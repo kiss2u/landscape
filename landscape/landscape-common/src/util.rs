@@ -1,0 +1,47 @@
+pub fn compute_checksum(mut init_num: u32, data: &[u8]) -> u16 {
+    for data in data.chunks(2) {
+        let word = if data.len() == 2 {
+            u16::from_be_bytes([data[0], data[1]]) as u32
+        } else {
+            u16::from_be_bytes([data[0], 0]) as u32
+        };
+        init_num = init_num.wrapping_add(word);
+    }
+    // 处理溢出
+    while init_num >> 16 != 0 {
+        init_num = (init_num & 0xFFFF) + (init_num >> 16);
+    }
+
+    // 取反
+    !(init_num as u16)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compute_checksum1() {
+        let init_num = 0;
+        let data: &[u8] = &[
+            0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x05, 0xbc, 0x45, 0x20, 0x05, 0xd4, 0x40, 0x8d,
+            0x40, 0x00, 0x3e, 0x06, 0x18, 0xb3, 0x0a, 0x03, 0xcd, 0x24, 0x0a, 0x40, 0xfc, 0x5c,
+            0xcc, 0xf9, 0xd7, 0x48, 0x8e, 0x30, 0x5e, 0x03,
+        ];
+        let result = compute_checksum(init_num, data);
+        assert_eq!(result, 0x66c9);
+    }
+
+    #[test]
+    fn test_compute_checksum2() {
+        let init_num = 0x03040000;
+        let data: &[u8] = &[
+            // 0x03, 0x04, 0x00, 0x00,
+            0x00, 0x00, 0x05, 0xbc, 0x45, 0x20, 0x05, 0xd4, 0x40, 0x8e, 0x40, 0x00, 0x3e, 0x06,
+            0x18, 0xb2, 0x0a, 0x03, 0xcd, 0x24, 0x0a, 0x40, 0xfc, 0x5c, 0xcc, 0xf9, 0xd7, 0x48,
+            0x8e, 0x30, 0x63, 0xa3,
+        ];
+        let result = compute_checksum(init_num, data);
+        assert_eq!(result, 0x6129);
+    }
+}

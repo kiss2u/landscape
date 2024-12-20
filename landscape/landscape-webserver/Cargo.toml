@@ -1,0 +1,31 @@
+[package]
+name = "landscape-webserver"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+landscape = { path = "../landscape" }
+landscape-dns = { path = "../landscape-dns" }
+
+tokio = { version = "1.0", features = ["full"] }
+clap = { version = "4.5.4", features = ["derive"] }
+
+axum = { workspace = true }
+axum-extra = { workspace = true }
+
+homedir = { workspace = true }
+
+futures = "0.3"
+
+futures-util = { version = "0.3", default-features = false, features = [
+    "sink",
+    "std",
+] }
+
+thiserror = { workspace = true }
+
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5.0", features = ["fs", "trace"] }
+
+serde = { version = "*", features = ["derive"] }
+serde_json = { version = "*" }

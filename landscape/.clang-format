@@ -1,0 +1,14 @@
+Language:        Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+UseTab: Never
+KeepEmptyLinesAtTheStartOfBlocks: false
+AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true
+DerivePointerAlignment: false
+SpacesBeforeTrailingComments: 2
+AccessModifierOffset: -4
+BreakBeforeBraces: Attach
+ColumnLimit: 100
+ForEachMacros: [ foreach, Q_FOREACH, BOOST_FOREACH ]
+SortIncludes: false

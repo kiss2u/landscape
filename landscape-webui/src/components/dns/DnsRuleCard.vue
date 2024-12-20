@@ -1,0 +1,45 @@
+<script setup lang="ts">
+import { ref } from "vue";
+import DnsRuleEditModal from "@/components/dns/DnsRuleEditModal.vue";
+import { DnsRule } from "@/lib/dns";
+import { delete_dns_rule } from "@/api/dns_service";
+const rule = defineModel<DnsRule>("rule", { required: true });
+
+const show_edit_modal = ref(false);
+
+async function del() {
+  await delete_dns_rule(rule.value.index);
+}
+</script>
+<template>
+  <n-flex>
+    <n-card :title="`优先级:${rule.index}`" size="small">
+      <!-- {{ rule }} -->
+      <n-descriptions bordered label-placement="top" :column="3">
+        <n-descriptions-item label="名称">
+          {{ rule.name }}
+        </n-descriptions-item>
+        <n-descriptions-item label="启用">
+          {{ rule.enable }}
+        </n-descriptions-item>
+        <n-descriptions-item label="流量标记">
+          {{ rule.mark }}
+        </n-descriptions-item>
+        <n-descriptions-item label="上游 DNS" :span="2">
+          {{ rule.dns_resolve_ip }}
+        </n-descriptions-item>
+        <n-descriptions-item label="匹配规则">
+          {{ rule.source }}
+        </n-descriptions-item>
+      </n-descriptions>
+      <template #header-extra>
+        <n-button @click="show_edit_modal = true"> 编辑 </n-button>
+        <n-button @click="del()"> 删除 </n-button>
+      </template>
+    </n-card>
+    <DnsRuleEditModal
+      :rule="rule"
+      v-model:show="show_edit_modal"
+    ></DnsRuleEditModal>
+  </n-flex>
+</template>

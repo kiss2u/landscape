@@ -1,0 +1,41 @@
+[package]
+name = "landscape-dns"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "dns_test"
+path = "src/bin/dns_test.rs"
+
+
+[dependencies]
+landscape-ebpf = { path = "../landscape-ebpf" }
+landscape-common = { path = "../landscape-common" }
+
+hickory-server = "0.24.1"
+hickory-client = "0.24.1"
+hickory-resolver = "0.24.1"
+hickory-proto = "0.24.1"
+tokio = { workspace = true, features = ['fs'] }
+clap = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+async-trait = "*"
+socket2 = "*"
+
+lru = "*"
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+homedir = { workspace = true }
+
+quick-protobuf = "0.8" # 确保使用最新版本
+trie-rs = "0.4.2"
+regex = "*"
+aho-corasick = "1.1.3"
+
+[build-dependencies]
+pb-rs = "0.9.1"
+walkdir = "*"

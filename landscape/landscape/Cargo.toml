@@ -1,0 +1,60 @@
+[package]
+name = "landscape"
+version.workspace = true
+edition.workspace = true
+default-run = "test"
+
+[dependencies]
+landscape-ebpf = { path = "../landscape-ebpf" }
+landscape-common = { path = "../landscape-common" }
+
+rusty_network_manager = "0.5.1"
+tokio-stream = "0.1.14"
+zbus = "4.1.2"
+sysinfo = "0.30.12"
+
+rtnetlink = { workspace = true }
+netlink-sys = { workspace = true }
+netlink-packet-route = { workspace = true }
+netlink-packet-core = { workspace = true }
+async-std = { version = "1.9.0", features = ["attributes"] }
+libc = "*"
+futures = "0.3.11"
+nix = { version = "*", features = ["socket"] }
+ctrlc = { workspace = true }
+
+cidr = { version = "0.2.3" }
+
+hickory-proto = { version = "*", features = ["serde-config"] }
+socket2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+tokio = { workspace = true, features = ["full", "net", "io-util"] }
+tokio-util = { workspace = true }
+rand = { workspace = true }
+
+clap = { workspace = true }
+toml_edit = { workspace = true }
+[dependencies.pnet]
+workspace = true
+
+
+[[bin]]
+name = "tap"
+path = "src/bin/tap.rs"
+# path = "src/bin/ttt.rs"
+
+
+[[bin]]
+name = "pppoe_test"
+path = "src/bin/pppoe_test.rs"
+
+
+[[bin]]
+name = "link_listen"
+path = "src/bin/link_listen.rs"
+
+[[bin]]
+name = "dhcp_client_test"
+path = "src/bin/dhcp_client_test.rs"
