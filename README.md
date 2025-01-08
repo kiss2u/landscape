@@ -9,9 +9,6 @@ Easily configure your favorite Linux distribution as a router using the web UI
 
 ## 截图
 ![](doc/images/1.png)
-![](doc/images/2.png)
-![](doc/images/5.png)
-![](doc/images/5-1.png)
 
 ## 启动方式以及限制
 目前功能所需的 Linux 版本需要在 `6.1` 及以上
@@ -59,7 +56,7 @@ build.sh
     * 支持将流量导入到 docker 中运行的 tproxy 程序, 见 `landscape/build_redirect_docker_img.sh` 文件是怎么进行编译镜像的. 
 
 ## 目前遇到的困境
-* 在 eBPF 中观察到的数据包, 可以常看到超过 MTU 大小的数据包. 即使发送 `ICMP "Fragmentation needed"` 消息后还是能接收到,我关闭了 `gro` `tso` `gso` 还是会出现, 也可能是我配置的问题. 
+* 在 eBPF 中观察到的数据包, 可以常看到超过 MTU 大小的数据包. 即使发送 `ICMP "Fragmentation needed"` 消息后还是能接收到,我关闭了 `gro` `tso` `gso` 还是会出现, 也可能是我配置的问题. ( 目前使用 pppd 避开了这个问题 )
 * 代码结构较为混乱,不知道该怎么进行梳理...
 * 在容器中指定 DNS 服务器为宿主机, 容器内 dig 命令正常请求, 但是 curl 无法访问, 提示找不到主机. 但是宿主机又是正常的.
 
