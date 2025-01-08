@@ -94,7 +94,7 @@ apt install pkg-config bpftool build-essential clang libelf1 libelf-dev zlib1g-d
 
 ## LICENSE
 
-- `landscape/landscape-ebpf`: [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+- `landscape-ebpf`: [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 - 其他部分: [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 
 ---

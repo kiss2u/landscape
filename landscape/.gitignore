@@ -1,8 +1,0 @@
-/target
-/assets
-/static
-vmlinux.h
-landscape-ebpf/src/bpf/vmlinux.h
-
-# docker build dir
-dockerfiles/redirect_prog/apps

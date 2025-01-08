@@ -98,7 +98,7 @@ The compiled output will be located in the `output` folder.
 
 ## LICENSE
 
-- `landscape/landscape-ebpf`: [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+- `landscape-ebpf`: [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 - Other parts: [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 
 ---
