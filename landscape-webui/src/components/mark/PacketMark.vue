@@ -25,6 +25,10 @@ const mark_type_option = [
     label: "禁止共享打洞",
     value: MarkType.SymmetricNat,
   },
+  {
+    label: "重定向至 Docker",
+    value: MarkType.RedirectNetns,
+  },
 ];
 </script>
 
@@ -39,7 +43,7 @@ const mark_type_option = [
     <!-- 后续能够设置 docker 网卡 -->
     <n-input-number
       :show-button="false"
-      v-if="mark.t === MarkType.Redirect"
+      v-if="mark.t === MarkType.Redirect || mark.t === MarkType.RedirectNetns"
       placeholder="重定向的网卡index"
       v-model:value="mark.index"
       type="text"

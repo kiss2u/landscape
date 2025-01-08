@@ -1,19 +1,24 @@
 use dev::{DevState, DeviceKind, LandScapeInterface};
 use iface::{config::NetworkIfaceConfig, get_iface_by_name};
 pub use message::*;
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    net::{IpAddr, Ipv4Addr},
+};
 
 pub mod base_info;
 pub mod config;
 pub mod dev;
 pub mod dhcp_client;
 pub mod dhcp_server;
+pub mod docker;
 pub mod dump;
 pub mod iface;
 pub mod macaddr;
 pub mod message;
 pub mod nat;
 pub mod packet_mark;
+pub mod pppd_client;
 pub mod pppoe_client;
 pub mod service;
 pub mod store;
@@ -138,6 +143,13 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
                 }
             }
 
+            if ifconfig.enable_in_boot {
+                std::process::Command::new("ip")
+                    .args(["link", "set", &ifconfig.name, "up"])
+                    .output()
+                    .unwrap();
+            }
+
             interface_map.remove(&ifconfig.name);
         }
     }
@@ -163,6 +175,36 @@ pub async fn get_all_devices() -> Vec<LandScapeInterface> {
     // handle.link().set(27).controller(12);
 
     result
+}
+
+pub async fn get_address(iface_name: &str) -> Option<(u32, HashSet<Ipv4Addr>)> {
+    let (connection, handle, _) = new_connection().unwrap();
+    tokio::spawn(connection);
+    let mut links = handle.link().get().match_name(iface_name.to_string()).execute();
+
+    if let Ok(Some(link)) = links.try_next().await {
+        let mut out_addr: HashSet<Ipv4Addr> = HashSet::new();
+        let mut addresses =
+            handle.address().get().set_link_index_filter(link.header.index).execute();
+        while let Ok(Some(msg)) = addresses.try_next().await {
+            if matches!(msg.header.family, AddressFamily::Inet) {
+                for attr in msg.attributes.iter() {
+                    match attr {
+                        netlink_packet_route::address::AddressAttribute::Local(addr) => {
+                            if let IpAddr::V4(addr) = addr {
+                                out_addr.insert(addr.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Some((link.header.index, out_addr))
+    } else {
+        None
+    }
 }
 
 pub async fn create_bridge(name: String) -> bool {

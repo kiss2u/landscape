@@ -2,6 +2,7 @@
 import { change_zone } from "@/api/network";
 import { stop_and_del_iface_config } from "@/api/service_ipconfig";
 import { stop_and_del_iface_nat } from "@/api/service_nat";
+import { delete_and_stop_iface_pppd_by_attach_iface_name } from "@/api/service_pppd";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { ref } from "vue";
 
@@ -21,6 +22,9 @@ async function chageIfaceZone() {
   try {
     await stop_and_del_iface_config(iface_info.iface_name);
     await stop_and_del_iface_nat(iface_info.iface_name);
+    await delete_and_stop_iface_pppd_by_attach_iface_name(
+      iface_info.iface_name
+    );
     await change_zone({
       iface_name: iface_info.iface_name,
       zone: temp_zone.value,

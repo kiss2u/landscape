@@ -14,7 +14,7 @@ use tokio::{sync::oneshot, time::sleep};
 //  nc 192.168.1.2 8080
 #[tokio::main]
 async fn main() {
-    let ifindex: i32 = 21;
+    let ifindex: i32 = 15;
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
 
@@ -25,10 +25,10 @@ async fn main() {
     })
     .unwrap();
 
-    let addr = Ipv4Addr::new(192, 168, 1, 1);
+    let addr = Ipv4Addr::new(192, 168, 255, 9);
     landscape_ebpf::map_setting::add_wan_ip(ifindex as u32, addr);
     std::thread::spawn(move || {
-        init_nat(ifindex, rx, NatConfig::default());
+        init_nat(ifindex, false, rx, NatConfig::default());
         other_tx.send(());
     });
 

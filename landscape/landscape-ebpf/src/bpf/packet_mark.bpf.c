@@ -15,6 +15,11 @@ SEC("tc")
 int egress_packet_mark(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<-|<- egress_packet_mark <-|<-"
 
+    if (skb->vlan_tci != 0) {
+        bpf_log_info("has vlan_tci = %u", skb->vlan_tci);
+        skb->mark == DIRECT_MARK;
+        bpf_skb_vlan_pop(skb);
+    }
     u8 action = 0;
     u8 index = 0;
     if (skb->mark == 0) {
@@ -63,13 +68,22 @@ int egress_packet_mark(struct __sk_buff *skb) {
         // 进入下一个环节
         return TC_ACT_UNSPEC;
     } else if (action == DIRECT_MARK) {
+        bpf_log_info("has DIRECT_MARK = %u", skb->mark);
         return TC_ACT_UNSPEC;
     } else if (action == DROP_MARK) {
         // bpf_log_info("drop packet mark %u", skb->mark);
         return TC_ACT_SHOT;
     } else if (action == REDIRECT_MARK) {
+        bpf_log_info("REDIRECT_MARK %u", skb->mark);
         u32 *outer_ifindex = bpf_map_lookup_elem(&redirect_index_map, &index);
         if (outer_ifindex != NULL) {
+            return bpf_redirect(*outer_ifindex, 0);
+        }
+    } else if (action == REDIRECT_NETNS_MARK) {
+        bpf_log_info("REDIRECT_NETNS_MARK %u", skb->mark);
+        u32 *outer_ifindex = bpf_map_lookup_elem(&redirect_index_map, &index);
+        if (outer_ifindex != NULL) {
+            bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
             return bpf_redirect(*outer_ifindex, 0);
         }
     }

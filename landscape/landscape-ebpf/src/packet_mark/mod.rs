@@ -1,7 +1,3 @@
-mod firewall {
-    include!(concat!(env!("OUT_DIR"), "/packet_mark.skel.rs"));
-}
-
 use std::{mem::MaybeUninit, path::PathBuf};
 
 use firewall::*;
@@ -16,6 +12,10 @@ use crate::{
     landscape::TcHookProxy, BLOCK_IP_MAP_PING_PATH, FIREWALL_EGRESS_PRIORITY,
     FIREWALL_INGRESS_PRIORITY, PACKET_MARK_MAP_PING_PATH, REDIRECT_INDEX_MAP_PING_PATH,
 };
+
+mod firewall {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/packet_mark.skel.rs"));
+}
 
 pub fn init_packet_mark(ifindex: i32, service_status: oneshot::Receiver<()>) {
     let mut landscape_builder = PacketMarkSkelBuilder::default();

@@ -5,13 +5,11 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use landscape::{
-    service::{
-        packet_mark_service::{MarkServiceManager, PacketMarkServiceConfig},
-        WatchServiceStatus,
-    },
-    store::StoreFileManager,
+use landscape::service::{
+    packet_mark_service::{MarkServiceManager, PacketMarkServiceConfig},
+    WatchServiceStatus,
 };
+use landscape_common::store::storev2::StoreFileManager;
 use serde_json::Value;
 use tokio::sync::Mutex;
 
@@ -20,14 +18,14 @@ use crate::{error::LandscapeApiError, SimpleResult};
 #[derive(Clone)]
 struct LandscapeIfaceMarkServices {
     service: MarkServiceManager,
-    store: Arc<Mutex<StoreFileManager>>,
+    store: Arc<Mutex<StoreFileManager<PacketMarkServiceConfig>>>,
 }
 
 pub async fn get_iface_packet_mark_paths(home_path: PathBuf) -> Router {
-    let store = StoreFileManager::new(home_path.clone(), "iface_mark_service".to_string());
+    let mut store = StoreFileManager::new(home_path.clone(), "iface_mark_service".to_string());
 
     let share_state = LandscapeIfaceMarkServices {
-        service: MarkServiceManager::init(vec![]).await,
+        service: MarkServiceManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
     };
     Router::new()
@@ -55,11 +53,10 @@ async fn get_all_nat_status(State(state): State<LandscapeIfaceMarkServices>) -> 
 async fn get_iface_nat_conifg(
     State(state): State<LandscapeIfaceMarkServices>,
     Path(iface_name): Path<String>,
-) -> Result<Json<Value>, LandscapeApiError> {
+) -> Result<Json<PacketMarkServiceConfig>, LandscapeApiError> {
     let mut read_lock = state.store.lock().await;
-    if let Some(iface_config) = read_lock.get(iface_name) {
-        let data: Value = serde_json::from_str(&iface_config)?;
-        Ok(Json(data))
+    if let Some(iface_config) = read_lock.get(&iface_name) {
+        Ok(Json(iface_config))
     } else {
         Err(LandscapeApiError::NotFound("can not find".into()))
     }
@@ -71,12 +68,11 @@ async fn handle_iface_nat_status(
     Json(service_config): Json<PacketMarkServiceConfig>,
 ) -> Json<Value> {
     let result = SimpleResult { success: true };
-    let write_data = serde_json::to_string(&service_config);
 
     // TODO 调用 IfaceIpModelConfig 的 check_iface_status 检查当前的 iface 是否能切换这个状态
-    if let Ok(()) = state.service.start_new_service(service_config).await {
+    if let Ok(()) = state.service.start_new_service(service_config.clone()).await {
         let mut write_lock = state.store.lock().await;
-        write_lock.set(iface_name, write_data.unwrap());
+        write_lock.set(service_config);
         drop(write_lock);
     }
     let result = serde_json::to_value(result);
@@ -88,7 +84,7 @@ async fn delete_and_stop_iface_nat(
     Path(iface_name): Path<String>,
 ) -> Json<Value> {
     let mut write_lock = state.store.lock().await;
-    write_lock.del(iface_name.clone());
+    write_lock.del(&iface_name);
     drop(write_lock);
 
     let mut write_lock = state.service.services.write().await;

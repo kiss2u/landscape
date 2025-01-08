@@ -1,7 +1,3 @@
-pub mod land_nat {
-    include!(concat!(env!("OUT_DIR"), "/land_nat.skel.rs"));
-}
-
 use core::ops::Range;
 use std::{mem::MaybeUninit, path::PathBuf};
 
@@ -15,6 +11,10 @@ use tokio::sync::oneshot;
 
 use crate::WAN_IP_MAP_PING_PATH;
 use crate::{landscape::TcHookProxy, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY};
+
+mod land_nat {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_nat.skel.rs"));
+}
 
 // fn bump_memlock_rlimit() {
 //     let rlimit = libc::rlimit { rlim_cur: 128 << 20, rlim_max: 128 << 20 };
@@ -41,7 +41,12 @@ impl Default for NatConfig {
     }
 }
 
-pub fn init_nat(ifindex: i32, service_status: oneshot::Receiver<()>, config: NatConfig) {
+pub fn init_nat(
+    ifindex: i32,
+    has_mac: bool,
+    service_status: oneshot::Receiver<()>,
+    config: NatConfig,
+) {
     // bump_memlock_rlimit();
     let mut landscape_builder = LandNatSkelBuilder::default();
     landscape_builder.obj_builder.debug(true);
@@ -60,6 +65,10 @@ pub fn init_nat(ifindex: i32, service_status: oneshot::Receiver<()>, config: Nat
 
     landscape_open.maps.rodata_data.icmp_range_start = config.icmp_in_range.start;
     landscape_open.maps.rodata_data.icmp_range_end = config.icmp_in_range.end;
+
+    if !has_mac {
+        landscape_open.maps.rodata_data.current_eth_net_offset = 0;
+    }
 
     let landscape_skel = landscape_open.load().unwrap();
     let nat_egress = landscape_skel.progs.egress_nat;

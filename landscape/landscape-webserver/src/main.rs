@@ -9,6 +9,7 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 use crate::args::WebCommArgs;
 
 mod args;
+mod docker;
 mod dump;
 mod error;
 mod iface;
@@ -34,6 +35,7 @@ async fn main() {
     let home_path = homedir::my_home().unwrap().unwrap().join(".landscape-router");
 
     let api_route = Router::new()
+        .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(home_path.clone()).await)
         .nest("/services", service::get_service_paths(home_path).await)
         .nest("/sysinfo", sysinfo::get_sys_info_route());

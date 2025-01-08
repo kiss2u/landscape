@@ -6,6 +6,8 @@ import { useIfaceNodeStore } from "./iface_node";
 import { useIpConfigStore } from "./status_ipconfig";
 import { useNATConfigStore } from "@/stores/status_nats";
 import { useMarkConfigStore } from "./status_mark";
+import { useDockerStore } from "./status_docker";
+import { useDnsStore } from "./status_dns";
 
 export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const sysinfo = useSysInfo();
@@ -13,10 +15,14 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const ipConfigStore = useIpConfigStore();
   const natConfigStore = useNATConfigStore();
   const markConfigStore = useMarkConfigStore();
+  const dockerStore = useDockerStore();
+  const dnsStore = useDnsStore();
 
   const interval_function = async () => {
     try {
       await sysinfo.UPDATE_INFO();
+      await dockerStore.UPDATE_INFO();
+      await dnsStore.UPDATE_INFO();
       await ifaceNodeStore.UPDATE_INFO();
       await ipConfigStore.UPDATE_INFO();
       await natConfigStore.UPDATE_INFO();

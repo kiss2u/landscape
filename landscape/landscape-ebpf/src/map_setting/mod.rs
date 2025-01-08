@@ -4,14 +4,19 @@ use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, MapFlags,
 };
+
 mod share_map {
-    include!(concat!(env!("OUT_DIR"), "/share_map.skel.rs"));
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/share_map.skel.rs"));
 }
 
+use pnet::util::Octets;
 use share_map::*;
 use types::{ipv4_lpm_key, ipv4_mark_action};
 
-use crate::{BLOCK_IP_MAP_PING_PATH, PACKET_MARK_MAP_PING_PATH, WAN_IP_MAP_PING_PATH};
+use crate::{
+    BLOCK_IP_MAP_PING_PATH, PACKET_MARK_MAP_PING_PATH, REDIRECT_INDEX_MAP_PING_PATH,
+    WAN_IP_MAP_PING_PATH,
+};
 
 pub fn add_wan_ip(ifindex: u32, addr: Ipv4Addr) {
     println!("setting wan index - 1: {ifindex:?} addr:{addr:?}");
@@ -155,5 +160,44 @@ pub fn del_ips_mark(ips: Vec<(Ipv4Addr, u32)>) {
         if let Err(e) = landscape_skel.maps.packet_mark_map.delete(block_ip_key) {
             println!("add block ip error:{e:?}");
         }
+    }
+}
+
+pub fn add_redirect_iface_pair(redirect_index: u8, ifindex: u32) {
+    let landscape_builder = ShareMapSkelBuilder::default();
+    // landscape_builder.obj_builder.debug(true);
+    let mut open_object = MaybeUninit::uninit();
+    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    if let Err(e) = landscape_open
+        .maps
+        .redirect_index_map
+        .set_pin_path(PathBuf::from(REDIRECT_INDEX_MAP_PING_PATH))
+    {
+        println!("error: {e:?}");
+    }
+    let landscape_skel = landscape_open.load().unwrap();
+    let key = [redirect_index];
+    let value = ifindex.to_le_bytes();
+    if let Err(e) = landscape_skel.maps.redirect_index_map.update(&key, &value, MapFlags::ANY) {
+        println!("add block ip error:{e:?}");
+    }
+}
+
+pub fn del_redirect_iface_pair(redirect_index: u8) {
+    let landscape_builder = ShareMapSkelBuilder::default();
+    // landscape_builder.obj_builder.debug(true);
+    let mut open_object = MaybeUninit::uninit();
+    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    if let Err(e) = landscape_open
+        .maps
+        .redirect_index_map
+        .set_pin_path(PathBuf::from(REDIRECT_INDEX_MAP_PING_PATH))
+    {
+        println!("error: {e:?}");
+    }
+    let landscape_skel = landscape_open.load().unwrap();
+    let key = [redirect_index];
+    if let Err(e) = landscape_skel.maps.redirect_index_map.delete(&key) {
+        println!("add block ip error:{e:?}");
     }
 }

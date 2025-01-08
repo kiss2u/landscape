@@ -6,9 +6,10 @@ edition.workspace = true
 [dependencies]
 landscape = { path = "../landscape" }
 landscape-dns = { path = "../landscape-dns" }
+landscape-common = { path = "../landscape-common" }
 
 tokio = { version = "1.0", features = ["full"] }
-clap = { version = "4.5.4", features = ["derive"] }
+clap = { workspace = true }
 
 axum = { workspace = true }
 axum-extra = { workspace = true }
@@ -29,3 +30,5 @@ tower-http = { version = "0.5.0", features = ["fs", "trace"] }
 
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*" }
+
+bollard = { workspace = true }

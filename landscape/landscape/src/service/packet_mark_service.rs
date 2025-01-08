@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use landscape_common::store::storev2::LandScapeStore;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 
@@ -10,6 +11,12 @@ use crate::iface::get_iface_by_name;
 pub struct PacketMarkServiceConfig {
     pub iface_name: String,
     pub enable: bool,
+}
+
+impl LandScapeStore for PacketMarkServiceConfig {
+    fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
 }
 
 type ServiceStatusAndConfigPair = (WatchServiceStatus, mpsc::Sender<PacketMarkServiceConfig>);

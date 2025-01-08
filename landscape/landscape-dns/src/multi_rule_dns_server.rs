@@ -82,7 +82,7 @@ impl RequestHandler for DnsServer {
 
         // 如果没有找到记录，返回 NXDomain 响应
         if records.is_empty() {
-            header.set_response_code(ResponseCode::NXDomain);
+            // header.set_response_code(ResponseCode::NXDomain);
             let response = response_builder.build_no_records(header);
             let result = response_handle.send_response(response).await;
             return match result {

@@ -8,6 +8,8 @@ default-run = "test"
 landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-common = { path = "../landscape-common" }
 
+
+const_format = { workspace = true }
 rusty_network_manager = "0.5.1"
 tokio-stream = "0.1.14"
 zbus = "4.1.2"
@@ -36,6 +38,8 @@ rand = { workspace = true }
 
 clap = { workspace = true }
 toml_edit = { workspace = true }
+bollard = { workspace = true }
+regex = { workspace = true }
 [dependencies.pnet]
 workspace = true
 

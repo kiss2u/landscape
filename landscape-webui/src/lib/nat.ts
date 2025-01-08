@@ -14,7 +14,7 @@ export class NatServiceConfig {
   }) {
     this.iface_name = obj?.iface_name ?? "";
     this.enable = obj?.enable ?? true;
-    this.nat_config = obj?.nat_config ?? new NatConfig();
+    this.nat_config = new NatConfig(obj?.nat_config ?? {});
   }
 }
 

@@ -1,17 +1,7 @@
 mod landscape_bpf {
-    include!(concat!(env!("OUT_DIR"), "/landscape.skel.rs"));
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/landscape.skel.rs"));
 }
-use std::{
-    mem::MaybeUninit,
-    os::fd::AsFd,
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread,
-    time::Duration,
-};
+use std::{mem::MaybeUninit, os::fd::AsFd, path::PathBuf, time::Duration};
 
 use landscape_bpf::*;
 use libbpf_rs::{
@@ -43,7 +33,7 @@ pub fn test() {
 
     let mut open_object = MaybeUninit::uninit();
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
-    landscape_open.maps.wan_ipv4_binding.set_pin_path(PathBuf::from(WAN_IP_MAP_PING_PATH));
+    // landscape_open.maps.wan_ipv4_binding.set_pin_path(PathBuf::from(WAN_IP_MAP_PING_PATH));
     let mut landscape_skel = landscape_open.load().unwrap();
 
     let mark_ingress = landscape_skel.progs.mark_ingress;
@@ -53,12 +43,12 @@ pub fn test() {
     // let modify_egress = landscape_skel.progs.modify_egress;
 
     // println!("pt: {:?}", modify_egress.prog_type());
-    let ifindex = 7;
+    let ifindex = 15;
     // let mut tc_builder = TcHookBuilder::new(nat_ingress.as_fd());
     // tc_builder.ifindex(ifindex).replace(true).handle(1).priority(1);
 
-    let mut mark_ingress_hook = TcHookProxy::new(&mark_ingress, 2, TC_INGRESS, 1);
-    let mut mark_egress_hook = TcHookProxy::new(&mark_egress, 2, TC_EGRESS, 2);
+    let mut mark_ingress_hook = TcHookProxy::new(&mark_ingress, ifindex, TC_INGRESS, 1);
+    let mut mark_egress_hook = TcHookProxy::new(&mark_egress, ifindex, TC_EGRESS, 2);
     mark_ingress_hook.attach();
     mark_egress_hook.attach();
     // let mut nat_proxy = TcHookProxy::new(&nat_egress, 7, TC_EGRESS, 1);
@@ -175,10 +165,15 @@ impl Drop for TcHookProxy {
             println!("detach hook");
             if let Ok(_) = hook.query() {
                 println!("start detach success");
-                hook.detach().unwrap();
-                println!("detach success");
+                if let Err(e) = hook.detach() {
+                    println!("detach error: {:?}", e);
+                } else {
+                    println!("detach success");
+                }
             }
-            hook.destroy().unwrap()
+            if let Err(e) = hook.destroy() {
+                println!("destroy error: {:?}", e);
+            }
         }
         // if let Ok(_) = self.query() {
         //     self.detach().unwrap();

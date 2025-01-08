@@ -7,3 +7,13 @@ export class Range {
     this.end = end;
   }
 }
+
+export type KeyValuePair = { key: string; value: string };
+
+export class SimpleResult {
+  success: boolean;
+
+  constructor(obj?: { success?: boolean }) {
+    this.success = obj?.success ?? false;
+  }
+}

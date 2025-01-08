@@ -44,6 +44,7 @@ export enum MarkType {
   Redirect = "redirect",
   /// 进行 IP 校验 ( 阻止进行打洞 )
   SymmetricNat = "symmetricnat",
+  RedirectNetns = "redirectnetns",
 }
 
 export type PacketMark =
@@ -51,4 +52,5 @@ export type PacketMark =
   | { t: MarkType.Direct }
   | { t: MarkType.Drop }
   | { t: MarkType.Redirect; index: number }
-  | { t: MarkType.SymmetricNat };
+  | { t: MarkType.SymmetricNat }
+  | { t: MarkType.RedirectNetns; index: number };

@@ -18,8 +18,9 @@ import {
 import { ref } from "vue";
 import { useIfaceNodeStore } from "@/stores/iface_node";
 
-// const { onConnect } = useVueFlow();
+const { zoomOnScroll } = useVueFlow();
 
+zoomOnScroll.value = false;
 let ifaceNodeStore = useIfaceNodeStore();
 
 const controlelr_config = ref<any>({});

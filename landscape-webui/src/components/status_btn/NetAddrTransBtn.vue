@@ -19,7 +19,7 @@ const emit = defineEmits(["click"]);
 
 <template>
   <StatusBtn
-    v-if="iface_info.zone === ZoneType.Wan"
+    v-if="iface_info.zone === ZoneType.Wan "
     :status="status"
     @click="emit('click')"
   >

@@ -1,7 +1,3 @@
-mod landscape_pppoe {
-    include!(concat!(env!("OUT_DIR"), "/pppoe.skel.rs"));
-}
-
 use std::{
     mem::MaybeUninit,
     net::{Ipv4Addr, SocketAddrV4},
@@ -29,6 +25,9 @@ use crate::{
     PPPOE_MTU_FILTER_EGRESS_PRIORITY,
 };
 
+mod landscape_pppoe {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/pppoe.skel.rs"));
+}
 pub async fn create_pppoe_tc_ebpf<'a>(
     ifindex: u32,
     session_id: u16,
@@ -218,12 +217,12 @@ pub async fn create_pppoe_tc_ebpf_3(
 
         // let mut pppoe_ingress_builder =
         //     TcHookProxy::new(&pppoe_skel.progs.pppoe_ingress, ifindex as i32, TC_INGRESS, 1);
-        let mut pppoe_egress_pkt_size_filter = TcHookProxy::new(
-            &pppoe_skel.progs.pppoe_egress_pkt_size_filter,
-            ifindex as i32,
-            TC_EGRESS,
-            PPPOE_MTU_FILTER_EGRESS_PRIORITY,
-        );
+        // let mut pppoe_egress_pkt_size_filter = TcHookProxy::new(
+        //     &pppoe_skel.progs.pppoe_egress_pkt_size_filter,
+        //     ifindex as i32,
+        //     TC_EGRESS,
+        //     PPPOE_MTU_FILTER_EGRESS_PRIORITY,
+        // );
 
         let mut pppoe_egress_builder = TcHookProxy::new(
             &pppoe_skel.progs.pppoe_egress,
@@ -242,7 +241,7 @@ pub async fn create_pppoe_tc_ebpf_3(
         let pppoe_xdp_ingress = pppoe_skel.progs.pppoe_xdp_ingress;
         let pppoe_xdp_link = pppoe_xdp_ingress.attach_xdp(ifindex as i32).unwrap();
 
-        pppoe_egress_pkt_size_filter.attach();
+        // pppoe_egress_pkt_size_filter.attach();
         pppoe_egress_builder.attach();
         pppoe_ingress_builder.attach();
 
@@ -255,7 +254,7 @@ pub async fn create_pppoe_tc_ebpf_3(
             }
         };
         println!("退出 pppoe");
-        drop(pppoe_egress_pkt_size_filter);
+        // drop(pppoe_egress_pkt_size_filter);
         drop(pppoe_egress_builder);
         drop(pppoe_ingress_builder);
         let _ = pppoe_xdp_link.detach();

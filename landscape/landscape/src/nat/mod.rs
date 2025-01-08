@@ -5,6 +5,7 @@ use crate::service::ServiceStatus;
 
 pub async fn create_nat_service(
     ifindex: i32,
+    has_mac: bool,
     nat_config: NatConfig,
     service_status: watch::Sender<ServiceStatus>,
 ) {
@@ -25,7 +26,7 @@ pub async fn create_nat_service(
         println!("向内部发送停止信号");
     });
     std::thread::spawn(move || {
-        init_nat(ifindex, rx, nat_config);
+        init_nat(ifindex, has_mac, rx, nat_config);
         println!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
     });

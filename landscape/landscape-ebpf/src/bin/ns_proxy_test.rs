@@ -18,6 +18,10 @@ fn main() {
     // sysctl net.ipv4.conf.veth0.proxy_arp=1
     //  sysctl net.ipv4.conf.veth0.rp_filter=2
 
+    // curl -vvv 223.5.5.5.5:2234
+    // docker run --rm -p 2234:80 --name temp-nginx nginx
     //
+    // nc -lu 2235
+    // nc -u 223.5.5.5.5 2235
     landscape_ebpf::ns_proxy::run()
 }

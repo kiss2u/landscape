@@ -8,7 +8,7 @@
 
 启动前需要先在 用户的 `home` 目录创建 
 ```shell
-mkdir -p ~/.landscape-route
+mkdir -p ~/.landscape-router
 ```
 
 然后将 `geosite.dat` 文件, 放入该文件夹.

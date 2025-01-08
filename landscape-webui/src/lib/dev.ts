@@ -1,12 +1,21 @@
+import { ZoneType } from "./service_ipconfig";
+
 export class NetDev {
   name: string;
   index: number;
-  mac: Array<number>;
-  perm_mac: Array<number> | undefined;
+  mac: string | undefined;
+  perm_mac: string | undefined;
   dev_type: string;
   dev_kind: string;
   dev_status: DevState;
-  controller: number | undefined;
+  controller: string | undefined;
+  controller_id: number | undefined;
+  carrier: boolean;
+  zone_type: ZoneType;
+  enable_in_boot: boolean;
+
+  netns_id: number | undefined;
+  peer_link_id: number | undefined;
 
   constructor(obj: any) {
     this.name = obj.name;
@@ -17,16 +26,23 @@ export class NetDev {
     this.dev_kind = obj.dev_kind;
     this.dev_status = { ...obj.dev_status };
     this.controller = obj.controller;
+    this.controller_id = obj.controller_id;
+    this.carrier = obj.carrier;
+    this.zone_type = obj.zone_type;
+    this.enable_in_boot = obj.enable_in_boot;
+    this.netns_id = obj.netns_id;
+    this.peer_link_id = obj.peer_link_id;
   }
 }
+
 export function filter(array: Array<any>): Map<number, Array<any>> {
   const a = new Map();
   // before
   for (let i = 0; i < array.length; i++) {
     let c = new NetDev(array[i]);
     let index = 0;
-    if (c.controller != undefined) {
-      index = c.controller;
+    if (c.controller_id != undefined) {
+      index = c.controller_id;
       console.log(c);
     } else {
     }

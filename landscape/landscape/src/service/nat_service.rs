@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use landscape_common::store::storev2::LandScapeStore;
 use landscape_ebpf::nat::NatConfig;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
@@ -13,6 +14,12 @@ pub struct NatServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub nat_config: NatConfig,
+}
+
+impl LandScapeStore for NatServiceConfig {
+    fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
 }
 
 type ServiceStatusAndConfigPair = (WatchServiceStatus, mpsc::Sender<NatServiceConfig>);
@@ -89,6 +96,7 @@ async fn new_iface_service_thread(
                     tokio::spawn(async move {
                         crate::nat::create_nat_service(
                             iface.index as i32,
+                            iface.mac.is_some(),
                             config.nat_config,
                             service_status_clone,
                         )

@@ -1,3 +1,3 @@
-fn main() {
+pub fn main() {
     landscape_ebpf::landscape::test();
 }

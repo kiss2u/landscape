@@ -6,6 +6,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
+#include "share_ifindex_ip.h"
 #include "nat.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -22,6 +23,8 @@ const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 #define IP_OFFSET bpf_htons(0x1FFF) /* "Fragment Offset" part	*/
 
 #define ICMP_HDR_LEN sizeof(struct icmphdr)
+
+const volatile int current_eth_net_offset = 14;
 
 const volatile u64 TCP_SYN_TIMEOUT = 1E9 * 6;
 const volatile u64 TCP_TCP_TRANS = 1E9 * 60 * 4;
@@ -807,7 +810,7 @@ static __always_inline int extract_packet_info(struct __sk_buff *skb, struct ip_
     if (pkt == NULL) {
         return TC_ACT_SHOT;
     }
-    int eth_offset = 14;
+    int eth_offset = current_eth_net_offset;
     pkt->l4_payload_offset = eth_offset;
     struct iphdr *iph;
     if (VALIDATE_READ_DATA(skb, &iph, eth_offset, sizeof(struct iphdr))) {
@@ -905,20 +908,37 @@ static __always_inline int extract_packet_info(struct __sk_buff *skb, struct ip_
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int current_pkg_type(struct __sk_buff *skb) {
+    if (current_eth_net_offset != 0) {
+        struct ethhdr *eth;
+        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+            return TC_ACT_UNSPEC;
+        }
+
+        if (eth->h_proto != ETH_IPV4) {
+            return TC_ACT_UNSPEC;
+        }
+    } else {
+        u8 *p_version;
+        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
+            return TC_ACT_UNSPEC;
+        }
+        u8 ip_version = (*p_version) >> 4;
+        if (ip_version != 4) {
+            return TC_ACT_UNSPEC;
+        }
+    }
+    return TC_ACT_OK;
+}
 SEC("tc")
 int ingress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">>> ingress_nat >>>"
 
-    // 先进行 二层协议的接续
-    struct ethhdr *eth;
-    if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+    if (current_pkg_type(skb) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
-    if (eth->h_proto != ETH_IPV4) {
-        return TC_ACT_UNSPEC;
-    }
-
+    // bpf_log_info("active");
     struct ip_packet_info packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
     // 接续数据包填充 eth_fram_info 的信息
@@ -994,7 +1014,7 @@ int ingress_nat(struct __sk_buff *skb) {
     //              (nat_ingress_value->addr.ip >> 16) & 0xFF,
     //              (nat_ingress_value->addr.ip >> 24) & 0xFF);
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, 14,
+    ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
                          packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset,
                          false, &packet_info.pair_ip.dst_addr, packet_info.pair_ip.dst_port,
                          &nat_ingress_value->addr, nat_ingress_value->port);
@@ -1010,18 +1030,11 @@ int ingress_nat(struct __sk_buff *skb) {
 SEC("tc")
 int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
-
-    // 先进行 二层协议的接续
-    struct ethhdr *eth;
-    if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+    if (current_pkg_type(skb) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
-    // IPV6 不进行 NAT
-    if (eth->h_proto != ETH_IPV4) {
-        return TC_ACT_UNSPEC;
-    }
-
+    // bpf_log_info("active");
     struct ip_packet_info packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
     // 接续数据包填充 eth_fram_info 的信息
@@ -1094,7 +1107,7 @@ int egress_nat(struct __sk_buff *skb) {
     //              0xFF, (nat_egress_value->addr.ip >> 24) & 0xFF);
 
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, 14,
+    ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
                          packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset, true,
                          &packet_info.pair_ip.src_addr, packet_info.pair_ip.src_port,
                          &nat_egress_value->addr, nat_egress_value->port);

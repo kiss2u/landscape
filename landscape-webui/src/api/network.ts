@@ -1,11 +1,12 @@
 import { IpConfigMode, NetworkConfig } from "@lib/network_config";
 import api from "../api";
 import { ZoneType } from "@/lib/service_ipconfig";
+import { NetDev } from "@/lib/dev";
 
-export async function ifaces(): Promise<any> {
+export async function ifaces(): Promise<NetDev[]> {
   let data = await api.api.get("iface");
   // console.log(data.data);
-  return data.data;
+  return data.data.map((e: any) => new NetDev(e));
 }
 
 export async function ifaces_by_name(name: string): Promise<NetworkConfig> {

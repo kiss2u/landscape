@@ -1,6 +1,7 @@
 use core::ops::Range;
 use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 
+use landscape_common::store::storev2::LandScapeStore;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 
@@ -22,6 +23,12 @@ pub struct IfaceIpServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub ip_model: IfaceIpModelConfig,
+}
+
+impl LandScapeStore for IfaceIpServiceConfig {
+    fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

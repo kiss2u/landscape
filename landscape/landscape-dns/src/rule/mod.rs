@@ -13,7 +13,7 @@ use hickory_resolver::{
     config::{NameServerConfigGroup, ResolverConfig, ResolverOpts},
     AsyncResolver,
 };
-use landscape_common::mark::PacketMark;
+use landscape_common::{mark::PacketMark, store::storev2::LandScapeStore};
 use matcher::DomainMatcher;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -166,7 +166,13 @@ impl ResolutionRule {
             }
             Err(e) => {
                 eprintln!("DNS resolution failed for {}: {}", domain, e);
-                Err(ResponseCode::ServFail)
+                let result = match e.kind() {
+                    hickory_resolver::error::ResolveErrorKind::NoRecordsFound { .. } => {
+                        ResponseCode::NXDomain
+                    }
+                    _ => ResponseCode::ServFail,
+                };
+                Err(result)
             }
         }
     }
@@ -186,6 +192,12 @@ pub struct DNSRuleConfig {
     pub mark: PacketMark,
     pub source: Vec<RuleSource>,
     // 还需增加一个字段, 用于配置解析的类型是 静态的 还是 递归的, 静态的就是 域名劫持 递归的就是向上游请求 DNS 信息
+}
+
+impl LandScapeStore for DNSRuleConfig {
+    fn get_store_key(&self) -> String {
+        self.index.to_string()
+    }
 }
 
 impl Default for DNSRuleConfig {
@@ -225,10 +237,6 @@ impl DNSRuleConfig {
             }
         }
         all_domain_rules
-    }
-
-    pub fn get_store_key(&self) -> String {
-        self.index.to_string()
     }
 }
 

@@ -185,35 +185,29 @@ int xdp_pass(struct xdp_md *ctx) {
 }
 
 SEC("tc")
-/// @brief  进行出口包的 nat
-/// @param skb
-/// @return
 int mark_egress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "mark_egress"
+#define BPF_LOG_TOPIC "<< mark_egress"
 
-    if (skb->mark != 0) {
-        bpf_log_info("mark_egress: %u", skb->mark);
+    struct ethhdr *eth;
+    if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+        return TC_ACT_UNSPEC;
     }
 
-    u32 key = 7;
-    u32 *ret = bpf_map_lookup_elem(&wan_ipv4_binding, &key);
-    if (ret) {
-        bpf_log_info("wan_ipv4_binding: %u", ret);
-    }
+    bpf_log_info("h_proto: %x", bpf_ntohs(eth->h_proto));
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
 }
 
 SEC("tc")
-/// @brief  进行出口包的 nat
-/// @param skb
-/// @return
 int mark_ingress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "mark_ingress"
-    if (skb->mark != 0) {
-        bpf_log_info("mark_ingress: %u", skb->mark);
+#define BPF_LOG_TOPIC ">> mark_ingress"
+    struct ethhdr *eth;
+    if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+        return TC_ACT_UNSPEC;
     }
+
+    bpf_log_info("h_proto: %x", bpf_ntohs(eth->h_proto));
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

@@ -21,10 +21,12 @@ pub enum PacketMark {
     Direct,
     /// 丢弃数据包
     Drop,
-    /// 转发到指定 index 的网卡中
+    /// 转发到指定 index 的流中
     Redirect { index: u8 },
     /// 进行 IP 校验 ( 阻止进行打洞 )
     SymmetricNat,
+    /// 转发到指定 index 的流中
+    RedirectNetns { index: u8 },
 }
 
 impl PacketMark {
@@ -41,6 +43,7 @@ const DIRECT_MARK: u8 = 1;
 const DROP_MARK: u8 = 2;
 const REDIRECT_MARK: u8 = 3;
 const SYMMETRIC_NAT: u8 = 4;
+const REDIRECT_NETNS_MARK: u8 = 5;
 
 const ACTION_MASK: u32 = 0x00FF;
 const INDEX_MASK: u32 = 0xFF00;
@@ -56,6 +59,7 @@ impl From<u32> for PacketMark {
             DROP_MARK => PacketMark::Drop,
             REDIRECT_MARK => PacketMark::Redirect { index },
             SYMMETRIC_NAT => PacketMark::SymmetricNat,
+            REDIRECT_NETNS_MARK => PacketMark::RedirectNetns { index },
             _ => PacketMark::NoMark,
         }
     }
@@ -69,6 +73,9 @@ impl Into<u32> for PacketMark {
             PacketMark::Drop => DROP_MARK as u32,
             PacketMark::Redirect { index } => REDIRECT_MARK as u32 | ((index as u32) << 8),
             PacketMark::SymmetricNat => SYMMETRIC_NAT as u32,
+            PacketMark::RedirectNetns { index } => {
+                REDIRECT_NETNS_MARK as u32 | ((index as u32) << 8)
+            }
         }
     }
 }

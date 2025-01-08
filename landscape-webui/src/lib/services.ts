@@ -1,3 +1,6 @@
+import { NetDev } from "./dev";
+import { ZoneType } from "./service_ipconfig";
+
 export enum ServiceStatusType {
   Staring = "staring",
   Running = "running",
@@ -12,5 +15,47 @@ export class ServiceStatus {
   constructor(obj?: { t: ServiceStatusType; message?: string }) {
     this.t = obj?.t ?? ServiceStatusType.Stop;
     this.message = obj?.message;
+  }
+}
+
+export class ServiceExhibitSwitch {
+  carrier: boolean;
+  enable_in_boot: boolean;
+  zone_type: boolean;
+  pppd: boolean;
+  ip_config: boolean;
+  nat_config: boolean;
+  mark_config: boolean;
+
+  constructor(dev: NetDev) {
+    this.carrier = true;
+    this.enable_in_boot = true;
+    this.zone_type = true;
+    this.pppd = false;
+    this.ip_config = true;
+    this.nat_config = false;
+    this.mark_config = false;
+
+    if (dev.peer_link_id != undefined) {
+      this.zone_type = false;
+      this.enable_in_boot = false;
+      this.ip_config = false;
+    } else if (dev.dev_type === "Ppp") {
+      this.enable_in_boot = false;
+      this.ip_config = false;
+      this.zone_type = false;
+      this.nat_config = true;
+      this.mark_config = true;
+    } else if (dev.name === "docker0") {
+      this.zone_type = false;
+      this.ip_config = false;
+    } else if (dev.zone_type === ZoneType.Lan) {
+      this.ip_config = true;
+    } else if (dev.zone_type === ZoneType.Wan) {
+      this.pppd = true;
+      this.ip_config = true;
+      this.nat_config = true;
+      this.mark_config = true;
+    }
   }
 }

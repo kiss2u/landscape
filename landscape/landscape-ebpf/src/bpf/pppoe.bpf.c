@@ -307,13 +307,13 @@ int pppoe_egress(struct __sk_buff *skb) {
     void *data = (void *)(long)skb->data;
 
     u32 pkt_sz = skb->len - 14;
-    // TODO: 消除这个魔法变量
-    if (pkt_sz > pppoe_mtu) {
-        bpf_log_info("egress package too large size is: %u", pkt_sz);
-        return TC_ACT_SHOT;
-        // } else if (pkt_sz == pppoe_mtu) {
-        //     bpf_log_info("exactly large size is: %u", pkt_sz);
-    }
+    // // TODO: 消除这个魔法变量
+    // if (pkt_sz > pppoe_mtu) {
+    //     bpf_log_info("egress package too large size is: %u", pkt_sz);
+    //     return TC_ACT_SHOT;
+    //     // } else if (pkt_sz == pppoe_mtu) {
+    //     //     bpf_log_info("exactly large size is: %u", pkt_sz);
+    // }
 
     struct ethhdr *eth = (struct ethhdr *)(data);
     if ((void *)(eth + 1) > data_end) {

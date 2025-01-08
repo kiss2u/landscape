@@ -17,6 +17,7 @@ default-members = ["landscape-webserver"]
 
 
 [workspace.dependencies]
+const_format = "0.2.34"
 ctrlc = "3.2"
 libc = "0.2.159"
 libbpf-rs = { version = "0.24.8" }
@@ -41,6 +42,10 @@ toml_edit = "0.22.22"
 tokio-util = { version = "0.7.0", features = ["codec", "net"] }
 
 socket2 = "0.5.7"
+regex = "*"
+
+# for docker
+bollard = "0.18.1"
 
 [workspace.dependencies.tokio]
 version = "1.38.0"

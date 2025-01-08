@@ -23,13 +23,17 @@ fn yes() -> bool {
 
 impl NetworkIfaceConfig {
     pub fn from_phy_dev(iface: &LandScapeInterface) -> NetworkIfaceConfig {
+        let zone_type = match iface.dev_type {
+            DeviceType::Ppp => IfaceZoneType::Wan,
+            _ => IfaceZoneType::Undefined,
+        };
         NetworkIfaceConfig {
             name: iface.name.clone(),
             dev_kind: iface.dev_kind.clone(),
             dev_type: iface.dev_type.clone(),
             controller_name: None,
             enable_in_boot: matches!(iface.dev_status, crate::dev::DevState::Up),
-            zone_type: IfaceZoneType::Undefined,
+            zone_type,
         }
     }
 

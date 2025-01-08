@@ -32,7 +32,8 @@ volatile const __be32 target_addr = 0;
 volatile const __be32 proxy_addr = 0;
 volatile const __be16 proxy_port = 0;
 
-static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb) {
+static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_protocol,
+                                               u8 *l4_protocol) {
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
     struct bpf_sock_tuple *result;
@@ -45,6 +46,7 @@ static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb) {
     if (eth + 1 > data_end) return NULL;
 
     /* Only support ipv4 */
+    *l3_protocol = eth->h_proto;
     if (eth->h_proto != ETH_IPV4) return NULL;
 
     struct iphdr *iph = (struct iphdr *)(data + sizeof(*eth));
@@ -52,19 +54,21 @@ static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb) {
     if (iph->ihl != 5) /* Options are not supported */
         return NULL;
     ihl_len = iph->ihl * 4;
-    proto = iph->protocol;
+    *l4_protocol = iph->protocol;
     result = (struct bpf_sock_tuple *)&iph->saddr;
 
     /* Only support TCP */
-    if (proto != IPPROTO_TCP) return NULL;
+    // if (proto != IPPROTO_TCP) return NULL;
 
     return result;
 }
 
-static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple) {
+static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple, u8 l4_protocol) {
 #define BPF_LOG_TOPIC "handle_tcp"
     struct bpf_sock_tuple server = {};
     struct bpf_sock *sk;
+    // struct bpf_sock *tcp_sk;
+    // struct bpf_sock *udp_sk;
     const int zero = 0;
     size_t tuple_len;
     int ret;
@@ -76,24 +80,44 @@ static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple
     if (tuple->ipv4.sport && tuple->ipv4.dport) {
         bpf_log_info(
             "Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port: %d\n",
-            (tuple->ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
-            (tuple->ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
-            (tuple->ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
             tuple->ipv4.saddr & 0xFF,          // 获取第四个字节
+            (tuple->ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
+            (tuple->ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
+            (tuple->ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
             bpf_ntohs(tuple->ipv4.sport),
-            (tuple->ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
-            (tuple->ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
-            (tuple->ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
             tuple->ipv4.daddr & 0xFF,          // 目标 IP 第四个字节
+            (tuple->ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
+            (tuple->ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
+            (tuple->ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
             bpf_ntohs(tuple->ipv4.dport));
     }
 
     /* Reuse existing connection if it exists */
-    sk = bpf_skc_lookup_tcp(skb, tuple, tuple_len, BPF_F_CURRENT_NETNS, 0);
-    if (sk) {
-        bpf_log_info("find 1 success: %d", sk);
-        if (sk->state != BPF_TCP_LISTEN) goto assign;
-        bpf_sk_release(sk);
+    if (l4_protocol == IPPROTO_TCP) {
+        sk = bpf_skc_lookup_tcp(skb, tuple, tuple_len, BPF_F_CURRENT_NETNS, 0);
+        if (sk) {
+            bpf_log_info("find 1 success: %u, protocol: tcp", sk);
+            bpf_log_info("find 1 state: %u", sk->state);
+            // tcp_sk = bpf_sk_lookup_tcp(skb, tuple, tuple_len, BPF_F_CURRENT_NETNS, 0);
+            // if (tcp_sk) {
+            //     bpf_log_info("find 1 tcp_sk success: %u, protocol: tcp", tcp_sk);
+            //     bpf_log_info("find 1 tcp_sk state: %u", tcp_sk->state);
+            //     bpf_sk_release(tcp_sk);
+            // }
+            if (sk->state != BPF_TCP_LISTEN) goto assign;
+            bpf_sk_release(sk);
+        }
+        // } else if (l4_protocol == IPPROTO_UDP) {
+        //     sk = bpf_sk_lookup_udp(skb, tuple, tuple_len, BPF_F_CURRENT_NETNS, 0);
+        //     if (sk) {
+        //         bpf_log_info("find 1 success: %u, protocol: udp", sk);
+        //         bpf_log_info("src_ip4: %u", sk->src_ip4);
+        //         bpf_log_info("src_port: %u", sk->src_port);
+        //         bpf_log_info("dst_port: %u", sk->dst_port);
+        //         bpf_log_info("dst_ip4: %u", sk->dst_ip4);
+        //         bpf_log_info("find 1 state: %u", sk->state);
+        //         goto assign;
+        //     }
     }
 
     /* Lookup port server is listening on */
@@ -102,35 +126,51 @@ static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple
     server.ipv4.sport = tuple->ipv4.sport;
     server.ipv4.dport = proxy_port;
     bpf_log_info("Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port: %d\n",
-                 (server.ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
-                 (server.ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
-                 (server.ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
                  server.ipv4.saddr & 0xFF,          // 获取第四个字节
+                 (server.ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
+                 (server.ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
+                 (server.ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
                  bpf_ntohs(server.ipv4.sport),
-                 (server.ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
-                 (server.ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
-                 (server.ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
                  server.ipv4.daddr & 0xFF,          // 目标 IP 第四个字节
+                 (server.ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
+                 (server.ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
+                 (server.ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
                  bpf_ntohs(server.ipv4.dport));
-    sk = bpf_skc_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
+    if (l4_protocol == IPPROTO_TCP) {
+        sk = bpf_skc_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
+    } else if (l4_protocol == IPPROTO_UDP) {
+        sk = bpf_sk_lookup_udp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
+    }
+    // sk = bpf_skc_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
+    // tcp_sk = bpf_sk_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
+    // if (tcp_sk) {
+    //     bpf_log_info("find tcp_sk success: sk=%d", tcp_sk);
+    //     bpf_sk_release(tcp_sk);
+    // }
+    // udp_sk = bpf_sk_lookup_udp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
+    // if (udp_sk) {
+    //     bpf_log_info("find udp_sk success: sk=%d", udp_sk);
+    //     bpf_sk_release(udp_sk);
+    // }
+
     if (!sk) return TC_ACT_SHOT;
-    if (sk->state != BPF_TCP_LISTEN) {
+    if (l4_protocol == IPPROTO_TCP && sk->state != BPF_TCP_LISTEN) {
         bpf_sk_release(sk);
         return TC_ACT_SHOT;
     }
 
-    bpf_log_info("find 2 success: sk=%d", sk);
-    bpf_log_info("bound_dev_if=%u", sk->bound_dev_if);
-    bpf_log_info("family=%u", sk->family);
-    // bpf_log_info("type=%u", sk->type);
-    // bpf_log_info("protocol=%u", sk->protocol);
-    // bpf_log_info("mark=%u", sk->mark);
-    // bpf_log_info("priority=%u", sk->priority);
-    bpf_log_info("src_ip4=%u", sk->src_ip4);
-    bpf_log_info("src_port=%u", sk->src_port);
-    bpf_log_info("dst_port=%u", sk->dst_port);
-    bpf_log_info("dst_ip4=%u", sk->dst_ip4);
-    bpf_log_info("state=%u", sk->state);
+    bpf_log_info("find 2 success: sk:%u, protocol: %d", sk, l4_protocol);
+    // bpf_log_info("bound_dev_if: %u", sk->bound_dev_if);
+    // bpf_log_info("family: %u", sk->family);
+    // bpf_log_info("type: %u", sk->type);
+    // bpf_log_info("protocol: %u", sk->protocol);
+    // bpf_log_info("mark: %u", sk->mark);
+    // bpf_log_info("priority: %u", sk->priority);
+    // bpf_log_info("src_ip4: %u", sk->src_ip4);
+    // bpf_log_info("src_port: %u", sk->src_port);
+    // bpf_log_info("dst_port: %u", sk->dst_port);
+    // bpf_log_info("dst_ip4: %u", sk->dst_ip4);
+    // bpf_log_info("state: %u", sk->state);
     // bpf_log_info("rx_queue_mapping=%d", sk->rx_queue_mapping);
 assign:
     skb->mark = 1;
@@ -138,8 +178,7 @@ assign:
     bpf_log_info("change_type_err %d", change_type_err);
     bpf_log_info("pkt_type %d", skb->pkt_type);
     ret = bpf_sk_assign(skb, sk, 0);
-    // ret = 0;
-    bpf_log_info("ret %d", ret);
+    bpf_log_info("bpf_sk_assign ret %d", ret);
     bpf_sk_release(sk);
     return ret;
 #undef BPF_LOG_TOPIC
@@ -148,107 +187,119 @@ assign:
 SEC("tc")
 int ns_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "ns_inner_ingress"
-    bpf_printk("ns_inner_ingress Got packet");
 
+    u32 vlan_id = skb->vlan_tci;
+    bpf_printk("vlan_id: %x", vlan_id);
+    bpf_skb_vlan_pop(skb);
     struct bpf_sock_tuple *tuple;
+    u16 l3_protocol;
+    u8 l4_protocol;
     int ret = 0;
 
-    tuple = get_tuple(skb);
+    tuple = get_tuple(skb, &l3_protocol, &l4_protocol);
     if (!tuple) return TC_ACT_OK;
 
-    ret = handle_tcp(skb, tuple);
+    if (vlan_id != LAND_REDIRECT_NETNS_VLAN_ID) return TC_ACT_OK;
+
+    /* Only support TCP */
+    if (l4_protocol != IPPROTO_TCP && l4_protocol != IPPROTO_UDP) return TC_ACT_OK;
+
+    ret = handle_tcp(skb, tuple, l4_protocol);
     return ret == 0 ? TC_ACT_OK : TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
-int ns_peer_ingress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "ns_outer_ingress"
+// SEC("tc")
+// int ns_peer_ingress(struct __sk_buff *skb) {
+// #define BPF_LOG_TOPIC "ns_outer_ingress"
 
-    struct bpf_sock_tuple *tuple;
-    tuple = get_tuple(skb);
-    if (!tuple) return TC_ACT_OK;
+//     struct bpf_sock_tuple *tuple;
+//     tuple = get_tuple(skb);
+//     if (!tuple) return TC_ACT_OK;
 
-    size_t tuple_len;
+//     size_t tuple_len;
 
-    tuple_len = sizeof(tuple->ipv4);
-    if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) return TC_ACT_SHOT;
+//     tuple_len = sizeof(tuple->ipv4);
+//     if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) return TC_ACT_SHOT;
 
-    if (tuple->ipv4.sport && tuple->ipv4.dport) {
-        bpf_log_info("Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port: %d",
-                     (tuple->ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
-                     (tuple->ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
-                     (tuple->ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
-                     tuple->ipv4.saddr & 0xFF,          // 获取第四个字节
-                     bpf_ntohs(tuple->ipv4.sport),
-                     (tuple->ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
-                     (tuple->ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
-                     (tuple->ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
-                     tuple->ipv4.daddr & 0xFF,          // 目标 IP 第四个字节
-                     bpf_ntohs(tuple->ipv4.dport));
-    }
+//     if (tuple->ipv4.sport && tuple->ipv4.dport) {
+//         bpf_log_info("Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port:
+//         %d",
+//                      (tuple->ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
+//                      (tuple->ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
+//                      (tuple->ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
+//                      tuple->ipv4.saddr & 0xFF,          // 获取第四个字节
+//                      bpf_ntohs(tuple->ipv4.sport),
+//                      (tuple->ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
+//                      (tuple->ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
+//                      (tuple->ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
+//                      tuple->ipv4.daddr & 0xFF,          // 目标 IP 第四个字节
+//                      bpf_ntohs(tuple->ipv4.dport));
+//     }
 
-    if (tuple->ipv4.daddr == target_addr) {
-        return bpf_redirect(2, BPF_F_INGRESS);
-    }
+//     if (tuple->ipv4.daddr == target_addr) {
+//         return bpf_redirect(2, BPF_F_INGRESS);
+//     }
 
-    // bpf_log_info("packet type %d\n", skb->pkt_type);
-    // bpf_log_info("mark %d\n", skb->mark);
-    // struct bpf_fib_lookup fib_params = {};
-    // fib_params.family = AF_INET;
-    // fib_params.tos = 0;
-    // fib_params.l4_protocol = 0;
-    // fib_params.sport = 0;
-    // fib_params.dport = 0;
-    // fib_params.tot_len = tuple_len;
-    // fib_params.ipv4_src = tuple->ipv4.saddr;
-    // fib_params.ipv4_dst = tuple->ipv4.daddr;
-    // fib_params.ifindex = skb->ifindex;
+//     // bpf_log_info("packet type %d\n", skb->pkt_type);
+//     // bpf_log_info("mark %d\n", skb->mark);
+//     // struct bpf_fib_lookup fib_params = {};
+//     // fib_params.family = AF_INET;
+//     // fib_params.tos = 0;
+//     // fib_params.l4_protocol = 0;
+//     // fib_params.sport = 0;
+//     // fib_params.dport = 0;
+//     // fib_params.tot_len = tuple_len;
+//     // fib_params.ipv4_src = tuple->ipv4.saddr;
+//     // fib_params.ipv4_dst = tuple->ipv4.daddr;
+//     // fib_params.ifindex = skb->ifindex;
 
-    // // 调用 bpf_fib_lookup 执行查找
-    // int ret = bpf_fib_lookup(skb, &fib_params, sizeof(fib_params), 0);
+//     // // 调用 bpf_fib_lookup 执行查找
+//     // int ret = bpf_fib_lookup(skb, &fib_params, sizeof(fib_params), 0);
 
-    // if (ret == BPF_FIB_LKUP_RET_SUCCESS) {
-    //     // 设置 MAC 地址
-    //     bpf_log_info("Next hop ifindex: %d egress", fib_params.ifindex);
-    //     bpf_skb_store_bytes(skb, 0, fib_params.dmac, 6, 0);
-    //     bpf_skb_store_bytes(skb, 6, fib_params.smac, 6, 0);
-    //     bpf_skb_change_type(skb, PACKET_OTHERHOST);
-    //     // 使用 bpf_redirect 将数据包发送到下一跳接口
-    //     return bpf_redirect(fib_params.ifindex, 0);
-    // } else {
-    //     bpf_log_info("Next hop fail ret value is: %d\n", ret);
-    //     // 查找失败，放行数据包
-    //     return TC_ACT_OK;
-    // }
+//     // if (ret == BPF_FIB_LKUP_RET_SUCCESS) {
+//     //     // 设置 MAC 地址
+//     //     bpf_log_info("Next hop ifindex: %d egress", fib_params.ifindex);
+//     //     bpf_skb_store_bytes(skb, 0, fib_params.dmac, 6, 0);
+//     //     bpf_skb_store_bytes(skb, 6, fib_params.smac, 6, 0);
+//     //     bpf_skb_change_type(skb, PACKET_OTHERHOST);
+//     //     // 使用 bpf_redirect 将数据包发送到下一跳接口
+//     //     return bpf_redirect(fib_params.ifindex, 0);
+//     // } else {
+//     //     bpf_log_info("Next hop fail ret value is: %d\n", ret);
+//     //     // 查找失败，放行数据包
+//     //     return TC_ACT_OK;
+//     // }
 
-    // fib_params.ipv4_src = tuple->ipv4.daddr;
-    // fib_params.ipv4_dst = tuple->ipv4.saddr;
+//     // fib_params.ipv4_src = tuple->ipv4.daddr;
+//     // fib_params.ipv4_dst = tuple->ipv4.saddr;
 
-    // ret = bpf_fib_lookup(skb, &fib_params, sizeof(fib_params), 0);
+//     // ret = bpf_fib_lookup(skb, &fib_params, sizeof(fib_params), 0);
 
-    // if (ret == BPF_FIB_LKUP_RET_SUCCESS) {
-    //     // 设置 MAC 地址
-    //     bpf_log_info("Next hop ifindex: %d ingress", fib_params.ifindex);
-    //     // 使用 bpf_redirect 将数据包发送到下一跳接口
-    //     // return bpf_redirect(fib_params.ifindex, BPF_F_INGRESS);
-    // } else {
-    //     bpf_log_info("Next hop fail ret value is: %d\n", ret);
-    //     // 查找失败，放行数据包
-    //     // return TC_ACT_OK;
-    // }
+//     // if (ret == BPF_FIB_LKUP_RET_SUCCESS) {
+//     //     // 设置 MAC 地址
+//     //     bpf_log_info("Next hop ifindex: %d ingress", fib_params.ifindex);
+//     //     // 使用 bpf_redirect 将数据包发送到下一跳接口
+//     //     // return bpf_redirect(fib_params.ifindex, BPF_F_INGRESS);
+//     // } else {
+//     //     bpf_log_info("Next hop fail ret value is: %d\n", ret);
+//     //     // 查找失败，放行数据包
+//     //     // return TC_ACT_OK;
+//     // }
 
-    bpf_log_info("Drop packet\n");
-    return TC_ACT_UNSPEC;
-#undef BPF_LOG_TOPIC
-}
+//     bpf_log_info("Drop packet\n");
+//     return TC_ACT_UNSPEC;
+// #undef BPF_LOG_TOPIC
+// }
 
 SEC("tc")
 int wan_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_egress"
     struct bpf_sock_tuple *tuple;
+    u16 l3_protocol;
+    u8 l4_protocol;
     int ret;
-    tuple = get_tuple(skb);
+    tuple = get_tuple(skb, &l3_protocol, &l4_protocol);
     if (!tuple) return TC_ACT_OK;
 
     size_t tuple_len;
@@ -257,25 +308,49 @@ int wan_egress(struct __sk_buff *skb) {
     if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) return TC_ACT_SHOT;
 
     if (tuple->ipv4.daddr != target_addr) return TC_ACT_OK;
+    bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
 
-    if (tuple->ipv4.sport && tuple->ipv4.dport) {
-        bpf_log_info(
-            "Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port: %d\n",
-            (tuple->ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
-            (tuple->ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
-            (tuple->ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
-            tuple->ipv4.saddr & 0xFF,          // 获取第四个字节
-            bpf_ntohs(tuple->ipv4.sport),
-            (tuple->ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
-            (tuple->ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
-            (tuple->ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
-            tuple->ipv4.daddr & 0xFF,          // 目标 IP 第四个字节
-            bpf_ntohs(tuple->ipv4.dport));
-    }
-
+    // if (tuple->ipv4.sport && tuple->ipv4.dport) {
+    //     bpf_log_info(
+    //         "Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port: %d\n",
+    //         (tuple->ipv4.saddr >> 24) & 0xFF,  // 获取第一个字节
+    //         (tuple->ipv4.saddr >> 16) & 0xFF,  // 获取第二个字节
+    //         (tuple->ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
+    //         tuple->ipv4.saddr & 0xFF,          // 获取第四个字节
+    //         bpf_ntohs(tuple->ipv4.sport),
+    //         (tuple->ipv4.daddr >> 24) & 0xFF,  // 目标 IP 第一个字节
+    //         (tuple->ipv4.daddr >> 16) & 0xFF,  // 目标 IP 第二个字节
+    //         (tuple->ipv4.daddr >> 8) & 0xFF,   // 目标 IP 第三个字节
+    //         tuple->ipv4.daddr & 0xFF,          // 目标 IP 第四个字节
+    //         bpf_ntohs(tuple->ipv4.dport));
+    // }
+    skb->mark = 777;
     ret = bpf_redirect(outer_ifindex, 0);
     bpf_log_info("bpf_redirect result %d", ret);
     return ret;
+#undef BPF_LOG_TOPIC
+}
+
+SEC("xdp")
+int inner_xdp(struct xdp_md *ctx) {
+#define BPF_LOG_TOPIC "inner_xdp"
+    void *data = (void *)(long)ctx->data;
+    void *data_end = (void *)(long)ctx->data_end;
+    int pkt_sz = data_end - data;
+
+    bpf_printk("has frame size : %u", pkt_sz);
+
+    struct ethhdr *eth = (struct ethhdr *)(data);
+    if ((void *)(eth + 1) > data_end) {
+        bpf_log_info("package size smaller then ethhdr");
+        return XDP_DROP;
+    }
+
+    // if (eth->h_proto = ETH_VLAN) {
+    //     bpf_log_info("eth %x", eth->h_proto);
+    // }
+
+    return XDP_PASS;
 #undef BPF_LOG_TOPIC
 }
 

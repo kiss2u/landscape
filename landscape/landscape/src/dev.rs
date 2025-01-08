@@ -16,6 +16,8 @@ pub struct LandScapeInterface {
     pub controller_id: Option<u32>,
     // 网线是否插入
     pub carrier: bool,
+    pub netns_id: Option<i32>,
+    pub peer_link_id: Option<u32>,
 }
 
 impl LandScapeInterface {
@@ -27,6 +29,9 @@ impl LandScapeInterface {
         let mut status = None;
         let mut kind = None;
         let mut carrier = false;
+
+        let mut netns_id = None;
+        let mut peer_link_id = None;
         // let mut port_kind = None;
         // let mut data = None;
         // let mut port_data = None;
@@ -107,7 +112,7 @@ impl LandScapeInterface {
                 }
                 //     LinkAttribute::ProtoDown(_) => todo!(),
                 //     LinkAttribute::Mtu(_) => todo!(),
-                //     LinkAttribute::Link(_) => todo!(),
+                LinkAttribute::Link(id) => peer_link_id = Some(id),
                 //     LinkAttribute::Controller(_) => todo!(),
                 //     LinkAttribute::TxQueueLen(_) => todo!(),
                 //     LinkAttribute::NetNsPid(_) => todo!(),
@@ -123,7 +128,7 @@ impl LandScapeInterface {
                 //     LinkAttribute::GsoMaxSize(_) => todo!(),
                 //     LinkAttribute::MinMtu(_) => todo!(),
                 //     LinkAttribute::MaxMtu(_) => todo!(),
-                //     LinkAttribute::NetnsId(_) => todo!(),
+                LinkAttribute::NetnsId(id) => netns_id = Some(id),
                 LinkAttribute::OperState(s) => status = Some(s),
                 //     LinkAttribute::Stats(_) => todo!(),
                 //     LinkAttribute::Stats64(_) => todo!(),
@@ -147,6 +152,8 @@ impl LandScapeInterface {
                 dev_kind: kind.map_or(DeviceKind::UnKnow, |kind| kind.into()),
                 perm_mac,
                 carrier,
+                netns_id,
+                peer_link_id,
             }),
             _ => None,
         }

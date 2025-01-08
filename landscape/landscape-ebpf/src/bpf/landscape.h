@@ -9,17 +9,12 @@
 #define BPF_LOOP_RET_CONTINUE 0
 #define BPF_LOOP_RET_BREAK 1
 
+#define ETH_P_8021Q 0x8100
+#define LAND_REDIRECT_NETNS_VLAN_ID 0x1d
+
 #define ETH_IPV4 bpf_htons(0x0800) /* ETH IPV4 packet */
 #define ETH_IPV6 bpf_htons(0x86DD) /* ETH IPv6 packet */
 #define ETH_ARP bpf_htons(0x0806)  /* ETH ARP packet */
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, u32);    // index
-    __type(value, u32);  // ipv4
-    __uint(max_entries, 16);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
-} wan_ipv4_binding SEC(".maps");
 
 static __always_inline int _validate_read(struct __sk_buff *skb, void **hdr_, u32 offset, u32 len) {
     u8 *data = (u8 *)(__u64)skb->data;

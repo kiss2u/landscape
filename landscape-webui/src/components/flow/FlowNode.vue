@@ -13,15 +13,16 @@ import IfaceChangeZone from "../iface/IfaceChangeZone.vue";
 import IPConfigStatusBtn from "@/components/status_btn/IPConfigStatusBtn.vue";
 import NetAddrTransBtn from "@/components/status_btn/NetAddrTransBtn.vue";
 import PacketMarkStatusBtn from "@/components/status_btn/PacketMarkStatusBtn.vue";
-import { AreaCustom, Power } from "@vicons/carbon";
+import { AreaCustom, Power, Link } from "@vicons/carbon";
 import { PlugDisconnected20Regular } from "@vicons/fluent";
 import { Ethernet } from "@vicons/fa";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import { DevStateType } from "@/lib/dev";
 import { useIfaceNodeStore } from "@/stores/iface_node";
 import { add_controller, change_iface_status } from "@/api/network";
 import { ZoneType } from "@/lib/service_ipconfig";
+import { ServiceExhibitSwitch } from "@/lib/services";
 
 // import { NodeToolbar } from "@vue-flow/node-toolbar";
 
@@ -38,6 +39,7 @@ const iface_mark_edit_show = ref(false);
 const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
 const show_zone_change = ref(false);
+const show_pppd_drawer = ref(false);
 function handleUpdateShow(show: boolean) {
   if (show) {
   }
@@ -68,9 +70,14 @@ async function remove_controller() {
   });
   await refresh();
 }
+
+const show_switch = computed(() => {
+  return new ServiceExhibitSwitch(props.node);
+});
 </script>
 
 <template>
+  <!-- {{ show_switch }} -->
   <!-- <NodeToolbar
     style="display: flex; gap: 0.5rem; align-items: center"
     :is-visible="undefined"
@@ -102,6 +109,7 @@ async function remove_controller() {
           </n-button> -->
             <n-flex>
               <n-button
+                v-if="show_switch.carrier"
                 text
                 :type="node.carrier ? 'info' : 'default'"
                 :focusable="false"
@@ -112,6 +120,7 @@ async function remove_controller() {
                 </n-icon>
               </n-button>
               <n-button
+                v-if="show_switch.enable_in_boot"
                 text
                 :type="
                   node.dev_status.t === DevStateType.Up ? 'info' : 'default'
@@ -125,6 +134,7 @@ async function remove_controller() {
                 </n-icon>
               </n-button>
               <n-button
+                v-if="show_switch.zone_type"
                 text
                 :focusable="false"
                 style="font-size: 16px"
@@ -134,22 +144,34 @@ async function remove_controller() {
                   <AreaCustom></AreaCustom>
                 </n-icon>
               </n-button>
+
+              <n-button
+                v-if="show_switch.pppd"
+                text
+                :focusable="false"
+                style="font-size: 16px"
+                @click="show_pppd_drawer = true"
+              >
+                <n-icon>
+                  <Link></Link>
+                </n-icon>
+              </n-button>
             </n-flex>
           </template>
         </n-card>
       </template>
       <n-descriptions label-placement="left" :column="2">
         <n-descriptions-item label="mac地址">
-          {{ node.mac }}
+          {{ node.mac ?? "N/A" }}
         </n-descriptions-item>
         <n-descriptions-item label="物理mca">
-          {{ node.perm_mac == undefined ? "N/A" : node.perm_mac }}
+          {{ node.perm_mac ?? "N/A" }}
         </n-descriptions-item>
         <n-descriptions-item label="网路类型">
-          {{ node.dev_type }}/{{ node.dev_kind }}
+          {{ node.dev_type ?? "N/A" }}/{{ node.dev_kind ?? "N/A" }}
         </n-descriptions-item>
         <n-descriptions-item label="状态">
-          {{ node.dev_status }}
+          {{ node.dev_status ?? "N/A" }}
         </n-descriptions-item>
         <n-descriptions-item label="上层控制设备(配置)">
           {{ node.controller_id == undefined ? "N/A" : node.controller_id }}
@@ -176,17 +198,20 @@ async function remove_controller() {
 
     <n-flex v-if="node.controller_id == undefined">
       <IPConfigStatusBtn
+        v-if="show_switch.ip_config"
         @click="iface_service_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
       <NetAddrTransBtn
+        v-if="show_switch.nat_config"
         @click="iface_nat_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
 
       <PacketMarkStatusBtn
+        v-if="show_switch.mark_config"
         @click="iface_mark_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
@@ -228,6 +253,12 @@ async function remove_controller() {
     v-model:show="iface_mark_edit_show"
     :zone="node.zone_type"
     :iface_name="node.name"
+    @refresh="refresh"
+  />
+
+  <PPPDServiceListDrawer
+    v-model:show="show_pppd_drawer"
+    :attach_iface_name="node.name"
     @refresh="refresh"
   />
 </template>

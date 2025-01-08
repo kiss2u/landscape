@@ -1,11 +1,12 @@
 import { ifaces } from "@/api/network";
 import { get_iface_server_status } from "@/api/service_ipconfig";
+import { NetDev } from "@/lib/dev";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 
 export const useIfaceNodeStore = defineStore("iface_node", () => {
-  const net_devs = ref<any>({});
+  const net_devs = ref<NetDev[]>([]);
 
   const nodes = ref<any>([]);
   const edges = ref<any>([]);
@@ -54,7 +55,6 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
         position.y = position.y + right_y;
         right_y += 120;
       }
-      each.status = await get_iface_server_status(each.name);
       tmp_nodes.push({
         id: `${each.index}`,
         data: each,

@@ -4,8 +4,9 @@ use tokio::sync::watch;
 pub mod ipconfig;
 pub mod nat_service;
 pub mod packet_mark_service;
+pub mod pppd_service;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WatchServiceStatus(pub watch::Sender<ServiceStatus>);
 
 impl Default for WatchServiceStatus {
@@ -18,6 +19,10 @@ impl Default for WatchServiceStatus {
 impl WatchServiceStatus {
     pub async fn stop(&self) {
         wait_status_stop(&self.0).await;
+    }
+
+    pub async fn wait_start(&self) {
+        wait_status_running(&self.0).await;
     }
 }
 
@@ -76,4 +81,18 @@ async fn wait_status_stop(ip_service_status: &watch::Sender<ServiceStatus>) {
         println!("前一个服务等待停止结束");
     }
     // let _ = drop(do_wait);
+}
+
+async fn wait_status_running(ip_service_status: &watch::Sender<ServiceStatus>) {
+    let mut do_wait = false;
+
+    if matches!(*ip_service_status.borrow(), ServiceStatus::Staring) {
+        do_wait = true;
+    }
+    if do_wait {
+        let _ = ip_service_status
+            .subscribe()
+            .wait_for(|status| matches!(status, ServiceStatus::Running))
+            .await;
+    }
 }

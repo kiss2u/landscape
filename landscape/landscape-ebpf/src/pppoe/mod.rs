@@ -1,7 +1,3 @@
-mod landscape_pppoe_client {
-    include!(concat!(env!("OUT_DIR"), "/pppoe_client.skel.rs"));
-}
-
 use std::{
     mem::MaybeUninit,
     os::{
@@ -18,6 +14,10 @@ use libc::{
 };
 use pnet::datalink::Channel::Ethernet;
 use tokio::sync::mpsc;
+
+mod landscape_pppoe_client {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/pppoe_client.skel.rs"));
+}
 
 pub mod pppoe_tc;
 fn open_raw_socket(prog_fd: i32) -> Result<i32, ()> {
