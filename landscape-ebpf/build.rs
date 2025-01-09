@@ -1,52 +1,63 @@
 #![feature(path_file_prefix)]
 
 use libbpf_cargo::SkeletonBuilder;
-use std::env;
+use std::{env, fs};
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
+
+/// Main function of the build script.
 fn main() {
-    let out = PathBuf::from(
+    let project_root = PathBuf::from(
         env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set in build script"),
     )
     .join("src")
     .join("bpf_rs");
-    let arch = env::var("CARGO_CFG_TARGET_ARCH")
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH")
         .expect("CARGO_CFG_TARGET_ARCH must be set in build script");
+
+    println!("build target arch is: {}", target_arch);
+
     println!("cargo:rerun-if-changed=src/bpf/*");
-    for path in std::fs::read_dir(PathBuf::from("src/bpf/")).unwrap() {
-        println!("in bpf file: {:?}", path);
-        let Ok(path) = path else {
-            continue;
+
+    for entry in fs::read_dir("src/bpf/").expect("Failed to read directory: src/bpf/") {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(e) => {
+                eprintln!("Error reading directory entry: {}", e);
+                continue;
+            }
         };
 
-        let file_name = path.file_name().to_string_lossy().to_string();
-        let path = path.path();
         if path.is_dir() {
             continue;
         }
 
-        let Some((file_name, extend)) = file_name.split_once('.') else {
+        let file_name = path.file_name().and_then(|name| name.to_str());
+        let Some(file_name) = file_name else {
+            eprintln!("Invalid file name: {:?}", path);
             continue;
         };
-        println!("in bpf file: {:?}", path);
-        if !extend.eq("bpf.c") {
+
+        if !file_name.ends_with(".bpf.c") {
             continue;
         }
-        let mut out = out.clone();
-        out.push(format!("{}.skel.rs", file_name));
 
-        println!("out bpf file: {:?}", out);
+        let file_stem = file_name.trim_end_matches(".bpf.c");
+        let output_file = project_root.join(format!("{}.skel.rs", file_stem));
+
+        println!("Processing input file: {:?}", path);
+        println!("Generating output file: {:?}", output_file);
 
         SkeletonBuilder::new()
-            .source(path)
+            .source(&path)
             .clang_args([
                 OsStr::new("-Wall"),
                 OsStr::new("-Wno-compare-distinct-pointer-types"),
                 OsStr::new("-I"),
-                vmlinux::include_path_root().join(arch.clone()).as_os_str(),
+                vmlinux::include_path_root().join(&target_arch).as_os_str(),
             ])
-            .build_and_generate(&out)
-            .unwrap();
+            .build_and_generate(&output_file)
+            .expect("Failed to build and generate skeleton file");
     }
 }

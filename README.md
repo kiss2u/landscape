@@ -6,10 +6,10 @@
 
 
 [中文 README](README.zh.md)
-## Screenshot
-The image below shows the Web UI of Landscape Router:
 
-![](doc/images/1.png)
+## Screenshot
+
+![](docs/images/1.png)
 
 ---
 
@@ -48,6 +48,7 @@ Make sure `node`, `yarn`, and `rust` are installed, then run the following comma
 ```
 
 The compiled output will be located in the `output` folder.
+For cross-compilation on an x86 host to target `aarch64`, refer to [Cross Compilation for aarch64](./docs/CROSS_COMPILATION.md).
 
 ---
 
@@ -75,10 +76,14 @@ The compiled output will be located in the `output` folder.
 | **Docker Support** |     |             |
 | Container Management | ✅ | Supports simple Docker container management |
 | Traffic Redirection | ✅ | Redirects traffic to tproxy programs running in Docker |
+| **Wi-Fi**        |        |             |
+| Create AP        | ❌     | Creates a Wi-Fi hotspot |
+| Connect to AP    | ❌     | Connects to a Wi-Fi hotspot |
 | **Miscellaneous** |      |             |
 | Login UI        | ❌     | Adds login logic and interface |
 | Log Standardization | ❌ | Improves logging standardization |
 | English UI      | ❌     | Adds English version of the frontend page |
+| NIC XPS/RSP Optimization | ❌ | Balances NIC load across CPU cores to improve throughput |
 
 ---
 

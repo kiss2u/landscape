@@ -5,7 +5,7 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 > 基于 Rust / eBPF / AF_PACKET 开发。
 
 ## 截图
-![](doc/images/1.png)
+![](docs/images/1.png)
 
 ---
 
@@ -45,6 +45,7 @@ apt install pkg-config bpftool build-essential clang libelf1 libelf-dev zlib1g-d
 
 编译完成后，产物将存放在 `output` 文件夹中。
 
+ 如果需要在 x86 主机上进行交叉编译，请参考 [交叉编译 aarch64](./docs/CROSS_COMPILATION.zh.md)
 ---
 
 ## 功能
@@ -52,8 +53,8 @@ apt install pkg-config bpftool build-essential clang libelf1 libelf-dev zlib1g-d
 | 功能模块       | 状态 | 说明 |
 |----------------|-------|------|
 | **IP 配置**    |       |      |
-| PPPoE          | ✅    | 使用 pppd 客户端支持多个连接 |
-| PPPoE          | ❌    | eBPF 数据包处理暂未解决 GSO/GRO 问题 |
+| PPPoE (pppd)         | ✅    | 使用 pppd 客户端支持多个连接 |
+| PPPoE (eBPF)         | ❌    | eBPF 数据包处理暂未解决 GSO/GRO 问题 |
 | DHCP 客户端    | ✅    | 可进行 IP 请求并配置 IP |
 | DHCP 客户端    | ❌    | 支持指定 DHCP Option |
 | DHCP 服务端    | ✅    | 提供简单 IP 地址分配和续期服务（默认网段为 `192.168.5.1/24`） |
@@ -71,10 +72,14 @@ apt install pkg-config bpftool build-essential clang libelf1 libelf-dev zlib1g-d
 | **Docker 支持**|       |      |
 | 容器管理       | ✅    | 支持简单运行和管理 Docker 容器 |
 | 流量导入       | ✅    | 将流量导入运行 tproxy 的 Docker 容器 |
+| **WIFI**       |       |      |
+| 创建 AP    |    ❌   |   创建 WIFI 热点   |
+| 接入热点    |    ❌   |   接入 WIFI 热点   |
 | **杂项**       |       |      |
 | 登录界面       | ❌    | 添加登录逻辑和界面 |
 | 日志记录       | ❌    | 规范化日志记录 |
 | 英文界面       | ❌    | 添加英文版前端页面 |
+| 网卡 XPS/RSP 优化 | ❌ | 将网卡压力负载到不同的核心, 提升整体吞吐 |
 
 ---
 
