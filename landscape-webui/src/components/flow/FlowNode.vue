@@ -119,20 +119,28 @@ const show_switch = computed(() => {
                   <Ethernet></Ethernet>
                 </n-icon>
               </n-button> -->
-              <n-button
+              <n-popconfirm
                 v-if="show_switch.enable_in_boot"
-                text
-                :type="
-                  node.dev_status.t === DevStateType.Up ? 'info' : 'default'
-                "
-                :focusable="false"
-                style="font-size: 16px"
-                @click="change_dev_status()"
+                @positive-click="change_dev_status"
               >
-                <n-icon>
-                  <Power></Power>
-                </n-icon>
-              </n-button>
+                <template #trigger>
+                  <n-button
+                    text
+                    :type="
+                      node.dev_status.t === DevStateType.Up ? 'info' : 'default'
+                    "
+                    :focusable="false"
+                    style="font-size: 16px"
+                  >
+                    <n-icon>
+                      <Power></Power>
+                    </n-icon>
+                  </n-button>
+                </template>
+                确定{{
+                  node.dev_status.t === DevStateType.Up ? "关闭" : "开启"
+                }}网卡吗
+              </n-popconfirm>
               <n-button
                 v-if="show_switch.zone_type"
                 :class="node.zone_type"

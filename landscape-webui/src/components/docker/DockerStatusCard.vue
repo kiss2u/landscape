@@ -7,7 +7,7 @@ import { useThemeVars } from "naive-ui";
 import { ServiceStatusType } from "@/lib/services";
 import { useDockerStore } from "@/stores/status_docker";
 
-import DockerImageDrawer from "@/components/docker/DockerImageDrawer.vue";
+import DockerImageDrawer from "@/components/docker/image/DockerImageDrawer.vue";
 import {
   start_docker_service,
   stop_docker_service,
@@ -41,9 +41,18 @@ async function stop() {
     </template>
     <template #header-extra>
       <n-flex>
-        <n-button @click="show_image_drawer = true">查看镜像</n-button>
-        <n-button @click="start" v-if="is_down"> 开启 </n-button>
-        <n-button v-else @click="stop">关闭 docker 事件监听服务</n-button>
+        <n-button size="small" @click="show_image_drawer = true">
+          查看镜像
+        </n-button>
+        <n-button size="small" @click="start" v-if="is_down"> 开启 </n-button>
+        <n-popconfirm v-else @positive-click="stop">
+          <template #trigger>
+            <n-button size="small" @click="">
+              关闭 docker 事件监听服务
+            </n-button>
+          </template>
+          确定停止吗
+        </n-popconfirm>
       </n-flex>
     </template>
     <n-flex justify="center" align="center" style="flex: 1">

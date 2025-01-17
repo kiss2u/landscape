@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 import {
   remove_container,
@@ -38,10 +38,20 @@ async function start() {
     await dockerStore.UPDATE_INFO();
   }
 }
+
+const stop_spin = ref(false);
+const show_stop_popconfirm = ref(false);
 async function stop() {
+  show_stop_popconfirm.value = false;
   if (title.value) {
-    await stop_container(title.value);
-    await dockerStore.UPDATE_INFO();
+    try {
+      stop_spin.value = true;
+      await stop_container(title.value);
+    } catch (e) {
+    } finally {
+      stop_spin.value = false;
+      await dockerStore.UPDATE_INFO();
+    }
   }
 }
 
@@ -73,30 +83,44 @@ async function remove() {
         >
           start
         </n-button>
-        <n-button
-          secondary
-          size="small"
-          @click="stop"
-          type="warning"
-          :disabled="!show_btn.stop"
+        <n-popconfirm
+          v-model:show="show_stop_popconfirm"
+          @positive-click="stop"
         >
-          stop
-        </n-button>
-        <n-button
-          secondary
-          size="small"
-          @click="remove"
-          type="error"
-          :disabled="!show_btn.remove"
-        >
-          remove
-        </n-button>
+          <template #trigger>
+            <n-button
+              :loading="stop_spin"
+              secondary
+              size="small"
+              @click="show_stop_popconfirm = true"
+              type="warning"
+              :disabled="!show_btn.stop"
+            >
+              stop
+            </n-button>
+          </template>
+          确定停止吗
+        </n-popconfirm>
+
+        <n-popconfirm @positive-click="remove">
+          <template #trigger>
+            <n-button
+              secondary
+              size="small"
+              type="error"
+              :disabled="!show_btn.remove"
+            >
+              remove
+            </n-button>
+          </template>
+          确定删除吗
+        </n-popconfirm>
       </n-flex>
     </template>
 
     <n-descriptions :column="1" label-placement="left">
       <n-descriptions-item label="镜像">
-        <n-ellipsis style="max-width: 240px">
+        <n-ellipsis style="max-width: 220px">
           {{ props.container.Image }}
         </n-ellipsis>
       </n-descriptions-item>

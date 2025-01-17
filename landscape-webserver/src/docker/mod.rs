@@ -7,19 +7,17 @@ use bollard::container::{
     Config, CreateContainerOptions, RemoveContainerOptions, StartContainerOptions,
     StopContainerOptions,
 };
-use bollard::{
-    container::ListContainersOptions,
-    image::ListImagesOptions,
-    secret::{ContainerSummary, ImageSummary},
-    Docker,
-};
+use bollard::{container::ListContainersOptions, secret::ContainerSummary, Docker};
 
+use image::get_docker_images_paths;
 use landscape::docker::LandscapeDockerService;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 
 use crate::SimpleResult;
+
+mod image;
 
 pub async fn get_docker_paths(home_path: PathBuf) -> Router {
     let docker_service = LandscapeDockerService::new(home_path.join("docker_info"));
@@ -30,13 +28,13 @@ pub async fn get_docker_paths(home_path: PathBuf) -> Router {
             get(get_docker_status).post(start_docker_status).delete(stop_docker_status),
         )
         .route("/container_summarys", get(get_all_container_summarys))
-        .route("/images", get(get_all_images))
         .route("/run/:container_name", post(run_container))
         .route("/run_cmd", post(run_cmd_container))
         .route("/start/:container_name", post(start_container))
         .route("/stop/:container_name", post(stop_container))
         .route("/remove/:container_name", post(remove_container))
         .with_state(docker_service)
+        .nest("/images", get_docker_images_paths().await)
 }
 
 async fn get_docker_status(State(state): State<LandscapeDockerService>) -> Json<Value> {
@@ -68,21 +66,6 @@ async fn get_all_container_summarys() -> Json<Value> {
     }
 
     let result = serde_json::to_value(&container_summarys);
-    Json(result.unwrap())
-}
-
-async fn get_all_images() -> Json<Value> {
-    let mut summarys: Vec<ImageSummary> = vec![];
-    let docker = Docker::connect_with_socket_defaults();
-
-    if let Ok(docker) = docker {
-        let option = ListImagesOptions { all: true, ..Default::default() };
-        if let Ok(images) = docker.list_images::<String>(Some(option)).await {
-            summarys = images;
-        }
-    }
-
-    let result = serde_json::to_value(&summarys);
     Json(result.unwrap())
 }
 

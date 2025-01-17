@@ -40,7 +40,7 @@ const load_avg = computed(() => {
         </n-flex>
       </n-flex>
 
-      <n-flex style="flex: 1; overflow: hidden">
+      <n-flex style="overflow: hidden">
         <n-scrollbar>
           <n-popover
             :index="each_cpu.name"

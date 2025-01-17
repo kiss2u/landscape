@@ -21,6 +21,16 @@ struct SimpleResult {
 #[tokio::main]
 async fn main() {
     let args = LAND_ARGS.clone();
+
+    // iproute2
+    std::process::Command::new("iptables")
+        .args(["-A", "FORWARD", "-j", "ACCEPT"])
+        .output()
+        .unwrap();
+
+    // procps
+    std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output().unwrap();
+
     println!("test: {args:?}");
 
     let addr = SocketAddr::from((args.address, args.port));

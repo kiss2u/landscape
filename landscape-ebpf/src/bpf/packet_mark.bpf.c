@@ -129,43 +129,43 @@ int egress_packet_mark(struct __sk_buff *skb) {
 SEC("tc")
 int ingress_packet_mark(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "->|-> ingress_packet_mark ->|->"
-    int offset = 0;
-    struct ethhdr *eth;
-    if (VALIDATE_READ_DATA(skb, &eth, offset, sizeof(*eth))) {
-        return TC_ACT_UNSPEC;
-    }
-    if (eth->h_proto == ETH_ARP) {
-        return TC_ACT_OK;
-    }
-    if (eth->h_proto != ETH_IPV4 && eth->h_proto != ETH_IPV6) {
-        bpf_log_info("has wrong h_proto: %u", eth->h_proto);
-        // 丢弃
-        return TC_ACT_UNSPEC;
-    }
-    offset = 14;
-    struct iphdr *iph;
-    if (VALIDATE_READ_DATA(skb, &iph, offset, sizeof(*iph))) {
-        return TC_ACT_UNSPEC;
-    }
-    offset += (iph->ihl * 4);
+    // int offset = 0;
+    // struct ethhdr *eth;
+    // if (VALIDATE_READ_DATA(skb, &eth, offset, sizeof(*eth))) {
+    //     return TC_ACT_UNSPEC;
+    // }
+    // if (eth->h_proto == ETH_ARP) {
+    //     return TC_ACT_OK;
+    // }
+    // if (eth->h_proto != ETH_IPV4 && eth->h_proto != ETH_IPV6) {
+    //     bpf_log_info("has wrong h_proto: %u", eth->h_proto);
+    //     // 丢弃
+    //     return TC_ACT_UNSPEC;
+    // }
+    // offset = 14;
+    // struct iphdr *iph;
+    // if (VALIDATE_READ_DATA(skb, &iph, offset, sizeof(*iph))) {
+    //     return TC_ACT_UNSPEC;
+    // }
+    // offset += (iph->ihl * 4);
 
-    u8 action = 0;
-    u8 index = 0;
-    struct ipv4_lpm_key find_key = {.prefixlen = 32, .addr = iph->saddr};
-    struct ipv4_mark_action *mark_value = bpf_map_lookup_elem(&packet_mark_map, &find_key);
-    if (mark_value) {
-        action = mark_value->mark & ACTION_MASK;
-        index = (mark_value->mark & INDEX_MASK) >> 8;
-    }
+    // u8 action = 0;
+    // u8 index = 0;
+    // struct ipv4_lpm_key find_key = {.prefixlen = 32, .addr = iph->saddr};
+    // struct ipv4_mark_action *mark_value = bpf_map_lookup_elem(&packet_mark_map, &find_key);
+    // if (mark_value) {
+    //     action = mark_value->mark & ACTION_MASK;
+    //     index = (mark_value->mark & INDEX_MASK) >> 8;
+    // }
 
-    if (action == OK_MARK) {
-        // 进入下一个环节
-        return TC_ACT_UNSPEC;
-    } else if (action == DIRECT_MARK) {
-        return TC_ACT_UNSPEC;
-    } else if (action == DROP_MARK) {
-        return TC_ACT_SHOT;
-    }
+    // if (action == OK_MARK) {
+    //     // 进入下一个环节
+    //     return TC_ACT_UNSPEC;
+    // } else if (action == DIRECT_MARK) {
+    //     return TC_ACT_UNSPEC;
+    // } else if (action == DROP_MARK) {
+    //     return TC_ACT_SHOT;
+    // }
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

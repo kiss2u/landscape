@@ -81,21 +81,25 @@ impl ResolutionRule {
         };
         match_result
     }
+
     // 检查缓存并根据 TTL 判断是否过期
+    // 不同的记录可能的过期时间不同
     pub async fn lookup(&self, domain: &str, query_type: RecordType) -> Option<Vec<Record>> {
         let mut cache = self.cache.lock().await;
         if let Some(records) = cache.get(&(domain.to_string(), query_type)) {
-            let valid_records: Vec<Record> = records
-                .iter()
-                .filter_map(|(rdata, insert_time)| {
-                    // 检查插入时间加上 TTL 是否超过当前时间，如果没过期，返回记录
-                    if insert_time.elapsed().as_secs() > rdata.ttl() as u64 {
-                        Some(rdata.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            let mut is_expire = false;
+            let mut valid_records: Vec<Record> = vec![];
+            for (rdata, insert_time) in records.iter() {
+                if insert_time.elapsed().as_secs() > rdata.ttl() as u64 {
+                    is_expire = true;
+                    break;
+                }
+                valid_records.push(rdata.clone());
+            }
+
+            if is_expire {
+                return None;
+            }
 
             // 如果有有效的记录，返回它们
             if !valid_records.is_empty() {
@@ -161,7 +165,7 @@ impl ResolutionRule {
                 if !records.is_empty() {
                     Ok(records)
                 } else {
-                    Err(ResponseCode::NXDomain)
+                    Err(ResponseCode::ServFail)
                 }
             }
             Err(e) => {

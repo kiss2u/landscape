@@ -190,7 +190,7 @@ assign:
     bpf_log_info("change_type_err %d", change_type_err);
     bpf_log_info("pkt_type %d", skb->pkt_type);
     bpf_log_info("ingress_ifindex %d", skb->ingress_ifindex);
-    bpf_log_info("sk->state %u", sk->state);
+    // bpf_log_info("sk->state %u", sk->state);
     ret = bpf_sk_assign(skb, sk, 0);
     bpf_log_info("bpf_sk_assign ret %d", ret);
     bpf_sk_release(sk);

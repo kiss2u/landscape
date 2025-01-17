@@ -44,16 +44,22 @@ export class DockerContainerSummary {
 }
 
 export class DockerImageSummary {
+  Id: string;
   Created: number | undefined;
   Labels: Map<string, string> | undefined;
   RepoTags: string[] | undefined;
+  Size: number | undefined;
   constructor(obj?: {
+    Id: string;
     Created?: number;
     Labels?: any | undefined;
     RepoTags: string[];
+    Size: number | undefined;
   }) {
+    this.Id = obj?.Id ?? "";
     this.Created = obj?.Created;
     this.RepoTags = obj?.RepoTags;
+    this.Size = obj?.Size;
     if (obj?.Labels !== undefined) {
       let map = new Map<string, string>();
       for (const [key, value] of Object.entries(obj?.Labels)) {

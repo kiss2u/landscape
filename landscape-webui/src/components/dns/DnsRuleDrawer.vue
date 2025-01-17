@@ -20,11 +20,15 @@ const show_create_modal = ref(false);
     placement="right"
   >
     <n-drawer-content title="编辑 DNS 所使用规则">
-      <n-button @click="show_create_modal = true">增加规则</n-button>
+      <n-flex style="height: 100%" vertical>
+        <n-button @click="show_create_modal = true">增加规则</n-button>
 
-      <n-flex vertical>
-        <DnsRuleCard v-for="rule in rules" :key="rule.index" :rule="rule">
-        </DnsRuleCard>
+        <n-scrollbar>
+          <n-flex vertical>
+            <DnsRuleCard v-for="rule in rules" :key="rule.index" :rule="rule">
+            </DnsRuleCard>
+          </n-flex>
+        </n-scrollbar>
       </n-flex>
 
       <DnsRuleEditModal v-model:show="show_create_modal"></DnsRuleEditModal>

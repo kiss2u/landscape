@@ -60,7 +60,7 @@ const swap = computed(() => {
         </n-flex>
       </n-flex>
 
-      <n-flex justify="center" align="center" style="flex: 1">
+      <n-flex justify="center" align="center">
         <SourceProgress :value="percentage"></SourceProgress>
       </n-flex>
     </n-flex>
