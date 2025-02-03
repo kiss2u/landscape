@@ -9,4 +9,6 @@ clap = { workspace = true }
 serde_json = { workspace = true }
 once_cell = { workspace = true }
 sysinfo = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+homedir = { workspace = true }

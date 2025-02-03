@@ -24,6 +24,9 @@ struct LandscapeIfaceIpServices {
 pub async fn get_iface_service_paths(home_path: PathBuf) -> Router {
     let mut store = StoreFileManager::new(home_path.clone(), "iface_ipconfig_service".to_string());
 
+    if store.list().is_empty() {
+        store.set(IfaceIpServiceConfig::get_default_lan_bridge());
+    }
     let share_state = LandscapeIfaceIpServices {
         service: IpConfigManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
@@ -79,7 +82,7 @@ async fn get_iface_service_status(
 
 async fn handle_iface_service_status(
     State(state): State<LandscapeIfaceIpServices>,
-    Path(iface_name): Path<String>,
+    // Path(iface_name): Path<String>,
     Json(service_config): Json<IfaceIpServiceConfig>,
 ) -> Json<Value> {
     let result = SimpleResult { success: true };

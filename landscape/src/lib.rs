@@ -7,6 +7,7 @@ use dev::{DevState, DeviceKind, LandScapeInterface};
 use iface::{config::NetworkIfaceConfig, get_iface_by_name};
 pub use routerstatus::*;
 
+pub mod boot;
 pub mod config;
 pub mod dev;
 pub mod dhcp_client;

@@ -9,7 +9,8 @@ async function add_bridge() {
   if (bridge_name.value !== "") {
     let result = await create_bridge(bridge_name.value);
     if (result) {
-      console.log("add success");
+      // console.log("add success");
+      showModal.value = false;
     }
   }
 }

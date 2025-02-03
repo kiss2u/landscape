@@ -1,7 +1,11 @@
 use core::ops::Range;
 use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 
-use landscape_common::store::storev2::LandScapeStore;
+use landscape_common::{
+    store::storev2::LandScapeStore, LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP,
+    LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK, LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_RANGE,
+    LANDSCAPE_DEFAULT_LAN_NAME,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 
@@ -28,6 +32,21 @@ pub struct IfaceIpServiceConfig {
 impl LandScapeStore for IfaceIpServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
+    }
+}
+
+impl IfaceIpServiceConfig {
+    pub fn get_default_lan_bridge() -> IfaceIpServiceConfig {
+        IfaceIpServiceConfig {
+            iface_name: LANDSCAPE_DEFAULT_LAN_NAME.into(),
+            enable: true,
+            ip_model: IfaceIpModelConfig::DhcpServer {
+                server_ip: LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP.octets(),
+                network_mask: LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK,
+                options: vec![],
+                host_range: LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_RANGE,
+            },
+        }
     }
 }
 

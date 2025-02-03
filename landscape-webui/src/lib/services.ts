@@ -40,11 +40,17 @@ export class ServiceExhibitSwitch {
     this.nat_config = false;
     this.mark_config = false;
 
-    if (dev.peer_link_id != undefined) {
+    if (dev.controller != undefined || dev.controller_id != undefined) {
       this.zone_type = false;
       this.enable_in_boot = false;
       this.ip_config = false;
-    } else if (dev.dev_type === "Ppp") {
+    }
+
+    if (dev.peer_link_id != undefined) {
+      this.enable_in_boot = false;
+      this.ip_config = false;
+    }
+    if (dev.dev_type === "Ppp") {
       this.enable_in_boot = false;
       this.ip_config = false;
       this.zone_type = false;

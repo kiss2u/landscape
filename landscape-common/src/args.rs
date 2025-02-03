@@ -19,4 +19,8 @@ pub struct WebCommArgs {
     /// listen address
     #[arg(short, long, default_value = "0.0.0.0")]
     pub address: IpAddr,
+
+    /// config home path
+    #[clap(short, long)]
+    pub config_path: Option<PathBuf>,
 }

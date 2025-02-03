@@ -1,7 +1,7 @@
 import { KeyValuePair } from "./common";
 import { useThemeVars } from "naive-ui";
 
-const LAND_REDIRECT_ID_KEY = "ld_red_id";
+export const LAND_REDIRECT_ID_KEY = "ld_red_id";
 export class DockerContainerSummary {
   Created: number | undefined;
   Names: string[] | undefined;

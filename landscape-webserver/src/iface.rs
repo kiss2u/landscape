@@ -5,13 +5,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::{
-    iface::{
-        config::{IfaceZoneType, NetworkIfaceConfig},
-        IfaceTopology,
-    },
-    store::StoreFileManager,
+use landscape::iface::{
+    config::{IfaceZoneType, NetworkIfaceConfig},
+    IfaceTopology,
 };
+use landscape_common::store::storev2::LandScapeStore;
+use landscape_common::store::storev2::StoreFileManager;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
@@ -20,20 +19,16 @@ use crate::SimpleResult;
 
 #[derive(Clone)]
 struct NetworkState {
-    store: Arc<Mutex<StoreFileManager>>,
+    store: Arc<Mutex<StoreFileManager<NetworkIfaceConfig>>>,
 }
 
 pub async fn get_network_paths(home_path: PathBuf) -> Router {
     let mut store = StoreFileManager::new(home_path, "network".to_string());
-    let interface_configs = if let Some(datas) = store.list() {
-        datas.into_iter().filter_map(|j| serde_json::from_str(&j).ok()).collect()
-    } else {
-        vec![]
-    };
+
     // 从配置初始化当前网络布局环境
-    let nedd_update_config = landscape::init_devs(interface_configs).await;
+    let nedd_update_config = landscape::init_devs(store.list()).await;
     for c in nedd_update_config.into_iter() {
-        store.set(c.name.clone(), serde_json::to_string(&c).unwrap());
+        store.set(c);
     }
     // println!("==> {:?}", devs);
     let store = Arc::new(Mutex::new(store));
@@ -50,12 +45,12 @@ pub async fn get_network_paths(home_path: PathBuf) -> Router {
 async fn get_ifaces(State(state): State<NetworkState>) -> Json<Value> {
     let all_alive_devs = landscape::get_all_devices().await;
     let mut store_lock = state.store.lock().await;
-    let all_config = store_lock.pair_list();
+    let all_config = store_lock.list();
     drop(store_lock);
 
     let mut comfig_map: HashMap<String, NetworkIfaceConfig> = HashMap::new();
-    for (key, config) in all_config.unwrap().into_iter() {
-        comfig_map.insert(key, serde_json::from_str(&config).unwrap());
+    for config in all_config.into_iter() {
+        comfig_map.insert(config.get_store_key(), config);
     }
 
     let mut info = vec![];
@@ -81,10 +76,9 @@ async fn create_bridge(
 ) -> Json<SimpleResult> {
     let mut result = SimpleResult { success: false };
     if landscape::create_bridge(bridge_create_request.name.clone()).await {
-        let bridge_info = NetworkIfaceConfig::crate_bridge(bridge_create_request.name.clone());
-        let value = serde_json::to_string(&bridge_info).unwrap();
+        let bridge_info = NetworkIfaceConfig::crate_bridge(bridge_create_request.name, None);
         let mut store_lock = state.store.lock().await;
-        store_lock.set(bridge_create_request.name, value);
+        store_lock.set(bridge_info);
         drop(store_lock);
         result.success = true;
     }
@@ -106,13 +100,13 @@ async fn set_controller(
     let mut success = false;
     if let Some(iface_info) = iface_info {
         let mut store_lock = state.store.lock().await;
-        let mut link_config = if let Some(link_config) = store_lock.get(link_name) {
-            serde_json::from_str(&link_config).unwrap()
+        let mut link_config = if let Some(link_config) = store_lock.get(&link_name) {
+            link_config
         } else {
             NetworkIfaceConfig::from_phy_dev(&iface_info)
         };
         link_config.controller_name = master_name;
-        store_lock.set(link_config.name.clone(), serde_json::to_string(&link_config).unwrap());
+        store_lock.set(link_config);
         drop(store_lock);
         success = true;
     }
@@ -126,14 +120,13 @@ async fn change_zone(
 ) -> Json<SimpleResult> {
     let success = false;
     let mut store_lock = state.store.lock().await;
-    if let Some(link_config) = store_lock.get(iface_name.clone()) {
-        let mut link_config: NetworkIfaceConfig = serde_json::from_str(&link_config).unwrap();
+    if let Some(mut link_config) = store_lock.get(&iface_name) {
         if matches!(zone, IfaceZoneType::Wan) {
             landscape::set_controller(&iface_name, None).await;
             link_config.controller_name = None;
         }
         link_config.zone_type = zone;
-        store_lock.set(link_config.name.clone(), serde_json::to_string(&link_config).unwrap());
+        store_lock.set(link_config);
         drop(store_lock);
     }
 
@@ -149,13 +142,13 @@ async fn change_dev_status(
     let mut success = false;
     if let Some(iface_info) = iface_info {
         let mut store_lock = state.store.lock().await;
-        let mut link_config = if let Some(link_config) = store_lock.get(iface_name) {
-            serde_json::from_str(&link_config).unwrap()
+        let mut link_config = if let Some(link_config) = store_lock.get(&iface_name) {
+            link_config
         } else {
             NetworkIfaceConfig::from_phy_dev(&iface_info)
         };
         link_config.enable_in_boot = enable_in_boot;
-        store_lock.set(link_config.name.clone(), serde_json::to_string(&link_config).unwrap());
+        store_lock.set(link_config);
         drop(store_lock);
         success = true;
     }

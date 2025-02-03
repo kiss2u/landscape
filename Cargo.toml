@@ -24,7 +24,8 @@ once_cell = "*"
 ctrlc = "3.2"
 libc = "0.2.159"
 libbpf-rs = { version = "0.24.8" }
-libbpf-cargo = "0.24.8"
+libbpf-cargo = { version = "0.24.8" }
+libbpf-sys = { version = "*" }
 rand = "0.8.5"
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "1.0.117" }
@@ -36,9 +37,9 @@ netlink-packet-core = { version = "0.7.0" }
 axum = { version = "0.7.7", features = ["ws"] }
 axum-extra = { version = "0.9.4", features = ["typed-header"] }
 netlink-sys = { version = "0.8.6" }
-homedir = "0.3.3"
+homedir = "0.3.4"
 log = "0.4.22"
-thiserror = "1.0.64"
+thiserror = "2"
 
 toml_edit = "0.22.22"
 
@@ -57,6 +58,6 @@ version = "1.38.0"
 version = "0.35.0"
 
 [workspace.dependencies.clap]
-version = "4.0.32"
+version = "4.5.27"
 default-features = false
 features = ["std", "derive", "help", "usage", "env"]

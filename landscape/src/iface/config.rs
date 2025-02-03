@@ -1,3 +1,4 @@
+use landscape_common::{store::storev2::LandScapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
 use serde::{Deserialize, Serialize};
 
 use crate::dev::{DeviceKind, DeviceType, LandScapeInterface};
@@ -15,6 +16,12 @@ pub struct NetworkIfaceConfig {
     pub zone_type: IfaceZoneType,
     #[serde(default = "yes")]
     pub enable_in_boot: bool,
+}
+
+impl LandScapeStore for NetworkIfaceConfig {
+    fn get_store_key(&self) -> String {
+        self.name.clone()
+    }
 }
 
 fn yes() -> bool {
@@ -38,17 +45,20 @@ impl NetworkIfaceConfig {
     }
 
     pub fn crate_default_br_lan() -> NetworkIfaceConfig {
-        NetworkIfaceConfig::crate_bridge("br_lan".into())
+        NetworkIfaceConfig::crate_bridge(
+            LANDSCAPE_DEFAULT_LAN_NAME.into(),
+            Some(IfaceZoneType::Lan),
+        )
     }
 
-    pub fn crate_bridge(name: String) -> NetworkIfaceConfig {
+    pub fn crate_bridge(name: String, zone_type: Option<IfaceZoneType>) -> NetworkIfaceConfig {
         NetworkIfaceConfig {
             name,
             dev_kind: DeviceKind::Bridge,
             dev_type: DeviceType::Ethernet,
             controller_name: None,
             enable_in_boot: true,
-            zone_type: IfaceZoneType::Undefined,
+            zone_type: zone_type.unwrap_or_default(),
         }
     }
 

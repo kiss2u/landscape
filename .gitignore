@@ -9,4 +9,6 @@ landscape-ebpf/src/bpf/vmlinux.h
 # docker build dir
 dockerfiles/redirect_prog/apps
 redirect_server*
+dockerfiles/landscape/.landscape-router
+dockerfiles/landscape/apps
 push_arm.sh
