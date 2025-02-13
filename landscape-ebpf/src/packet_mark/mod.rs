@@ -1,4 +1,4 @@
-use std::{mem::MaybeUninit, path::PathBuf};
+use std::mem::MaybeUninit;
 
 use firewall::*;
 use libbpf_rs::{
@@ -9,8 +9,7 @@ use libbpf_rs::{
 use tokio::sync::oneshot;
 
 use crate::{
-    landscape::TcHookProxy, BLOCK_IP_MAP_PING_PATH, FIREWALL_EGRESS_PRIORITY,
-    FIREWALL_INGRESS_PRIORITY, PACKET_MARK_MAP_PING_PATH, REDIRECT_INDEX_MAP_PING_PATH,
+    landscape::TcHookProxy, FIREWALL_EGRESS_PRIORITY, FIREWALL_INGRESS_PRIORITY, MAP_PATHS,
 };
 
 mod firewall {
@@ -34,17 +33,11 @@ pub fn init_packet_mark(ifindex: i32, has_mac: bool, service_status: oneshot::Re
         landscape_open.maps.rodata_data.current_eth_net_offset = 0;
     }
 
-    if let Err(e) = landscape_open
-        .maps
-        .packet_mark_map
-        .reuse_pinned_map(PathBuf::from(PACKET_MARK_MAP_PING_PATH))
-    {
+    if let Err(e) = landscape_open.maps.packet_mark_map.reuse_pinned_map(&MAP_PATHS.packet_mark) {
         println!("error: {e:?}");
     }
-    if let Err(e) = landscape_open
-        .maps
-        .redirect_index_map
-        .reuse_pinned_map(PathBuf::from(REDIRECT_INDEX_MAP_PING_PATH))
+    if let Err(e) =
+        landscape_open.maps.redirect_index_map.reuse_pinned_map(&MAP_PATHS.redirect_index)
     {
         println!("error: {e:?}");
     }

@@ -23,4 +23,8 @@ pub struct WebCommArgs {
     /// config home path
     #[clap(short, long)]
     pub config_path: Option<PathBuf>,
+
+    /// ebpf map space
+    #[clap(short, long, env = "LAND_SCAPE_EBPF_MAP_SPACE", default_value = "default")]
+    pub ebpf_map_space: String,
 }

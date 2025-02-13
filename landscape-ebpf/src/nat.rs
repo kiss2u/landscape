@@ -1,5 +1,5 @@
 use core::ops::Range;
-use std::{mem::MaybeUninit, path::PathBuf};
+use std::mem::MaybeUninit;
 
 use land_nat::*;
 use libbpf_rs::{
@@ -9,7 +9,7 @@ use libbpf_rs::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use crate::WAN_IP_MAP_PING_PATH;
+use crate::MAP_PATHS;
 use crate::{landscape::TcHookProxy, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY};
 
 mod land_nat {
@@ -53,9 +53,7 @@ pub fn init_nat(
 
     let mut open_object = MaybeUninit::uninit();
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
-    if let Err(e) =
-        landscape_open.maps.wan_ipv4_binding.reuse_pinned_map(PathBuf::from(WAN_IP_MAP_PING_PATH))
-    {
+    if let Err(e) = landscape_open.maps.wan_ipv4_binding.reuse_pinned_map(&MAP_PATHS.wan_ip) {
         println!("error: {e:?}");
     }
     landscape_open.maps.rodata_data.tcp_range_start = config.tcp_range.start;

@@ -1,7 +1,7 @@
 mod landscape_bpf {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/landscape.skel.rs"));
 }
-use std::{mem::MaybeUninit, os::fd::AsFd, path::PathBuf, time::Duration};
+use std::{mem::MaybeUninit, os::fd::AsFd, time::Duration};
 
 use landscape_bpf::*;
 use libbpf_rs::{
@@ -9,7 +9,6 @@ use libbpf_rs::{
     Program, TcAttachPoint, TcHook, TcHookBuilder, TC_EGRESS, TC_INGRESS,
 };
 
-use crate::WAN_IP_MAP_PING_PATH;
 fn bump_memlock_rlimit() {
     let rlimit = libc::rlimit { rlim_cur: 128 << 20, rlim_max: 128 << 20 };
 

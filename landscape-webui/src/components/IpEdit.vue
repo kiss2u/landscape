@@ -10,7 +10,7 @@ const mask = defineModel<number | undefined>("mask");
     <n-input-number
       v-model:value="ip[0]"
       :show-button="false"
-      min="1"
+      min="0"
       max="255"
       placeholder=""
     />
@@ -18,7 +18,7 @@ const mask = defineModel<number | undefined>("mask");
     <n-input-number
       v-model:value="ip[1]"
       :show-button="false"
-      min="1"
+      min="0"
       max="255"
       placeholder=""
     />
@@ -26,7 +26,7 @@ const mask = defineModel<number | undefined>("mask");
     <n-input-number
       v-model:value="ip[2]"
       :show-button="false"
-      min="1"
+      min="0"
       max="255"
       placeholder=""
     />
@@ -34,7 +34,7 @@ const mask = defineModel<number | undefined>("mask");
     <n-input-number
       v-model:value="ip[3]"
       :show-button="false"
-      min="1"
+      min="0"
       max="254"
       placeholder=""
     />

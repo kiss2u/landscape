@@ -10,6 +10,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 ctrlc = { workspace = true }
 pnet = { workspace = true }
+once_cell = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 nix = { version = "0.28", default-features = false, features = [
     "net",

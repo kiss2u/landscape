@@ -38,14 +38,14 @@ struct {
 
 // 不会因为时间而过期的记录
 // 且优先级低于其他 map
-struct {
-    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
-    __type(key, struct ipv4_lpm_key);
-    __type(value, struct ipv4_mark_action);
-    __uint(max_entries, 65535);
-    __uint(map_flags, BPF_F_NO_PREALLOC);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
-} stable_mark_map SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+//     __type(key, struct ipv4_lpm_key);
+//     __type(value, struct ipv4_mark_action);
+//     __uint(max_entries, 65535);
+//     __uint(map_flags, BPF_F_NO_PREALLOC);
+//     __uint(pinning, LIBBPF_PIN_BY_NAME);
+// } stable_mark_map SEC(".maps");
 
 // 数据包过滤使用的 mark
 // 存储的数据是 redirect_id -> 具体网卡 index

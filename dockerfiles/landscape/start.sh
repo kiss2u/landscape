@@ -46,5 +46,7 @@ echo "[命名空间 pc2] 网卡状态和 IP 地址:"
 ip netns exec pc2 ip link show
 ip netns exec pc2 ip addr show pc2-peer  # 显示 DHCP 获取的 IP
 
+echo "nameserver 127.0.0.1" > /etc/resolv.conf
+
 # 启动其他服务（如 Web 服务器）
 /root/landscape-webserver

@@ -1617,6 +1617,7 @@ dependencies = [
  "libbpf-rs",
  "libc",
  "nix 0.28.0",
+ "once_cell",
  "plain",
  "pnet",
  "serde",

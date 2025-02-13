@@ -6,15 +6,20 @@ services:
     container_name: land_rt
     privileged: true
     pull_policy: if_not_present
+    environment:
+      LAND_SCAPE_EBPF_MAP_SPACE: docker
     volumes:
       - ./.landscape-router:/root/.landscape-router
-      # - /sys/fs/bpf:/sys/fs/bpf TODO: diff name mapping
+      - /sys/fs/bpf/:/sys/fs/bpf/
     networks:
       - out
       - br
 
   firefox:
     image: jlesage/firefox
+    environment:
+      LANG: zh_CN.UTF-8
+      ENABLE_CJK_FONT: 1
     ports:
       - "5800:5800"
     networks:
@@ -24,5 +29,4 @@ networks:
   out:
     driver: bridge
   br:
-    name: br
     driver: bridge
