@@ -1,10 +1,14 @@
 use core::ops::Range;
-use std::mem::MaybeUninit;
+use std::{mem::MaybeUninit, net::Ipv4Addr};
 
-use land_nat::*;
+use land_nat::{
+    types::{nat_mapping_key, nat_mapping_value, u_inet_addr},
+    *,
+};
+// use landscape_common::args::LAND_ARGS;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    TC_EGRESS, TC_INGRESS,
+    MapCore, MapFlags, TC_EGRESS, TC_INGRESS,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -46,6 +50,7 @@ pub fn init_nat(
     has_mac: bool,
     service_status: oneshot::Receiver<()>,
     config: NatConfig,
+    static_mappings: Option<Vec<(Ipv4Addr, u16, Ipv4Addr, u16)>>,
 ) {
     // bump_memlock_rlimit();
     let mut landscape_builder = LandNatSkelBuilder::default();
@@ -53,7 +58,15 @@ pub fn init_nat(
 
     let mut open_object = MaybeUninit::uninit();
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    // println!("reuse_pinned_map: {:?}", MAP_PATHS.wan_ip);
+    landscape_open.maps.wan_ipv4_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
+    landscape_open.maps.static_nat_mappings.set_pin_path(&MAP_PATHS.static_nat_mappings).unwrap();
     if let Err(e) = landscape_open.maps.wan_ipv4_binding.reuse_pinned_map(&MAP_PATHS.wan_ip) {
+        println!("error: {e:?}");
+    }
+    if let Err(e) =
+        landscape_open.maps.static_nat_mappings.reuse_pinned_map(&MAP_PATHS.static_nat_mappings)
+    {
         println!("error: {e:?}");
     }
     landscape_open.maps.rodata_data.tcp_range_start = config.tcp_range.start;
@@ -69,6 +82,11 @@ pub fn init_nat(
     }
 
     let landscape_skel = landscape_open.load().unwrap();
+    // let map = landscape_skel.maps.static_nat_mappings;
+    // if let Some(addr) = LAND_ARGS.get_ipv4_listen() {
+    //     get_static_mapping((addr.0, addr.1, addr.0, addr.1), &map);
+    // }
+
     let nat_egress = landscape_skel.progs.egress_nat;
     let nat_ingress = landscape_skel.progs.ingress_nat;
 
@@ -82,4 +100,55 @@ pub fn init_nat(
     let _ = service_status.blocking_recv();
     drop(nat_egress_hook);
     drop(nat_ingress_hook);
+}
+
+pub(crate) fn set_nat_static_mapping<'obj, T>(mapping: (Ipv4Addr, u16, Ipv4Addr, u16), map: &T)
+where
+    T: MapCore,
+{
+    let an = mapping.0.to_bits().to_be();
+    let pn = mapping.1.to_be();
+    let ac = mapping.2.to_bits().to_be();
+    let pc = mapping.3.to_be();
+
+    let kn = nat_mapping_key {
+        gress: 0,
+        l4proto: 6,
+        from_port: pn,
+        from_addr: u_inet_addr { ip: an },
+    };
+    let kn = unsafe { plain::as_bytes(&kn) };
+
+    let vn = nat_mapping_value {
+        addr: u_inet_addr { ip: ac },
+        trigger_addr: u_inet_addr { ip: 0 },
+        port: pc,
+        trigger_port: 0,
+        is_static: 1,
+        _pad: [0; 3],
+        active_time: 0,
+    };
+    let vn = unsafe { plain::as_bytes(&vn) };
+
+    let kc = nat_mapping_key {
+        gress: 1,
+        l4proto: 6,
+        from_port: pc,
+        from_addr: u_inet_addr { ip: ac },
+    };
+    let kc = unsafe { plain::as_bytes(&kc) };
+
+    let vc = nat_mapping_value {
+        addr: u_inet_addr { ip: an },
+        trigger_addr: u_inet_addr { ip: 0 },
+        port: pn,
+        trigger_port: 0,
+        is_static: 1,
+        _pad: [0; 3],
+        active_time: 0,
+    };
+    let vc = unsafe { plain::as_bytes(&vc) };
+
+    map.update(kn, vn, MapFlags::ANY).unwrap();
+    map.update(kc, vc, MapFlags::ANY).unwrap();
 }

@@ -15,16 +15,6 @@ struct ipv4_mark_action {
     __u32 mark;
 };
 
-#define OK_MARK 0
-#define DIRECT_MARK 1
-#define DROP_MARK 2
-#define REDIRECT_MARK 3
-#define SYMMETRIC_NAT 4
-#define REDIRECT_NETNS_MARK 5
-
-#define ACTION_MASK 0x00FF
-#define INDEX_MASK 0xFF00
-
 // DNS (目前) 或者 其他程序 可控制的 map,
 // 其中的记录会变化
 struct {

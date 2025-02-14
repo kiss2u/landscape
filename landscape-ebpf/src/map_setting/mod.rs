@@ -1,5 +1,6 @@
 use std::{mem::MaybeUninit, net::Ipv4Addr};
 
+use landscape_common::args::LAND_ARGS;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, MapFlags,
@@ -21,6 +22,7 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
 
     landscape_open.maps.wan_ipv4_binding.set_pin_path(&paths.wan_ip).unwrap();
+    landscape_open.maps.static_nat_mappings.set_pin_path(&paths.static_nat_mappings).unwrap();
     landscape_open.maps.packet_mark_map.set_pin_path(&paths.packet_mark).unwrap();
     landscape_open.maps.redirect_index_map.set_pin_path(&paths.redirect_index).unwrap();
     let _landscape_skel = landscape_open.load().unwrap();
@@ -30,13 +32,22 @@ pub fn add_wan_ip(ifindex: u32, addr: Ipv4Addr) {
     println!("add wan index - 1: {ifindex:?}");
     let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
 
-    let addr: u32 = addr.into();
+    let addr_num: u32 = addr.clone().into();
     if let Err(e) =
-        wan_ipv4_binding.update(&ifindex.to_le_bytes(), &addr.to_be_bytes(), MapFlags::ANY)
+        wan_ipv4_binding.update(&ifindex.to_le_bytes(), &addr_num.to_be_bytes(), MapFlags::ANY)
     {
         println!("setting wan ip error:{e:?}");
     } else {
         println!("setting wan index: {ifindex:?} addr:{addr:?}");
+    }
+
+    if LAND_ARGS.export_manager {
+        let static_nat_mappings =
+            libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.static_nat_mappings).unwrap();
+        crate::nat::set_nat_static_mapping(
+            (addr.clone(), LAND_ARGS.port, addr, LAND_ARGS.port),
+            &static_nat_mappings,
+        );
     }
 }
 

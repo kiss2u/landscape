@@ -41,6 +41,7 @@ onConnect(async (params: any) => {
   }
 
   let dev = ifaceNodeStore.FIND_DEV_BY_IFINDEX(params.target);
+  let master_dev = ifaceNodeStore.FIND_DEV_BY_IFINDEX(params.source);
   if (dev) {
     if (dev.controller_id || dev.controller) {
       naive_message.error("此设备已有上级设备了");
@@ -49,7 +50,7 @@ onConnect(async (params: any) => {
       link_name: dev.name,
       link_ifindex: parseInt(params.target),
       master_ifindex: parseInt(params.source),
-      master_name: undefined,
+      master_name: master_dev?.name,
     });
     if (result) {
       await ifaceNodeStore.UPDATE_INFO();

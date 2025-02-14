@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     iproute2 \
     docker-ce docker-ce-cli containerd.io  \
     curl  \
+    tcpdump \
     isc-dhcp-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

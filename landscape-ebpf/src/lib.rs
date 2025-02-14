@@ -16,11 +16,12 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
     let ebpf_map_path = format!("/sys/fs/bpf/landscape/{}", ebpf_map_space);
     if !PathBuf::from(&ebpf_map_path).exists() {
         if let Err(e) = std::fs::create_dir_all(&ebpf_map_path) {
-            panic!("can not create bpf map path: {e:?}");
+            panic!("can not create bpf map path: {ebpf_map_path:?}, err: {e:?}");
         }
     }
     let paths = LandscapeMapPath {
         wan_ip: PathBuf::from(format!("{}/wan_ipv4_binding", ebpf_map_path)),
+        static_nat_mappings: PathBuf::from(format!("{}/nat_static_mapping", ebpf_map_path)),
         // block_ip: PathBuf::from(format!("{}/firewall_block_map", ebpf_map_path)),
         packet_mark: PathBuf::from(format!("{}/packet_mark_map", ebpf_map_path)),
         redirect_index: PathBuf::from(format!("{}/redirect_index_map", ebpf_map_path)),
@@ -32,6 +33,7 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
 #[derive(Clone)]
 pub(crate) struct LandscapeMapPath {
     pub wan_ip: PathBuf,
+    pub static_nat_mappings: PathBuf,
     // pub block_ip: PathBuf,
     pub packet_mark: PathBuf,
     pub redirect_index: PathBuf,

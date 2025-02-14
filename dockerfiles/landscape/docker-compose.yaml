@@ -12,21 +12,26 @@ services:
       - ./.landscape-router:/root/.landscape-router
       - /sys/fs/bpf/:/sys/fs/bpf/
     networks:
-      - out
-      - br
+      out:
+        ipv4_address: 172.123.0.2
 
   firefox:
+    container_name: land_ff
     image: jlesage/firefox
     environment:
       LANG: zh_CN.UTF-8
       ENABLE_CJK_FONT: 1
+    dns:
+      - 1.1.1.1
     ports:
       - "5800:5800"
     networks:
-      - br
+      out:
+        ipv4_address: 172.123.0.3
 
 networks:
   out:
     driver: bridge
-  br:
-    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.123.0.0/16

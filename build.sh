@@ -6,4 +6,4 @@ source ./scripts/build_webpage.sh
 
 source ./scripts/build_server.sh
 
-# source ./scripts/build_docker.sh
+source ./scripts/build_docker.sh

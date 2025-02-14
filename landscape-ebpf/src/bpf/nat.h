@@ -1,3 +1,5 @@
+#ifndef LD_NAT_H
+#define LD_NAT_H
 #include "vmlinux.h"
 #include "landscape_log.h"
 
@@ -55,8 +57,8 @@ struct inet_pair {
     __be16 src_port;
     __be16 dst_port;
 };
+#define U_INET_ADDR_EQUAL(a, b) (__builtin_memcmp(&(a), &(b), sizeof(a)) == 0)
 #define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
-
 static __always_inline void inet_addr_set_ip(union u_inet_addr *addr, __be32 ip) { addr->ip = ip; }
 static __always_inline bool inet_addr_equal(const union u_inet_addr *a,
                                             const union u_inet_addr *b) {
@@ -142,6 +144,17 @@ struct nat_mapping_value {
     //
 };
 
+/// 作为静态映射 map
+/// TODO: 支持多 Nat 网卡进行映射
+struct nat_static_mapping_key {
+    // 匹配数据长度
+    __u32 prefixlen;
+    u8 gress;
+    u8 l4proto;
+    __be16 from_port;
+    union u_inet_addr from_addr;
+};
+
 // Timer 状态
 enum {
     TIMER_INIT = 0ULL,  // 0ULL ensures the value is of type u64
@@ -173,14 +186,6 @@ struct nat_timer_value {
     struct bpf_timer timer;
 };
 
-#define FRAG_CACHE_SIZE 1024 * 32
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __type(key, struct fragment_cache_key);
-    __type(value, struct fragment_cache_value);
-    __uint(max_entries, FRAG_CACHE_SIZE);
-} fragment_cache SEC(".maps");
-
 // 用于搜寻可用的端口
 struct search_port_ctx {
     struct nat_mapping_key ingress_key;
@@ -191,3 +196,4 @@ struct search_port_ctx {
     bool found;
     u64 timeout_interval;
 };
+#endif /* LD_NAT_H */

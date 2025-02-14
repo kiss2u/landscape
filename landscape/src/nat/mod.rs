@@ -26,7 +26,7 @@ pub async fn create_nat_service(
         println!("向内部发送停止信号");
     });
     std::thread::spawn(move || {
-        init_nat(ifindex, has_mac, rx, nat_config);
+        init_nat(ifindex, has_mac, rx, nat_config, None);
         println!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
     });

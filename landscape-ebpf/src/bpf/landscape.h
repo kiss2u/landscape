@@ -16,6 +16,16 @@
 #define ETH_IPV6 bpf_htons(0x86DD) /* ETH IPv6 packet */
 #define ETH_ARP bpf_htons(0x0806)  /* ETH ARP packet */
 
+#define OK_MARK 0
+#define DIRECT_MARK 1
+#define DROP_MARK 2
+#define REDIRECT_MARK 3
+#define SYMMETRIC_NAT 4
+#define REDIRECT_NETNS_MARK 5
+
+#define ACTION_MASK 0x00FF
+#define INDEX_MASK 0xFF00
+
 static __always_inline int _validate_read(struct __sk_buff *skb, void **hdr_, u32 offset, u32 len) {
     u8 *data = (u8 *)(__u64)skb->data;
     u8 *data_end = (u8 *)(__u64)skb->data_end;

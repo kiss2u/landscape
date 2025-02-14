@@ -58,6 +58,14 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } map_mapping_timer SEC(".maps");
 
+#define FRAG_CACHE_SIZE 1024 * 32
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __type(key, struct fragment_cache_key);
+    __type(value, struct fragment_cache_value);
+    __uint(max_entries, FRAG_CACHE_SIZE);
+} fragment_cache SEC(".maps");
+
 volatile const u16 tcp_range_start = 32768;
 // volatile const u16 tcp_range_end = 32770;
 volatile const u16 tcp_range_end = 65535;
@@ -630,6 +638,54 @@ egress_lookup_or_new_mapping(struct __sk_buff *skb, u8 ip_protocol, bool allow_c
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int lookup_static_mapping(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
+                                                 const struct inet_pair *pkt_ip_pair,
+                                                 struct nat_mapping_value **nat_gress_value_,
+                                                 struct nat_mapping_value **nat_gress_value_rev_) {
+#define BPF_LOG_TOPIC "lookup_static_mapping"
+    struct nat_mapping_key gress_key = {
+        .gress = gress,
+        .l4proto = ip_protocol,
+        .from_port = pkt_ip_pair->src_port,
+        .from_addr = pkt_ip_pair->src_addr,
+    };
+
+    struct nat_mapping_value *nat_gress_value = NULL;
+    struct nat_mapping_value *nat_gress_value_rev = NULL;
+    u8 gress_rev = gress;
+    if (gress == NAT_MAPPING_INGRESS) {
+        gress_rev = NAT_MAPPING_EGRESS;
+        gress_key.from_port = pkt_ip_pair->dst_port;
+        gress_key.from_addr = pkt_ip_pair->dst_addr;
+    } else {
+        gress_rev = NAT_MAPPING_INGRESS;
+    }
+
+    // 倒置的值
+    nat_gress_value = bpf_map_lookup_elem(&static_nat_mappings, &gress_key);
+    if (nat_gress_value) {
+        // 已经存在就查询另外一个值 并进行刷新时间
+        struct nat_mapping_key ingress_key = {
+            .gress = gress_rev,
+            .l4proto = ip_protocol,              // 原有的 l4 层协议值
+            .from_port = nat_gress_value->port,  // 数据包中的 内网端口
+            .from_addr = nat_gress_value->addr,  // 内网原始地址
+        };
+        nat_gress_value_rev = bpf_map_lookup_elem(&static_nat_mappings, &ingress_key);
+
+        if (!nat_gress_value_rev) {
+            return TC_ACT_SHOT;
+        }
+    } else {
+        return TC_ACT_SHOT;
+    }
+
+    *nat_gress_value_ = nat_gress_value;
+    *nat_gress_value_rev_ = nat_gress_value_rev;
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
 /// IP Fragment Related Start
 static __always_inline int fragment_track(struct __sk_buff *skb, struct ip_packet_info *pkt) {
 #define BPF_LOG_TOPIC "fragment_track"
@@ -964,55 +1020,61 @@ int ingress_nat(struct __sk_buff *skb) {
     struct nat_mapping_value *nat_egress_value, *nat_ingress_value;
 
     // bpf_log_info("allow_create_mapping : %d", allow_create_mapping);
-    // 所以这边即使是 ingress 使用， 那么就会使用
-    ret =
-        ingress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
-                                      &packet_info.pair_ip, &nat_egress_value, &nat_ingress_value);
 
-    // bpf_log_info("packet src port: %u ", bpf_ntohs(packet_info.pair_ip.src_port));
-    // bpf_log_info("modify port: %u -> %u", bpf_ntohs(packet_info.pair_ip.dst_port),
-    // bpf_ntohs(nat_egress_value->port));
-
+    ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_INGRESS,
+                                &packet_info.pair_ip, &nat_ingress_value, &nat_egress_value);
     if (ret != TC_ACT_OK) {
-        return TC_ACT_SHOT;
-    }
+        ret = ingress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
+                                            &packet_info.pair_ip, &nat_egress_value,
+                                            &nat_ingress_value);
 
-    // bpf_log_info("ingress value, %lu : %u", bpf_ntohl(nat_ingress_value->addr.ip),
-    //              bpf_ntohs(nat_ingress_value->port));
-    // bpf_log_info("egress  value, %lu : %u", bpf_ntohl(nat_egress_value->addr.ip),
-    //              bpf_ntohs(nat_egress_value->port));
+        // bpf_log_info("packet src port: %u ", bpf_ntohs(packet_info.pair_ip.src_port));
+        // bpf_log_info("modify port: %u -> %u", bpf_ntohs(packet_info.pair_ip.dst_port),
+        // bpf_ntohs(nat_egress_value->port));
 
-    if (!nat_egress_value->is_static) {
-        struct nat_timer_value *ct_timer_value;
-        ret = lookup_or_new_ct(packet_info.ip_protocol, allow_create_mapping, &packet_info.pair_ip,
-                               nat_egress_value, nat_ingress_value, &ct_timer_value);
-        if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
+        if (ret != TC_ACT_OK) {
             return TC_ACT_SHOT;
         }
-        if (!is_icmpx_error || ct_timer_value != NULL) {
-            ct_state_transition(packet_info.ip_protocol, packet_info.pkt_type, NAT_MAPPING_EGRESS,
-                                ct_timer_value);
+
+        // bpf_log_info("ingress value, %lu : %u", bpf_ntohl(nat_ingress_value->addr.ip),
+        //              bpf_ntohs(nat_ingress_value->port));
+        // bpf_log_info("egress  value, %lu : %u", bpf_ntohl(nat_egress_value->addr.ip),
+        //              bpf_ntohs(nat_egress_value->port));
+
+        if (!nat_egress_value->is_static) {
+            struct nat_timer_value *ct_timer_value;
+            ret = lookup_or_new_ct(packet_info.ip_protocol, allow_create_mapping,
+                                   &packet_info.pair_ip, nat_egress_value, nat_ingress_value,
+                                   &ct_timer_value);
+            if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
+                return TC_ACT_SHOT;
+            }
+            if (!is_icmpx_error || ct_timer_value != NULL) {
+                ct_state_transition(packet_info.ip_protocol, packet_info.pkt_type,
+                                    NAT_MAPPING_EGRESS, ct_timer_value);
+            }
         }
+        // } else {
+        //     bpf_log_info("packet dst port: %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
+        //                  bpf_ntohs(packet_info.pair_ip.dst_port));
+        //     bpf_log_info("modify dst port:  %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
+        //                  bpf_ntohs(nat_ingress_value->port));
+
+        //     bpf_log_info("src IP: %d.%d.%d.%d,", packet_info.pair_ip.src_addr.ip & 0xFF,
+        //                  (packet_info.pair_ip.src_addr.ip >> 8) & 0xFF,
+        //                  (packet_info.pair_ip.src_addr.ip >> 16) & 0xFF,
+        //                  (packet_info.pair_ip.src_addr.ip >> 24) & 0xFF);
+
+        //     bpf_log_info("dst IP: %d.%d.%d.%d,", packet_info.pair_ip.dst_addr.ip & 0xFF,
+        //                  (packet_info.pair_ip.dst_addr.ip >> 8) & 0xFF,
+        //                  (packet_info.pair_ip.dst_addr.ip >> 16) & 0xFF,
+        //                  (packet_info.pair_ip.dst_addr.ip >> 24) & 0xFF);
+        //     bpf_log_info("real IP: %d.%d.%d.%d,", nat_ingress_value->addr.ip & 0xFF,
+        //                  (nat_ingress_value->addr.ip >> 8) & 0xFF,
+        //                  (nat_ingress_value->addr.ip >> 16) & 0xFF,
+        //                  (nat_ingress_value->addr.ip >> 24) & 0xFF);
     }
 
-    // bpf_log_info("packet dst port: %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
-    //              bpf_ntohs(packet_info.pair_ip.dst_port));
-    // bpf_log_info("modify dst port:  %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
-    //              bpf_ntohs(nat_ingress_value->port));
-
-    // bpf_log_info("src IP: %d.%d.%d.%d,", packet_info.pair_ip.src_addr.ip & 0xFF,
-    //              (packet_info.pair_ip.src_addr.ip >> 8) & 0xFF,
-    //              (packet_info.pair_ip.src_addr.ip >> 16) & 0xFF,
-    //              (packet_info.pair_ip.src_addr.ip >> 24) & 0xFF);
-
-    // bpf_log_info("dst IP: %d.%d.%d.%d,", packet_info.pair_ip.dst_addr.ip & 0xFF,
-    //              (packet_info.pair_ip.dst_addr.ip >> 8) & 0xFF,
-    //              (packet_info.pair_ip.dst_addr.ip >> 16) & 0xFF,
-    //              (packet_info.pair_ip.dst_addr.ip >> 24) & 0xFF);
-    // bpf_log_info("real IP: %d.%d.%d.%d,", nat_ingress_value->addr.ip & 0xFF,
-    //              (nat_ingress_value->addr.ip >> 8) & 0xFF,
-    //              (nat_ingress_value->addr.ip >> 16) & 0xFF,
-    //              (nat_ingress_value->addr.ip >> 24) & 0xFF);
     // modify source
     ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
                          packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset,
@@ -1064,27 +1126,42 @@ int egress_nat(struct __sk_buff *skb) {
 
     // bpf_log_info("allow_create_mapping : %d", allow_create_mapping);
 
-    ret = egress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
-                                       &packet_info.pair_ip, &nat_egress_value, &nat_ingress_value);
+    ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_EGRESS,
+                                &packet_info.pair_ip, &nat_egress_value, &nat_ingress_value);
 
     if (ret != TC_ACT_OK) {
-        return TC_ACT_SHOT;
-    }
+        ret = egress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
+                                           &packet_info.pair_ip, &nat_egress_value,
+                                           &nat_ingress_value);
 
-    // bpf_log_info("ingress value, %lu : %u", bpf_ntohl(nat_ingress_value->addr.ip),
-    // bpf_ntohs(nat_ingress_value->port)); bpf_log_info("egress  value, %lu : %u",
-    // bpf_ntohl(nat_egress_value->addr.ip), bpf_ntohs(nat_egress_value->port));
-
-    if (!nat_egress_value->is_static) {
-        struct nat_timer_value *ct_timer_value;
-        ret = lookup_or_new_ct(packet_info.ip_protocol, allow_create_mapping, &packet_info.pair_ip,
-                               nat_egress_value, nat_ingress_value, &ct_timer_value);
-        if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
+        if (ret != TC_ACT_OK) {
             return TC_ACT_SHOT;
         }
-        if (!is_icmpx_error || ct_timer_value != NULL) {
-            ct_state_transition(packet_info.ip_protocol, packet_info.pkt_type, NAT_MAPPING_EGRESS,
-                                ct_timer_value);
+
+        if (skb->mark & ACTION_MASK == SYMMETRIC_NAT) {
+            // SYMMETRIC_NAT check
+            if (!U_INET_ADDR_EQUAL(packet_info.pair_ip.dst_addr, nat_egress_value->trigger_addr) ||
+                packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
+                return TC_ACT_SHOT;
+            }
+        }
+
+        // bpf_log_info("ingress value, %lu : %u", bpf_ntohl(nat_ingress_value->addr.ip),
+        // bpf_ntohs(nat_ingress_value->port)); bpf_log_info("egress  value, %lu : %u",
+        // bpf_ntohl(nat_egress_value->addr.ip), bpf_ntohs(nat_egress_value->port));
+
+        if (!nat_egress_value->is_static) {
+            struct nat_timer_value *ct_timer_value;
+            ret = lookup_or_new_ct(packet_info.ip_protocol, allow_create_mapping,
+                                   &packet_info.pair_ip, nat_egress_value, nat_ingress_value,
+                                   &ct_timer_value);
+            if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
+                return TC_ACT_SHOT;
+            }
+            if (!is_icmpx_error || ct_timer_value != NULL) {
+                ct_state_transition(packet_info.ip_protocol, packet_info.pkt_type,
+                                    NAT_MAPPING_EGRESS, ct_timer_value);
+            }
         }
     }
 
