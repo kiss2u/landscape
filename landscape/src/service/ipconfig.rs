@@ -73,6 +73,7 @@ pub enum IfaceIpModelConfig {
     DhcpServer {
         server_ip: [u8; 4],
         network_mask: u8,
+        #[serde(default)]
         options: Vec<DhcpOptions>,
         host_range: Range<u32>,
         // TODO: 加入 mac 地址绑定

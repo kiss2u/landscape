@@ -13,6 +13,7 @@ use super::WatchServiceStatus;
 pub struct NatServiceConfig {
     pub iface_name: String,
     pub enable: bool,
+    #[serde(default)]
     pub nat_config: NatConfig,
 }
 

@@ -1,0 +1,71 @@
+# Config Interface 
+[[ifaces]]
+name = "eth0"
+zone_type = "wan"
+
+[[ifaces]]
+name = "br_lan"
+create_dev_type = "bridge"
+zone_type = "lan"
+
+[[ifaces]]
+name = "pc1"
+controller_name = "br_lan"
+
+[[ifaces]]
+name = "pc2"
+controller_name = "br_lan"
+
+# Config IP
+[[ipconfigs]]
+iface_name = "eth0"
+enable = true
+
+[ipconfigs.ip_model]
+t = "static"
+ipv4 = [172, 123, 0, 2]
+ipv4_mask = 16
+
+# Config NAT
+[[nats]]
+iface_name = "eth0"
+enable = true
+
+# Config IP ( You don’t need to put similar configurations together )
+[[ipconfigs]]
+iface_name = "br_lan"
+enable = true
+
+[ipconfigs.ip_model]
+t = "dhcpserver"
+server_ip = [192, 168, 5, 1]
+network_mask = 24
+host_range = [100, 200]
+
+[[dns_rules]]
+name = "default rule"
+index = 1000
+enable = true
+redirection = false
+# An empty 'source' matches all domains.
+# Therefore, the default rule's index must be higher than those of more specific rules,
+# ensuring that specific rules (with lower index values) are matched first.
+source = []
+
+[[dns_rules]]
+name = "example"
+index = 200
+enable = true
+redirection = false
+source = [
+    { t = "geokey", key = "geo_key_value" },
+    { t = "config", match_type = "plain", value = "example.com" },
+]
+
+
+[[dns_rules]]
+name = "just for google.com"
+index = 500
+enable = true
+redirection = false
+source = [{ t = "config", match_type = "plain", value = "google.com" }]

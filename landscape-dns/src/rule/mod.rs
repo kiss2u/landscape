@@ -13,9 +13,11 @@ use hickory_resolver::{
     config::{NameServerConfigGroup, ResolverConfig, ResolverOpts},
     AsyncResolver,
 };
-use landscape_common::{mark::PacketMark, store::storev2::LandScapeStore};
+use landscape_common::{
+    dns::{DNSRuleConfig, DomainConfig, DomainMatchType, RuleSource},
+    mark::PacketMark,
+};
 use matcher::DomainMatcher;
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tokio::sync::Mutex;
 
@@ -41,7 +43,7 @@ pub struct ResolutionRule {
 
 impl ResolutionRule {
     pub fn new(config: DNSRuleConfig, geo_file: &HashMap<String, Vec<DomainConfig>>) -> Self {
-        let matcher = DomainMatcher::new(config.get_all_domain_configs(geo_file));
+        let matcher = DomainMatcher::new(convert_config_to_runtime_rule(&config, geo_file));
 
         let mark_value = match config.mark.clone() {
             PacketMark::Redirect { index } => PacketMark::Redirect { index }.into(),
@@ -182,111 +184,42 @@ impl ResolutionRule {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-/// 用于保存和还原的之持久化配置
-pub struct DNSRuleConfig {
-    pub name: String,
-    // 优先级
-    pub index: u32,
-    // 是否启用
-    pub enable: bool,
-    // 配置使用的 DNS 解析服务器
-    pub dns_resolve_ip: String,
-    /// 流量标记
-    pub mark: PacketMark,
-    pub source: Vec<RuleSource>,
-    // 还需增加一个字段, 用于配置解析的类型是 静态的 还是 递归的, 静态的就是 域名劫持 递归的就是向上游请求 DNS 信息
-}
-
-impl LandScapeStore for DNSRuleConfig {
-    fn get_store_key(&self) -> String {
-        self.index.to_string()
-    }
-}
-
-impl Default for DNSRuleConfig {
-    fn default() -> Self {
-        Self {
-            name: "default rule".into(),
-            index: 10000,
-            enable: true,
-            dns_resolve_ip: Default::default(),
-            mark: Default::default(),
-            source: vec![],
-        }
-    }
-}
-
-impl DNSRuleConfig {
-    pub fn get_all_domain_configs(
-        &self,
-        geo_file: &HashMap<String, Vec<DomainConfig>>,
-    ) -> Vec<DomainConfig> {
-        // println!("geo geo_file: {:?}", geo_file.keys().collect::<Vec<&String>>());
-        let mut all_domain_rules = vec![];
-        for each in self.source.iter() {
-            match each {
-                RuleSource::GeoKey { key } => {
-                    if let Some(domains) = geo_file.get(&key.to_uppercase()) {
-                        // for each_d in domains.iter() {
-                        //     all_domain_rules.push(DomainConfig::from(each_d));
-                        // }
-                        all_domain_rules.extend(domains.iter().cloned());
-                    }
-                }
-                RuleSource::Config(c) => {
-                    // all_domain_rules.extend(vec.iter().cloned());
-                    all_domain_rules.push(c.clone());
+pub fn convert_config_to_runtime_rule(
+    config: &DNSRuleConfig,
+    geo_file: &HashMap<String, Vec<DomainConfig>>,
+) -> Vec<DomainConfig> {
+    let mut all_domain_rules = vec![];
+    for each in config.source.iter() {
+        match each {
+            RuleSource::GeoKey { key } => {
+                if let Some(domains) = geo_file.get(&key.to_uppercase()) {
+                    // for each_d in domains.iter() {
+                    //     all_domain_rules.push(DomainConfig::from(each_d));
+                    // }
+                    all_domain_rules.extend(domains.iter().cloned());
                 }
             }
+            RuleSource::Config(c) => {
+                // all_domain_rules.extend(vec.iter().cloned());
+                all_domain_rules.push(c.clone());
+            }
         }
-        all_domain_rules
+    }
+    all_domain_rules
+}
+
+pub fn convert_match_type_from_proto(value: Type) -> DomainMatchType {
+    match value {
+        Type::Plain => DomainMatchType::Plain,
+        Type::Regex => DomainMatchType::Regex,
+        Type::Domain => DomainMatchType::Domain,
+        Type::Full => DomainMatchType::Full,
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
-pub enum RuleSource {
-    GeoKey { key: String },
-    Config(DomainConfig),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DomainConfig {
-    pub match_type: DomainMatchType,
-    pub value: String,
-}
-
-impl From<&Domain<'_>> for DomainConfig {
-    fn from(value: &Domain) -> Self {
-        DomainConfig {
-            match_type: DomainMatchType::from(value.type_pb),
-            value: value.value.to_lowercase(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum DomainMatchType {
-    /// The value is used as is.
-    Plain = 0,
-    /// The value is used as a regular expression.
-    Regex = 1,
-    /// 域名匹配， 前缀匹配
-    Domain = 2,
-    /// The value is a domain.
-    Full = 3,
-}
-
-impl From<Type> for DomainMatchType {
-    fn from(value: Type) -> Self {
-        match value {
-            Type::Plain => DomainMatchType::Plain,
-            Type::Regex => DomainMatchType::Regex,
-            Type::Domain => DomainMatchType::Domain,
-            Type::Full => DomainMatchType::Full,
-        }
+pub fn convert_domain_from_proto(value: &Domain) -> DomainConfig {
+    DomainConfig {
+        match_type: convert_match_type_from_proto(value.type_pb),
+        value: value.value.to_lowercase(),
     }
 }

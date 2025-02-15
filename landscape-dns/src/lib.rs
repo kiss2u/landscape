@@ -1,11 +1,12 @@
 use hickory_server::ServerFuture;
+use landscape_common::args::LAND_HOME_PATH;
+use landscape_common::dns::{DNSRuleConfig, DomainConfig};
+use landscape_common::GEO_SITE_FILE_NAME;
 use multi_rule_dns_server::DnsServer;
 use protos::geo::GeoSiteListOwned;
-use rule::{DNSRuleConfig, DomainConfig};
 use serde::{Serialize, Serializer};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
@@ -18,8 +19,6 @@ pub mod rule;
 
 /// Timeout for TCP connections.
 const TCP_TIMEOUT: Duration = Duration::from_secs(10);
-
-const GEO_SITE_FILE_NAME: &'static str = "geosite.dat";
 
 #[derive(Serialize, Debug, PartialEq, Clone)]
 #[serde(tag = "t")]
@@ -60,35 +59,31 @@ where
 pub struct LandscapeDnsService {
     #[serde(serialize_with = "serialize_status")]
     pub status: watch::Sender<ServiceStatus>,
-    // 配置的数据路径位置
-    // 里面存储的是 rule 的配置
-    pub data_path: PathBuf,
-    // pub rules_config: Vec<DNSRuleConfig>,
 }
 
 impl LandscapeDnsService {
-    pub async fn new(data_path: PathBuf) -> Self {
+    pub async fn new() -> Self {
         let (status, _) = watch::channel(ServiceStatus::Stop { message: None });
-        // let rules_config = vec![];
-        LandscapeDnsService {
-            status,
-            data_path,
-            // rules_config
-        }
+        LandscapeDnsService { status }
     }
 
     pub async fn read_geo_site_file(&self) -> HashMap<String, Vec<DomainConfig>> {
         let mut result = HashMap::new();
-        let geo_file_path = self.data_path.join(GEO_SITE_FILE_NAME);
+        let geo_file_path = LAND_HOME_PATH.join(GEO_SITE_FILE_NAME);
 
-        // 读取文件并解析为 Owned 结构体
-        let data = tokio::fs::read(geo_file_path).await.unwrap();
-        let list = GeoSiteListOwned::try_from(data).unwrap();
+        if geo_file_path.exists() && geo_file_path.is_file() {
+            // 读取文件并解析为 Owned 结构体
+            let data = tokio::fs::read(geo_file_path).await.unwrap();
+            let list = GeoSiteListOwned::try_from(data).unwrap();
 
-        for entry in list.entry.iter() {
-            let domains = entry.domain.iter().map(DomainConfig::from).collect();
-            result.insert(entry.country_code.to_string(), domains);
+            for entry in list.entry.iter() {
+                let domains = entry.domain.iter().map(rule::convert_domain_from_proto).collect();
+                result.insert(entry.country_code.to_string(), domains);
+            }
+        } else {
+            println!("geo file don't exists or not a file, return empty map");
         }
+
         result
     }
 

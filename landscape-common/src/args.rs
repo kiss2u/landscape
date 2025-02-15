@@ -6,7 +6,19 @@ use std::{
 use clap::{arg, Parser};
 use once_cell::sync::Lazy;
 
+use crate::LANDSCAPE_CONFIG_DIR_NAME;
+
 pub static LAND_ARGS: Lazy<WebCommArgs> = Lazy::new(WebCommArgs::parse);
+pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
+    if let Some(path) = &LAND_ARGS.config_path {
+        path.clone()
+    } else {
+        let Some(path) = homedir::my_home().unwrap() else {
+            panic!("can not get home path");
+        };
+        path.join(LANDSCAPE_CONFIG_DIR_NAME)
+    }
+});
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]

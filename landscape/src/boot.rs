@@ -9,7 +9,10 @@ use crate::{
         packet_mark_service::PacketMarkServiceConfig, pppd_service::PPPDServiceConfig,
     },
 };
-use landscape_common::error::{LdError, LdResult};
+use landscape_common::{
+    dns::DNSRuleConfig,
+    error::{LdError, LdResult},
+};
 
 const INIT_FILE_NAME: &'static str = "landscape_init.toml";
 
@@ -34,7 +37,6 @@ If landscape_init.toml does not exist, all existing configurations will be clear
 pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> {
     let lock_path = home_path.as_ref().join(INIT_LOCK_FILE_NAME);
 
-    // 1. 先检查文件存不存在, 不存在 创建一个 Lock 文件
     if !lock_path.exists() {
         let mut file =
             OpenOptions::new().write(true).truncate(true).create(true).open(&lock_path)?;
@@ -67,4 +69,5 @@ pub struct InitConfig {
     pub nats: Vec<NatServiceConfig>,
     pub marks: Vec<PacketMarkServiceConfig>,
     pub pppds: Vec<PPPDServiceConfig>,
+    pub dns_rules: Vec<DNSRuleConfig>,
 }

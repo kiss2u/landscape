@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
@@ -21,9 +21,7 @@ struct LandscapeIfaceIpServices {
     store: Arc<Mutex<StoreFileManager<IfaceIpServiceConfig>>>,
 }
 
-pub async fn get_iface_ipconfig_paths(home_path: PathBuf) -> Router {
-    let mut store = StoreFileManager::new(home_path.clone(), "iface_ipconfig_service".to_string());
-
+pub async fn get_iface_ipconfig_paths(mut store: StoreFileManager<IfaceIpServiceConfig>) -> Router {
     if store.list().is_empty() {
         store.set(IfaceIpServiceConfig::get_default_lan_bridge());
     }

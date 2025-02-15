@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
@@ -21,9 +21,9 @@ struct LandscapeIfaceMarkServices {
     store: Arc<Mutex<StoreFileManager<PacketMarkServiceConfig>>>,
 }
 
-pub async fn get_iface_packet_mark_paths(home_path: PathBuf) -> Router {
-    let mut store = StoreFileManager::new(home_path.clone(), "iface_mark_service".to_string());
-
+pub async fn get_iface_packet_mark_paths(
+    mut store: StoreFileManager<PacketMarkServiceConfig>,
+) -> Router {
     let share_state = LandscapeIfaceMarkServices {
         service: MarkServiceManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),

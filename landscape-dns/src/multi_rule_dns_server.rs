@@ -9,7 +9,8 @@ use hickory_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
 
-use crate::rule::{DNSRuleConfig, DomainConfig, ResolutionRule};
+use crate::rule::ResolutionRule;
+use landscape_common::dns::{DNSRuleConfig, DomainConfig};
 
 pub struct DnsServer {
     resolves: BTreeMap<u32, Arc<ResolutionRule>>,

@@ -1,6 +1,7 @@
 use std::{net::Ipv4Addr, ops::Range};
 
 pub mod args;
+pub mod dns;
 pub mod error;
 pub mod info;
 pub mod mark;
@@ -8,6 +9,8 @@ pub mod store;
 pub mod util;
 
 pub const LANDSCAPE_CONFIG_DIR_NAME: &'static str = ".landscape-router";
+
+pub const GEO_SITE_FILE_NAME: &'static str = "geosite.dat";
 
 /// Landscape default lan bridge name
 pub const LANDSCAPE_DEFAULT_LAN_NAME: &'static str = "br_lan";

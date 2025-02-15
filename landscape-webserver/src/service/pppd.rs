@@ -66,9 +66,8 @@ iptables -t mangle -L -n -v --line-numbers | grep "TCPMSS.*$PPP_IFACE.*clamp" | 
     let _ = write_context(PathBuf::from(PPPD_IF_DOWN_FILE_PATH), ip_down_file_context);
 }
 
-pub async fn get_iface_pppd_paths(home_path: PathBuf) -> Router {
+pub async fn get_iface_pppd_paths(mut store: StoreFileManager<PPPDServiceConfig>) -> Router {
     check_pppd_sh();
-    let mut store = StoreFileManager::new(home_path.clone(), "iface_pppd_service".to_string());
 
     let share_state = LandscapeIfacePPPDServices {
         service: PPPDServiceManager::init(store.list()).await,

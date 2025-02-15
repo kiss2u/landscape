@@ -12,6 +12,7 @@ pub struct NetworkIfaceConfig {
     pub create_dev_type: CreateDevType,
     // 是否有 master 使用 name 因为 Linux 中名称是唯一的
     pub controller_name: Option<String>,
+    #[serde(default)]
     pub zone_type: IfaceZoneType,
     #[serde(default = "yes")]
     pub enable_in_boot: bool,

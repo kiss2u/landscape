@@ -54,6 +54,7 @@ fn main() {
                 OsStr::new("-Wall"),
                 OsStr::new("-Wno-compare-distinct-pointer-types"),
                 OsStr::new("-I"),
+                OsStr::new("-mcpu=v2"),
                 vmlinux::include_path_root().join(&target_arch).as_os_str(),
             ])
             .build_and_generate(&output_file)

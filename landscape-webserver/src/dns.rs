@@ -1,16 +1,16 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
     routing::{delete, get},
     Json, Router,
 };
-use landscape_common::store::storev2::StoreFileManager;
+use landscape_common::{dns::DNSRuleConfig, store::storev2::StoreFileManager};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
-use landscape_dns::{rule::DNSRuleConfig, LandscapeDnsService};
+use landscape_dns::LandscapeDnsService;
 
 #[derive(Clone)]
 struct LandscapeServices {
@@ -18,17 +18,17 @@ struct LandscapeServices {
     store: Arc<Mutex<StoreFileManager<DNSRuleConfig>>>,
 }
 
-pub async fn get_dns_paths(home_path: PathBuf) -> Router {
-    let mut store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
+pub async fn get_dns_paths(mut store: StoreFileManager<DNSRuleConfig>) -> Router {
     let mut rules = store.list();
     if rules.is_empty() {
         store.set(DNSRuleConfig::default());
         rules = store.list();
     }
     let share_state = LandscapeServices {
-        dns_service: LandscapeDnsService::new(home_path.clone()).await,
+        dns_service: LandscapeDnsService::new().await,
         store: Arc::new(Mutex::new(store)),
     };
+
     share_state.dns_service.start(53, Some(53), rules).await;
 
     Router::new()

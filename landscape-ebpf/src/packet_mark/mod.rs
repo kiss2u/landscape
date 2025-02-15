@@ -33,6 +33,8 @@ pub fn init_packet_mark(ifindex: i32, has_mac: bool, service_status: oneshot::Re
         landscape_open.maps.rodata_data.current_eth_net_offset = 0;
     }
 
+    landscape_open.maps.packet_mark_map.set_pin_path(&MAP_PATHS.packet_mark).unwrap();
+    landscape_open.maps.redirect_index_map.set_pin_path(&MAP_PATHS.redirect_index).unwrap();
     if let Err(e) = landscape_open.maps.packet_mark_map.reuse_pinned_map(&MAP_PATHS.packet_mark) {
         println!("error: {e:?}");
     }
