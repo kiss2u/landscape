@@ -7,7 +7,7 @@ services:
     privileged: true
     pull_policy: if_not_present
     environment:
-      LAND_SCAPE_EBPF_MAP_SPACE: docker
+      LANDSCAPE_EBPF_MAP_SPACE: docker
     volumes:
       - ./.landscape-router:/root/.landscape-router
       - /sys/fs/bpf/:/sys/fs/bpf/

@@ -9,7 +9,7 @@ use crate::{iface::get_iface_by_name, service::ServiceStatus};
 
 use super::WatchServiceStatus;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatServiceConfig {
     pub iface_name: String,
     pub enable: bool,

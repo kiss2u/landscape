@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
@@ -7,7 +7,7 @@ use axum::{
 };
 use landscape::iface::{
     config::{IfaceZoneType, NetworkIfaceConfig},
-    IfaceTopology,
+    get_iface_by_name, IfaceTopology,
 };
 use landscape_common::store::storev2::LandScapeStore;
 use landscape_common::store::storev2::StoreFileManager;
@@ -22,8 +22,8 @@ struct NetworkState {
     store: Arc<Mutex<StoreFileManager<NetworkIfaceConfig>>>,
 }
 
-pub async fn get_network_paths(home_path: PathBuf) -> Router {
-    let mut store = StoreFileManager::new(home_path, "network".to_string());
+pub async fn get_network_paths(mut store: StoreFileManager<NetworkIfaceConfig>) -> Router {
+    // let mut store = StoreFileManager::new(home_path, "network".to_string());
 
     // 从配置初始化当前网络布局环境
     let nedd_update_config = landscape::init_devs(store.list()).await;
@@ -120,7 +120,18 @@ async fn change_zone(
 ) -> Json<SimpleResult> {
     let success = false;
     let mut store_lock = state.store.lock().await;
-    if let Some(mut link_config) = store_lock.get(&iface_name) {
+
+    let link_config = if let Some(link_config) = store_lock.get(&iface_name) {
+        Some(link_config)
+    } else {
+        if let Some(iface) = get_iface_by_name(&iface_name).await {
+            Some(NetworkIfaceConfig::from_phy_dev(&iface))
+        } else {
+            None
+        }
+    };
+
+    if let Some(mut link_config) = link_config {
         if matches!(zone, IfaceZoneType::Wan) {
             landscape::set_controller(&iface_name, None).await;
             link_config.controller_name = None;

@@ -8,7 +8,7 @@ use crate::pppd_client::PPPDConfig;
 
 use super::WatchServiceStatus;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PPPDServiceConfig {
     pub attach_iface_name: String,
     pub iface_name: String,

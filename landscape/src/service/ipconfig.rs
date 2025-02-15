@@ -22,7 +22,7 @@ use crate::{
 
 use super::WatchServiceStatus;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfaceIpServiceConfig {
     pub iface_name: String,
     pub enable: bool,

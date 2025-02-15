@@ -2,10 +2,11 @@ use std::net::SocketAddr;
 
 use axum::{handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router};
 
-use landscape::boot::boot_check;
+use landscape::boot::{boot_check, InitConfig};
 use landscape_common::{
     args::LAND_ARGS,
     error::{LdError, LdResult},
+    store::storev2::StoreFileManager,
     LANDSCAPE_CONFIG_DIR_NAME,
 };
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ mod iface;
 mod service;
 mod sysinfo;
 
-use service::ipconfig::get_iface_service_paths;
+use service::ipconfig::get_iface_ipconfig_paths;
 use service::nat::get_iface_nat_paths;
 use service::packet_mark::get_iface_packet_mark_paths;
 use service::pppd::get_iface_pppd_paths;
@@ -45,7 +46,16 @@ async fn main() -> LdResult<()> {
 
     println!("config path: {home_path:?}");
 
-    // let need_init = boot_check(&home_path)?;
+    let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
+
+    let need_init_config = boot_check(&home_path)?;
+
+    if let Some(InitConfig { ifaces, ipconfigs, nats, marks, pppds }) = need_init_config {
+        iface_store.truncate();
+        for iface_config in ifaces {
+            iface_store.set(iface_config);
+        }
+    }
 
     // need iproute2
     std::process::Command::new("iptables")
@@ -64,13 +74,13 @@ async fn main() -> LdResult<()> {
 
     let api_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
-        .nest("/iface", iface::get_network_paths(home_path.clone()).await)
+        .nest("/iface", iface::get_network_paths(iface_store).await)
         .nest("/dns", dns::get_dns_paths(home_path.clone()).await)
         .nest(
             "/services",
             Router::new()
+                .merge(get_iface_ipconfig_paths(home_path.clone()).await)
                 .merge(get_iface_pppd_paths(home_path.clone()).await)
-                .merge(get_iface_service_paths(home_path.clone()).await)
                 .merge(get_iface_packet_mark_paths(home_path.clone()).await)
                 .merge(get_iface_nat_paths(home_path.clone()).await),
         )

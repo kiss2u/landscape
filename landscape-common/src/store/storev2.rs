@@ -361,4 +361,50 @@ where
             }
         }
     }
+
+    /// 清空所有记录，重置存储状态
+    pub fn truncate(&mut self) {
+        // 关闭所有现有的文件句柄
+        self.readers.clear();
+        // 确保当前 writer 的内容刷新并关闭
+        let _ = self.writer.flush();
+
+        // 删除所有数据文件
+        let dir_entries = std::fs::read_dir(&self.path).unwrap();
+        for entry in dir_entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext.to_string_lossy().to_string() == self.name {
+                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                            if stem.parse::<u64>().is_ok() {
+                                let _ = std::fs::remove_file(&path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 重置内部状态
+        self.current_era = 1;
+        self.junk_data_size = 0;
+        self.index.clear();
+
+        // 创建新的 era 1 文件
+        let current_era_file_path = self.path.join(format!("{}.{}", self.current_era, &self.name));
+        let writer_file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(true) // 确保文件为空
+            .open(&current_era_file_path)
+            .unwrap();
+        self.writer = BufWriter::new(writer_file);
+
+        // 添加对应的 reader
+        let reader_file = OpenOptions::new().read(true).open(current_era_file_path).unwrap();
+        self.readers.insert(self.current_era, BufReader::new(reader_file));
+    }
 }

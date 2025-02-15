@@ -3,8 +3,11 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use dev::{DevState, DeviceKind, LandScapeInterface};
-use iface::{config::NetworkIfaceConfig, get_iface_by_name};
+use dev::{DevState, LandScapeInterface};
+use iface::{
+    config::{CreateDevType, NetworkIfaceConfig},
+    get_iface_by_name,
+};
 pub use routerstatus::*;
 
 pub mod boot;
@@ -96,9 +99,9 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
                 current_iface
             } else {
                 // TODO 依据网卡类型创建网卡
-                match &ifconfig.dev_kind {
+                match &ifconfig.create_dev_type {
                     // 目前仅处理桥接设别的创建
-                    DeviceKind::Bridge => {
+                    CreateDevType::Bridge => {
                         let create_result =
                             handle.link().add().bridge(ifconfig.name.clone()).execute().await;
                     }
@@ -143,9 +146,12 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
         }
     }
 
-    for iface in interface_map.into_values() {
-        need_store_config.push(NetworkIfaceConfig::from_phy_dev(&iface));
-    }
+    // for iface in interface_map.into_values() {
+    //     if iface.is_lo() {
+    //         continue;
+    //     }
+    //     need_store_config.push(NetworkIfaceConfig::from_phy_dev(&iface));
+    // }
 
     need_store_config
 }

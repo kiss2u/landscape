@@ -8,7 +8,7 @@ default-run = "test"
 landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-common = { path = "../landscape-common" }
 
-
+toml = { workspace = true }
 const_format = { workspace = true }
 rusty_network_manager = "0.5.1"
 tokio-stream = "0.1.14"

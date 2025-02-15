@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, RwLock};
 use super::{ServiceStatus, WatchServiceStatus};
 use crate::iface::get_iface_by_name;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PacketMarkServiceConfig {
     pub iface_name: String,
     pub enable: bool,

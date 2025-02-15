@@ -8,9 +8,8 @@ use crate::dev::{DeviceKind, DeviceType, LandScapeInterface};
 pub struct NetworkIfaceConfig {
     // 名称 关联的网卡名称 相当于网卡的唯一 id
     pub name: String,
-    // 类型 网卡还是桥接设备
-    pub dev_kind: DeviceKind,
-    pub dev_type: DeviceType,
+    #[serde(default)]
+    pub create_dev_type: CreateDevType,
     // 是否有 master 使用 name 因为 Linux 中名称是唯一的
     pub controller_name: Option<String>,
     pub zone_type: IfaceZoneType,
@@ -36,8 +35,7 @@ impl NetworkIfaceConfig {
         };
         NetworkIfaceConfig {
             name: iface.name.clone(),
-            dev_kind: iface.dev_kind.clone(),
-            dev_type: iface.dev_type.clone(),
+            create_dev_type: CreateDevType::create_from(iface),
             controller_name: None,
             enable_in_boot: matches!(iface.dev_status, crate::dev::DevState::Up),
             zone_type,
@@ -54,20 +52,11 @@ impl NetworkIfaceConfig {
     pub fn crate_bridge(name: String, zone_type: Option<IfaceZoneType>) -> NetworkIfaceConfig {
         NetworkIfaceConfig {
             name,
-            dev_kind: DeviceKind::Bridge,
-            dev_type: DeviceType::Ethernet,
+            create_dev_type: CreateDevType::Bridge,
             controller_name: None,
             enable_in_boot: true,
             zone_type: zone_type.unwrap_or_default(),
         }
-    }
-
-    pub fn is_virtual_dev(&self) -> bool {
-        !matches!(self.dev_kind, DeviceKind::UnKnow)
-    }
-
-    pub fn is_lo(&self) -> bool {
-        self.name == "lo"
     }
 }
 
@@ -79,4 +68,26 @@ pub enum IfaceZoneType {
     Undefined,
     Wan,
     Lan,
+}
+
+/// 需要创建的设备类型
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum CreateDevType {
+    #[default]
+    NoNeedToCreate,
+    Bridge,
+}
+
+impl CreateDevType {
+    pub fn create_from(iface: &LandScapeInterface) -> Self {
+        if !iface.is_virtual_dev() {
+            CreateDevType::default()
+        } else {
+            match iface.dev_kind {
+                DeviceKind::Bridge => CreateDevType::Bridge,
+                _ => CreateDevType::default(),
+            }
+        }
+    }
 }

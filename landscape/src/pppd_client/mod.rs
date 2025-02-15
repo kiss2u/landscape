@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod pppd;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PPPDConfig {
     pub default_route: bool,
     pub peer_id: String,

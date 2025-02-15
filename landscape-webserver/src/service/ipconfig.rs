@@ -21,7 +21,7 @@ struct LandscapeIfaceIpServices {
     store: Arc<Mutex<StoreFileManager<IfaceIpServiceConfig>>>,
 }
 
-pub async fn get_iface_service_paths(home_path: PathBuf) -> Router {
+pub async fn get_iface_ipconfig_paths(home_path: PathBuf) -> Router {
     let mut store = StoreFileManager::new(home_path.clone(), "iface_ipconfig_service".to_string());
 
     if store.list().is_empty() {

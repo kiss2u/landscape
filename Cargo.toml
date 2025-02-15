@@ -41,6 +41,7 @@ homedir = "0.3.4"
 log = "0.4.22"
 thiserror = "2"
 
+toml = "0.8.19"
 toml_edit = "0.22.22"
 
 tokio-util = { version = "0.7.0", features = ["codec", "net"] }
