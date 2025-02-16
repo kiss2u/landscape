@@ -12,6 +12,7 @@ use hickory_server::{
 use crate::rule::ResolutionRule;
 use landscape_common::dns::{DNSRuleConfig, DomainConfig};
 
+/// 整个 DNS 规则匹配树
 pub struct DnsServer {
     resolves: BTreeMap<u32, Arc<ResolutionRule>>,
 }
@@ -50,34 +51,27 @@ impl RequestHandler for DnsServer {
 
         let mut records = vec![];
 
+        // TODO: 修改逻辑
         for (_index, resolver) in self.resolves.iter() {
             if resolver.is_match(&domain).await {
-                records = if let Some(cached_rdata) = resolver.lookup(&domain, query_type).await {
-                    cached_rdata
-                } else {
-                    // 如果缓存中没有有效记录，则调用 resolve_domain 进行 DNS 解析
-                    match resolver.resolve_domain(&domain, query_type).await {
-                        Ok(rdata_vec) => {
-                            // 将解析结果插入缓存
-                            resolver.insert(domain.clone(), query_type, rdata_vec.clone()).await;
-                            rdata_vec
-                        }
-                        Err(error_code) => {
-                            // 构建并返回错误响应
-                            header.set_response_code(error_code);
-                            let response = MessageResponseBuilder::from_message_request(request)
-                                .build_no_records(header);
-                            let result = response_handle.send_response(response).await;
-                            return match result {
-                                Err(e) => {
-                                    log::error!("Request failed: {}", e);
-                                    serve_failed()
-                                }
-                                Ok(info) => info,
-                            };
-                        }
+                records = match resolver.lookup(&domain, query_type).await {
+                    Ok(rdata_vec) => rdata_vec,
+                    Err(error_code) => {
+                        // 构建并返回错误响应
+                        header.set_response_code(error_code);
+                        let response = MessageResponseBuilder::from_message_request(request)
+                            .build_no_records(header);
+                        let result = response_handle.send_response(response).await;
+                        return match result {
+                            Err(e) => {
+                                log::error!("Request failed: {}", e);
+                                serve_failed()
+                            }
+                            Ok(info) => info,
+                        };
                     }
                 };
+                break;
             }
         }
 

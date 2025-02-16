@@ -72,14 +72,20 @@ const source_style = [
     size="huge"
     :bordered="false"
   >
-    {{ isModified }}
-    <n-form style="flex: 1" ref="formRef" :model="rule" :cols="4">
+    <!-- {{ isModified }} -->
+    <n-form style="flex: 1" ref="formRef" :model="rule" :cols="5">
       <n-grid :cols="5">
         <n-form-item-gi label="优先级" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi>
         <n-form-item-gi label="启用" :offset="1" :span="1">
           <n-switch v-model:value="rule.enable">
+            <template #checked> 启用 </template>
+            <template #unchecked> 禁用 </template>
+          </n-switch>
+        </n-form-item-gi>
+        <n-form-item-gi label="重定向" :span="1">
+          <n-switch v-model:value="rule.redirection">
             <template #checked> 启用 </template>
             <template #unchecked> 禁用 </template>
           </n-switch>

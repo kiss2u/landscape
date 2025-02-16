@@ -2,6 +2,7 @@ export class DnsRule {
   index: number;
   name: string;
   enable: boolean;
+  redirection: boolean;
   mark: PacketMark;
   dns_resolve_ip: string;
   source: RuleSource[];
@@ -10,6 +11,7 @@ export class DnsRule {
     index?: number;
     name?: string;
     enable?: boolean;
+    redirection?: boolean;
     mark?: PacketMark;
     dns_resolve_ip?: string;
     source?: RuleSource[];
@@ -17,6 +19,7 @@ export class DnsRule {
     this.index = obj?.index ?? -1;
     this.name = obj?.name ?? "";
     this.enable = obj?.enable ?? true;
+    this.redirection = obj?.redirection ?? false;
     this.mark = obj?.mark ? { ...obj.mark } : { t: MarkType.NoMark };
     this.dns_resolve_ip = obj?.dns_resolve_ip ?? "1.1.1.1";
     this.source = obj?.source ?? [];
