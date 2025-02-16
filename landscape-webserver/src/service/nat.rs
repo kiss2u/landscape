@@ -2,16 +2,16 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use landscape::service::{
     nat_service::{NatServiceConfig, NatServiceManager},
     WatchServiceStatus,
 };
-use landscape_common::store::storev2::StoreFileManager;
+use landscape_common::{observer::IfaceObserverAction, store::storev2::StoreFileManager};
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 
 use crate::{error::LandscapeApiError, SimpleResult};
 
@@ -21,11 +21,34 @@ struct LandscapeIfaceNatServices {
     store: Arc<Mutex<StoreFileManager<NatServiceConfig>>>,
 }
 
-pub async fn get_iface_nat_paths(mut store: StoreFileManager<NatServiceConfig>) -> Router {
+pub async fn get_iface_nat_paths(
+    mut store: StoreFileManager<NatServiceConfig>,
+    mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+) -> Router {
     let share_state = LandscapeIfaceNatServices {
         service: NatServiceManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
     };
+
+    let share_state_copy = share_state.clone();
+    tokio::spawn(async move {
+        while let Ok(msg) = dev_observer.recv().await {
+            match msg {
+                IfaceObserverAction::Up(iface_name) => {
+                    println!("restart {iface_name} NAT service");
+                    let mut read_lock = share_state_copy.store.lock().await;
+                    let service_config = if let Some(service_config) = read_lock.get(&iface_name) {
+                        service_config
+                    } else {
+                        continue;
+                    };
+                    drop(read_lock);
+                    let _ = share_state_copy.service.start_new_service(service_config).await;
+                }
+                IfaceObserverAction::Down(_) => {}
+            }
+        }
+    });
     Router::new()
         .route("/nats/status", get(get_all_nat_status))
         .route(
@@ -34,7 +57,7 @@ pub async fn get_iface_nat_paths(mut store: StoreFileManager<NatServiceConfig>) 
                 .post(handle_iface_nat_status)
                 .delete(delete_and_stop_iface_nat),
         )
-        .route("/nats/:iface_name/restart", post(restart_nat_service_status))
+        // .route("/nats/:iface_name/restart", post(restart_nat_service_status))
         .with_state(share_state)
 }
 
@@ -99,21 +122,21 @@ async fn delete_and_stop_iface_nat(
     Json(result.unwrap())
 }
 
-async fn restart_nat_service_status(
-    State(state): State<LandscapeIfaceNatServices>,
-    Path(iface_name): Path<String>,
-) -> Result<Json<Value>, LandscapeApiError> {
-    let mut result = SimpleResult { success: false };
+// async fn restart_nat_service_status(
+//     State(state): State<LandscapeIfaceNatServices>,
+//     Path(iface_name): Path<String>,
+// ) -> Result<Json<Value>, LandscapeApiError> {
+//     let mut result = SimpleResult { success: false };
 
-    let mut read_lock = state.store.lock().await;
-    if let Some(service_config) = read_lock.get(&iface_name) {
-        if let Ok(()) = state.service.start_new_service(service_config).await {
-            result.success = true;
-        }
-    } else {
-        return Err(LandscapeApiError::NotFound("can not find".into()));
-    }
+//     let mut read_lock = state.store.lock().await;
+//     if let Some(service_config) = read_lock.get(&iface_name) {
+//         if let Ok(()) = state.service.start_new_service(service_config).await {
+//             result.success = true;
+//         }
+//     } else {
+//         return Err(LandscapeApiError::NotFound("can not find".into()));
+//     }
 
-    let result = serde_json::to_value(result);
-    Ok(Json(result.unwrap()))
-}
+//     let result = serde_json::to_value(result);
+//     Ok(Json(result.unwrap()))
+// }

@@ -16,9 +16,9 @@ async fn main() -> Result<(), String> {
 
     // // Listen for link changes
     let mgroup_flags = RTMGRP_LINK
-        | RTMGRP_IPV4_IFADDR
+        // | RTMGRP_IPV4_IFADDR
         // | RTMGRP_IPV4_ROUTE
-        | RTMGRP_IPV6_IFADDR
+        // | RTMGRP_IPV6_IFADDR
         // | RTMGRP_IPV6_ROUTE
         ;
 
@@ -27,14 +27,16 @@ async fn main() -> Result<(), String> {
     tokio::spawn(connection);
 
     while let Some((message, _)) = messages.next().await {
-        println!("Route change message - {message:?}");
-        match message.payload {
-            NetlinkPayload::InnerMessage(inner_message) => {
-                // 处理 InnerMessage
-                println!("Received Inner message: {:?}", inner_message);
-            }
-            _ => todo!(),
-        }
+        // println!("Route change message - {message:?}");
+        let result = landscape::observer::filter_message_status(message);
+        println!("result - {result:?}");
+        // match message.payload {
+        //     NetlinkPayload::InnerMessage(inner_message) => {
+        //         // 处理 InnerMessage
+        //         println!("Received Inner message: {:?}", inner_message);
+        //     }
+        //     _ => todo!(),
+        // }
     }
 
     // flush_addresses(handle, "veth-host".to_string()).await;

@@ -38,6 +38,7 @@ async fn main() -> LdResult<()> {
 
     println!("config path: {home_path:?}");
 
+    let dev_obs = landscape::observer::dev_observer().await;
     let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
     let mut iface_ipconfig_store =
         StoreFileManager::new(home_path.clone(), "iface_ipconfig".to_string());
@@ -111,8 +112,8 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_iface_ipconfig_paths(iface_ipconfig_store).await)
                 .merge(get_iface_pppd_paths(iface_pppd_store).await)
-                .merge(get_iface_nat_paths(iface_nat_store).await)
-                .merge(get_iface_packet_mark_paths(iface_mark_store).await),
+                .merge(get_iface_nat_paths(iface_nat_store, dev_obs.resubscribe()).await)
+                .merge(get_iface_packet_mark_paths(iface_mark_store, dev_obs).await),
         )
         .nest("/sysinfo", sysinfo::get_sys_info_route());
     let app = Router::new()

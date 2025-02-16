@@ -40,7 +40,8 @@ pub async fn get_dns_paths(mut store: StoreFileManager<DNSRuleConfig>) -> Router
 
 async fn get_dns_rules(State(state): State<LandscapeServices>) -> Json<Value> {
     let mut get_store = state.store.lock().await;
-    let dns_rules = get_store.list();
+    let mut dns_rules = get_store.list();
+    dns_rules.sort_by(|a, b| a.index.cmp(&b.index));
     let result = serde_json::to_value(dns_rules);
     Json(result.unwrap())
 }

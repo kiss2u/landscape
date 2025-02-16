@@ -5,6 +5,7 @@ pub mod dns;
 pub mod error;
 pub mod info;
 pub mod mark;
+pub mod observer;
 pub mod store;
 pub mod util;
 

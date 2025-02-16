@@ -108,8 +108,14 @@ const source_style = [
       <n-form-item label="名称">
         <n-input v-model:value="rule.name" type="text" />
       </n-form-item>
-
-      <n-form-item label="上游 DNS">
+      <n-form-item v-if="rule.redirection" label="重定向 IP">
+        <n-input
+          placeholder="默认使用: 1.1.1.1"
+          v-model:value="rule.dns_resolve_ip"
+          type="text"
+        />
+      </n-form-item>
+      <n-form-item v-else label="上游 DNS">
         <n-input
           placeholder="默认使用: 1.1.1.1"
           v-model:value="rule.dns_resolve_ip"
