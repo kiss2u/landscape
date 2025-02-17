@@ -13,6 +13,13 @@ const percentage = computed(() => {
   );
 });
 
+const swap_percentage = computed(() => {
+  // console.log(sysinfo.mem.used_mem / sysinfo.mem.total_mem);
+  return (
+    sysinfo.router_status.mem.used_swap / sysinfo.router_status.mem.total_swap
+  );
+});
+
 const men = computed(() => {
   return {
     total_mem: (
@@ -55,13 +62,14 @@ const swap = computed(() => {
         </n-flex>
 
         <n-flex justify="space-between">
-          <n-flex>swap: {{ swap.total_swap }} GB</n-flex>
+          <n-flex>交换: {{ swap.total_swap }} GB</n-flex>
           <n-flex>已用: {{ swap.used_swap }} GB</n-flex>
         </n-flex>
       </n-flex>
 
-      <n-flex justify="center" align="center">
+      <n-flex justify="space-around" align="center">
         <SourceProgress :value="percentage"></SourceProgress>
+        <SourceProgress :warn="false" :value="swap_percentage"></SourceProgress>
       </n-flex>
     </n-flex>
   </n-card>

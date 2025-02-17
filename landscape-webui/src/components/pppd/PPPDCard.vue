@@ -33,8 +33,16 @@ async function del() {
         </n-descriptions-item>
       </n-descriptions>
       <template #header-extra>
-        <n-button @click="show_create_pppd_modal = true"> 编辑 </n-button>
-        <n-button @click="del()"> 删除 </n-button>
+        <n-flex>
+          <n-button
+            type="warning"
+            secondary
+            @click="show_create_pppd_modal = true"
+          >
+            编辑
+          </n-button>
+          <n-button type="error" secondary @click="del()"> 删除 </n-button>
+        </n-flex>
       </template>
     </n-card>
     <CreatePPPDConfigModal

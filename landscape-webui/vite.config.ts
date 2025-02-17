@@ -6,6 +6,8 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 
+const HOST_PORT = "localhost:6300";
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -36,14 +38,14 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:6300",
+        target: `http://${HOST_PORT}`,
         changeOrigin: true,
         configure: (proxy: any, options: any) => {
           // proxy will be an instance of 'http-proxy'
         },
       },
       "/ws": {
-        target: "ws://localhost:6300",
+        target: `ws://${HOST_PORT}`,
         changeOrigin: true,
         ws: true,
         rewrite: (path: any) => path.replace(/^\/ws/, ""),

@@ -14,24 +14,35 @@ const show_create_modal = ref(false);
 </script>
 <template>
   <n-drawer
-    @after-enter="read_rules"
+    @after-enter="read_rules()"
     v-model:show="show"
     :width="502"
     placement="right"
   >
     <n-drawer-content title="编辑 DNS 所使用规则">
       <n-flex style="height: 100%" vertical>
+        <n-alert type="warning">
+          编辑规则后需要手动 `停止` 并 `开启` 后 DNS 规则才能生效
+        </n-alert>
         <n-button @click="show_create_modal = true">增加规则</n-button>
 
         <n-scrollbar>
           <n-flex vertical>
-            <DnsRuleCard v-for="rule in rules" :key="rule.index" :rule="rule">
+            <DnsRuleCard
+              @refresh="read_rules()"
+              v-for="rule in rules"
+              :key="rule.index"
+              :rule="rule"
+            >
             </DnsRuleCard>
           </n-flex>
         </n-scrollbar>
       </n-flex>
 
-      <DnsRuleEditModal v-model:show="show_create_modal"></DnsRuleEditModal>
+      <DnsRuleEditModal
+        v-model:show="show_create_modal"
+        @refresh="read_rules()"
+      ></DnsRuleEditModal>
     </n-drawer-content>
   </n-drawer>
 </template>

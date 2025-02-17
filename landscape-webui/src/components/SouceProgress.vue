@@ -11,6 +11,8 @@ interface Props {
   exhibit_type?: ExhibitType;
 }
 
+const warn = defineModel("warn", { default: true });
+
 const props = withDefaults(defineProps<Props>(), {
   exhibit_type: ExhibitType.Dashboard,
 });
@@ -22,10 +24,14 @@ const percentage = computed(() => {
 });
 
 const percentage_color = computed(() => {
-  if (percentage.value > 90) {
-    return themeVars.value.errorColor;
-  } else if (percentage.value > 80) {
-    return themeVars.value.warningColor;
+  if (warn.value) {
+    if (percentage.value > 90) {
+      return themeVars.value.errorColor;
+    } else if (percentage.value > 80) {
+      return themeVars.value.warningColor;
+    } else {
+      return themeVars.value.successColor;
+    }
   } else {
     return themeVars.value.successColor;
   }

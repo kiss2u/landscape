@@ -8,7 +8,10 @@ landscape = { path = "../landscape" }
 landscape-dns = { path = "../landscape-dns" }
 landscape-common = { path = "../landscape-common" }
 
-tokio = { version = "1.0", features = ["full"] }
+jsonwebtoken = "9"
+once_cell = { workspace = true }
+
+tokio = { workspace = true, features = ["full"] }
 clap = { workspace = true }
 
 axum = { workspace = true }
@@ -32,3 +35,5 @@ serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*" }
 
 bollard = { workspace = true }
+
+rand = { workspace = true }

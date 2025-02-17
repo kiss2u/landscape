@@ -20,12 +20,29 @@ pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
     }
 });
 
+pub static LAND_WEB_ARGS: Lazy<WebConfig> = Lazy::new(|| {
+    let web_root = if let Some(web_root) = &LAND_ARGS.web {
+        web_root.clone()
+    } else {
+        LAND_HOME_PATH.join("static")
+    };
+
+    println!("web root is: {web_root:?}");
+    println!("listen at: {:?}:{:?}", LAND_ARGS.address, LAND_ARGS.port);
+
+    WebConfig {
+        web_root,
+        port: LAND_ARGS.port,
+        address: LAND_ARGS.address,
+    }
+});
+
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
     /// static html location
-    #[arg(short, long, default_value = "./static")]
-    pub web: PathBuf,
+    #[arg(short, long)]
+    pub web: Option<PathBuf>,
 
     /// listen port
     #[arg(short, long, default_value = "6300")]
@@ -46,6 +63,14 @@ pub struct WebCommArgs {
     /// ebpf map space
     #[clap(long, env = "LANDSCAPE_EBPF_MAP_SPACE", default_value = "default")]
     pub ebpf_map_space: String,
+
+    /// manager user
+    #[clap(long = "user", env = "LANDSCAPE_ADMIN_USER", default_value = "root")]
+    pub admin_user: String,
+
+    /// manager pass
+    #[clap(long = "pass", env = "LANDSCAPE_ADMIN_PASS", default_value = "changeme")]
+    pub admin_pass: String,
 }
 
 impl WebCommArgs {
@@ -55,4 +80,13 @@ impl WebCommArgs {
             IpAddr::V6(_) => None,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct WebConfig {
+    pub web_root: PathBuf,
+
+    pub port: u16,
+
+    pub address: IpAddr,
 }

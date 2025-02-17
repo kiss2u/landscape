@@ -17,3 +17,5 @@ export class SimpleResult {
     this.success = obj?.success ?? false;
   }
 }
+
+export const LANDSCAPE_TOKEN_KEY = "LANDSCAPE_TOKEN";

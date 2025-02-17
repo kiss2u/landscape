@@ -1,6 +1,6 @@
-import { ServiceStatus } from "@/lib/services";
 import api from ".";
 import { DnsRule } from "@/lib/dns";
+import { ServiceStatus } from "@/lib/services";
 
 export async function get_dns_status(): Promise<ServiceStatus> {
   let data = await api.api.get("dns");

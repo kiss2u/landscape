@@ -25,14 +25,23 @@ const show_create_pppd_modal = ref(false);
       :title="`配置 ${props.attach_iface_name} PPPD 服务`"
       closable
     >
-      <n-button @click="show_create_pppd_modal = true">
-        add pppd config
-      </n-button>
+      <n-flex style="height: 100%" vertical>
+        <n-button @click="show_create_pppd_modal = true">
+          添加 PPPD 配置
+        </n-button>
 
-      <n-flex vertical>
-        <PPPDCard 
-        @refresh="inti_drawer" :config="each" v-for="each in pppd_configs"> </PPPDCard>
+        <n-scrollbar>
+          <n-flex vertical>
+            <PPPDCard
+              @refresh="inti_drawer"
+              :config="each"
+              v-for="each in pppd_configs"
+            >
+            </PPPDCard>
+          </n-flex>
+        </n-scrollbar>
       </n-flex>
+
       <!-- {{ pppd_configs }} -->
 
       <CreatePPPDConfigModal

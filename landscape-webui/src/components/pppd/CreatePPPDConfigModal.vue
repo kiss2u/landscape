@@ -75,11 +75,19 @@ async function confirm_config() {
       </n-grid>
 
       <n-form-item label="用户名">
-        <n-input v-model:value="value.pppd_config.peer_id" type="text" />
+        <n-input
+          type="password"
+          show-password-on="click"
+          v-model:value="value.pppd_config.peer_id"
+        />
       </n-form-item>
 
       <n-form-item label="密码">
-        <n-input v-model:value="value.pppd_config.password" type="text" />
+        <n-input
+          type="password"
+          show-password-on="click"
+          v-model:value="value.pppd_config.password"
+        />
       </n-form-item>
     </n-form>
     <template #footer>

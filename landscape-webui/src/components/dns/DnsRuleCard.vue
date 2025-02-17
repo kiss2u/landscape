@@ -7,8 +7,11 @@ const rule = defineModel<DnsRule>("rule", { required: true });
 
 const show_edit_modal = ref(false);
 
+const emit = defineEmits(["refresh"]);
+
 async function del() {
   await delete_dns_rule(rule.value.index);
+  emit("refresh");
 }
 </script>
 <template>
@@ -37,11 +40,18 @@ async function del() {
           <n-button type="warning" secondary @click="show_edit_modal = true">
             编辑
           </n-button>
-          <n-button type="error" secondary @click="del()"> 删除 </n-button>
+
+          <n-popconfirm @positive-click="del()">
+            <template #trigger>
+              <n-button type="error" secondary @click=""> 删除 </n-button>
+            </template>
+            确定删除吗
+          </n-popconfirm>
         </n-flex>
       </template>
     </n-card>
     <DnsRuleEditModal
+      @refresh="emit('refresh')"
       :rule="rule"
       v-model:show="show_edit_modal"
     ></DnsRuleEditModal>

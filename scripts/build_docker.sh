@@ -9,7 +9,7 @@ BUILD_DIR="$SCRIPT_DIR/dockerfiles/landscape"
 
 echo "Creating build directory: $COPY_DIR"
 rm -rf "$COPY_DIR"  # 清理旧的构建目录
-mkdir -p "$COPY_DIR"
+mkdir -p "$COPY_DIR/.landscape-router"
 
 
 # 继续复制其他文件（不受影响）
@@ -22,7 +22,7 @@ cp "$SCRIPT_DIR/target/$TARGET_ARCH/release/landscape-webserver" \
 chmod +x "$COPY_DIR/landscape-webserver"
 
 cp -r "$SCRIPT_DIR/output/static" \
-   "$COPY_DIR/static"
+   "$COPY_DIR/.landscape-router/static"
 
 #
 # 第三阶段：使用 Buildx 构建 Docker 镜像并输出到 tar 文件

@@ -1,16 +1,22 @@
 use std::net::SocketAddr;
 
-use axum::{handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router};
+use axum::{
+    handler::HandlerWithoutStateExt,
+    http::StatusCode,
+    routing::{get, post},
+    Router,
+};
 
 use landscape::boot::{boot_check, InitConfig};
 use landscape_common::{
-    args::{LAND_ARGS, LAND_HOME_PATH},
+    args::{LAND_ARGS, LAND_HOME_PATH, LAND_WEB_ARGS},
     error::LdResult,
     store::storev2::StoreFileManager,
 };
 use serde::{Deserialize, Serialize};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
+mod auth;
 mod dns;
 mod docker;
 mod dump;
@@ -97,13 +103,13 @@ async fn main() -> LdResult<()> {
     // need procps
     std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output().unwrap();
 
-    let addr = SocketAddr::from((args.address, args.port));
+    let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     let service = handle_404.into_service();
-    let serve_dir = ServeDir::new(&args.web).not_found_service(service);
+    let serve_dir = ServeDir::new(&LAND_WEB_ARGS.web_root).not_found_service(service);
 
-    let api_route = Router::new()
+    let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(iface_store).await)
         .nest("/dns", dns::get_dns_paths(dns_store).await)
@@ -115,7 +121,15 @@ async fn main() -> LdResult<()> {
                 .merge(get_iface_nat_paths(iface_nat_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_packet_mark_paths(iface_mark_store, dev_obs).await),
         )
-        .nest("/sysinfo", sysinfo::get_sys_info_route());
+        .nest("/sysinfo", sysinfo::get_sys_info_route())
+        .route_layer(axum::middleware::from_fn(auth::auth_middleware));
+
+    let auth_route = Router::new().route("/login", post(auth::login_handler));
+    let api_route = Router::new()
+        // 资源路由
+        .nest("/src", source_route)
+        // 认证路由
+        .nest("/auth", auth_route);
     let app = Router::new()
         .nest("/api", api_route)
         .nest("/sock", dump::get_tump_router())

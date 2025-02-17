@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { push_dns_rule } from "@/api/dns_service";
 import { DnsRule, DomainMatchType, RuleSource } from "@/lib/dns";
+import { useMessage } from "naive-ui";
 
 import { ChangeCatalog } from "@vicons/carbon";
 import { computed, onMounted } from "vue";
@@ -8,11 +9,16 @@ import { ref } from "vue";
 
 import PacketMark from "@/components/mark/PacketMark.vue";
 
+const message = useMessage();
+
+const emit = defineEmits(["refresh"]);
+
 const show = defineModel<boolean>("show", { required: true });
 
 const origin_rule = defineModel<DnsRule>("rule", { default: new DnsRule() });
 const rule = ref<any>(new DnsRule(origin_rule.value));
 
+const commit_spin = ref(false);
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== JSON.stringify(origin_rule.value);
 });
@@ -37,9 +43,22 @@ function changeCurrentRuleType(value: RuleSource, index: number) {
 }
 
 async function saveRule() {
-  await push_dns_rule(rule.value);
-  console.log("submit success");
-  origin_rule.value = rule.value;
+  if (rule.value.index == -1) {
+    message.warning("**优先级** 值不能为 -1, 且不能重复, 否则将会覆盖规则");
+    return;
+  }
+  try {
+    commit_spin.value = true;
+    await push_dns_rule(rule.value);
+    console.log("submit success");
+    origin_rule.value = rule.value;
+    show.value = false;
+  } catch (e: any) {
+    message.error(`${e.response.data}`);
+  } finally {
+    commit_spin.value = false;
+  }
+  emit("refresh");
 }
 
 const source_style = [
@@ -91,7 +110,7 @@ const source_style = [
           </n-switch>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="5" label="流量标记">
+        <n-form-item-gi v-if="!rule.redirection" :span="5" label="流量标记">
           <!-- <n-popover trigger="hover">
             <template #trigger>
               <n-switch v-model:value="rule.mark">
@@ -104,7 +123,6 @@ const source_style = [
           <PacketMark v-model:mark="rule.mark"></PacketMark>
         </n-form-item-gi>
       </n-grid>
-
       <n-form-item label="名称">
         <n-input v-model:value="rule.name" type="text" />
       </n-form-item>
@@ -161,7 +179,12 @@ const source_style = [
     <template #footer>
       <n-flex justify="space-between">
         <n-button>取消</n-button>
-        <n-button @click="saveRule" :disabled="!isModified">保存</n-button>
+        <n-button
+          :loading="commit_spin"
+          @click="saveRule"
+          :disabled="!isModified"
+          >保存</n-button
+        >
       </n-flex>
     </template>
   </n-modal>

@@ -1,7 +1,7 @@
 {
   "name": "landscape-webui",
   "private": true,
-  "version": "0.2.5",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "axios": "^1.6.8",
     "pinia": "^2.2.6",
     "vue": "^3.4.21",
-    "vue-i18n": "10"
+    "vue-i18n": "10",
+    "vue-router": "4"
   },
   "devDependencies": {
     "@types/netmask": "^2.0.5",
