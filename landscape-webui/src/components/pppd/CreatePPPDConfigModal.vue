@@ -97,8 +97,9 @@ async function confirm_config() {
           @click="confirm_config()"
           type="success"
           :disabled="!isModified"
-          >确定</n-button
         >
+          确定
+        </n-button>
       </n-flex>
     </template>
   </n-modal>

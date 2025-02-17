@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import CreatePPPDConfigModal from "@/components/pppd/CreatePPPDConfigModal.vue";
 import { PPPDServiceConfig } from "@/lib/pppd";
 import { stop_and_del_iface_pppd } from "@/api/service_pppd";
@@ -9,6 +9,13 @@ const config = defineModel<PPPDServiceConfig>("config", { required: true });
 const show_create_pppd_modal = ref(false);
 const emit = defineEmits(["refresh"]);
 
+const maskedUser = computed(() => {
+  let username = config.value.pppd_config.peer_id;
+  if (username && username.length > 3) {
+    return "****" + username.slice(-3);
+  }
+  return username;
+});
 async function del() {
   await stop_and_del_iface_pppd(config.value.iface_name);
   emit("refresh");
@@ -29,7 +36,7 @@ async function del() {
           {{ config.pppd_config.default_route }}
         </n-descriptions-item>
         <n-descriptions-item label="用户名">
-          {{ config.pppd_config.peer_id }}
+          {{ maskedUser }}
         </n-descriptions-item>
       </n-descriptions>
       <template #header-extra>
@@ -41,7 +48,12 @@ async function del() {
           >
             编辑
           </n-button>
-          <n-button type="error" secondary @click="del()"> 删除 </n-button>
+          <n-popconfirm @positive-click="del()">
+            <template #trigger>
+              <n-button type="error" secondary @click=""> 删除 </n-button>
+            </template>
+            确定删除吗
+          </n-popconfirm>
         </n-flex>
       </template>
     </n-card>

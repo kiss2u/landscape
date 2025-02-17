@@ -183,8 +183,9 @@ const source_style = [
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
-          >保存</n-button
         >
+          保存
+        </n-button>
       </n-flex>
     </template>
   </n-modal>
