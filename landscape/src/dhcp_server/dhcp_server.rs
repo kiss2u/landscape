@@ -105,7 +105,7 @@ pub async fn init_dhcp_server(
     let send_socket = Arc::new(socket);
     let recive_socket_raw = send_socket.clone();
 
-    let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1024);
+    let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<(Vec<u8>, SocketAddr)>(1024);
 
     tokio::spawn(async move {
         let mut buf = vec![0u8; 65535];
@@ -117,7 +117,7 @@ pub async fn init_dhcp_server(
                         Ok((len, addr)) => {
                             // println!("Received {} bytes from {}", len, addr);
                             let message = buf[..len].to_vec();
-                            if let Err(e) = message_tx.try_send(message) {
+                            if let Err(e) = message_tx.try_send((message, addr)) {
                                 println!("Error sending message to channel: {:?}", e);
                             }
                         }
@@ -189,7 +189,7 @@ pub async fn init_dhcp_server(
 async fn handle_dhcp_message(
     dhcp_status: &mut DhcpServerStatus,
     send_socket: &Arc<UdpSocket>,
-    message: Vec<u8>,
+    (message, msg_addr): (Vec<u8>, SocketAddr),
 ) {
     let dhcp = DhcpEthFrame::new(&message);
     println!("dhcp: {dhcp:?}");
@@ -197,64 +197,65 @@ async fn handle_dhcp_message(
     if let Some(dhcp) = dhcp {
         println!("dhcp xid: {:04x}", dhcp.xid);
         match dhcp.op {
-            1 => {
-                match dhcp.options.message_type {
-                    DhcpOptionMessageType::Discover => {
-                        let payload = dhcp_status.gen_offer(dhcp);
-                        let payload = crate::dump::udp_packet::EthUdpType::Dhcp(Box::new(payload));
+            1 => match dhcp.options.message_type {
+                DhcpOptionMessageType::Discover => {
+                    let payload = dhcp_status.gen_offer(dhcp);
+                    let payload = crate::dump::udp_packet::EthUdpType::Dhcp(Box::new(payload));
 
-                        let addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), 68);
+                    let addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), 68);
 
-                        println!("payload: {payload:?}");
-                        match send_socket.send_to(&payload.convert_to_payload(), &addr).await {
-                            Ok(len) => {
-                                println!("send len: {:?}", len);
-                            }
-                            Err(e) => {
-                                println!("error: {:?}", e);
-                            }
+                    println!("payload: {payload:?}");
+                    match send_socket.send_to(&payload.convert_to_payload(), &addr).await {
+                        Ok(len) => {
+                            println!("send len: {:?}", len);
+                        }
+                        Err(e) => {
+                            println!("error: {:?}", e);
                         }
                     }
-                    DhcpOptionMessageType::Request => {
-                        let Some(payload) = dhcp_status.gen_ack(dhcp) else {
-                            return;
-                        };
-                        // let payload = get_ack(dhcp);
-                        let payload = crate::dump::udp_packet::EthUdpType::Dhcp(Box::new(payload));
-
-                        let addr =
-                            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 68);
-
-                        println!("payload ack: {:?}", payload.convert_to_payload());
-                        match send_socket.send_to(&payload.convert_to_payload(), &addr).await {
-                            Ok(len) => {
-                                println!("send len: {:?}", len);
-                            }
-                            Err(e) => {
-                                println!("error: {:?}", e);
-                            }
-                        }
-                    }
-                    DhcpOptionMessageType::Decline => todo!(),
-                    DhcpOptionMessageType::Ack => todo!(),
-                    DhcpOptionMessageType::Nak => todo!(),
-                    DhcpOptionMessageType::Release => {
-                        println!("{dhcp:?}");
-                    }
-                    DhcpOptionMessageType::Inform => todo!(),
-                    DhcpOptionMessageType::ForceRenew => todo!(),
-                    DhcpOptionMessageType::LeaseQuery => todo!(),
-                    DhcpOptionMessageType::LeaseUnassigned => todo!(),
-                    DhcpOptionMessageType::LeaseUnknown => todo!(),
-                    DhcpOptionMessageType::LeaseActive => todo!(),
-                    DhcpOptionMessageType::BulkLeaseQuery => todo!(),
-                    DhcpOptionMessageType::LeaseQueryDone => todo!(),
-                    DhcpOptionMessageType::ActiveLeaseQuery => todo!(),
-                    DhcpOptionMessageType::LeaseQueryStatus => todo!(),
-                    DhcpOptionMessageType::Tls => todo!(),
-                    _ => {}
                 }
-            }
+                DhcpOptionMessageType::Request => {
+                    let Some(payload) = dhcp_status.gen_ack(dhcp) else {
+                        return;
+                    };
+
+                    let addr = if payload.is_broaddcast() {
+                        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 68)
+                    } else {
+                        SocketAddr::new(IpAddr::V4(payload.yiaddr.clone()), msg_addr.port())
+                    };
+
+                    let payload = crate::dump::udp_packet::EthUdpType::Dhcp(Box::new(payload));
+
+                    println!("payload ack: {:?}", payload.convert_to_payload());
+                    match send_socket.send_to(&payload.convert_to_payload(), &addr).await {
+                        Ok(len) => {
+                            println!("send len: {:?}", len);
+                        }
+                        Err(e) => {
+                            println!("error: {:?}", e);
+                        }
+                    }
+                }
+                DhcpOptionMessageType::Decline => todo!(),
+                DhcpOptionMessageType::Ack => todo!(),
+                DhcpOptionMessageType::Nak => todo!(),
+                DhcpOptionMessageType::Release => {
+                    println!("{dhcp:?}");
+                }
+                DhcpOptionMessageType::Inform => todo!(),
+                DhcpOptionMessageType::ForceRenew => todo!(),
+                DhcpOptionMessageType::LeaseQuery => todo!(),
+                DhcpOptionMessageType::LeaseUnassigned => todo!(),
+                DhcpOptionMessageType::LeaseUnknown => todo!(),
+                DhcpOptionMessageType::LeaseActive => todo!(),
+                DhcpOptionMessageType::BulkLeaseQuery => todo!(),
+                DhcpOptionMessageType::LeaseQueryDone => todo!(),
+                DhcpOptionMessageType::ActiveLeaseQuery => todo!(),
+                DhcpOptionMessageType::LeaseQueryStatus => todo!(),
+                DhcpOptionMessageType::Tls => todo!(),
+                _ => {}
+            },
             2 => {}
             3 => {}
             _ => {}
@@ -297,20 +298,23 @@ impl DhcpServerStatus {
     /// get offer
     pub fn gen_offer(&mut self, frame: DhcpEthFrame) -> DhcpEthFrame {
         let mut options = vec![];
-        if let Some(option) = frame.options.has_option(55) {
-            if let DhcpOptions::ParameterRequestList(info_list) = option {
-                for each_index in info_list {
-                    if let Some(opt) = self.options_map.get(&each_index) {
-                        options.push(opt.clone());
-                    } else {
-                        println!("在配置中找不到这个 option 配置")
-                    }
+        let request_params = if let Some(request_params) = frame.options.has_option(55) {
+            request_params
+        } else {
+            crate::dump::udp_packet::dhcp::get_default_request_list()
+        };
+
+        if let DhcpOptions::ParameterRequestList(info_list) = request_params {
+            for each_index in info_list {
+                if let Some(opt) = self.options_map.get(&each_index) {
+                    options.push(opt.clone());
+                } else {
+                    println!("在配置中找不到这个 option 配置, index: {each_index:?}");
                 }
             }
-        } else {
-            println!("不存在 option 55: {:?}", frame)
         }
-        // options.push(DhcpOptions::MessageType(DhcpOptionMessageType::Offer));
+
+        options.push(DhcpOptions::ServerIdentifier(self.server_ip.address()));
 
         let options = DhcpOptionFrame {
             message_type: DhcpOptionMessageType::Offer,
@@ -345,7 +349,7 @@ impl DhcpServerStatus {
             flags: frame.flags,
             ciaddr: Ipv4Addr::new(0, 0, 0, 0),
             yiaddr: client_addr,
-            siaddr: self.server_ip.address(),
+            siaddr: Ipv4Addr::new(0, 0, 0, 0),
             giaddr: Ipv4Addr::new(0, 0, 0, 0),
             chaddr: frame.chaddr,
             sname: [0; 64].to_vec(),
@@ -358,15 +362,18 @@ impl DhcpServerStatus {
 
     fn gen_ack(&mut self, frame: DhcpEthFrame) -> Option<DhcpEthFrame> {
         let mut options = vec![];
-        if let Some(option) = frame.options.has_option(55) {
-            if let DhcpOptions::ParameterRequestList(info_list) = option {
-                if !info_list.contains(&51) {
-                    options.push(DhcpOptions::AddressLeaseTime(40));
-                }
-                for each_index in info_list {
-                    if let Some(opt) = self.options_map.get(&each_index) {
-                        options.push(opt.clone());
-                    }
+        let request_params = if let Some(request_params) = frame.options.has_option(55) {
+            request_params
+        } else {
+            crate::dump::udp_packet::dhcp::get_default_request_list()
+        };
+        if let DhcpOptions::ParameterRequestList(info_list) = request_params {
+            if !info_list.contains(&51) {
+                options.push(DhcpOptions::AddressLeaseTime(40));
+            }
+            for each_index in info_list {
+                if let Some(opt) = self.options_map.get(&each_index) {
+                    options.push(opt.clone());
                 }
             }
         }
@@ -392,7 +399,7 @@ impl DhcpServerStatus {
             flags: frame.flags,
             ciaddr: Ipv4Addr::new(0, 0, 0, 0),
             yiaddr: client_addr,
-            siaddr: self.server_ip.address(),
+            siaddr: Ipv4Addr::new(0, 0, 0, 0),
             giaddr: Ipv4Addr::new(0, 0, 0, 0),
             chaddr: frame.chaddr,
             sname: [0; 64].to_vec(),

@@ -17,15 +17,23 @@ use crate::{
 
 const DEFAULT_TIME_OUT: u64 = 4;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DhcpState {
     /// 控制发送线程发送 discover
-    Discovering(Option<Ipv4Addr>),
+    Discovering {
+        /// 为会话 ID
+        xid: u32,
+        /// 初始的 IPV4 地址
+        ciaddr: Option<Ipv4Addr>,
+    },
     /// 发送线程停止发送 进入等待 changed 的状态
-    Offer,
+    Offer {
+        xid: u32,
+    },
     /// 控制发送线程发送 request
     /// TODO 端口号可能也要保存
     Requesting {
+        xid: u32,
         ciaddr: Ipv4Addr,
         yiaddr: Ipv4Addr,
         siaddr: Ipv4Addr,
@@ -33,6 +41,7 @@ pub enum DhcpState {
     },
     /// 获得了 服务端的响应, 但是可能是 AKC 或者 ANK, 但是停止发送 Request 或者 Renew 请求
     Bound {
+        xid: u32,
         ciaddr: Ipv4Addr,
         yiaddr: Ipv4Addr,
         siaddr: Ipv4Addr,
@@ -40,6 +49,7 @@ pub enum DhcpState {
     },
     /// 客户端发起
     Renewing {
+        xid: u32,
         ciaddr: Ipv4Addr,
         yiaddr: Ipv4Addr,
         siaddr: Ipv4Addr,
@@ -51,10 +61,28 @@ pub enum DhcpState {
 }
 
 impl DhcpState {
+    pub fn init_status(renew_ip: Option<Ipv4Addr>) -> DhcpState {
+        DhcpState::Discovering { ciaddr: renew_ip, xid: rand::random() }
+    }
+
+    pub fn get_xid(&self) -> u32 {
+        match self {
+            DhcpState::Discovering { xid, .. } => xid.clone(),
+            DhcpState::Offer { xid, .. } => xid.clone(),
+            DhcpState::Requesting { xid, .. } => xid.clone(),
+            DhcpState::Bound { xid, .. } => xid.clone(),
+            DhcpState::Renewing { xid, .. } => xid.clone(),
+            DhcpState::Stopping => 0,
+            DhcpState::Stop => 0,
+        }
+    }
+}
+
+impl DhcpState {
     pub fn can_handle_message(&self, message_type: &DhcpOptionMessageType) -> bool {
         match self {
-            DhcpState::Discovering(_) => matches!(message_type, DhcpOptionMessageType::Offer),
-            DhcpState::Offer => matches!(message_type, DhcpOptionMessageType::Request),
+            DhcpState::Discovering { .. } => matches!(message_type, DhcpOptionMessageType::Offer),
+            DhcpState::Offer { .. } => matches!(message_type, DhcpOptionMessageType::Request),
             DhcpState::Requesting { .. } => {
                 matches!(message_type, DhcpOptionMessageType::Ack | DhcpOptionMessageType::Nak)
             }
@@ -89,6 +117,7 @@ pub async fn dhcp_client(
             return;
         }
     };
+
     if let Err(e) = socket.bind_device(Some(iface_name.as_bytes())) {
         println!("Failed to bind to device: {:?}", e);
     } else {
@@ -101,7 +130,7 @@ pub async fn dhcp_client(
     let send_socket = Arc::new(socket);
     let recive_socket_raw = send_socket.clone();
 
-    let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1024);
+    let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<(Vec<u8>, SocketAddr)>(1024);
 
     // 接收数据
     tokio::spawn(async move {
@@ -114,7 +143,7 @@ pub async fn dhcp_client(
                         Ok((len, addr)) => {
                             // println!("Received {} bytes from {}", len, addr);
                             let message = buf[..len].to_vec();
-                            if let Err(e) = message_tx.try_send(message) {
+                            if let Err(e) = message_tx.try_send((message, addr)) {
                                 println!("Error sending message to channel: {:?}", e);
                             }
                         }
@@ -124,13 +153,16 @@ pub async fn dhcp_client(
                     }
                 },
                 _ = message_tx.closed() => {
+                    println!("message_tx closed");
                     break;
                 }
             }
         }
+
+        println!("DHCP recv client loop");
     });
 
-    let (status_tx, mut status_rx) = watch::channel::<DhcpState>(DhcpState::Discovering(None));
+    let (status_tx, mut status_rx) = watch::channel::<DhcpState>(DhcpState::init_status(None));
     // 处理接收循环
     let status_tx_status = status_tx.clone();
     let mut hdcp_rx_status = status_rx.clone();
@@ -166,7 +198,6 @@ pub async fn dhcp_client(
 
     // 处理发送循环
     let status_tx_status = status_tx.clone();
-    let xid: u32 = rand::random();
     let service_status_clone = service_status.clone();
     tokio::task::spawn(async move {
         let service_status = service_status_clone;
@@ -207,7 +238,7 @@ pub async fn dhcp_client(
 
             let current_dhcp_client_status = (*status_rx.borrow()).clone();
             match current_dhcp_client_status {
-                DhcpState::Discovering(ciaddr) => {
+                DhcpState::Discovering { ciaddr, xid } => {
                     // send
                     current_model = &times_limit_send;
 
@@ -230,11 +261,11 @@ pub async fn dhcp_client(
                         }
                     }
                 }
-                DhcpState::Offer => {
+                DhcpState::Offer { .. } => {
                     // 进行轮空
                     current_timeout_time = Duration::MAX.as_secs();
                 }
-                DhcpState::Requesting { ciaddr, yiaddr, siaddr, mut options } => {
+                DhcpState::Requesting { xid, ciaddr, yiaddr, siaddr, mut options } => {
                     current_model = &times_ulimit_send;
                     if let Some(DhcpOptions::AddressLeaseTime(time)) = options.has_option(51) {
                         options.modify_option(DhcpOptions::AddressLeaseTime(time));
@@ -265,12 +296,13 @@ pub async fn dhcp_client(
                     }
 
                     if timeout_times > 4 {
-                        status_tx_status.send(DhcpState::Discovering(None)).unwrap();
+                        status_tx_status.send(DhcpState::init_status(None)).unwrap();
                     }
                 }
-                DhcpState::Bound { ciaddr, yiaddr, siaddr, options } => {
+                DhcpState::Bound { xid, ciaddr, yiaddr, siaddr, options } => {
                     // 进行一个等待, 等待到租期时间到 70% 后 将当前的状态设置为 Renewing 以便进行续期
 
+                    println!("start Bound ip: {} {} {} {:?}", ciaddr, yiaddr, siaddr, options);
                     let Some((renew_time, rebinding_time)) = options.get_renew_time() else {
                         continue;
                     };
@@ -310,14 +342,32 @@ pub async fn dhcp_client(
                     tokio::select! {
                         _ = tokio::time::sleep_until(sleep_time) => {
                             println!("Time to renew lease, switching to Renewing...");
-                            status_tx_status.send(DhcpState::Renewing {ciaddr: yiaddr.clone(), yiaddr, siaddr, options, rebinding_time }).unwrap();
+                            status_tx_status.send(DhcpState::Renewing {xid, ciaddr: yiaddr.clone(), yiaddr, siaddr, options, rebinding_time }).unwrap();
                         },
                         _ = status_rx.changed() => {
                         }
                     }
                 }
-                DhcpState::Renewing { ciaddr, yiaddr, siaddr, options, rebinding_time } => {
+                DhcpState::Renewing {
+                    xid,
+                    ciaddr,
+                    yiaddr,
+                    siaddr,
+                    options,
+                    rebinding_time,
+                } => {
                     current_model = &times_ulimit_send;
+
+                    let addr = if siaddr.is_unspecified() {
+                        if let Some(DhcpOptions::ServerIdentifier(addr)) = options.has_option(54) {
+                            addr
+                        } else {
+                            Ipv4Addr::BROADCAST
+                        }
+                    } else {
+                        siaddr
+                    };
+
                     let dhcp_discover = crate::dump::udp_packet::dhcp::gen_request(
                         xid, mac_addr, ciaddr, yiaddr, siaddr, options,
                     );
@@ -325,7 +375,7 @@ pub async fn dhcp_client(
                     match send_socket
                         .send_to(
                             &dhcp_discover.convert_to_payload(),
-                            &SocketAddr::new(IpAddr::V4(siaddr), 67),
+                            &SocketAddr::new(IpAddr::V4(addr), 67),
                         )
                         .await
                     {
@@ -340,7 +390,7 @@ pub async fn dhcp_client(
 
                     if Instant::now() >= rebinding_time {
                         // 超过租期的最后期限 尝试获得新的 DHCP 响应
-                        status_tx_status.send(DhcpState::Discovering(None)).unwrap();
+                        status_tx_status.send(DhcpState::init_status(None)).unwrap();
                     }
                 }
                 DhcpState::Stopping | DhcpState::Stop => {
@@ -391,7 +441,7 @@ pub async fn dhcp_client(
 }
 
 // 处理接收到的报文，根据当前状态决定如何处理
-async fn handle_packet(status: &watch::Sender<DhcpState>, msg: Vec<u8>) {
+async fn handle_packet(status: &watch::Sender<DhcpState>, (msg, _msg_addr): (Vec<u8>, SocketAddr)) {
     let dhcp = DhcpEthFrame::new(&msg);
     let Some(dhcp) = dhcp else {
         println!("handle message error");
@@ -405,37 +455,55 @@ async fn handle_packet(status: &watch::Sender<DhcpState>, msg: Vec<u8>) {
 
     // let current_client_status_rx = ;
     let current_client_status = status.subscribe().borrow().clone();
+    if dhcp.xid != current_client_status.get_xid() {
+        return;
+    }
     if !current_client_status.can_handle_message(&dhcp.options.message_type) {
+        println!("self: {current_client_status:?}");
+        println!("dhcp: {dhcp:?}");
         println!("current status can not handle this status");
         return;
     }
     match current_client_status {
-        DhcpState::Discovering(_) => {
+        DhcpState::Discovering { xid, .. } => {
             // drop(current_client_status);
-            status.send_replace(DhcpState::Offer);
+            status.send_replace(DhcpState::Offer { xid });
             let ciaddr = dhcp.ciaddr;
             let yiaddr = dhcp.yiaddr;
             let siaddr = dhcp.siaddr;
 
             let options = dhcp.options;
             // TODO: 判断是否符合, 不符合退回 Discovering 状态
-
-            status.send_replace(DhcpState::Requesting { ciaddr, yiaddr, siaddr, options });
+            status.send_replace(DhcpState::Requesting { xid, ciaddr, yiaddr, siaddr, options });
         }
-        DhcpState::Requesting { .. } | DhcpState::Renewing { .. } => {
+        DhcpState::Requesting { yiaddr, .. } | DhcpState::Renewing { yiaddr, .. } => {
             match dhcp.options.message_type {
                 DhcpOptionMessageType::Ack => {
-                    // 成功获得 IP
-                    let ciaddr = dhcp.ciaddr;
-                    let yiaddr = dhcp.yiaddr;
-                    let siaddr = dhcp.siaddr;
+                    if dhcp.yiaddr == yiaddr {
+                        // 成功获得 IP
+                        let new_ciaddr = dhcp.ciaddr;
+                        let new_yiaddr = dhcp.yiaddr;
+                        let new_siaddr = dhcp.siaddr;
 
-                    let options = dhcp.options;
-                    status.send_replace(DhcpState::Bound { ciaddr, yiaddr, siaddr, options });
+                        let options = dhcp.options;
+                        println!("get bound ip, {:?}", yiaddr);
+
+                        // 这个 ID 是下次 Renewing 的时候使用
+                        let xid = rand::random();
+                        status.send_replace(DhcpState::Bound {
+                            xid,
+                            ciaddr: new_ciaddr,
+                            yiaddr: new_yiaddr,
+                            siaddr: new_siaddr,
+                            options,
+                        });
+                    } else {
+                        println!("IP 地址不符合")
+                    }
                 }
                 DhcpOptionMessageType::Nak => {
                     // 获取 ip 失败 重新进入 discover
-                    let _ = status.send(DhcpState::Discovering(None));
+                    let _ = status.send(DhcpState::init_status(None));
                 }
                 _ => {}
             }

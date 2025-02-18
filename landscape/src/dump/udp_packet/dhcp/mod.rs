@@ -133,7 +133,7 @@ impl DhcpOptionFrame {
         } else {
             lease_time / 2
         };
-        let rebinding_time = if let Some(DhcpOptions::Rebinding(time)) = self.has_option(58) {
+        let rebinding_time = if let Some(DhcpOptions::Rebinding(time)) = self.has_option(59) {
             time
         } else {
             lease_time * 7 / 8
@@ -192,6 +192,10 @@ impl DhcpEthFrame {
             magic_cookie,
             options,
         })
+    }
+
+    pub fn is_broaddcast(&self) -> bool {
+        self.flags == 0x8000
     }
 
     pub fn convert_to_payload(&self) -> Vec<u8> {
@@ -281,18 +285,8 @@ pub fn discover_options(ciaddr: Option<Ipv4Addr>) -> DhcpOptionFrame {
         options.push(DhcpOptions::RequestedIpAddress(ciaddr));
     }
     options.push(DhcpOptions::Hostname("TEST-PC".to_string()));
-    // Requested Parameters (Option 55) - 常见的请求参数
-    options.push(DhcpOptions::ParameterRequestList(vec![
-        1,   // Subnet Mask
-        3,   // Router
-        6,   // Domain Name Server
-        15,  // Domain Name
-        26,  // Interface MTU
-        28,  // Broadcast Address
-        12,  // Host Name
-        42,  // NTP Servers
-        119, // Domain Search
-    ]));
+
+    options.push(get_default_request_list());
 
     return DhcpOptionFrame {
         message_type: options::DhcpOptionMessageType::Discover,
@@ -348,6 +342,22 @@ pub fn gen_offer(frame: DhcpEthFrame) -> DhcpEthFrame {
     offer
 }
 
+/// Requested Parameters (Option 55) - 常见的请求参数
+pub fn get_default_request_list() -> DhcpOptions {
+    DhcpOptions::ParameterRequestList(vec![
+        1,   // Subnet Mask
+        3,   // Router
+        6,   // Domain Name Server
+        15,  // Domain Name
+        26,  // Interface MTU
+        28,  // Broadcast Address
+        12,  // Host Name
+        42,  // NTP Servers
+        51,  // Address Lease Time
+        119, // Domain Search
+    ])
+}
+
 pub fn gen_request(
     xid: u32,
     mac_addr: MacAddr,
@@ -358,6 +368,9 @@ pub fn gen_request(
 ) -> DhcpEthFrame {
     // 增加 所要使用的 ip 地址 option
     options.options.push(DhcpOptions::RequestedIpAddress(yiaddr));
+    options.options.push(DhcpOptions::ClassIdentifier(mac_addr.octets().to_vec()));
+    options.options.push(get_default_request_list());
+
     options.message_type = DhcpOptionMessageType::Request;
     // Flags: Broadcast
     let flags = if ciaddr.is_unspecified() { 0x8000 } else { 0 };

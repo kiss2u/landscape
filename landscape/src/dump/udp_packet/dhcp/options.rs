@@ -278,7 +278,23 @@ pub enum DhcpOptionMessageType {
     LeaseQueryStatus,
     Tls,
 }
+
 impl DhcpOptionMessageType {
+    pub fn is_handled_by_server(&self) -> bool {
+        matches!(
+            self,
+            DhcpOptionMessageType::Offer
+                | DhcpOptionMessageType::Ack
+                | DhcpOptionMessageType::Nak
+                | DhcpOptionMessageType::LeaseUnassigned
+                | DhcpOptionMessageType::LeaseUnknown
+                | DhcpOptionMessageType::LeaseActive
+                | DhcpOptionMessageType::LeaseQueryDone
+                | DhcpOptionMessageType::LeaseQueryStatus
+                | DhcpOptionMessageType::Tls
+        )
+    }
+
     fn from(value: u8) -> Option<Self> {
         match value {
             1 => Some(DhcpOptionMessageType::Discover),

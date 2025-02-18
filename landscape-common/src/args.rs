@@ -69,7 +69,7 @@ pub struct WebCommArgs {
     pub admin_user: String,
 
     /// manager pass
-    #[clap(long = "pass", env = "LANDSCAPE_ADMIN_PASS", default_value = "changeme")]
+    #[clap(long = "pass", env = "LANDSCAPE_ADMIN_PASS", default_value = "root")]
     pub admin_pass: String,
 }
 
