@@ -8,7 +8,13 @@ use once_cell::sync::Lazy;
 
 use crate::LANDSCAPE_CONFIG_DIR_NAME;
 
+pub static LAND_HOSTNAME: Lazy<String> = Lazy::new(|| {
+    let hostname = hostname::get().expect("无法获取主机名");
+    hostname.to_string_lossy().to_string()
+});
+
 pub static LAND_ARGS: Lazy<WebCommArgs> = Lazy::new(WebCommArgs::parse);
+
 pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
     if let Some(path) = &LAND_ARGS.config_path {
         path.clone()

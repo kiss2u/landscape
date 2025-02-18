@@ -272,7 +272,7 @@ pub fn ack_options() -> DhcpOptionFrame {
 
 /// 客户端发起的 DHCP 请求 option 值, 现在默认这些
 /// TODO: 加入设置的 80 或者其他的 option 用于 ipoe 的申请
-pub fn discover_options(ciaddr: Option<Ipv4Addr>) -> DhcpOptionFrame {
+pub fn discover_options(ciaddr: Option<Ipv4Addr>, hostname: String) -> DhcpOptionFrame {
     let mut options = vec![];
     // DHCP Message Type: Discover (Option 53)
     // options.push(DhcpOptions::MessageType(options::DhcpOptionMessageType::Discover));
@@ -284,7 +284,7 @@ pub fn discover_options(ciaddr: Option<Ipv4Addr>) -> DhcpOptionFrame {
     if let Some(ciaddr) = ciaddr {
         options.push(DhcpOptions::RequestedIpAddress(ciaddr));
     }
-    options.push(DhcpOptions::Hostname("TEST-PC".to_string()));
+    options.push(DhcpOptions::Hostname(hostname));
 
     options.push(get_default_request_list());
 
@@ -295,7 +295,12 @@ pub fn discover_options(ciaddr: Option<Ipv4Addr>) -> DhcpOptionFrame {
     };
 }
 
-pub fn gen_discover(xid: u32, mac_addr: MacAddr, ciaddr: Option<Ipv4Addr>) -> DhcpEthFrame {
+pub fn gen_discover(
+    xid: u32,
+    mac_addr: MacAddr,
+    ciaddr: Option<Ipv4Addr>,
+    hostname: String,
+) -> DhcpEthFrame {
     // Flags: Broadcast
     let flags = if ciaddr.is_none() { 0x8000 } else { 0 };
     let discover = DhcpEthFrame {
@@ -314,7 +319,7 @@ pub fn gen_discover(xid: u32, mac_addr: MacAddr, ciaddr: Option<Ipv4Addr>) -> Dh
         sname: vec![0; 64],                                      // Server host name (optional)
         file: vec![0; 128],                                      // Boot file name (optional)
         magic_cookie: DHCP_MAGIC_COOKIE,                         // DHCP magic cookie
-        options: discover_options(ciaddr),                       // 使用上面定义的 discover options
+        options: discover_options(ciaddr, hostname),             // 使用上面定义的 discover options
     };
     discover
 }
@@ -363,7 +368,6 @@ pub fn gen_request(
     mac_addr: MacAddr,
     ciaddr: Ipv4Addr,
     yiaddr: Ipv4Addr,
-    siaddr: Ipv4Addr,
     mut options: DhcpOptionFrame,
 ) -> DhcpEthFrame {
     // 增加 所要使用的 ip 地址 option
@@ -372,6 +376,7 @@ pub fn gen_request(
     options.options.push(get_default_request_list());
 
     options.message_type = DhcpOptionMessageType::Request;
+
     // Flags: Broadcast
     let flags = if ciaddr.is_unspecified() { 0x8000 } else { 0 };
     let offer = DhcpEthFrame {
@@ -383,8 +388,8 @@ pub fn gen_request(
         secs: 0,
         flags,
         ciaddr,
-        yiaddr,
-        siaddr,
+        yiaddr: Ipv4Addr::UNSPECIFIED,
+        siaddr: Ipv4Addr::UNSPECIFIED,
         giaddr: Ipv4Addr::UNSPECIFIED,
         chaddr: mac_addr,
         sname: [0; 64].to_vec(),

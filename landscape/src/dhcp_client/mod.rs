@@ -8,6 +8,7 @@ use crate::{
     dump::udp_packet::dhcp::{options::DhcpOptionMessageType, DhcpOptionFrame},
     service::ServiceStatus,
 };
+use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, sync::watch};
 
 use crate::{
@@ -106,28 +107,25 @@ pub async fn dhcp_client(
     mac_addr: MacAddr,
     client_port: u16,
     service_status: watch::Sender<ServiceStatus>,
+    hostname: String,
 ) {
     service_status.send_replace(ServiceStatus::Staring);
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), client_port);
 
-    let socket = match UdpSocket::bind(socket_addr).await {
-        Ok(socket) => socket,
-        Err(e) => {
-            service_status.send_replace(ServiceStatus::Stop { message: Some(e.to_string()) });
-            return;
-        }
-    };
+    let socket2 = socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
 
-    if let Err(e) = socket.bind_device(Some(iface_name.as_bytes())) {
-        println!("Failed to bind to device: {:?}", e);
-    } else {
-        println!("Successfully bound to device {}", iface_name);
-    }
-    if let Err(e) = socket.set_broadcast(true) {
-        println!("Failed to set broadcast: {:?}", e);
-    }
+    // TODO: Error handle
+    socket2.set_reuse_address(true).unwrap();
+    socket2.set_reuse_port(true).unwrap();
+    socket2.bind(&socket_addr.into()).unwrap();
+    socket2.set_nonblocking(true).unwrap();
+    socket2.bind_device(Some(iface_name.as_bytes())).unwrap();
+    socket2.set_broadcast(true).unwrap();
+
+    let socket = UdpSocket::from_std(socket2.into()).unwrap();
 
     let send_socket = Arc::new(socket);
+
     let recive_socket_raw = send_socket.clone();
 
     let (message_tx, mut message_rx) = tokio::sync::mpsc::channel::<(Vec<u8>, SocketAddr)>(1024);
@@ -242,8 +240,12 @@ pub async fn dhcp_client(
                     // send
                     current_model = &times_limit_send;
 
-                    let dhcp_discover =
-                        crate::dump::udp_packet::dhcp::gen_discover(xid, mac_addr, ciaddr);
+                    let dhcp_discover = crate::dump::udp_packet::dhcp::gen_discover(
+                        xid,
+                        mac_addr,
+                        ciaddr,
+                        hostname.clone(),
+                    );
 
                     match send_socket
                         .send_to(
@@ -265,7 +267,7 @@ pub async fn dhcp_client(
                     // 进行轮空
                     current_timeout_time = Duration::MAX.as_secs();
                 }
-                DhcpState::Requesting { xid, ciaddr, yiaddr, siaddr, mut options } => {
+                DhcpState::Requesting { xid, ciaddr, yiaddr, mut options, .. } => {
                     current_model = &times_ulimit_send;
                     if let Some(DhcpOptions::AddressLeaseTime(time)) = options.has_option(51) {
                         options.modify_option(DhcpOptions::AddressLeaseTime(time));
@@ -276,7 +278,7 @@ pub async fn dhcp_client(
                     // }
                     // send request
                     let dhcp_discover = crate::dump::udp_packet::dhcp::gen_request(
-                        xid, mac_addr, ciaddr, yiaddr, siaddr, options,
+                        xid, mac_addr, ciaddr, yiaddr, options,
                     );
 
                     match send_socket
@@ -369,7 +371,7 @@ pub async fn dhcp_client(
                     };
 
                     let dhcp_discover = crate::dump::udp_packet::dhcp::gen_request(
-                        xid, mac_addr, ciaddr, yiaddr, siaddr, options,
+                        xid, mac_addr, ciaddr, yiaddr, options,
                     );
 
                     match send_socket
@@ -381,7 +383,7 @@ pub async fn dhcp_client(
                     {
                         Ok(len) => {
                             println!("send len: {:?}", len);
-                            println!("Renewing dhcp: {:?}", dhcp_discover);
+                            // println!("Renewing dhcp: {:?}", dhcp_discover);
                         }
                         Err(e) => {
                             println!("error: {:?}", e);

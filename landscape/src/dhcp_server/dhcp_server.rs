@@ -1,7 +1,7 @@
+use std::time::{Duration, Instant};
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    ops::Range,
     sync::Arc,
 };
 
@@ -18,11 +18,9 @@ use cidr::Ipv4Inet;
 use futures::TryStreamExt;
 use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};
-use tokio::sync::watch;
-
-use std::time::{Duration, Instant};
-
+use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
+use tokio::sync::watch;
 
 use super::DhcpServerIpv4Config;
 
@@ -92,15 +90,17 @@ pub async fn init_dhcp_server(
 
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 67);
 
-    let socket = UdpSocket::bind(socket_addr).await.unwrap();
-    if let Err(e) = socket.bind_device(Some(iface_name.clone().as_bytes())) {
-        println!("Failed to bind to device: {:?}", e);
-    } else {
-        println!("Successfully bound to device {}", iface_name);
-    }
-    if let Err(e) = socket.set_broadcast(true) {
-        println!("Failed to set broadcast: {:?}", e);
-    }
+    let socket2 = socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
+
+    // TODO: Error handle
+    socket2.set_reuse_address(true).unwrap();
+    socket2.set_reuse_port(true).unwrap();
+    socket2.bind(&socket_addr.into()).unwrap();
+    socket2.set_nonblocking(true).unwrap();
+    socket2.bind_device(Some(iface_name.as_bytes())).unwrap();
+    socket2.set_broadcast(true).unwrap();
+
+    let socket = UdpSocket::from_std(socket2.into()).unwrap();
 
     let send_socket = Arc::new(socket);
     let recive_socket_raw = send_socket.clone();
@@ -133,9 +133,10 @@ pub async fn init_dhcp_server(
         }
     });
 
-    let ipv4_inet = dhcp_config.get_ipv4_inet();
-    let options = dhcp_config.options.clone();
-    let host_range = dhcp_config.host_range;
+    let ip_range_start = dhcp_config.get_ipv4_inet_start();
+    let options = dhcp_config.get_server_options();
+    let range_capacity = dhcp_config.get_range_capacity();
+    let server_ip = dhcp_config.server_ip_addr;
 
     dhcp_server_status.send_replace(ServiceStatus::Running);
     let mut dhcp_server_service_status = dhcp_server_status.subscribe();
@@ -143,8 +144,9 @@ pub async fn init_dhcp_server(
         let timeout_timer =
             tokio::time::sleep(tokio::time::Duration::from_secs(IP_EXPIRE_INTERVAL));
         tokio::pin!(timeout_timer);
-        if let Some(server_ip) = ipv4_inet {
-            let mut dhcp_status = DhcpServerStatus::new(server_ip, options, host_range);
+        if let Some(ip_range_start) = ip_range_start {
+            let mut dhcp_status =
+                DhcpServerStatus::new(server_ip, ip_range_start, options, range_capacity);
             loop {
                 tokio::select! {
                     // 处理消息分支
@@ -192,10 +194,10 @@ async fn handle_dhcp_message(
     (message, msg_addr): (Vec<u8>, SocketAddr),
 ) {
     let dhcp = DhcpEthFrame::new(&message);
-    println!("dhcp: {dhcp:?}");
+    // println!("dhcp: {dhcp:?}");
 
     if let Some(dhcp) = dhcp {
-        println!("dhcp xid: {:04x}", dhcp.xid);
+        // println!("dhcp xid: {:04x}", dhcp.xid);
         match dhcp.op {
             1 => match dhcp.options.message_type {
                 DhcpOptionMessageType::Discover => {
@@ -204,10 +206,10 @@ async fn handle_dhcp_message(
 
                     let addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), 68);
 
-                    println!("payload: {payload:?}");
+                    // println!("payload: {payload:?}");
                     match send_socket.send_to(&payload.convert_to_payload(), &addr).await {
-                        Ok(len) => {
-                            println!("send len: {:?}", len);
+                        Ok(_len) => {
+                            // println!("send len: {:?}", len);
                         }
                         Err(e) => {
                             println!("error: {:?}", e);
@@ -222,15 +224,20 @@ async fn handle_dhcp_message(
                     let addr = if payload.is_broaddcast() {
                         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 68)
                     } else {
-                        SocketAddr::new(IpAddr::V4(payload.yiaddr.clone()), msg_addr.port())
+                        let ip = if payload.ciaddr.is_unspecified() {
+                            IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255))
+                        } else {
+                            IpAddr::V4(payload.ciaddr.clone())
+                        };
+                        SocketAddr::new(ip, msg_addr.port())
                     };
 
                     let payload = crate::dump::udp_packet::EthUdpType::Dhcp(Box::new(payload));
 
-                    println!("payload ack: {:?}", payload.convert_to_payload());
+                    // println!("payload ack: {:?}", payload.convert_to_payload());
                     match send_socket.send_to(&payload.convert_to_payload(), &addr).await {
-                        Ok(len) => {
-                            println!("send len: {:?}", len);
+                        Ok(_len) => {
+                            // println!("send len: {:?}", len);
                         }
                         Err(e) => {
                             println!("error: {:?}", e);
@@ -269,27 +276,34 @@ struct DhcpServerStatus {
     /// mac addr ip pair
     ip_map: HashMap<MacAddr, (Ipv4Addr, Instant)>,
     ///
-    server_ip: Ipv4Inet,
+    server_ip: Ipv4Addr,
+    ip_range_start: Ipv4Inet,
 
     options_map: HashMap<u8, DhcpOptions>,
 
     /// allocatd host ids
     allocated_host: HashSet<u32>,
 
-    host_range: Range<u32>,
+    range_capacity: u32,
 }
 
 impl DhcpServerStatus {
-    pub fn new(server_ip: Ipv4Inet, options: Vec<DhcpOptions>, host_range: Range<u32>) -> Self {
+    pub fn new(
+        server_ip: Ipv4Addr,
+        ip_range_start: Ipv4Inet,
+        options: Vec<DhcpOptions>,
+        range_capacity: u32,
+    ) -> Self {
         let allocated_host = HashSet::new();
         let mut options_map = HashMap::new();
         for each in options.iter() {
             options_map.insert(each.get_index(), each.clone());
         }
         Self {
-            host_range,
+            range_capacity,
             ip_map: HashMap::new(),
             server_ip,
+            ip_range_start,
             options_map,
             allocated_host,
         }
@@ -314,7 +328,7 @@ impl DhcpServerStatus {
             }
         }
 
-        options.push(DhcpOptions::ServerIdentifier(self.server_ip.address()));
+        options.push(DhcpOptions::ServerIdentifier(self.server_ip));
 
         let options = DhcpOptionFrame {
             message_type: DhcpOptionMessageType::Offer,
@@ -326,18 +340,19 @@ impl DhcpServerStatus {
         let client_addr = if let Some((ip_add, _)) = self.ip_map.get(&frame.chaddr) {
             ip_add.clone()
         } else {
-            println!("checksum: {:?}", frame.chaddr.u32_ckecksum());
+            // println!("checksum: {:?}", frame.chaddr.u32_ckecksum());
             let host_id = get_host_id(
-                self.host_range.clone(),
+                self.range_capacity,
                 frame.chaddr.u32_ckecksum(),
                 &mut self.allocated_host,
             )
             .unwrap();
-            let (client_addr, _overflow) = self.server_ip.first().overflowing_add_u32(host_id);
+            let (client_addr, _overflow) = self.ip_range_start.overflowing_add_u32(host_id);
             let expire_instant = Instant::now() + Duration::from_secs(DEFAULT_RENT_TIME);
             self.ip_map.insert(frame.chaddr, (client_addr.address(), expire_instant));
             client_addr.address()
         };
+        println!("allocated ip: {:?} for mac: {:?}", client_addr, frame.chaddr);
 
         let offer = DhcpEthFrame {
             op: 2,
@@ -424,41 +439,26 @@ impl DhcpServerStatus {
 }
 
 /// Generate a unique host ID within the specified range
-fn get_host_id(
-    host_range: Range<u32>,
-    seed: u32,
-    allocated_host: &mut HashSet<u32>,
-) -> Option<u32> {
-    let host_range_size = host_range.end - host_range.start;
+fn get_host_id(host_range_size: u32, seed: u32, allocated_host: &mut HashSet<u32>) -> Option<u32> {
+    let query_index = seed % host_range_size;
 
-    let index = seed % host_range_size;
-    let query_index = host_range.start + index;
-    // println!("query_index: {query_index:?}");
-    let result_index = if !allocated_host.contains(&query_index) {
+    if !allocated_host.contains(&query_index) {
         allocated_host.insert(query_index);
-        query_index
-    } else {
-        let mut inc_seed = index;
+        return Some(query_index);
+    }
 
-        loop {
-            inc_seed += 1;
-            if inc_seed / host_range_size >= 2 {
-                break u32::MAX;
-            }
-            let index = inc_seed % host_range_size;
-            let query_index = host_range.start + index;
-
-            if !allocated_host.contains(&query_index) {
-                // TODO 返回这个 index
-                allocated_host.insert(query_index);
-                break query_index;
-            }
+    let mut inc_seed = query_index;
+    loop {
+        inc_seed += 1;
+        if (inc_seed / host_range_size) >= 2 {
+            return None;
         }
-    };
-    if result_index == u32::MAX {
-        None
-    } else {
-        Some(result_index)
+        let query_index = inc_seed % host_range_size;
+
+        if !allocated_host.contains(&query_index) {
+            allocated_host.insert(query_index);
+            return Some(query_index);
+        }
     }
 }
 
@@ -470,54 +470,54 @@ mod tests {
 
     #[test]
     pub fn test_ip_alloc() {
-        let host_size = 1..8;
+        let host_size = 7;
         let mut seed = 2;
         let mut allocated_host = HashSet::new();
         allocated_host.insert(5);
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
         seed = 0;
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
     }
 
     #[test]
     pub fn test_ip_alloc_same_seed_large_then_2_lap() {
-        let host_size = 1..254;
+        let host_size = 254;
         let seed = 1398943828;
         let mut allocated_host = HashSet::new();
 
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
-        let index = get_host_id(host_size.clone(), seed, &mut allocated_host);
+        let index = get_host_id(host_size, seed, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
 
-        let index = get_host_id(host_size.clone(), 2060278997, &mut allocated_host);
+        let index = get_host_id(host_size, 2060278997, &mut allocated_host);
         println!("index: {index:?}, {allocated_host:?}");
     }
 }

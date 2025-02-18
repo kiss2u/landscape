@@ -50,7 +50,7 @@ export enum IfaceIpMode {
 }
 export type IfaceIpModelConfig =
   | { t: "nothing" }
-  | { t: "static"; ipv4: number[]; ipv4_mask: number; ipv6: number[] }
+  | { t: "static"; ipv4: string; ipv4_mask: number; ipv6: string | undefined }
   | { t: "pppoe"; username: string; password: string; mtu: number }
   | DhcpServerConfig
   | { t: "dhcpclient" };
@@ -67,7 +67,23 @@ export class IfaceIpServiceConfig {
   }) {
     this.iface_name = obj?.iface_name ?? "";
     this.enable = obj?.enable ?? true;
-    this.ip_model = obj?.ip_model ?? { t: "nothing" };
+    if (obj?.ip_model !== undefined) {
+      switch (obj?.ip_model.t) {
+        case IfaceIpMode.Nothing:
+        case IfaceIpMode.Static:
+        case IfaceIpMode.PPPoE:
+        case IfaceIpMode.DHCPClient:
+          this.ip_model = obj.ip_model;
+          break;
+        case IfaceIpMode.DHCPServer:
+          this.ip_model = new DhcpServerConfig(obj.ip_model);
+          break;
+        default:
+          this.ip_model = obj?.ip_model ?? { t: "nothing" };
+      }
+    } else {
+      this.ip_model = obj?.ip_model ?? { t: "nothing" };
+    }
   }
 }
 

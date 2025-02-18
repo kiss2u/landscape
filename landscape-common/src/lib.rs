@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, ops::Range};
+use std::net::Ipv4Addr;
 
 pub mod args;
 pub mod dns;
@@ -18,4 +18,4 @@ pub const LANDSCAPE_DEFAULT_LAN_NAME: &'static str = "br_lan";
 
 pub const LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 5, 1);
 pub const LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK: u8 = 24_u8;
-pub const LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_RANGE: Range<u32> = 1..254;
+pub const LANDSCAPE_DEFAULE_LAN_DHCP_RANGE_START: Ipv4Addr = Ipv4Addr::new(192, 168, 5, 100);

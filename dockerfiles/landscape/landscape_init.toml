@@ -23,7 +23,7 @@ enable = true
 
 [ipconfigs.ip_model]
 t = "static"
-ipv4 = [172, 123, 0, 2]
+ipv4 = "172.123.0.2"
 ipv4_mask = 16
 
 # Config NAT
@@ -38,9 +38,9 @@ enable = true
 
 [ipconfigs.ip_model]
 t = "dhcpserver"
-server_ip = [192, 168, 5, 1]
+server_ip_addr = "192.168.5.1"
 network_mask = 24
-host_range = [100, 200]
+ip_range_start = "192.168.5.100"
 
 [[dns_rules]]
 name = "default rule"

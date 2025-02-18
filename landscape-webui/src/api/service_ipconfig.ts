@@ -17,7 +17,7 @@ export async function get_iface_server_config(
   iface_name: string
 ): Promise<IfaceIpServiceConfig> {
   let data = await api.api.get(`services/ipconfigs/${iface_name}`);
-  console.log(data.data);
+  // console.log(data.data);
   return data.data;
 }
 

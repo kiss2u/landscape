@@ -8,9 +8,10 @@ import {
   ZoneType,
   IfaceIpMode,
 } from "@/lib/service_ipconfig";
+import DhcpServerConfigForm from "@/components/ipconfig/DhcpServerConfigForm.vue";
 import { computed, ref } from "vue";
 import { DhcpServerConfig } from "@/lib/dhcp";
-import IpEdit from "../IpEdit.vue";
+import NewIpEdit from "../NewIpEdit.vue";
 
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
@@ -41,10 +42,10 @@ const ip_config_options = computed(() => {
       value: IfaceIpMode.DHCPServer,
     });
   } else if (iface_info.zone == ZoneType.Wan) {
-    result.push({
-      label: "PPPoE",
-      value: IfaceIpMode.PPPoE,
-    });
+    // result.push({
+    //   label: "PPPoE",
+    //   value: IfaceIpMode.PPPoE,
+    // });
     result.push({
       label: "DHCP 客户端",
       value: IfaceIpMode.DHCPClient,
@@ -56,9 +57,9 @@ const ip_config_options = computed(() => {
 async function on_modal_enter() {
   try {
     let config = await get_iface_server_config(iface_info.iface_name);
-    console.log(config);
+    // console.log(config);
     // iface_service_type.value = config.t;
-    iface_data.value = config;
+    iface_data.value = new IfaceIpServiceConfig(config);
   } catch (e) {
     iface_data.value = new IfaceIpServiceConfig({
       iface_name: iface_info.iface_name,
@@ -85,9 +86,9 @@ function select_ip_model(value: IfaceIpMode) {
   } else if (value === IfaceIpMode.Static) {
     iface_data.value.ip_model = {
       t: IfaceIpMode.Static,
-      ipv4: [0, 0, 0, 0],
+      ipv4: "0.0.0.0",
       ipv4_mask: 24,
-      ipv6: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      ipv6: undefined,
     };
   } else if (value === IfaceIpMode.PPPoE) {
     iface_data.value.ip_model = {
@@ -123,27 +124,28 @@ function select_ip_model(value: IfaceIpMode) {
         style="width: 100%"
         v-if="iface_data.ip_model !== undefined"
       >
-        <n-flex>
-          <n-switch v-model:value="iface_data.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
-          </n-switch>
-        </n-flex>
-
-        <n-flex align="center" style="flex: 1" justify="center">
-          <n-select
-            :value="iface_data.ip_model.t"
-            @update:value="select_ip_model"
-            :options="ip_config_options"
-          />
+        <n-flex align="center" :wrap="false">
+          <n-flex>
+            <n-switch v-model:value="iface_data.enable">
+              <template #checked> 启用 </template>
+              <template #unchecked> 禁用 </template>
+            </n-switch>
+          </n-flex>
+          <n-flex style="flex: 1">
+            <n-select
+              :value="iface_data.ip_model.t"
+              @update:value="select_ip_model"
+              :options="ip_config_options"
+            />
+          </n-flex>
         </n-flex>
 
         <n-flex>
           <n-flex v-if="iface_data.ip_model.t === IfaceIpMode.Static">
-            <IpEdit
+            <NewIpEdit
               v-model:ip="iface_data.ip_model.ipv4"
               v-model:mask="iface_data.ip_model.ipv4_mask"
-            ></IpEdit>
+            ></NewIpEdit>
           </n-flex>
           <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.PPPoE">
             <n-input-group>
@@ -161,7 +163,9 @@ function select_ip_model(value: IfaceIpMode) {
           </n-flex>
 
           <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.DHCPServer">
-            // TODO
+            <DhcpServerConfigForm
+              v-model:config="iface_data.ip_model"
+            ></DhcpServerConfigForm>
           </n-flex>
           <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.DHCPClient">
             // TODO

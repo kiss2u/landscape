@@ -1,10 +1,11 @@
-use core::ops::Range;
-use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, Ipv6Addr},
+    sync::Arc,
+};
 
 use landscape_common::{
-    store::storev2::LandScapeStore, LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP,
-    LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK, LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_RANGE,
-    LANDSCAPE_DEFAULT_LAN_NAME,
+    args::LAND_HOSTNAME, store::storev2::LandScapeStore, LANDSCAPE_DEFAULT_LAN_NAME,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
@@ -12,7 +13,6 @@ use tokio::sync::{mpsc, RwLock};
 use crate::{
     dev::LandScapeInterface,
     dhcp_server::{dhcp_server::init_dhcp_server, DhcpServerIpv4Config},
-    dump::udp_packet::dhcp::options::DhcpOptions,
     iface::{
         config::{IfaceZoneType, NetworkIfaceConfig},
         get_iface_by_name,
@@ -40,12 +40,7 @@ impl IfaceIpServiceConfig {
         IfaceIpServiceConfig {
             iface_name: LANDSCAPE_DEFAULT_LAN_NAME.into(),
             enable: true,
-            ip_model: IfaceIpModelConfig::DhcpServer {
-                server_ip: LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP.octets(),
-                network_mask: LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK,
-                options: vec![],
-                host_range: LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_RANGE,
-            },
+            ip_model: IfaceIpModelConfig::DhcpServer(DhcpServerIpv4Config::default()),
         }
     }
 }
@@ -58,26 +53,21 @@ pub enum IfaceIpModelConfig {
     Nothing,
     Static {
         #[serde(default)]
-        ipv4: Option<[u8; 4]>,
+        ipv4: Option<Ipv4Addr>,
         #[serde(default)]
         ipv4_mask: u8,
         #[serde(default)]
-        ipv6: Option<[u8; 16]>,
+        ipv6: Option<Ipv6Addr>,
     },
     PPPoE {
         username: String,
         password: String,
         mtu: u32,
     },
-    DhcpClient,
-    DhcpServer {
-        server_ip: [u8; 4],
-        network_mask: u8,
-        #[serde(default)]
-        options: Vec<DhcpOptions>,
-        host_range: Range<u32>,
-        // TODO: 加入 mac 地址绑定
+    DhcpClient {
+        hostname: Option<String>,
     },
+    DhcpServer(DhcpServerIpv4Config),
 }
 
 impl IfaceIpModelConfig {
@@ -87,7 +77,9 @@ impl IfaceIpModelConfig {
             IfaceIpModelConfig::PPPoE { .. } => {
                 matches!(iface_config.zone_type, IfaceZoneType::Wan)
             }
-            IfaceIpModelConfig::DhcpClient => matches!(iface_config.zone_type, IfaceZoneType::Wan),
+            IfaceIpModelConfig::DhcpClient { .. } => {
+                matches!(iface_config.zone_type, IfaceZoneType::Wan)
+            }
             IfaceIpModelConfig::DhcpServer { .. } => {
                 matches!(iface_config.zone_type, IfaceZoneType::Lan)
             }
@@ -213,7 +205,7 @@ async fn init_service_from_config(
                     let iface_name = iface_name_clone;
                     let ip_config = ipconfig_clone;
                     ip_config.send_replace(ServiceStatus::Staring);
-                    let ipv4 = Ipv4Addr::new(ipv4[0], ipv4[1], ipv4[2], ipv4[3]);
+                    // let ipv4 = Ipv4Addr::new(ipv4[0], ipv4[1], ipv4[2], ipv4[3]);
                     println!("set ipv4 is: {}", ipv4);
                     let _ = std::process::Command::new("ip")
                         .args(&[
@@ -272,10 +264,12 @@ async fn init_service_from_config(
                 });
             }
         }
-        IfaceIpModelConfig::DhcpClient => {
+        IfaceIpModelConfig::DhcpClient { hostname } => {
             if let Some(mac_addr) = iface.mac {
                 let iface_name = iface.name.clone();
                 let service_status = ip_config.clone();
+                let hostname =
+                    if let Some(hostname) = hostname { hostname } else { LAND_HOSTNAME.clone() };
                 tokio::spawn(async move {
                     crate::dhcp_client::dhcp_client(
                         iface.index,
@@ -283,6 +277,7 @@ async fn init_service_from_config(
                         mac_addr,
                         68,
                         service_status,
+                        hostname,
                     )
                     .await;
                 });
@@ -292,9 +287,7 @@ async fn init_service_from_config(
                 });
             }
         }
-        IfaceIpModelConfig::DhcpServer { server_ip, network_mask, options, host_range } => {
-            let server_ip = Ipv4Addr::new(server_ip[0], server_ip[1], server_ip[2], server_ip[3]);
-            let config = DhcpServerIpv4Config::new(server_ip, network_mask, options, host_range);
+        IfaceIpModelConfig::DhcpServer(config) => {
             println!("使用的  DHCP server 配置是: {config:?}");
             init_dhcp_server(iface.name.clone(), config, ip_config.clone()).await;
         }

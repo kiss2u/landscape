@@ -12,3 +12,4 @@ sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 homedir = { workspace = true }
+hostname = "0.3"
