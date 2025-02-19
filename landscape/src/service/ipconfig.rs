@@ -303,8 +303,10 @@ async fn init_service_from_config(
             if let Some(mac_addr) = iface.mac {
                 let iface_name = iface.name.clone();
                 let service_status = ip_config.clone();
+
                 let hostname =
-                    if let Some(hostname) = hostname { hostname } else { LAND_HOSTNAME.clone() };
+                    hostname.filter(|h| !h.is_empty()).unwrap_or_else(|| LAND_HOSTNAME.clone());
+
                 tokio::spawn(async move {
                     crate::dhcp_client::dhcp_client(
                         iface.index,
