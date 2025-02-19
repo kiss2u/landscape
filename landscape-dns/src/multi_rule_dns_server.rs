@@ -1,5 +1,8 @@
+use core::panic;
 use std::{
     collections::{BTreeMap, HashMap},
+    fs,
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -12,6 +15,34 @@ use hickory_server::{
 use crate::rule::ResolutionRule;
 use landscape_common::dns::{DNSRuleConfig, DomainConfig};
 
+static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
+static RESOLVER_CONF_LD_BACK: &'static str = "/etc/resolv.conf.ld_back";
+
+fn check_resolver_conf() {
+    let resolver_file = PathBuf::from(RESOLVER_CONF);
+    let resolver_file_back = PathBuf::from(RESOLVER_CONF_LD_BACK);
+    let new_content = "nameserver 127.0.0.1\n";
+
+    if resolver_file.is_symlink() {
+        // 如果是符号链接，直接删除
+        fs::remove_file(&resolver_file).unwrap();
+    } else if resolver_file.exists() {
+        if resolver_file.is_file() {
+            // 如果是普通文件，检查备份文件
+            if resolver_file_back.exists() {
+                fs::remove_file(&resolver_file).unwrap();
+            } else {
+                fs::rename(&resolver_file, &resolver_file_back).unwrap();
+            }
+        } else {
+            panic!("other kind file");
+        }
+    }
+
+    // 写入新内容到 /etc/resolv.conf
+    fs::write(&resolver_file, new_content).unwrap();
+}
+
 /// 整个 DNS 规则匹配树
 pub struct DnsServer {
     resolves: BTreeMap<u32, Arc<ResolutionRule>>,
@@ -22,6 +53,8 @@ impl DnsServer {
         dns_rules: Vec<DNSRuleConfig>,
         geo_map: HashMap<String, Vec<DomainConfig>>,
     ) -> DnsServer {
+        check_resolver_conf();
+
         let mut resolves = BTreeMap::new();
 
         for rule in dns_rules.into_iter() {

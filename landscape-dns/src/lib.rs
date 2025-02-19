@@ -13,7 +13,6 @@ use tokio::sync::watch;
 
 mod connection;
 pub mod multi_rule_dns_server;
-pub mod options;
 pub mod protos;
 pub mod rule;
 

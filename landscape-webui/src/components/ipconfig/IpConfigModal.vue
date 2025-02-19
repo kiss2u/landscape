@@ -86,6 +86,8 @@ function select_ip_model(value: IfaceIpMode) {
   } else if (value === IfaceIpMode.Static) {
     iface_data.value.ip_model = {
       t: IfaceIpMode.Static,
+      default_router_ip: "0.0.0.0",
+      default_router: false,
       ipv4: "0.0.0.0",
       ipv4_mask: 24,
       ipv6: undefined,
@@ -93,6 +95,7 @@ function select_ip_model(value: IfaceIpMode) {
   } else if (value === IfaceIpMode.PPPoE) {
     iface_data.value.ip_model = {
       t: IfaceIpMode.PPPoE,
+      default_router: false,
       username: "",
       password: "",
       mtu: 1492,
@@ -100,7 +103,11 @@ function select_ip_model(value: IfaceIpMode) {
   } else if (value === IfaceIpMode.DHCPServer) {
     iface_data.value.ip_model = new DhcpServerConfig();
   } else if (value === IfaceIpMode.DHCPClient) {
-    iface_data.value.ip_model = { t: IfaceIpMode.DHCPClient };
+    iface_data.value.ip_model = {
+      t: IfaceIpMode.DHCPClient,
+      default_router: false,
+      hostname: undefined,
+    };
   }
 }
 </script>
@@ -142,10 +149,35 @@ function select_ip_model(value: IfaceIpMode) {
 
         <n-flex>
           <n-flex v-if="iface_data.ip_model.t === IfaceIpMode.Static">
-            <NewIpEdit
-              v-model:ip="iface_data.ip_model.ipv4"
-              v-model:mask="iface_data.ip_model.ipv4_mask"
-            ></NewIpEdit>
+            <n-form style="flex: 1" :model="iface_data.ip_model" :cols="5">
+              <n-grid :cols="5">
+                <n-form-item-gi label="静态 IP" :span="5">
+                  <NewIpEdit
+                    v-model:ip="iface_data.ip_model.ipv4"
+                    v-model:mask="iface_data.ip_model.ipv4_mask"
+                  ></NewIpEdit>
+                </n-form-item-gi>
+                <n-form-item-gi
+                  v-if="iface_info.zone == ZoneType.Wan"
+                  label="是否设置默认路由"
+                  :span="5"
+                >
+                  <n-switch v-model:value="iface_data.ip_model.default_router">
+                    <template #checked> 是 </template>
+                    <template #unchecked> 否 </template>
+                  </n-switch>
+                </n-form-item-gi>
+                <n-form-item-gi
+                  v-if="iface_info.zone == ZoneType.Wan"
+                  label="路由 IP"
+                  :span="5"
+                >
+                  <NewIpEdit
+                    v-model:ip="iface_data.ip_model.default_router_ip"
+                  ></NewIpEdit>
+                </n-form-item-gi>
+              </n-grid>
+            </n-form>
           </n-flex>
           <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.PPPoE">
             <n-input-group>
@@ -167,8 +199,25 @@ function select_ip_model(value: IfaceIpMode) {
               v-model:config="iface_data.ip_model"
             ></DhcpServerConfigForm>
           </n-flex>
-          <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.DHCPClient">
-            // TODO
+          <n-flex
+            style="flex: 1"
+            v-else-if="iface_data.ip_model.t === IfaceIpMode.DHCPClient"
+          >
+            <n-form style="flex: 1" :model="iface_data.ip_model" :cols="5">
+              <n-grid :cols="5">
+                <n-form-item-gi label="是否设置默认路由" :span="5">
+                  <n-switch v-model:value="iface_data.ip_model.default_router">
+                    <template #checked> 是 </template>
+                    <template #unchecked> 否 </template>
+                  </n-switch>
+                </n-form-item-gi>
+                <n-form-item-gi label="DHCP 时填充的主机名称" :span="5">
+                  <n-input
+                    v-model:value="iface_data.ip_model.hostname"
+                  ></n-input>
+                </n-form-item-gi>
+              </n-grid>
+            </n-form>
           </n-flex>
         </n-flex>
       </n-flex>

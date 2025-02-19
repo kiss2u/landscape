@@ -53,6 +53,10 @@ pub enum IfaceIpModelConfig {
     Nothing,
     Static {
         #[serde(default)]
+        default_router_ip: Option<Ipv4Addr>,
+        #[serde(default)]
+        default_router: bool,
+        #[serde(default)]
         ipv4: Option<Ipv4Addr>,
         #[serde(default)]
         ipv4_mask: u8,
@@ -60,11 +64,15 @@ pub enum IfaceIpModelConfig {
         ipv6: Option<Ipv6Addr>,
     },
     PPPoE {
+        #[serde(default)]
+        default_router: bool,
         username: String,
         password: String,
         mtu: u32,
     },
     DhcpClient {
+        #[serde(default)]
+        default_router: bool,
         hostname: Option<String>,
     },
     DhcpServer(DhcpServerIpv4Config),
@@ -196,7 +204,9 @@ async fn init_service_from_config(
 
     match service_config {
         IfaceIpModelConfig::Nothing => {}
-        IfaceIpModelConfig::Static { ipv4, ipv4_mask, .. } => {
+        IfaceIpModelConfig::Static {
+            default_router, default_router_ip, ipv4, ipv4_mask, ..
+        } => {
             // TODO: IPV6 的设置
             if let Some(ipv4) = ipv4 {
                 let ipconfig_clone = ip_config.clone();
@@ -218,6 +228,31 @@ async fn init_service_from_config(
                         .output();
                     println!("start setting");
                     landscape_ebpf::map_setting::add_wan_ip(iface.index, ipv4);
+
+                    if default_router {
+                        if let Some(default_router_ip) = default_router_ip {
+                            if !default_router_ip.is_broadcast()
+                                && !default_router_ip.is_unspecified()
+                                && !default_router_ip.is_loopback()
+                            {
+                                println!("setting default route: {:?}", default_router_ip);
+                                let result = std::process::Command::new("ip")
+                                    .args(&[
+                                        "route",
+                                        "replace",
+                                        "default",
+                                        "via",
+                                        &format!("{}", default_router_ip),
+                                        "dev",
+                                        &iface_name,
+                                    ])
+                                    .output();
+                                if let Err(e) = result {
+                                    println!("replace route error: {e:?}")
+                                }
+                            }
+                        }
+                    }
 
                     ip_config.send_replace(ServiceStatus::Running);
 
@@ -243,7 +278,7 @@ async fn init_service_from_config(
                 });
             }
         }
-        IfaceIpModelConfig::PPPoE { username, password, mtu: _ } => {
+        IfaceIpModelConfig::PPPoE { username, password, mtu: _, .. } => {
             if let Some(mac_addr) = iface.mac {
                 let iface_name = iface.name.clone();
                 let service_status = ip_config.clone();
@@ -264,7 +299,7 @@ async fn init_service_from_config(
                 });
             }
         }
-        IfaceIpModelConfig::DhcpClient { hostname } => {
+        IfaceIpModelConfig::DhcpClient { default_router, hostname } => {
             if let Some(mac_addr) = iface.mac {
                 let iface_name = iface.name.clone();
                 let service_status = ip_config.clone();
@@ -278,6 +313,7 @@ async fn init_service_from_config(
                         68,
                         service_status,
                         hostname,
+                        default_router,
                     )
                     .await;
                 });

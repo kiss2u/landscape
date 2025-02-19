@@ -50,10 +50,23 @@ export enum IfaceIpMode {
 }
 export type IfaceIpModelConfig =
   | { t: "nothing" }
-  | { t: "static"; ipv4: string; ipv4_mask: number; ipv6: string | undefined }
-  | { t: "pppoe"; username: string; password: string; mtu: number }
+  | {
+      t: "static";
+      default_router_ip: string | undefined;
+      default_router: boolean;
+      ipv4: string;
+      ipv4_mask: number;
+      ipv6: string | undefined;
+    }
+  | {
+      t: "pppoe";
+      default_router: boolean;
+      username: string;
+      password: string;
+      mtu: number;
+    }
   | DhcpServerConfig
-  | { t: "dhcpclient" };
+  | { t: "dhcpclient"; default_router: boolean; hostname: string | undefined };
 
 export class IfaceIpServiceConfig {
   iface_name: string;

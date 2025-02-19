@@ -108,6 +108,7 @@ pub async fn dhcp_client(
     client_port: u16,
     service_status: watch::Sender<ServiceStatus>,
     hostname: String,
+    default_router: bool,
 ) {
     service_status.send_replace(ServiceStatus::Staring);
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), client_port);
@@ -328,6 +329,7 @@ pub async fn dhcp_client(
                         args.extend(["brd".to_string(), format!("{}", broadcast)]);
                     }
                     args.extend(["dev".to_string(), iface_name.clone()]);
+
                     println!("{:?}", args);
                     let result = std::process::Command::new("ip").args(&args).output();
                     if let Err(e) = result {
@@ -337,6 +339,22 @@ pub async fn dhcp_client(
                             *value = "del".to_string();
                         }
                         ip_arg = Some(args);
+                    }
+
+                    if default_router {
+                        if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
+                            let _ = std::process::Command::new("ip")
+                                .args(&[
+                                    "route",
+                                    "replace",
+                                    "default",
+                                    "via",
+                                    &format!("{}", router_ip),
+                                    "dev",
+                                    &iface_name,
+                                ])
+                                .output();
+                        }
                     }
 
                     let rebinding_time = Instant::now() + Duration::from_secs(rebinding_time);

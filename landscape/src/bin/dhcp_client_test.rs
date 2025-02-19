@@ -13,7 +13,8 @@ async fn main() {
 
     let service_status = status.clone();
     tokio::spawn(async move {
-        dhcp_client(5, "ens4".into(), mac_addr, 68, service_status, "TEST-PC".to_string()).await;
+        dhcp_client(5, "ens4".into(), mac_addr, 68, service_status, "TEST-PC".to_string(), false)
+            .await;
     });
 
     tokio::time::sleep(Duration::from_secs(30)).await;
