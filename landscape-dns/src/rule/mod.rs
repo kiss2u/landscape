@@ -87,7 +87,13 @@ impl CacheResolver {
         None
     }
 
-    pub async fn insert(&self, domain: &str, query_type: RecordType, rdata_ttl_vec: Vec<Record>) {
+    pub async fn insert(
+        &self,
+        domain: &str,
+        query_type: RecordType,
+        rdata_ttl_vec: Vec<Record>,
+        mark: &PacketMark,
+    ) {
         let mut cache = self.cache.lock().await;
         let now = Instant::now();
 
@@ -110,11 +116,11 @@ impl CacheResolver {
 
         cache.put((domain.to_string(), query_type), records_with_expiration);
         // 将 mark 写入 mark ebpf map
-        // if self.config.mark.need_add_mark_config() {
-        //     println!("setting ips: {:?}, Mark: {:?}", ipv4s, self.config.mark);
-        //     // TODO: 如果写入错误 返回错误后 向客户端返回查询错误
-        //     landscape_ebpf::map_setting::add_ips_mark(ipv4s, self.config.mark.clone().into());
-        // }
+        if mark.need_add_mark_config() {
+            println!("setting ips: {:?}, Mark: {:?}", ipv4s, mark);
+            // TODO: 如果写入错误 返回错误后 向客户端返回查询错误
+            landscape_ebpf::map_setting::add_ips_mark(ipv4s, mark.clone().into());
+        }
     }
 
     // 根据请求的类型解析域名，返回 RData
@@ -156,6 +162,7 @@ impl ResolverType {
         &self,
         domain: &str,
         query_type: RecordType,
+        mark: &PacketMark,
     ) -> Result<Vec<Record>, ResponseCode> {
         match self {
             ResolverType::RedirectResolver(result_ip) => Ok(vec![Record::from_rdata(
@@ -170,7 +177,7 @@ impl ResolverType {
                     match resolver.resolve_domain_using_upstream(&domain, query_type).await {
                         Ok(rdata_vec) => {
                             // 将解析结果插入缓存
-                            resolver.insert(domain, query_type, rdata_vec.clone()).await;
+                            resolver.insert(domain, query_type, rdata_vec.clone(), mark).await;
                             Ok(rdata_vec)
                         }
                         Err(error_code) => Err(error_code),
@@ -217,7 +224,7 @@ impl ResolutionRule {
         domain: &str,
         query_type: RecordType,
     ) -> Result<Vec<Record>, ResponseCode> {
-        self.resolver.lookup(domain, query_type).await
+        self.resolver.lookup(domain, query_type, &self.config.mark).await
     }
 
     // // 检查缓存并根据 TTL 判断是否过期

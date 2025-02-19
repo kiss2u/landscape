@@ -88,7 +88,7 @@ int egress_packet_mark(struct __sk_buff *skb) {
             skb->mark = mark_value->mark;
         }
     } else {
-        bpf_log_info("has mark = %u", skb->mark);
+        // bpf_log_info("has mark = %u", skb->mark);
         action = skb->mark & ACTION_MASK;
         index = (skb->mark & INDEX_MASK) >> 8;
     }
@@ -97,7 +97,7 @@ int egress_packet_mark(struct __sk_buff *skb) {
         // 进入下一个环节
         return TC_ACT_UNSPEC;
     } else if (action == DIRECT_MARK) {
-        bpf_log_info("has DIRECT_MARK = %u", skb->mark);
+        // bpf_log_info("has DIRECT_MARK = %u", skb->mark);
         return TC_ACT_UNSPEC;
     } else if (action == DROP_MARK) {
         // bpf_log_info("drop packet mark %u", skb->mark);
@@ -109,7 +109,6 @@ int egress_packet_mark(struct __sk_buff *skb) {
             return bpf_redirect(*outer_ifindex, 0);
         }
     } else if (action == REDIRECT_NETNS_MARK) {
-        bpf_log_info("REDIRECT_NETNS_MARK %u", skb->mark);
         u32 *outer_ifindex = bpf_map_lookup_elem(&redirect_index_map, &index);
         if (outer_ifindex != NULL) {
             if (current_eth_net_offset == 0) {
@@ -119,6 +118,8 @@ int egress_packet_mark(struct __sk_buff *skb) {
             }
             bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
             return bpf_redirect(*outer_ifindex, 0);
+        } else {
+            bpf_log_info("Can not find ifindex to handle package redirect %u", skb->mark);
         }
     }
 
