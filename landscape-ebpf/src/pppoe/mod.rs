@@ -4,7 +4,6 @@ use std::{
         fd::{AsFd, AsRawFd},
         raw::c_void,
     },
-    time::Duration,
 };
 
 use landscape_pppoe_client::*;
@@ -48,7 +47,7 @@ pub async fn start(
 
     let mut open_object = MaybeUninit::uninit();
     let pppoe_open = pppoe_builder.open(&mut open_object).unwrap();
-    let mut pppoe_skel = pppoe_open.load().unwrap();
+    let pppoe_skel = pppoe_open.load().unwrap();
 
     let pppoe_pnet_progs = pppoe_skel.progs;
 

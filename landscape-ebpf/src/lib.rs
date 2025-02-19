@@ -39,11 +39,6 @@ pub(crate) struct LandscapeMapPath {
     pub redirect_index: PathBuf,
 }
 
-// pub const WAN_IP_MAP_PING_PATH: &'static str = "/sys/fs/bpf/landscape/wan_ipv4_binding";
-// pub const BLOCK_IP_MAP_PING_PATH: &'static str = "/sys/fs/bpf/landscape/firewall_block_map";
-// pub const PACKET_MARK_MAP_PING_PATH: &'static str = "/sys/fs/bpf/landscape/packet_mark_map";
-// pub const REDIRECT_INDEX_MAP_PING_PATH: &'static str = "/sys/fs/bpf/landscape/redirect_index_map";
-
 // pppoe -> Fire wall -> nat
 const PPPOE_INGRESS_PRIORITY: u32 = 1;
 const FIREWALL_INGRESS_PRIORITY: u32 = 2;

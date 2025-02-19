@@ -45,6 +45,8 @@ fn check_resolver_conf() {
 
 /// 整个 DNS 规则匹配树
 pub struct DnsServer {
+    /// 所有的域名处理对象
+    /// 遍历的顺序是小到大
     resolves: BTreeMap<u32, Arc<ResolutionRule>>,
 }
 

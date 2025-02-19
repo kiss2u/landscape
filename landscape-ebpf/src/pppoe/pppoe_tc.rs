@@ -1,8 +1,6 @@
 use std::{
     mem::MaybeUninit,
     net::{Ipv4Addr, SocketAddrV4},
-    os::fd::AsFd,
-    sync::Arc,
     time::Duration,
 };
 
@@ -10,20 +8,13 @@ use landscape_common::util::compute_checksum;
 use landscape_pppoe::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    OpenObject, TcHookBuilder, TC_EGRESS, TC_INGRESS,
+    OpenObject, TC_EGRESS, TC_INGRESS,
 };
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, SockAddr, Socket, Type};
-use tokio::sync::{
-    mpsc,
-    oneshot::{self, error::TryRecvError},
-    Mutex,
-};
+use tokio::sync::oneshot::error::TryRecvError;
 
-use crate::{
-    landscape::TcHookProxy, PPPOE_EGRESS_PRIORITY, PPPOE_INGRESS_PRIORITY,
-    PPPOE_MTU_FILTER_EGRESS_PRIORITY,
-};
+use crate::{landscape::TcHookProxy, PPPOE_EGRESS_PRIORITY, PPPOE_INGRESS_PRIORITY};
 
 mod landscape_pppoe {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/pppoe.skel.rs"));

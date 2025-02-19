@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 use std::os::fd::RawFd;
-use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::os::unix::io::AsRawFd;
 use std::{future::Future, io, pin::Pin};
 
 use hickory_client::proto::iocompat::AsyncIoTokioAsStd;
@@ -11,7 +11,6 @@ use hickory_resolver::{
 };
 
 use libc::{setsockopt, SOL_SOCKET, SO_MARK};
-use socket2::{Domain, Socket, Type};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio::net::UdpSocket as TokioUdpSocket;
 
@@ -28,15 +27,6 @@ impl MarkRuntimeProvider {
     /// Create a Tokio runtime with a specific mark value
     pub fn new(mark_value: u32) -> Self {
         MarkRuntimeProvider { handler: TokioHandle::default(), mark_value }
-    }
-
-    /// Sets the SO_MARK option on a given socket
-    fn set_socket_mark<S: AsRawFd>(&self, socket: &S) -> io::Result<()> {
-        let raw_socket = unsafe { Socket::from_raw_fd(socket.as_raw_fd()) };
-        raw_socket.set_mark(self.mark_value)?;
-        // Avoid closing the socket when `raw_socket` goes out of scope
-        std::mem::forget(raw_socket);
-        Ok(())
     }
 }
 

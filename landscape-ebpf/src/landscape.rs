@@ -31,9 +31,9 @@ pub fn test() {
     landscape_builder.obj_builder.debug(true);
 
     let mut open_object = MaybeUninit::uninit();
-    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    let landscape_open = landscape_builder.open(&mut open_object).unwrap();
     // landscape_open.maps.wan_ipv4_binding.set_pin_path(PathBuf::from(WAN_IP_MAP_PING_PATH));
-    let mut landscape_skel = landscape_open.load().unwrap();
+    let landscape_skel = landscape_open.load().unwrap();
 
     let mark_ingress = landscape_skel.progs.mark_ingress;
     let mark_egress = landscape_skel.progs.mark_egress;
@@ -123,9 +123,9 @@ pub async fn xdp_test() {
 
     let mut open_object = MaybeUninit::uninit();
     let landscape_open = landscape_builder.open(&mut open_object).unwrap();
-    let mut landscape_skel = landscape_open.load().unwrap();
+    let landscape_skel = landscape_open.load().unwrap();
 
-    let link = landscape_skel.progs.xdp_pass.attach_xdp(6).unwrap();
+    let _link = landscape_skel.progs.xdp_pass.attach_xdp(6).unwrap();
 
     std::thread::sleep(Duration::from_secs(120));
 }
