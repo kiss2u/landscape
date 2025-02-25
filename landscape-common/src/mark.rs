@@ -9,7 +9,7 @@ pub struct MarkRule {
     mark: PacketMark,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy)]
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum PacketMark {

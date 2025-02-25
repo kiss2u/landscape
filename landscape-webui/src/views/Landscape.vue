@@ -15,7 +15,8 @@ import LanguageSetting from "@/components/head/LanguageSetting.vue";
 import CopyRight from "@/components/CopyRight.vue";
 import NetFlow from "@/components/flow/NetFlow.vue";
 
-import { computed, onMounted, ref } from "vue";
+import { ref } from "vue";
+import MarkRuleCard from "@/components/mark/MarkRuleCard.vue";
 
 const show_dump = ref(false);
 
@@ -53,21 +54,24 @@ const { t } = useI18n({ useScope: "global" });
           <n-gi :span="1">
             <SystemInfo></SystemInfo>
           </n-gi>
-          <n-gi style="display: flex" :span="1">
+          <n-gi style="display: flex; height: 320px" :span="1">
             <CPUUsage></CPUUsage>
           </n-gi>
-          <n-gi style="display: flex" :span="1">
+          <n-gi style="display: flex; height: 320px" :span="1">
             <MemUsage></MemUsage>
           </n-gi>
-          <n-gi style="display: flex" :span="1">
+          <n-gi style="display: flex; height: 320px" :span="1">
             <DnsStatusCard></DnsStatusCard>
           </n-gi>
-          <n-gi style="display: flex" :span="2">
+          <n-gi style="display: flex; height: 320px" :span="1">
             <DockerStatusCard></DockerStatusCard>
           </n-gi>
-          <!-- <n-gi :span="2">
-              <FireWallStatusCard></FireWallStatusCard>
-            </n-gi> -->
+          <n-gi style="display: flex; height: 320px" :span="1">
+            <MarkRuleCard></MarkRuleCard>
+          </n-gi>
+          <!-- <n-gi style="display: flex; height: 320px" :span="1">
+            <FireWallStatusCard></FireWallStatusCard>
+          </n-gi> -->
         </n-grid>
         <n-divider style="margin: 16px 0" title-placement="left">
           {{ t("docker_divider") }}

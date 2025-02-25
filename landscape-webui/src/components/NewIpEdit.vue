@@ -4,6 +4,14 @@ import { computed, ref, watch } from "vue";
 const ip = defineModel<string | undefined>("ip", { required: true });
 const mask = defineModel<number | undefined>("mask");
 
+interface Props {
+  mask_max?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  mask_max: 32,
+});
+
 const ipParts = ref<[number, number, number, number]>([0, 0, 0, 0]);
 watch(
   ip,
@@ -65,8 +73,8 @@ watch(ip_parts_watch, (new_ip) => {
     <n-input-group-label v-if="mask !== undefined">/</n-input-group-label>
     <n-input-number
       v-if="mask !== undefined"
-      min="1"
-      max="30"
+      min="0"
+      :max="props.mask_max"
       v-model:value="mask"
       placeholder="mask"
     />

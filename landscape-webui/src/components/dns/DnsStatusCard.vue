@@ -37,15 +37,24 @@ async function stop_dns() {
     </template>
     <template #header-extra>
       <n-flex>
-        <n-button size="small" @click="show_rule_drawer = true">
+        <n-button
+          :focusable="false"
+          size="small"
+          @click="show_rule_drawer = true"
+        >
           域名解析规则
         </n-button>
-        <n-button size="small" @click="start_dns" v-if="dnsStore.is_down">
+        <n-button
+          :focusable="false"
+          size="small"
+          @click="start_dns"
+          v-if="dnsStore.is_down"
+        >
           开启
         </n-button>
         <n-popconfirm v-else @positive-click="stop_dns">
           <template #trigger>
-            <n-button size="small" @click="">
+            <n-button :focusable="false" size="small" @click="">
               关闭
             </n-button>
           </template>

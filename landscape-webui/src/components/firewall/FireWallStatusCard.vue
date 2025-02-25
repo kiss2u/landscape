@@ -20,22 +20,6 @@ async function stop_dns() {
   // current_status.value = await stop_dns_service();
   // await pollDnsStatus();
 }
-
-// async function pollDnsStatus() {
-//   while (true) {
-//     current_status.value = await get_dns_status();
-
-//     if (
-//       current_status.value.t === "running" ||
-//       current_status.value.t === "stop"
-//     ) {
-//       break; // 满足条件时退出循环
-//     }
-
-//     // 设置一个合适的轮询间隔，避免过于频繁的请求
-//     await new Promise((resolve) => setTimeout(resolve, 1000)); // 1秒间隔
-//   }
-// }
 </script>
 <template>
   <n-card title="防火墙">

@@ -12,6 +12,7 @@ use crate::{
 use landscape_common::{
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
+    ip_mark::{LanIPRuleConfig, WanIPRuleConfig},
 };
 
 const INIT_FILE_NAME: &'static str = "landscape_init.toml";
@@ -70,4 +71,7 @@ pub struct InitConfig {
     pub marks: Vec<PacketMarkServiceConfig>,
     pub pppds: Vec<PPPDServiceConfig>,
     pub dns_rules: Vec<DNSRuleConfig>,
+
+    pub lan_ip_mark: Vec<LanIPRuleConfig>,
+    pub wan_ip_mark: Vec<WanIPRuleConfig>,
 }

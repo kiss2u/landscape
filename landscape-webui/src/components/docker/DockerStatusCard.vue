@@ -41,14 +41,20 @@ async function stop() {
     </template>
     <template #header-extra>
       <n-flex>
-        <n-button size="small" @click="show_image_drawer = true">
-          查看镜像
+        <n-button
+          :focusable="false"
+          size="small"
+          @click="show_image_drawer = true"
+        >
+          镜像
         </n-button>
-        <n-button size="small" @click="start" v-if="is_down"> 开启 </n-button>
+        <n-button :focusable="false" size="small" @click="start" v-if="is_down">
+          开启
+        </n-button>
         <n-popconfirm v-else @positive-click="stop">
           <template #trigger>
-            <n-button size="small" @click="">
-              关闭 docker 事件监听服务
+            <n-button :focusable="false" size="small" @click="">
+              关闭监听
             </n-button>
           </template>
           确定停止吗

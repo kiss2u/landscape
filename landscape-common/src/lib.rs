@@ -4,14 +4,21 @@ pub mod args;
 pub mod dns;
 pub mod error;
 pub mod info;
+pub mod ip_mark;
 pub mod mark;
 pub mod observer;
 pub mod store;
+pub mod sys_config;
 pub mod util;
 
+/// Config file
+pub const LAND_CONFIG: &'static str = "landscape.toml";
+
+/// Home Path
 pub const LANDSCAPE_CONFIG_DIR_NAME: &'static str = ".landscape-router";
 
 pub const GEO_SITE_FILE_NAME: &'static str = "geosite.dat";
+pub const GEO_IP_FILE_NAME: &'static str = "geoip.dat";
 
 /// Landscape default lan bridge name
 pub const LANDSCAPE_DEFAULT_LAN_NAME: &'static str = "br_lan";

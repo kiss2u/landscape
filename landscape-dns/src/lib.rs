@@ -12,6 +12,7 @@ use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
 
 mod connection;
+pub mod ip_rule;
 pub mod multi_rule_dns_server;
 pub mod protos;
 pub mod rule;

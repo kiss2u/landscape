@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Netmask } from "netmask";
 
 import { DhcpServerConfig, get_dhcp_range } from "@/lib/dhcp";
 import NewIpEdit from "../NewIpEdit.vue";
@@ -41,6 +40,7 @@ const network_mask = computed({
         <NewIpEdit
           v-model:ip="server_ip_addr"
           v-model:mask="network_mask"
+          :mask_max="30"
         ></NewIpEdit>
       </n-form-item-gi>
       <!-- <n-form-item-gi label="IP 掩码" :span="5">

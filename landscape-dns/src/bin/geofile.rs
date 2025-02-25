@@ -16,6 +16,10 @@ async fn main() {
         } else {
             sum += entry.cidr.len()
         }
+        println!("reverse_match : {:?}", entry.reverse_match);
+        // if entry.reverse_match {
+        //     println!("reverse_match : {:?}", entry.cidr);
+        // }
     }
     println!("other count: {sum:?}");
 }

@@ -73,9 +73,27 @@ int egress_packet_mark(struct __sk_buff *skb) {
         }
         offset += (iph->ihl * 4);
 
-        struct ipv4_lpm_key find_key = {.prefixlen = 32, .addr = iph->daddr};
-        // 检查当前配置的 mark
-        struct ipv4_mark_action *mark_value = bpf_map_lookup_elem(&packet_mark_map, &find_key);
+        // 1. 检查对 LAN IP 是否有限制
+        struct ipv4_lpm_key find_key = {.prefixlen = 32, .addr = iph->saddr};
+        struct ipv4_mark_action *mark_value = bpf_map_lookup_elem(&lanip_mark_map, &find_key);
+
+        if (!mark_value) {
+            find_key.addr = iph->daddr;
+            // 2. 检查 DNS Mark
+            mark_value = bpf_map_lookup_elem(&packet_mark_map, &find_key);
+            if (!mark_value) {
+                // 3. 检查 Wan Mark
+                mark_value = bpf_map_lookup_elem(&wanip_mark_map, &find_key);
+                // if (mark_value) {
+                //     bpf_log_info("find by wan %u", mark_value);
+                // }
+            // } else {
+                // bpf_log_info("find by dns %u", mark_value);
+            }
+        // } else {
+            // bpf_log_info("find by lan %u", mark_value);
+        }
+
         if (mark_value) {
             // bpf_log_info("IP: %d.%d.%d.%d,",
             //              iph->daddr & 0xFF,
@@ -86,6 +104,8 @@ int egress_packet_mark(struct __sk_buff *skb) {
             action = mark_value->mark & ACTION_MASK;
             index = (mark_value->mark & INDEX_MASK) >> 8;
             skb->mark = mark_value->mark;
+        } else {
+            goto no_mark;
         }
     } else {
         // bpf_log_info("has mark = %u", skb->mark);
@@ -123,6 +143,7 @@ int egress_packet_mark(struct __sk_buff *skb) {
         }
     }
 
+no_mark:
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
 }

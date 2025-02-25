@@ -21,6 +21,7 @@ mod dns;
 mod docker;
 mod dump;
 mod error;
+mod global_mark;
 mod iface;
 mod service;
 mod sysinfo;
@@ -56,11 +57,24 @@ async fn main() -> LdResult<()> {
 
     let mut dns_store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
 
+    let mut lan_ip_mark_store = StoreFileManager::new(home_path.clone(), "lan_ip_mark".to_string());
+
+    let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
+
     let need_init_config = boot_check(&home_path)?;
 
     println!("init config: {need_init_config:?}");
 
-    if let Some(InitConfig { ifaces, ipconfigs, nats, marks, pppds, dns_rules }) = need_init_config
+    if let Some(InitConfig {
+        ifaces,
+        ipconfigs,
+        nats,
+        marks,
+        pppds,
+        dns_rules,
+        lan_ip_mark,
+        wan_ip_mark,
+    }) = need_init_config
     {
         iface_store.truncate();
         iface_ipconfig_store.truncate();
@@ -68,6 +82,8 @@ async fn main() -> LdResult<()> {
         iface_mark_store.truncate();
         iface_pppd_store.truncate();
         dns_store.truncate();
+        lan_ip_mark_store.truncate();
+        wan_ip_mark_store.truncate();
 
         for each_config in ifaces {
             iface_store.set(each_config);
@@ -92,6 +108,14 @@ async fn main() -> LdResult<()> {
         for each_config in dns_rules {
             dns_store.set(each_config);
         }
+
+        for each_config in lan_ip_mark {
+            lan_ip_mark_store.set(each_config);
+        }
+
+        for each_config in wan_ip_mark {
+            wan_ip_mark_store.set(each_config);
+        }
     }
 
     // need iproute2
@@ -112,6 +136,10 @@ async fn main() -> LdResult<()> {
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(iface_store).await)
+        .nest(
+            "/global_mark",
+            global_mark::get_global_mark_paths(lan_ip_mark_store, wan_ip_mark_store).await,
+        )
         .nest("/dns", dns::get_dns_paths(dns_store).await)
         .nest(
             "/services",
