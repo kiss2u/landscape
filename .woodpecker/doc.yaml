@@ -1,6 +1,8 @@
 when:
-  - event: [push, manual]
-  - path: 'docs/*'
+  - event: [push]
+    path: 'docs/*'
+  - event: [manual]
+    evaluate: 'DOC == "true"'
 labels:
   name: jp35
 
@@ -13,6 +15,7 @@ steps:
   - yarn install --cache-folder /yarn
   - yarn run docs:build
   - ls -la .vitepress/dist
+  - rm -rf /landscape/*
   - mv .vitepress/dist/* /landscape/
   - ls -la /landscape
   volumes:

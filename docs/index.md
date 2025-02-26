@@ -16,10 +16,10 @@ hero:
 
 features:
   - title: Linux 为基础
-    details: "自由选择你想要的发行版  (注: 内核 6.1.x 以上, musl 暂时不支持)"
+    details: "自由选择你想要的发行版 <br> (注: 内核 6.1.x 以上, musl 暂时不支持)"
   - title: DNS
-    details: 可以控制任意域名流量的行为, 无论是劫持还是重定向转发至 Docker 容器中, 详见文档
+    details: 控制任意域名流量的行为, 无论是劫持还是重定向转发至 Docker 容器中, 详见文档
   - title: eBPF
-    details: 所有数据包的修改和重定向都在 eBPF 中进行实现, 高效运行
+    details: 所有数据包的修改和重定向都在 eBPF 中进行
 ---
 
