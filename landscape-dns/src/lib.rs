@@ -60,7 +60,7 @@ where
 // }
 
 pub struct CacheDNSItem {
-    rdata: Record,
+    rdatas: Vec<Record>,
     insert_time: Instant,
     mark: PacketMark,
 }

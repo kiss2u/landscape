@@ -89,51 +89,51 @@ impl DnsServer {
 
                 for ((domain, req_type), value) in old_cache.iter() {
                     'resolver: for (_index, resolver) in resolves.iter() {
-                        println!("old domain: {domain:?}");
+                        // println!("old domain: {domain:?}");
                         if resolver.is_match(&domain) {
                             let new_mark = resolver.mark().clone();
-                            println!("old domain match resolver: {domain:?}");
+                            // println!("old domain match resolver: {domain:?}");
                             let mut cache_items = vec![];
-                            for CacheDNSItem { rdata, insert_time, mark } in value.iter() {
+                            for CacheDNSItem { rdatas, insert_time, mark } in value.iter() {
                                 if matches!(new_mark, PacketMark::NoMark)
                                     && matches!(mark, PacketMark::NoMark)
                                 {
                                     continue;
                                 }
 
-                                println!("old mark: {mark:?}, new_mark: {new_mark:?}");
+                                // println!("old mark: {mark:?}, new_mark: {new_mark:?}");
                                 if new_mark != *mark {
-                                    println!("not same");
-
-                                    if let Some(data) = rdata.data() {
-                                        match data {
-                                            hickory_proto::rr::RData::A(a) => {
-                                                if matches!(new_mark, PacketMark::NoMark) {
-                                                    del_dns_mark_list.insert(IpConfig {
-                                                        ip: std::net::IpAddr::V4(a.0),
-                                                        prefix: 32_u32,
-                                                    });
-                                                } else {
-                                                    cache_items.push(CacheDNSItem {
-                                                        rdata: rdata.clone(),
-                                                        insert_time: insert_time.clone(),
-                                                        mark: new_mark.clone(),
-                                                    });
-                                                    update_dns_mark_list.insert(IpMarkInfo {
-                                                        mark: new_mark,
-                                                        cidr: IpConfig {
+                                    for rdata in rdatas.iter() {
+                                        if let Some(data) = rdata.data() {
+                                            match data {
+                                                hickory_proto::rr::RData::A(a) => {
+                                                    if matches!(new_mark, PacketMark::NoMark) {
+                                                        del_dns_mark_list.insert(IpConfig {
                                                             ip: std::net::IpAddr::V4(a.0),
                                                             prefix: 32_u32,
-                                                        },
-                                                    });
+                                                        });
+                                                    } else {
+                                                        update_dns_mark_list.insert(IpMarkInfo {
+                                                            mark: new_mark,
+                                                            cidr: IpConfig {
+                                                                ip: std::net::IpAddr::V4(a.0),
+                                                                prefix: 32_u32,
+                                                            },
+                                                        });
+                                                    }
                                                 }
+                                                _ => {}
                                             }
-                                            _ => {}
                                         }
                                     }
+                                    cache_items.push(CacheDNSItem {
+                                        rdatas: rdatas.clone(),
+                                        insert_time: insert_time.clone(),
+                                        mark: new_mark.clone(),
+                                    });
                                 } else {
                                     cache_items.push(CacheDNSItem {
-                                        rdata: rdata.clone(),
+                                        rdatas: rdatas.clone(),
                                         insert_time: insert_time.clone(),
                                         mark: new_mark.clone(),
                                     });
@@ -157,7 +157,7 @@ impl DnsServer {
 
         drop(geo_map);
 
-        println!("cache: {:?}", cache);
+        // println!("cache: {:?}", cache);
         let cache = Arc::new(Mutex::new(cache));
 
         DnsServer { resolves, cache }
@@ -174,12 +174,14 @@ impl DnsServer {
         if let Some(records) = cache.get(&(domain.to_string(), query_type)) {
             let mut is_expire = false;
             let mut valid_records: Vec<Record> = vec![];
-            for CacheDNSItem { rdata, insert_time, .. } in records.iter() {
-                if insert_time.elapsed().as_secs() > rdata.ttl() as u64 {
-                    is_expire = true;
-                    break;
+            'a_record: for CacheDNSItem { rdatas, insert_time, .. } in records.iter() {
+                for rdata in rdatas.iter() {
+                    if insert_time.elapsed().as_secs() > rdata.ttl() as u64 {
+                        is_expire = true;
+                        break 'a_record;
+                    }
                 }
-                valid_records.push(rdata.clone());
+                valid_records.extend_from_slice(rdatas);
             }
 
             if is_expire {
@@ -207,6 +209,7 @@ impl DnsServer {
         let mut records_with_expiration: Vec<CacheDNSItem> = vec![];
         // TODO: 目前仅记录 IPV4 缓存
         let mut update_dns_mark_list = HashSet::new();
+        let mut rdatas = vec![];
         for rdata in rdata_ttl_vec.into_iter() {
             if let Some(data) = rdata.data() {
                 match data {
@@ -219,8 +222,9 @@ impl DnsServer {
                     _ => {}
                 }
             }
-            records_with_expiration.push(CacheDNSItem { rdata, insert_time, mark: mark.clone() });
+            rdatas.push(rdata);
         }
+        records_with_expiration.push(CacheDNSItem { rdatas, insert_time, mark: mark.clone() });
         // let records_with_expiration: Vec<(Record, Instant)> =
         //     rdata_ttl_vec.into_iter().map(|rdata| (rdata, now)).collect();
 

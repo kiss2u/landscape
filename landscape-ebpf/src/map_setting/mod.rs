@@ -1,9 +1,6 @@
 use std::{mem::MaybeUninit, net::Ipv4Addr};
 
-use landscape_common::{
-    ip_mark::{IpConfig, IpMarkInfo},
-    mark::PacketMark,
-};
+use landscape_common::ip_mark::{IpConfig, IpMarkInfo};
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, MapFlags,
