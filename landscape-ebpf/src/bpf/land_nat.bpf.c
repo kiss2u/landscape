@@ -1011,6 +1011,23 @@ int ingress_nat(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) {
         return TC_ACT_SHOT;
     }
+    u16 dst_port = bpf_ntohs(packet_info.pair_ip.dst_port);
+    u8 *expose_port = NULL;
+    if (packet_info.ip_protocol == IPPROTO_TCP) {
+        if (dst_port < tcp_range_start || dst_port > tcp_range_end) {
+            // bpf_log_info("find expose_port: %u", dst_port);
+            expose_port = bpf_map_lookup_elem(&nat_expose_ports, &packet_info.pair_ip.dst_port);
+        }
+    } else if (packet_info.ip_protocol == IPPROTO_UDP) {
+        if (dst_port < udp_range_start || dst_port > udp_range_end) {
+            // bpf_log_info("find expose_port: %u", dst_port);
+            expose_port = bpf_map_lookup_elem(&nat_expose_ports, &packet_info.pair_ip.dst_port);
+        }
+    }
+    if (expose_port != NULL) {
+        // bpf_log_info("find expose_port");
+        return TC_ACT_OK;
+    }
 
     bool is_icmpx_error = is_icmp_error_pkt(&packet_info);
     bool allow_create_mapping = packet_info.ip_protocol == IPPROTO_ICMP;
@@ -1089,9 +1106,39 @@ int ingress_nat(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int self_packet(struct __sk_buff *skb, struct ip_packet_info *pkt) {
+#define BPF_LOG_TOPIC "self_packet"
+    if (pkt->ip_protocol == IPPROTO_ICMP) {
+        return TC_ACT_UNSPEC;
+    }
+    struct bpf_sock_tuple server = {0};
+    struct bpf_sock *sk;
+
+    server.ipv4.saddr = pkt->pair_ip.dst_addr.ip;
+    server.ipv4.sport = pkt->pair_ip.dst_port;
+    server.ipv4.dport = pkt->pair_ip.src_port;
+    server.ipv4.daddr = pkt->pair_ip.src_addr.ip;
+    if (pkt->ip_protocol == IPPROTO_TCP) {
+        sk = bpf_sk_lookup_tcp(skb, &server, sizeof(server.ipv4), BPF_F_CURRENT_NETNS, 0);
+    } else if (pkt->ip_protocol == IPPROTO_UDP) {
+        sk = bpf_sk_lookup_udp(skb, &server, sizeof(server.ipv4), BPF_F_CURRENT_NETNS, 0);
+    }
+
+    // 找到了 SK
+    if (sk) {
+        bpf_sk_release(sk);
+        // bpf_log_info("find sk");
+        return TC_ACT_OK;
+    }
+    // 找不到
+    return TC_ACT_UNSPEC;
+#undef BPF_LOG_TOPIC
+}
+
 SEC("tc")
 int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
+
     if (current_pkg_type(skb) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -1117,6 +1164,12 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("packet pkt_type: %d", packet_info.pkt_type);
     // bpf_log_info("icmp_error_payload_offset: %d", packet_info.icmp_error_payload_offset);
 
+    if (bpf_map_lookup_elem(&nat_expose_ports, &packet_info.pair_ip.src_port) != NULL) {
+        if (self_packet(skb, &packet_info) == TC_ACT_OK) {
+            return TC_ACT_OK;
+        }
+    }
+
     bool is_icmpx_error = is_icmp_error_pkt(&packet_info);
     bool allow_create_mapping = !is_icmpx_error && pkt_allow_initiating_ct(packet_info.pkt_type);
 
@@ -1138,10 +1191,28 @@ int egress_nat(struct __sk_buff *skb) {
             return TC_ACT_SHOT;
         }
 
-        if (skb->mark & ACTION_MASK == SYMMETRIC_NAT) {
+        u8 action = skb->mark & ACTION_MASK;
+        if (action == SYMMETRIC_NAT) {
             // SYMMETRIC_NAT check
             if (!U_INET_ADDR_EQUAL(packet_info.pair_ip.dst_addr, nat_egress_value->trigger_addr) ||
                 packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
+                bpf_log_info("SYMMETRIC_NAT MARK DROP PACKET");
+                bpf_log_info("dst IP: %d.%d.%d.%d,", packet_info.pair_ip.dst_addr.ip & 0xFF,
+                             (packet_info.pair_ip.dst_addr.ip >> 8) & 0xFF,
+                             (packet_info.pair_ip.dst_addr.ip >> 16) & 0xFF,
+                             (packet_info.pair_ip.dst_addr.ip >> 24) & 0xFF);
+                bpf_log_info("trigger_addr IP: %d.%d.%d.%d,",
+                             nat_egress_value->trigger_addr.ip & 0xFF,
+                             (nat_egress_value->trigger_addr.ip >> 8) & 0xFF,
+                             (nat_egress_value->trigger_addr.ip >> 16) & 0xFF,
+                             (nat_egress_value->trigger_addr.ip >> 24) & 0xFF);
+                bpf_log_info("compare ip result: %d",
+                             U_INET_ADDR_EQUAL(packet_info.pair_ip.dst_addr,
+                                               nat_egress_value->trigger_addr));
+                bpf_log_info("trigger_port: %u,", bpf_ntohs(nat_egress_value->trigger_port));
+                bpf_log_info("dst_port: %u,", bpf_ntohs(packet_info.pair_ip.dst_port));
+                bpf_log_info("compare port result: %d",
+                             packet_info.pair_ip.dst_port == nat_egress_value->trigger_port);
                 return TC_ACT_SHOT;
             }
         }

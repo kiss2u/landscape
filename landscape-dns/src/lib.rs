@@ -88,6 +88,7 @@ impl LandscapeDnsService {
     }
 
     pub async fn start(&self, udp_port: u16, tcp_port: Option<u16>, dns_rules: Vec<DNSRuleConfig>) {
+        let dns_rules = dns_rules.into_iter().filter(|rule| rule.enable).collect();
         let handler = DnsServer::new(dns_rules, self.read_geo_site_file().await);
         let mut server = ServerFuture::new(handler);
         let status_clone = self.status.clone();

@@ -7,7 +7,7 @@ use axum::{
     Router,
 };
 
-use landscape::boot::{boot_check, InitConfig};
+use landscape::boot::{boot_check, init_ports, InitConfig};
 use landscape_common::{
     args::{LAND_ARGS, LAND_HOME_PATH, LAND_WEB_ARGS},
     error::LdResult,
@@ -40,7 +40,7 @@ struct SimpleResult {
 async fn main() -> LdResult<()> {
     let args = LAND_ARGS.clone();
     println!("using args: {args:?}");
-
+    init_ports();
     let home_path = LAND_HOME_PATH.clone();
 
     println!("config path: {home_path:?}");
@@ -129,6 +129,12 @@ async fn main() -> LdResult<()> {
 
     let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    // let _ = landscape_dns::connection::set_socket_mark(
+    //     std::os::fd::AsFd::as_fd(&listener).as_raw_fd(),
+    //     landscape_common::mark::PacketMark::LandscapeSys.into(),
+    // )
+    // .unwrap();
 
     let service = handle_404.into_service();
     let serve_dir = ServeDir::new(&LAND_WEB_ARGS.web_root).not_found_service(service);

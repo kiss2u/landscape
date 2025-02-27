@@ -87,10 +87,10 @@ int egress_packet_mark(struct __sk_buff *skb) {
                 // if (mark_value) {
                 //     bpf_log_info("find by wan %u", mark_value);
                 // }
-            // } else {
+                // } else {
                 // bpf_log_info("find by dns %u", mark_value);
             }
-        // } else {
+            // } else {
             // bpf_log_info("find by lan %u", mark_value);
         }
 
@@ -104,6 +104,7 @@ int egress_packet_mark(struct __sk_buff *skb) {
             action = mark_value->mark & ACTION_MASK;
             index = (mark_value->mark & INDEX_MASK) >> 8;
             skb->mark = mark_value->mark;
+            // bpf_log_info("ifindex: %u, setting mark %u", skb->ifindex, skb->mark);
         } else {
             goto no_mark;
         }

@@ -111,6 +111,7 @@ pub async fn dhcp_client(
     default_router: bool,
 ) {
     service_status.send_replace(ServiceStatus::Staring);
+    landscape_ebpf::map_setting::add_expose_port(client_port);
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), client_port);
 
     let socket2 = socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();

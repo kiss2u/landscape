@@ -19,3 +19,11 @@ struct {
     __uint(max_entries, STATIC_NAT_MAPPING_CACHE_SIZE);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } static_nat_mappings SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, u16);
+    __type(value, u8);
+    __uint(max_entries, STATIC_NAT_MAPPING_CACHE_SIZE);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} nat_expose_ports SEC(".maps");

@@ -62,6 +62,10 @@ pub struct WebCommArgs {
     #[arg(short, long, default_value = "true")]
     pub export_manager: bool,
 
+    /// Developer Model
+    #[arg(long, default_value = "false")]
+    pub dev: bool,
+
     /// config home path
     #[clap(short, long)]
     pub config_path: Option<PathBuf>,

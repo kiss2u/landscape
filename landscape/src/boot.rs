@@ -1,5 +1,6 @@
 use std::{fs::OpenOptions, io::Write, path::Path};
 
+use landscape_ebpf::map_setting;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     },
 };
 use landscape_common::{
+    args::LAND_ARGS,
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
     ip_mark::{LanIPRuleConfig, WanIPRuleConfig},
@@ -74,4 +76,17 @@ pub struct InitConfig {
 
     pub lan_ip_mark: Vec<LanIPRuleConfig>,
     pub wan_ip_mark: Vec<WanIPRuleConfig>,
+}
+
+pub fn init_ports() {
+    // ssh port
+    map_setting::add_expose_port(22);
+    if LAND_ARGS.dev {
+        // vite server port
+        map_setting::add_expose_port(5173);
+        map_setting::add_expose_port(5800);
+    }
+    if LAND_ARGS.export_manager {
+        map_setting::add_expose_port(LAND_ARGS.port);
+    }
 }

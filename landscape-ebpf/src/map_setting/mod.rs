@@ -26,6 +26,7 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
 
     landscape_open.maps.wan_ipv4_binding.set_pin_path(&paths.wan_ip).unwrap();
     landscape_open.maps.static_nat_mappings.set_pin_path(&paths.static_nat_mappings).unwrap();
+    landscape_open.maps.nat_expose_ports.set_pin_path(&paths.nat_expose_ports).unwrap();
     landscape_open.maps.packet_mark_map.set_pin_path(&paths.packet_mark).unwrap();
     landscape_open.maps.lanip_mark_map.set_pin_path(&paths.lanip_mark).unwrap();
     landscape_open.maps.wanip_mark_map.set_pin_path(&paths.wanip_mark).unwrap();
@@ -46,14 +47,14 @@ pub fn add_wan_ip(ifindex: u32, addr: Ipv4Addr) {
         println!("setting wan index: {ifindex:?} addr:{addr:?}");
     }
 
-    if LAND_ARGS.export_manager {
-        let static_nat_mappings =
-            libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.static_nat_mappings).unwrap();
-        crate::nat::set_nat_static_mapping(
-            (addr.clone(), LAND_ARGS.port, addr, LAND_ARGS.port),
-            &static_nat_mappings,
-        );
-    }
+    // if LAND_ARGS.export_manager {
+    //     let static_nat_mappings =
+    //         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.static_nat_mappings).unwrap();
+    //     crate::nat::set_nat_static_mapping(
+    //         (addr.clone(), LAND_ARGS.port, addr, LAND_ARGS.port),
+    //         &static_nat_mappings,
+    //     );
+    // }
 }
 
 pub fn del_wan_ip(ifindex: u32) {
@@ -63,6 +64,25 @@ pub fn del_wan_ip(ifindex: u32) {
         println!("delete wan ip error:{e:?}");
     } else {
         println!("delete wan index: {ifindex:?}");
+    }
+}
+
+pub fn add_expose_port(port: u16) {
+    let nat_expose_ports =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_expose_ports).unwrap();
+
+    let key = port.to_be_bytes();
+    if let Err(e) = nat_expose_ports.update(&key, &[0], MapFlags::ANY) {
+        println!("add_expose_port:{e:?}");
+    }
+}
+
+pub fn del_expose_port(port: u16) {
+    let nat_expose_ports =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_expose_ports).unwrap();
+    let key = port.to_be_bytes();
+    if let Err(e) = nat_expose_ports.delete(&key) {
+        println!("del_expose_port:{e:?}");
     }
 }
 
