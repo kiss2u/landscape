@@ -65,6 +65,7 @@ pub struct IpConfig {
 }
 
 /// IP 标记最小单元
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IpMarkInfo {
     pub mark: PacketMark,
     pub cidr: IpConfig,

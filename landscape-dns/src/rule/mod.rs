@@ -12,16 +12,10 @@ use landscape_common::{
 };
 use matcher::DomainMatcher;
 use std::str::FromStr;
-use std::time::Instant;
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
-    num::NonZeroUsize,
-    sync::Arc,
 };
-use tokio::sync::Mutex;
-
-use lru::LruCache;
 
 use crate::{
     connection::{MarkConnectionProvider, MarkRuntimeProvider},
@@ -31,8 +25,7 @@ use crate::{
 mod matcher;
 
 pub struct CacheResolver {
-    cache: Arc<Mutex<LruCache<(String, RecordType), Vec<(Record, Instant)>>>>,
-    resolver: AsyncResolver<MarkConnectionProvider>,
+    pub resolver: AsyncResolver<MarkConnectionProvider>,
 }
 
 impl CacheResolver {
@@ -56,92 +49,7 @@ impl CacheResolver {
             ResolverOpts::default(),
             MarkConnectionProvider::new(MarkRuntimeProvider::new(mark_value)),
         );
-        let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())));
-        CacheResolver { cache, resolver }
-    }
-
-    // 检查缓存并根据 TTL 判断是否过期
-    // 不同的记录可能的过期时间不同
-    pub async fn lookup_cache(&self, domain: &str, query_type: RecordType) -> Option<Vec<Record>> {
-        let mut cache = self.cache.lock().await;
-        if let Some(records) = cache.get(&(domain.to_string(), query_type)) {
-            let mut is_expire = false;
-            let mut valid_records: Vec<Record> = vec![];
-            for (rdata, insert_time) in records.iter() {
-                if insert_time.elapsed().as_secs() > rdata.ttl() as u64 {
-                    is_expire = true;
-                    break;
-                }
-                valid_records.push(rdata.clone());
-            }
-
-            if is_expire {
-                return None;
-            }
-
-            // 如果有有效的记录，返回它们
-            if !valid_records.is_empty() {
-                return Some(valid_records);
-            }
-        }
-        None
-    }
-
-    pub async fn insert(
-        &self,
-        domain: &str,
-        query_type: RecordType,
-        rdata_ttl_vec: Vec<Record>,
-        mark: &PacketMark,
-    ) {
-        let mut cache = self.cache.lock().await;
-        let now = Instant::now();
-
-        // 将记录和插入时间存储到缓存中
-        let mut records_with_expiration: Vec<(Record, Instant)> = vec![];
-        let mut ipv4s = vec![];
-        for rdata in rdata_ttl_vec.into_iter() {
-            if let Some(data) = rdata.data() {
-                match data {
-                    hickory_proto::rr::RData::A(a) => {
-                        ipv4s.push((a.0, 32_u32));
-                    }
-                    _ => {}
-                }
-            }
-            records_with_expiration.push((rdata, now));
-        }
-        // let records_with_expiration: Vec<(Record, Instant)> =
-        //     rdata_ttl_vec.into_iter().map(|rdata| (rdata, now)).collect();
-
-        cache.put((domain.to_string(), query_type), records_with_expiration);
-        // 将 mark 写入 mark ebpf map
-        if mark.need_add_mark_config() {
-            println!("setting ips: {:?}, Mark: {:?}", ipv4s, mark);
-            // TODO: 如果写入错误 返回错误后 向客户端返回查询错误
-            landscape_ebpf::map_setting::add_ips_mark(ipv4s, mark.clone().into());
-        }
-    }
-
-    // 根据请求的类型解析域名，返回 RData
-    pub async fn resolve_domain_using_upstream(
-        &self,
-        domain: &str,
-        query_type: RecordType,
-    ) -> Result<Vec<Record>, ResponseCode> {
-        match self.resolver.lookup(domain, query_type).await {
-            Ok(lookup) => Ok(lookup.records().to_vec()),
-            Err(e) => {
-                eprintln!("DNS resolution failed for {}: {}", domain, e);
-                let result = match e.kind() {
-                    hickory_resolver::error::ResolveErrorKind::NoRecordsFound { .. } => {
-                        ResponseCode::NoError
-                    }
-                    _ => ResponseCode::ServFail,
-                };
-                Err(result)
-            }
-        }
+        CacheResolver { resolver }
     }
 }
 
@@ -162,7 +70,6 @@ impl ResolverType {
         &self,
         domain: &str,
         query_type: RecordType,
-        mark: &PacketMark,
     ) -> Result<Vec<Record>, ResponseCode> {
         match self {
             ResolverType::RedirectResolver(result_ip) => Ok(vec![Record::from_rdata(
@@ -171,16 +78,17 @@ impl ResolverType {
                 RData::A(A::from_str(result_ip).unwrap()),
             )]),
             ResolverType::CacheResolver(resolver) => {
-                if let Some(result) = resolver.lookup_cache(domain, query_type).await {
-                    Ok(result)
-                } else {
-                    match resolver.resolve_domain_using_upstream(&domain, query_type).await {
-                        Ok(rdata_vec) => {
-                            // 将解析结果插入缓存
-                            resolver.insert(domain, query_type, rdata_vec.clone(), mark).await;
-                            Ok(rdata_vec)
-                        }
-                        Err(error_code) => Err(error_code),
+                match resolver.resolver.lookup(domain, query_type).await {
+                    Ok(lookup) => Ok(lookup.records().to_vec()),
+                    Err(e) => {
+                        eprintln!("DNS resolution failed for {}: {}", domain, e);
+                        let result = match e.kind() {
+                            hickory_resolver::error::ResolveErrorKind::NoRecordsFound {
+                                ..
+                            } => ResponseCode::NoError,
+                            _ => ResponseCode::ServFail,
+                        };
+                        Err(result)
                     }
                 }
             }
@@ -207,8 +115,12 @@ impl ResolutionRule {
         ResolutionRule { matcher, config, resolver }
     }
 
+    pub fn mark(&self) -> &PacketMark {
+        &self.config.mark
+    }
+
     /// 确定是不是当前规则进行处理
-    pub async fn is_match(&self, domain: &str) -> bool {
+    pub fn is_match(&self, domain: &str) -> bool {
         let match_result = if self.config.source.is_empty() {
             true
         } else {
@@ -224,7 +136,7 @@ impl ResolutionRule {
         domain: &str,
         query_type: RecordType,
     ) -> Result<Vec<Record>, ResponseCode> {
-        self.resolver.lookup(domain, query_type, &self.config.mark).await
+        self.resolver.lookup(domain, query_type).await
     }
 
     // // 检查缓存并根据 TTL 判断是否过期

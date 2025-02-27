@@ -1,15 +1,19 @@
+use hickory_proto::rr::{Record, RecordType};
 use hickory_server::ServerFuture;
 use landscape_common::args::LAND_HOME_PATH;
 use landscape_common::dns::{DNSRuleConfig, DomainConfig};
+use landscape_common::mark::PacketMark;
 use landscape_common::GEO_SITE_FILE_NAME;
+use lru::LruCache;
 use multi_rule_dns_server::DnsServer;
 use protos::geo::GeoSiteListOwned;
 use serde::{Serialize, Serializer};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, UdpSocket};
-use tokio::sync::watch;
+use tokio::sync::{watch, Mutex};
 
 mod connection;
 pub mod ip_rule;
@@ -55,6 +59,14 @@ where
 //     read_locl.serialize(serializer)
 // }
 
+pub struct CacheDNSItem {
+    rdata: Record,
+    insert_time: Instant,
+    mark: PacketMark,
+}
+
+pub type DNSCache = LruCache<(String, RecordType), Vec<CacheDNSItem>>;
+
 #[derive(Serialize, Debug, Clone)]
 pub struct LandscapeDnsService {
     #[serde(serialize_with = "serialize_status")]
@@ -87,10 +99,19 @@ impl LandscapeDnsService {
         result
     }
 
-    pub async fn start(&self, udp_port: u16, tcp_port: Option<u16>, dns_rules: Vec<DNSRuleConfig>) {
+    pub async fn start(
+        &self,
+        udp_port: u16,
+        tcp_port: Option<u16>,
+        dns_rules: Vec<DNSRuleConfig>,
+        old_cache: Option<Arc<Mutex<DNSCache>>>,
+    ) -> Arc<Mutex<DNSCache>> {
         let dns_rules = dns_rules.into_iter().filter(|rule| rule.enable).collect();
-        let handler = DnsServer::new(dns_rules, self.read_geo_site_file().await);
+        let handler = DnsServer::new(dns_rules, self.read_geo_site_file().await, old_cache);
+        let cache = handler.clone_cache();
+
         let mut server = ServerFuture::new(handler);
+
         let status_clone = self.status.clone();
 
         status_clone.send_replace(ServiceStatus::Staring);
@@ -138,6 +159,7 @@ impl LandscapeDnsService {
                 }
             }
         });
+        cache
     }
 
     pub fn stop(&self) {
