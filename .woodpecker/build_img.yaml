@@ -1,6 +1,7 @@
 when:
   - event: [push]
     path: 'dockerfiles/build/*'
+    branch: [main, build_img]
   - event: [manual]
     evaluate: 'BUILD_IMG == "true"'
 labels:

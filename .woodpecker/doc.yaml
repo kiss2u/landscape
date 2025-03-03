@@ -1,6 +1,7 @@
 when:
   - event: [push]
     path: 'docs/*'
+    branch: [main, docs]
   - event: [manual]
     evaluate: 'DOC == "true"'
 labels:
