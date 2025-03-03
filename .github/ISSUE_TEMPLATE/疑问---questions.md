@@ -1,7 +1,7 @@
 ---
 name: 疑问 / Questions
 about: BUG 之外的疑问 / Questions other than BUGs
-title: "[?]"
+title: "[?] "
 labels: question
 assignees: ''
 
@@ -18,6 +18,8 @@ assignees: ''
        I have tried the latest version/main branch
 - [ ] 我已经提供足够复现问题的关键信息  
        I have provided sufficient reproduction details
+- [ ] 不是关于代理方面的疑问  
+       This is not a question about the Proxy.
 
 ### 问题描述 / Description
 <!-- 请清晰简明地描述遇到的问题 -->
