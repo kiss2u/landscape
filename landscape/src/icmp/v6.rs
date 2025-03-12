@@ -17,6 +17,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use std::u64;
 
 static ICMPV6_MULTICAST_ROUTER: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0x2);
 static ICMPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0x1);
@@ -49,6 +50,7 @@ pub async fn icmp_ra_server(
     // sudo sysctl -w net.ipv6.conf.all.router_solicitations=0
     // sudo sysctl -w net.ipv6.conf.default.router_solicitations=0
 
+    service_status.just_change_status(ServiceStatus::Staring);
     //  sysctl -w net.ipv6.conf.all.forwarding=1
     let socket = Socket::new(Domain::IPV6, Type::RAW, Some(Protocol::ICMPV6))?;
     socket.set_nonblocking(true)?;
@@ -129,7 +131,7 @@ pub async fn icmp_ra_server(
 
     service_status.just_change_status(ServiceStatus::Running);
     let mut ia_config_watch = LD_PD_WATCHES.get_ia_prefix(&depend_iface).await;
-
+    tracing::debug!("ICMP get LD_PD_WATCHES");
     let mut current_config_info: Option<ICMPv6ConfigInfo> = None;
     // let mut count_down = LdCountdown::new(Duration::from_secs(0));
 
@@ -150,17 +152,19 @@ pub async fn icmp_ra_server(
     }
 
     tracing::info!("ICMP v6 RA Server Running, RA interval: {ra_preferred_lifetime:?}s");
-    let mut interval = tokio::time::interval(Duration::from_secs(ra_preferred_lifetime as u64));
+    let mut interval =
+        Box::pin(tokio::time::interval(Duration::from_secs(ra_preferred_lifetime as u64)));
 
+    let mut service_status_subscribe = service_status.subscribe();
     loop {
-        let mut service_status_subscribe = service_status.subscribe();
         tokio::select! {
             _ = interval.tick() => {
+                let deadline = expire_time.deadline();
                 interval_msg(
                     &mac_addr,
                     &current_config_info,
                     &send_socket,
-                    expire_time.deadline(),
+                    deadline,
                     ra_preferred_lifetime,
                     ra_valid_lifetime
                 ).await;
@@ -168,6 +172,8 @@ pub async fn icmp_ra_server(
             // 发送时间为 0 的
             _ = expire_time.as_mut() => {
                 current_config_info = None;
+                tracing::debug!("expire_time active");
+                expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(u64::MAX)));
             }
             message_result = message_rx.recv() => {
                 // 处理接收到的数据包
@@ -210,6 +216,7 @@ pub async fn icmp_ra_server(
             }
             // status change
             change_result = service_status_subscribe.changed() => {
+                tracing::debug!("ICMP v6 RA Service change");
                 if let Err(_) = change_result {
                     tracing::error!("get change result error. exit loop");
                     break;

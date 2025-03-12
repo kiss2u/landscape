@@ -244,8 +244,8 @@ pub async fn dhcp_v6_pd_client(
     #[cfg(debug_assertions)]
     let time = tokio::time::Instant::now();
 
+    let mut service_status_subscribe = service_status.subscribe();
     loop {
-        let mut service_status_subscribe = service_status.subscribe();
         tokio::select! {
             // 超时激发重发
             _ = active_send.as_mut() => {

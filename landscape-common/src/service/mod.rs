@@ -25,7 +25,7 @@ pub enum ServiceStatus {
 impl ServiceStatus {
     // 检查当前状态是否可以转换到目标状态
     pub fn can_transition_to(&self, target: &ServiceStatus) -> bool {
-        matches!(
+        let can = matches!(
             (self, target),
             (ServiceStatus::Stop, ServiceStatus::Staring)
                 | (ServiceStatus::Staring, ServiceStatus::Running)
@@ -34,7 +34,13 @@ impl ServiceStatus {
                 | (ServiceStatus::Running, ServiceStatus::Stopping)
                 | (ServiceStatus::Running, ServiceStatus::Stop)
                 | (ServiceStatus::Stopping, ServiceStatus::Stop)
-        )
+        );
+        if !can {
+            tracing::error!(
+                "can not change status, current status: {self:?}, target status: {target:?}"
+            );
+        }
+        can
     }
 }
 
