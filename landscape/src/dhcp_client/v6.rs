@@ -6,7 +6,7 @@ use std::{
 };
 
 use dhcproto::{
-    v6::{self, DhcpOption, DhcpOptions, Message, OptionCode},
+    v6::{self, DhcpOption, DhcpOptions, IAPrefix, Message, OptionCode},
     Decodable, Decoder, Encodable, Encoder,
 };
 
@@ -183,7 +183,11 @@ pub async fn dhcp_v6_pd_client(
     socket2.set_reuse_port(true).unwrap();
     socket2.bind(&socket_addr.into()).unwrap();
     socket2.set_nonblocking(true).unwrap();
-    socket2.bind_device(Some(iface_name.as_bytes())).unwrap();
+    if let Err(e) = socket2.bind_device(Some(iface_name.as_bytes())) {
+        tracing::error!("bind_device error: {e:?}");
+        service_status.just_change_status(ServiceStatus::Stop);
+        return;
+    }
     // socket2.set_broadcast(true).unwrap();
 
     let socket = UdpSocket::from_std(socket2.into()).unwrap();
@@ -473,7 +477,7 @@ async fn send_data(msg: &v6::Message, send_socket: &UdpSocket, target_sock: Opti
             tracing::debug!("send dhcpv6 fram: {msg:?},  len: {len:?}");
         }
         Err(e) => {
-            tracing::error!("error: {:?}", e);
+            tracing::error!("target sock addr: {target_sock:?}, error: {:?}", e);
         }
     }
 }
@@ -504,6 +508,10 @@ async fn handle_packet(
     current_status: &mut IpV6PdState,
     (msg, msg_addr): (Vec<u8>, SocketAddr),
 ) -> bool {
+    let IpAddr::V6(ipv6addr) = msg_addr.ip() else {
+        tracing::error!("unexpected IPV4 packet");
+        return true;
+    };
     let new_v6_msg = Message::decode(&mut Decoder::new(&msg));
     let new_v6_msg = match new_v6_msg {
         Ok(msg) => msg,
@@ -583,6 +591,10 @@ async fn handle_packet(
                     new_v6_msg.opts().get(OptionCode::ServerId)
                 {
                     if &service_id != new_service_id {
+                        tracing::warn!(
+                            "receiver a replay from another server, id is: {:?}",
+                            new_service_id
+                        );
                         return false;
                     }
                 }
@@ -618,6 +630,7 @@ async fn handle_packet(
                                 iapd: iapd.clone(),
                                 bound_time: Instant::now(),
                             };
+                            replace_ip_route(&ia_prefix, ipv6addr, iface_name);
                             // setting IA prefix to IAPrefixMap
                             LD_PD_WATCHES
                                 .insert_or_replace(
@@ -648,4 +661,27 @@ async fn handle_packet(
     }
 
     false
+}
+
+fn replace_ip_route(iapd: &IAPrefix, route_ip: Ipv6Addr, iface_name: &str) {
+    let result = std::process::Command::new("ip")
+        .args([
+            "-6",
+            "route",
+            "replace",
+            "default",
+            "from",
+            &format!("{}/{}", iapd.prefix_ip, iapd.prefix_len),
+            "via",
+            &format!("{}", route_ip),
+            "dev",
+            &format!("{}", iface_name),
+            "expires",
+            &format!("{}", iapd.valid_lifetime),
+        ])
+        .output();
+
+    if let Err(e) = result {
+        tracing::error!("{e:?}");
+    }
 }

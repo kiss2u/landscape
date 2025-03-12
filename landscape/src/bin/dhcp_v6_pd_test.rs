@@ -9,7 +9,7 @@ use std::{
 use clap::Parser;
 use landscape::{
     dhcp_client::v6::dhcp_v6_pd_client, icmp::v6::icmp_ra_server, iface::get_iface_by_name,
-    macaddr::MacAddr,
+    macaddr::MacAddr, service::ra::IPV6RAConfig,
 };
 use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
@@ -49,9 +49,15 @@ async fn main() {
         return;
     };
 
-    let dhcp_client_iface = args.dhcp_client_iface.clone();
-
     let dhcp_service_status = DefaultWatchServiceStatus::new();
+
+    let config = IPV6RAConfig {
+        subnet_prefix: 64,
+        subnet_index: 1,
+        depend_iface: args.dhcp_client_iface.clone(),
+        ra_preferred_lifetime: 300,
+        ra_valid_lifetime: 300,
+    };
 
     let status = dhcp_service_status.clone();
     tokio::spawn(async move {
@@ -69,7 +75,7 @@ async fn main() {
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.icmp_ra_iface).await {
             if let Some(mac) = iface.mac {
-                icmp_ra_server(64, 1, mac, iface.name, dhcp_client_iface, status).await.unwrap();
+                icmp_ra_server(config, mac, iface.name, status).await.unwrap();
             }
         }
     });

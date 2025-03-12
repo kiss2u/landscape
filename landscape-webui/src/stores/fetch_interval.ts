@@ -8,6 +8,7 @@ import { useNATConfigStore } from "@/stores/status_nats";
 import { useMarkConfigStore } from "./status_mark";
 import { useDockerStore } from "./status_docker";
 import { useDnsStore } from "./status_dns";
+import { useIPv6PDStore } from "./status_ipv6pd";
 
 export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const sysinfo = useSysInfo();
@@ -17,6 +18,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const markConfigStore = useMarkConfigStore();
   const dockerStore = useDockerStore();
   const dnsStore = useDnsStore();
+  const ipv6PDStore = useIPv6PDStore();
 
   const interval_function = async () => {
     if (start_count_down_callback.value !== undefined) {
@@ -30,6 +32,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
       await ipConfigStore.UPDATE_INFO();
       await natConfigStore.UPDATE_INFO();
       await markConfigStore.UPDATE_INFO();
+      await ipv6PDStore.UPDATE_INFO();
     } catch (error) {
       // console.log("1111");
       enable_interval.value = false;

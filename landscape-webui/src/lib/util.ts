@@ -79,3 +79,13 @@ class ReconnectingWebSocket {
     }
   }
 }
+
+export function generateValidMAC() {
+  let mac = [...Array(6)].map(() =>
+    ("0" + Math.floor(Math.random() * 256).toString(16)).slice(-2)
+  );
+  mac[0] = (
+    "0" + ((parseInt(mac[0], 16) & 0b11111110) | 0b00000010).toString(16)
+  ).slice(-2);
+  return mac.join(":");
+}

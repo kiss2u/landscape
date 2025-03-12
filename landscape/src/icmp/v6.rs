@@ -11,8 +11,8 @@ use crate::dump::icmp::v6::option_codes::{
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
 use crate::iface::ip::addresses_by_iface_name;
 use crate::macaddr::MacAddr;
+use crate::service::ra::IPV6RAConfig;
 use socket2::{Domain, Protocol, Socket, Type};
-use std::collections::HashSet;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -27,15 +27,20 @@ pub struct ICMPv6ConfigInfo {
     subnet_router: Ipv6Addr,
 }
 pub async fn icmp_ra_server(
-    // 子网前缀长度
-    subnet_prefix: u8,
-    // 子网索引
-    subnet_index: u128,
+    config: IPV6RAConfig,
+    // RA 通告要发送的 网卡 MAC 信息
     mac_addr: MacAddr,
+    // RA 通告要发送的 网卡名称
     iface_name: String,
-    depend_iface: String,
     service_status: DefaultWatchServiceStatus,
 ) -> LdResult<()> {
+    let IPV6RAConfig {
+        subnet_prefix,
+        subnet_index,
+        depend_iface,
+        ra_preferred_lifetime,
+        ra_valid_lifetime,
+    } = config;
     // TODO: ip link set ens5 addrgenmode none
     // OR
     // # 禁用IPv6路由器请求
@@ -125,7 +130,6 @@ pub async fn icmp_ra_server(
     service_status.just_change_status(ServiceStatus::Running);
     let mut ia_config_watch = LD_PD_WATCHES.get_ia_prefix(&depend_iface).await;
 
-    let mut advertised_ip: HashSet<Ipv6Addr> = HashSet::new();
     let mut current_config_info: Option<ICMPv6ConfigInfo> = None;
     // let mut count_down = LdCountdown::new(Duration::from_secs(0));
 
@@ -134,7 +138,14 @@ pub async fn icmp_ra_server(
     let ia_prefix = ia_config_watch.borrow().clone();
     if let Some(ia_prefix) = ia_prefix {
         current_config_info = Some(
-            update_current_info(ia_prefix, subnet_prefix, subnet_index, expire_time.as_mut()).await,
+            update_current_info(
+                &iface_name,
+                ia_prefix,
+                subnet_prefix,
+                subnet_index,
+                expire_time.as_mut(),
+            )
+            .await,
         );
     }
     tracing::info!("ICMP v6 RA Server Running");
@@ -143,12 +154,14 @@ pub async fn icmp_ra_server(
     loop {
         let mut service_status_subscribe = service_status.subscribe();
         tokio::select! {
-            _ =interval.tick() => {
+            _ = interval.tick() => {
                 interval_msg(
                     &mac_addr,
                     &current_config_info,
                     &send_socket,
-                    expire_time.deadline()
+                    expire_time.deadline(),
+                    ra_preferred_lifetime,
+                    ra_valid_lifetime
                 ).await;
             }
             // 发送时间为 0 的
@@ -165,7 +178,6 @@ pub async fn icmp_ra_server(
                             &current_config_info,
                             data,
                             &send_socket,
-                            &mut advertised_ip,
                             expire_time.deadline()
                         ).await;
                     }
@@ -184,6 +196,7 @@ pub async fn icmp_ra_server(
                 if let Some(ia_prefix) = ia_prefix {
                     current_config_info = Some(
                         update_current_info(
+                            &iface_name,
                             ia_prefix,
                             subnet_prefix,
                             subnet_index,
@@ -191,6 +204,8 @@ pub async fn icmp_ra_server(
                         ).await
                     );
                 }
+                // 立即进行通告
+                interval.reset_immediately();
             }
             // status change
             change_result = service_status_subscribe.changed() => {
@@ -216,6 +231,7 @@ pub async fn icmp_ra_server(
 }
 
 async fn update_current_info(
+    iface_name: &str,
     ia_prefix: LDIAPrefix,
     subnet_prefix: u8,
     subnet_index: u128,
@@ -224,10 +240,15 @@ async fn update_current_info(
     expire_time.set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
     let (subnet, route) = allocate_subnet(&ia_prefix, subnet_prefix, subnet_index);
 
-    //  ip -6 addr add  fd00:abcd:1234::1/64 dev ens5
+    add_route(subnet, subnet_prefix, iface_name, ia_prefix.valid_lifetime);
+    set_iface_ip(
+        route,
+        subnet_prefix,
+        iface_name,
+        ia_prefix.valid_lifetime,
+        ia_prefix.preferred_lifetime,
+    );
 
-    // TODO: setting current router, default ::1
-    // std::process::Command::new("ip").args(["-6", "addr", "add", format!(), status]).output();
     ICMPv6ConfigInfo {
         watch_ia_prefix: ia_prefix,
         subnet,
@@ -240,6 +261,8 @@ async fn interval_msg(
     current_config_info: &Option<ICMPv6ConfigInfo>,
     send_socket: &UdpSocket,
     current_deadline: Instant,
+    ra_preferred_lifetime: u32,
+    ra_valid_lifetime: u32,
 ) {
     let Some(current_info) = current_config_info else {
         tracing::error!("current config_info is None, can not handle message");
@@ -247,15 +270,15 @@ async fn interval_msg(
     };
     let remain = (current_deadline - Instant::now()).as_secs() as u32;
     tracing::debug!("remain: {remain:?}");
-    let valid_time = current_info.watch_ia_prefix.valid_lifetime
-        - current_info.watch_ia_prefix.preferred_lifetime;
-    let preferred_lifetime = if remain > valid_time { remain - valid_time } else { 0 };
+    // let valid_time = current_info.watch_ia_prefix.valid_lifetime
+    //     - current_info.watch_ia_prefix.preferred_lifetime;
+    // let preferred_lifetime = if remain > valid_time { remain - valid_time } else { 0 };
     let mut opts = IcmpV6Options::new();
     opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
     opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
         current_info.subnet_prefix,
-        remain,
-        preferred_lifetime,
+        ra_valid_lifetime,
+        ra_preferred_lifetime,
         current_info.subnet,
     )));
     opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
@@ -274,7 +297,6 @@ async fn handle_rs_msg(
     current_config_info: &Option<ICMPv6ConfigInfo>,
     (msg, target_addr): (Vec<u8>, SocketAddr),
     send_socket: &UdpSocket,
-    ips: &mut HashSet<Ipv6Addr>,
     current_deadline: Instant,
 ) {
     let Some(current_info) = current_config_info else {
@@ -325,7 +347,7 @@ async fn handle_rs_msg(
             )));
             opts.insert(IcmpV6Option::MTU(1500));
             opts.insert(IcmpV6Option::AdvertisementInterval(60_000));
-            // opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, current_info.subnet_router)));
+            opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, current_info.subnet_router)));
             let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(opts));
             send_data(&msg, send_socket, target_addr).await;
         }
@@ -389,6 +411,52 @@ fn allocate_subnet(
     let router_address = subnet_network + 1;
 
     (Ipv6Addr::from(subnet_network), Ipv6Addr::from(router_address))
+}
+
+pub fn add_route(ip: Ipv6Addr, prefix: u8, iface_name: &str, valid_lifetime: u32) {
+    let result = std::process::Command::new("ip")
+        .args([
+            "-6",
+            "route",
+            "replace",
+            &format!("{}/{}", ip, prefix),
+            "dev",
+            &format!("{}", iface_name),
+            "expires",
+            &format!("{}", valid_lifetime),
+        ])
+        .output();
+
+    if let Err(e) = result {
+        tracing::error!("{e:?}");
+    }
+}
+
+pub fn set_iface_ip(
+    ip: Ipv6Addr,
+    prefix: u8,
+    iface_name: &str,
+    valid_lifetime: u32,
+    preferred_lft: u32,
+) {
+    let result = std::process::Command::new("ip")
+        .args([
+            "-6",
+            "addr",
+            "replace",
+            &format!("{}/{}", ip, prefix),
+            "dev",
+            &format!("{}", iface_name),
+            "valid_lft",
+            &format!("{}", valid_lifetime),
+            "preferred_lft",
+            &format!("{}", preferred_lft),
+        ])
+        .output();
+
+    if let Err(e) = result {
+        tracing::error!("{e:?}");
+    }
 }
 
 #[cfg(test)]

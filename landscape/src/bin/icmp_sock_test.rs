@@ -7,7 +7,7 @@ use std::{
 };
 
 use clap::Parser;
-use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name};
+use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name, service::ra::IPV6RAConfig};
 use landscape_common::{
     global_const::{LDIAPrefix, LD_PD_WATCHES},
     service::{DefaultWatchServiceStatus, ServiceStatus},
@@ -60,7 +60,14 @@ async fn main() {
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.iface_name).await {
             if let Some(mac) = iface.mac {
-                icmp_ra_server(64, 1, mac, iface.name, args.depend_iface, status).await.unwrap();
+                let config = IPV6RAConfig {
+                    subnet_prefix: 64,
+                    subnet_index: 1,
+                    depend_iface: args.depend_iface,
+                    ra_preferred_lifetime: 300,
+                    ra_valid_lifetime: 300,
+                };
+                icmp_ra_server(config, mac, iface.name, status).await.unwrap();
             }
         }
     });

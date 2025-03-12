@@ -20,6 +20,8 @@ import { useIfaceNodeStore } from "@/stores/iface_node";
 import { add_controller, change_iface_status } from "@/api/network";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { ServiceExhibitSwitch } from "@/lib/services";
+import IPv6PDStatusBtnCopy from "../status_btn/IPv6PDStatusBtn.vue";
+import IPv6PDEditModal from "../ipv6pd/IPv6PDEditModal.vue";
 
 // import { NodeToolbar } from "@vue-flow/node-toolbar";
 
@@ -33,6 +35,7 @@ const ifaceNodeStore = useIfaceNodeStore();
 
 // const nodesData = useNodesData(() => connections.value[0]?.source)
 
+const iface_ipv6pd_edit_show = ref(false);
 const iface_mark_edit_show = ref(false);
 const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
@@ -72,6 +75,16 @@ async function remove_controller() {
 const show_switch = computed(() => {
   return new ServiceExhibitSwitch(props.node);
 });
+
+// const card_style = computed(() => {
+//   if (props.node.zone_type == ZoneType.Wan) {
+//     return "min-width: 330px";
+//   } else if (props.node.zone_type == ZoneType.Lan) {
+//     return "min-width: 220px";
+//   } else {
+//     return "min-width: 200px";
+//   }
+// });
 </script>
 
 <template>
@@ -93,7 +106,7 @@ const show_switch = computed(() => {
       @update:show="handleUpdateShow"
     >
       <template #trigger>
-        <n-card size="small" style="min-width: 220px">
+        <n-card size="small" style="min-width: 220px; max-width: 220px">
           <template #header>
             <n-flex style="gap: 3px" inline align="center">
               <n-icon
@@ -205,23 +218,35 @@ const show_switch = computed(() => {
       <!-- <n-divider /> -->
     </n-popover>
 
-    <n-flex v-if="node.controller_id == undefined">
+    <n-flex
+      v-if="node.controller_id == undefined"
+      style="min-width: 220px; max-width: 220px"
+    >
+      <!-- IP 配置 按钮 -->
       <IPConfigStatusBtn
         v-if="show_switch.ip_config"
         @click="iface_service_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
+      <!-- NAT 配置 按钮 -->
       <NetAddrTransBtn
         v-if="show_switch.nat_config"
         @click="iface_nat_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
-
+      <!-- 标记服务配置按钮 -->
       <PacketMarkStatusBtn
         v-if="show_switch.mark_config"
         @click="iface_mark_edit_show = true"
+        :iface_name="node.name"
+        :zone="node.zone_type"
+      />
+      <!-- IPV6PD 配置按钮 -->
+      <IPv6PDStatusBtnCopy
+        v-if="show_switch.mark_config"
+        @click="iface_ipv6pd_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
@@ -268,6 +293,13 @@ const show_switch = computed(() => {
   <PPPDServiceListDrawer
     v-model:show="show_pppd_drawer"
     :attach_iface_name="node.name"
+    @refresh="refresh"
+  />
+  <IPv6PDEditModal
+    v-model:show="iface_ipv6pd_edit_show"
+    :zone="node.zone_type"
+    :iface_name="node.name"
+    :mac="node.mac"
     @refresh="refresh"
   />
 </template>

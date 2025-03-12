@@ -26,10 +26,10 @@ mod iface;
 mod service;
 mod sysinfo;
 
-use service::ipconfig::get_iface_ipconfig_paths;
 use service::nat::get_iface_nat_paths;
 use service::packet_mark::get_iface_packet_mark_paths;
 use service::pppd::get_iface_pppd_paths;
+use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
 use tracing::{error, info};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -64,6 +64,8 @@ async fn main() -> LdResult<()> {
     let mut lan_ip_mark_store = StoreFileManager::new(home_path.clone(), "lan_ip_mark".to_string());
 
     let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
+
+    let mut ipv6pd_store = StoreFileManager::new(home_path.clone(), "ipv6pd_service".to_string());
 
     let need_init_config = boot_check(&home_path)?;
 
@@ -136,6 +138,19 @@ async fn main() -> LdResult<()> {
         error!("sysctl cmd exec err: {e:#?}");
     }
 
+    if let Err(e) =
+        std::process::Command::new("sysctl").args(["-w", "net.ipv6.conf.all.forwarding=1"]).output()
+    {
+        error!("sysctl cmd exec err: {e:#?}");
+    }
+
+    if let Err(e) = std::process::Command::new("sysctl")
+        .args(["-w", "net.ipv6.conf.default.forwarding=1"])
+        .output()
+    {
+        error!("sysctl cmd exec err: {e:#?}");
+    }
+
     let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
@@ -164,6 +179,7 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_iface_ipconfig_paths(iface_ipconfig_store).await)
                 .merge(get_iface_pppd_paths(iface_pppd_store).await)
+                .merge(get_iface_pdclient_paths(ipv6pd_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_nat_paths(iface_nat_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_packet_mark_paths(iface_mark_store, dev_obs).await),
         )

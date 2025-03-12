@@ -7,6 +7,7 @@ pub mod ipv6pd;
 pub mod nat_service;
 pub mod packet_mark_service;
 pub mod pppd_service;
+pub mod ra;
 
 #[derive(Clone, Debug)]
 pub struct WatchServiceStatus(pub watch::Sender<ServiceStatus>);
