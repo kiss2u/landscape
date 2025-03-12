@@ -20,7 +20,9 @@ import { useIfaceNodeStore } from "@/stores/iface_node";
 import { add_controller, change_iface_status } from "@/api/network";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { ServiceExhibitSwitch } from "@/lib/services";
-import IPv6PDStatusBtnCopy from "../status_btn/IPv6PDStatusBtn.vue";
+import IPv6PDStatusBtn from "../status_btn/IPv6PDStatusBtn.vue";
+import ICMPv6RAStatusBtn from "../status_btn/ICMPv6RAStatusBtn.vue";
+
 import IPv6PDEditModal from "../ipv6pd/IPv6PDEditModal.vue";
 
 // import { NodeToolbar } from "@vue-flow/node-toolbar";
@@ -35,6 +37,7 @@ const ifaceNodeStore = useIfaceNodeStore();
 
 // const nodesData = useNodesData(() => connections.value[0]?.source)
 
+const iface_icmpv6ra_edit_show = ref(false);
 const iface_ipv6pd_edit_show = ref(false);
 const iface_mark_edit_show = ref(false);
 const iface_nat_edit_show = ref(false);
@@ -244,9 +247,16 @@ const show_switch = computed(() => {
         :zone="node.zone_type"
       />
       <!-- IPV6PD 配置按钮 -->
-      <IPv6PDStatusBtnCopy
-        v-if="show_switch.mark_config"
+      <IPv6PDStatusBtn
+        v-if="show_switch.ipv6pd"
         @click="iface_ipv6pd_edit_show = true"
+        :iface_name="node.name"
+        :zone="node.zone_type"
+      />
+      <!-- ICMPv6 RA -->
+      <ICMPv6RAStatusBtn
+        v-if="show_switch.icmpv6ra"
+        @click="iface_icmpv6ra_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
@@ -297,6 +307,13 @@ const show_switch = computed(() => {
   />
   <IPv6PDEditModal
     v-model:show="iface_ipv6pd_edit_show"
+    :zone="node.zone_type"
+    :iface_name="node.name"
+    :mac="node.mac"
+    @refresh="refresh"
+  />
+  <IcmpRAEditModal
+    v-model:show="iface_icmpv6ra_edit_show"
     :zone="node.zone_type"
     :iface_name="node.name"
     :mac="node.mac"

@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
-import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
-import { IPV6PDConfig, IPV6PDServiceConfig } from "@/lib/ipv6pd";
-import {
-  get_iface_ipv6pd_config,
-  update_ipv6pd_config,
-} from "@/api/service_ipv6pd";
+import { ZoneType } from "@/lib/service_ipconfig";
 import { useIPv6PDStore } from "@/stores/status_ipv6pd";
-import { generateValidMAC } from "@/lib/util";
+import { IPV6RAServiceConfig } from "@/lib/icmpv6ra";
+import {
+  get_iface_icmpv6ra_config,
+  update_icmpv6ra_config,
+} from "@/api/service_icmpv6ra";
 
 let ipv6PDStore = useIPv6PDStore();
 const message = useMessage();
@@ -22,42 +21,29 @@ const iface_info = defineProps<{
   zone: ZoneType;
 }>();
 
-const service_config = ref<IPV6PDServiceConfig>(
-  new IPV6PDServiceConfig({
+const service_config = ref<IPV6RAServiceConfig>(
+  new IPV6RAServiceConfig({
     iface_name: iface_info.iface_name,
-    config: new IPV6PDConfig({
-      mac: iface_info.mac ?? generateValidMAC(),
-    }),
   })
 );
 
 async function on_modal_enter() {
   try {
-    let config = await get_iface_ipv6pd_config(iface_info.iface_name);
+    let config = await get_iface_icmpv6ra_config(iface_info.iface_name);
     console.log(config);
     // iface_service_type.value = config.t;
     service_config.value = config;
   } catch (e) {
-    new IPV6PDServiceConfig({
+    new IPV6RAServiceConfig({
       iface_name: iface_info.iface_name,
-      config: new IPV6PDConfig({
-        mac: iface_info.mac ?? generateValidMAC(),
-      }),
     });
   }
 }
 
 async function save_config() {
-  if (
-    service_config.value.config.mac === "" ||
-    service_config.value.config.mac === undefined
-  ) {
-    message.warning("MAC 地址不能为空");
-  } else {
-    let config = await update_ipv6pd_config(service_config.value);
-    await ipv6PDStore.UPDATE_INFO();
-    show_model.value = false;
-  }
+  let config = await update_icmpv6ra_config(service_config.value);
+  await ipv6PDStore.UPDATE_INFO();
+  show_model.value = false;
 }
 </script>
 
@@ -69,7 +55,7 @@ async function save_config() {
   >
     <n-card
       style="width: 600px"
-      title="IPv6-PD 客户端配置"
+      title="ICMPv6 PD 配置"
       :bordered="false"
       size="small"
       role="dialog"
@@ -77,15 +63,55 @@ async function save_config() {
     >
       <!-- {{ service_config }} -->
       <n-form :model="service_config">
-        <n-form-item label="是否启用">
-          <n-switch v-model:value="service_config.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
-          </n-switch>
-        </n-form-item>
-        <n-form-item label="申请使用的 mac 地址 (PPP网卡上使用需要填写)">
-          <n-input v-model:value="service_config.config.mac"></n-input>
-        </n-form-item>
+        <n-grid :cols="24" :x-gap="24">
+          <n-form-item-gi :span="24" label="是否启用">
+            <n-switch v-model:value="service_config.enable">
+              <template #checked> 启用 </template>
+              <template #unchecked> 禁用 </template>
+            </n-switch>
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            :span="24"
+            label="所关联的网卡 (须对应网卡开启 DHCPv6-PD)"
+          >
+            <n-input
+              style="flex: 1"
+              v-model:value="service_config.config.depend_iface"
+              clearable
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="12" label="子网索引">
+            <n-input-number
+              style="flex: 1"
+              v-model:value="service_config.config.subnet_index"
+              clearable
+            />
+          </n-form-item-gi>
+          <n-form-item-gi :span="12" label="子网前缀长度">
+            <n-input-number
+              style="flex: 1"
+              v-model:value="service_config.config.subnet_prefix"
+              clearable
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="12" label="IP 首选状态时间 (s)">
+            <n-input-number
+              style="flex: 1"
+              v-model:value="service_config.config.ra_preferred_lifetime"
+              clearable
+            />
+          </n-form-item-gi>
+          <n-form-item-gi :span="12" label="IP 有效状态时间 (s)">
+            <n-input-number
+              style="flex: 1"
+              v-model:value="service_config.config.ra_valid_lifetime"
+              clearable
+            />
+          </n-form-item-gi>
+        </n-grid>
       </n-form>
 
       <template #footer>

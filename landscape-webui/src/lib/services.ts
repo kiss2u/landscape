@@ -30,6 +30,8 @@ export class ServiceExhibitSwitch {
   ip_config: boolean;
   nat_config: boolean;
   mark_config: boolean;
+  ipv6pd: boolean;
+  icmpv6ra: boolean;
 
   constructor(dev: NetDev) {
     this.carrier = true;
@@ -39,6 +41,8 @@ export class ServiceExhibitSwitch {
     this.ip_config = true;
     this.nat_config = false;
     this.mark_config = false;
+    this.ipv6pd = false;
+    this.icmpv6ra = false;
 
     if (dev.controller != undefined || dev.controller_id != undefined) {
       this.zone_type = false;
@@ -56,16 +60,19 @@ export class ServiceExhibitSwitch {
       this.zone_type = false;
       this.nat_config = true;
       this.mark_config = true;
+      this.ipv6pd = true;
     } else if (dev.name === "docker0") {
       this.zone_type = false;
       this.ip_config = false;
     } else if (dev.zone_type === ZoneType.Lan) {
       this.ip_config = true;
+      this.icmpv6ra = true;
     } else if (dev.zone_type === ZoneType.Wan) {
       this.pppd = true;
       this.ip_config = true;
       this.nat_config = true;
       this.mark_config = true;
+      this.ipv6pd = true;
     }
   }
 }

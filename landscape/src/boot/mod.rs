@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     iface::config::NetworkIfaceConfig,
     service::{
-        ipconfig::IfaceIpServiceConfig, nat_service::NatServiceConfig,
+        ipconfig::IfaceIpServiceConfig, ipv6pd::IPV6PDServiceConfig, nat_service::NatServiceConfig,
         packet_mark_service::PacketMarkServiceConfig, pppd_service::PPPDServiceConfig,
+        ra::IPV6RAServiceConfig,
     },
 };
 use landscape_common::{
@@ -76,6 +77,9 @@ pub struct InitConfig {
 
     pub lan_ip_mark: Vec<LanIPRuleConfig>,
     pub wan_ip_mark: Vec<WanIPRuleConfig>,
+
+    pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
+    pub icmpras: Vec<IPV6RAServiceConfig>,
 }
 
 pub fn init_ports() {

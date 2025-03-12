@@ -148,8 +148,9 @@ pub async fn icmp_ra_server(
             .await,
         );
     }
-    tracing::info!("ICMP v6 RA Server Running");
-    let mut interval = tokio::time::interval(Duration::from_secs(500));
+
+    tracing::info!("ICMP v6 RA Server Running, RA interval: {ra_preferred_lifetime:?}s");
+    let mut interval = tokio::time::interval(Duration::from_secs(ra_preferred_lifetime as u64));
 
     loop {
         let mut service_status_subscribe = service_status.subscribe();

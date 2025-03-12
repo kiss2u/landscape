@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ZoneType } from "@/lib/service_ipconfig";
-import { BareMetalServer02 } from "@vicons/carbon";
+import { Ad } from "@vicons/tabler";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useIPv6PDStore } from "@/stores/status_ipv6pd";
@@ -20,7 +20,7 @@ const emit = defineEmits(["click"]);
 <template>
   <StatusBtn :status="status" @click="emit('click')">
     <template #btn-icon>
-      <BareMetalServer02></BareMetalServer02>
+      <Ad></Ad>
     </template>
   </StatusBtn>
 </template>
