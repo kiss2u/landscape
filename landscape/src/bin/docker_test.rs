@@ -6,10 +6,7 @@ use std::{
     time::Duration,
 };
 
-use bollard::{
-    secret::{EventActor, EventMessageTypeEnum},
-    Docker,
-};
+use bollard::Docker;
 
 use landscape::docker::create_docker_event_spawn;
 

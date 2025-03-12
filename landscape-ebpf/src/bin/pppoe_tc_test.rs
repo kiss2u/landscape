@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use landscape_ebpf::pppoe;
-use tokio::{select, time::sleep};
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() {

@@ -188,11 +188,11 @@ impl dhcproto::Decodable for Icmpv6Message {
 impl dhcproto::Encodable for Icmpv6Message {
     fn encode(&self, e: &mut dhcproto::Encoder<'_>) -> dhcproto::v6::EncodeResult<()> {
         match self {
-            Icmpv6Message::RouterSolicitation(router_solicitation) => todo!(),
+            Icmpv6Message::RouterSolicitation(_) => todo!(),
             Icmpv6Message::RouterAdvertisement(router_advertisement) => {
                 router_advertisement.encode(e)?;
             }
-            Icmpv6Message::Unassigned(_, items) => todo!(),
+            Icmpv6Message::Unassigned(_, _) => todo!(),
         }
         Ok(())
     }

@@ -3,10 +3,6 @@ use std::vec;
 use landscape::dump::eth::EthFram;
 use pnet::datalink::{self, NetworkInterface};
 
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::error::TryRecvError;
-
 use landscape::macaddr::MacAddr;
 
 #[tokio::main]
@@ -42,7 +38,7 @@ async fn main() {
                 let result = EthFram::new(packet, mac);
                 match result.eth_type {
                     landscape::dump::eth::EthL3Type::Raw(_, _) => {}
-                    landscape::dump::eth::EthL3Type::Ipv4(mut ip_frame) => {
+                    landscape::dump::eth::EthL3Type::Ipv4(ip_frame) => {
                         println!("ip_frame data: {}", serde_json::json!(&ip_frame));
 
                         // println!("ip_frame data ckeck sum:: {}", ip_frame.caculate_checksum());

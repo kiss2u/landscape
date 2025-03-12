@@ -67,7 +67,7 @@ function confirmChangeImterval() {
     <n-popover @update:show="handleUpdateShow" trigger="hover">
       <template #trigger>
         <n-switch
-          :round="!fetchIntervalStore.enable_interval"
+          :round="fetchIntervalStore.enable_interval"
           v-model:value="fetchIntervalStore.enable_interval"
         >
           <template #checked-icon>

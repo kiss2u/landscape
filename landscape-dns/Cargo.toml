@@ -3,11 +3,6 @@ name = "landscape-dns"
 version.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "dns_test"
-path = "src/bin/dns_test.rs"
-
-
 [dependencies]
 landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-common = { path = "../landscape-common" }
