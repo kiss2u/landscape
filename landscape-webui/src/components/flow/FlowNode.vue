@@ -109,7 +109,7 @@ const show_switch = computed(() => {
       @update:show="handleUpdateShow"
     >
       <template #trigger>
-        <n-card size="small" style="min-width: 220px; max-width: 220px">
+        <n-card size="small" style="min-width: 220px; max-width: 230px">
           <template #header>
             <n-flex style="gap: 3px" inline align="center">
               <n-icon
@@ -223,7 +223,7 @@ const show_switch = computed(() => {
 
     <n-flex
       v-if="node.controller_id == undefined"
-      style="min-width: 220px; max-width: 220px"
+      style="min-width: 230px; max-width: 230px"
     >
       <!-- IP 配置 按钮 -->
       <IPConfigStatusBtn

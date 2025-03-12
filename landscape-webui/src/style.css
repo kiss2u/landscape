@@ -18,3 +18,13 @@ body {
   width: 100%;
   height: 100%;
 }
+
+.n-drawer {
+  max-width: 100vw;
+}
+
+@media (max-width: 768px) {
+  .n-drawer {
+    width: 90vw !important;
+  }
+}

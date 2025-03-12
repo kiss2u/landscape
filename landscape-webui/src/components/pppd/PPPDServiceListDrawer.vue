@@ -20,7 +20,7 @@ async function inti_drawer() {
 const show_create_pppd_modal = ref(false);
 </script>
 <template>
-  <n-drawer v-model:show="show" :width="502" @after-enter="inti_drawer">
+  <n-drawer v-model:show="show" width="500px" @after-enter="inti_drawer">
     <n-drawer-content
       :title="`配置 ${props.attach_iface_name} PPPD 服务`"
       closable

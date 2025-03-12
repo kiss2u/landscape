@@ -16,10 +16,10 @@ const show_create_modal = ref(false);
   <n-drawer
     @after-enter="read_rules()"
     v-model:show="show"
-    :width="502"
+    width="500px"
     placement="right"
   >
-    <n-drawer-content title="编辑 DNS 所使用规则">
+    <n-drawer-content title="编辑 DNS 所使用规则" closable>
       <n-flex style="height: 100%" vertical>
         <n-alert type="warning">
           编辑规则后需要手动 `停止` 并 `开启` 后 DNS 规则才能生效

@@ -83,7 +83,7 @@ async function save_config() {
             <template #unchecked> 禁用 </template>
           </n-switch>
         </n-form-item>
-        <n-form-item label="申请使用的 mac 地址 (PPP网卡上使用需要填写)">
+        <n-form-item label="申请使用的 mac 地址 (PPP网卡上是生成虚拟的)">
           <n-input v-model:value="service_config.config.mac"></n-input>
         </n-form-item>
       </n-form>

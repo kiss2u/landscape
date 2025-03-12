@@ -122,7 +122,6 @@ function select_ip_model(value: IfaceIpMode) {
       style="width: 600px"
       title="网卡运行服务配置"
       :bordered="false"
-      size="huge"
       role="dialog"
       aria-modal="true"
     >

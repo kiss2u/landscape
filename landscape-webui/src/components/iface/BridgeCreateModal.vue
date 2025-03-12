@@ -21,7 +21,6 @@ async function add_bridge() {
     <n-card
       style="width: 600px; display: flex"
       title="创建桥接设备"
-      size="huge"
       :bordered="false"
       role="dialog"
       aria-modal="true"

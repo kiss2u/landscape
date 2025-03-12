@@ -17,10 +17,10 @@ const show_create_modal = ref(false);
   <n-drawer
     @after-enter="read_rules()"
     v-model:show="show"
-    :width="502"
+    width="500px"
     placement="right"
   >
-    <n-drawer-content title="编辑 Wan 规则">
+    <n-drawer-content title="编辑 Wan 规则" closable>
       <n-flex style="height: 100%" vertical>
         <!-- <n-alert type="warning"> 规则编辑后 </n-alert> -->
         <n-button @click="show_create_modal = true">增加规则</n-button>

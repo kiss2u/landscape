@@ -60,11 +60,13 @@ async function save_config() {
       size="small"
       role="dialog"
       aria-modal="true"
+      closable
+      @close="show_model = false"
     >
       <!-- {{ service_config }} -->
       <n-form :model="service_config">
-        <n-grid :cols="24" :x-gap="24">
-          <n-form-item-gi :span="24" label="是否启用">
+        <n-grid :x-gap="12" :y-gap="8" cols="2" item-responsive>
+          <n-form-item-gi span="1 m:1 l:2" label="是否启用">
             <n-switch v-model:value="service_config.enable">
               <template #checked> 启用 </template>
               <template #unchecked> 禁用 </template>
@@ -72,7 +74,7 @@ async function save_config() {
           </n-form-item-gi>
 
           <n-form-item-gi
-            :span="24"
+            span="1 m:1 l:2"
             label="所关联的网卡 (须对应网卡开启 DHCPv6-PD)"
           >
             <n-input
@@ -82,14 +84,14 @@ async function save_config() {
             />
           </n-form-item-gi>
 
-          <n-form-item-gi :span="12" label="子网索引">
+          <n-form-item-gi span="1 m:1" label="子网索引">
             <n-input-number
               style="flex: 1"
               v-model:value="service_config.config.subnet_index"
               clearable
             />
           </n-form-item-gi>
-          <n-form-item-gi :span="12" label="子网前缀长度">
+          <n-form-item-gi span="1 m:1" label="子网前缀长度">
             <n-input-number
               style="flex: 1"
               v-model:value="service_config.config.subnet_prefix"
@@ -97,14 +99,14 @@ async function save_config() {
             />
           </n-form-item-gi>
 
-          <n-form-item-gi :span="12" label="IP 首选状态时间 (s)">
+          <n-form-item-gi span="1 m:1" label="IP 首选状态时间 (s)">
             <n-input-number
               style="flex: 1"
               v-model:value="service_config.config.ra_preferred_lifetime"
               clearable
             />
           </n-form-item-gi>
-          <n-form-item-gi :span="12" label="IP 有效状态时间 (s)">
+          <n-form-item-gi span="1 m:1" label="IP 有效状态时间 (s)">
             <n-input-number
               style="flex: 1"
               v-model:value="service_config.config.ra_valid_lifetime"

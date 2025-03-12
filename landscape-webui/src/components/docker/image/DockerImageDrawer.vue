@@ -11,7 +11,6 @@ async function flush_images() {
 
 async function pull_image() {
   await pull_docker_image(pull_docker_image_name.value);
-  
 }
 
 const pull_docker_image_name = ref("");
@@ -19,12 +18,13 @@ const pull_docker_image_name = ref("");
 </script>
 <template>
   <n-drawer
-    @after-enter="flush_images"
+    @after-enter="flush_images()"
     v-model:show="show"
-    :width="502"
+    width="500px"
     placement="right"
+    responsive
   >
-    <n-drawer-content title="Docker 镜像列表">
+    <n-drawer-content title="Docker 镜像列表" closable>
       <n-flex style="height: 100%" vertical>
         <n-input-group>
           <n-input v-model:value="pull_docker_image_name" />

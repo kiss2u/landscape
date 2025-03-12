@@ -68,7 +68,6 @@ async function saveRule() {
     class="custom-card"
     preset="card"
     title="规则编辑"
-    size="huge"
     :bordered="false"
   >
     <!-- {{ isModified }} -->
