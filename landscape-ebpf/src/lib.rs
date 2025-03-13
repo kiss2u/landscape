@@ -13,6 +13,7 @@ pub mod tproxy;
 
 static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
     let ebpf_map_space = &LAND_ARGS.ebpf_map_space;
+    tracing::info!("ebpf_map_space is: {ebpf_map_space}");
     let ebpf_map_path = format!("/sys/fs/bpf/landscape/{}", ebpf_map_space);
     if !PathBuf::from(&ebpf_map_path).exists() {
         if let Err(e) = std::fs::create_dir_all(&ebpf_map_path) {
@@ -29,11 +30,12 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         packet_mark: PathBuf::from(format!("{}/packet_mark_map", ebpf_map_path)),
         redirect_index: PathBuf::from(format!("{}/redirect_index_map", ebpf_map_path)),
     };
+    tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
     paths
 });
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct LandscapeMapPath {
     pub wan_ip: PathBuf,
     pub static_nat_mappings: PathBuf,

@@ -1,10 +1,30 @@
 use landscape_common::observer::IfaceObserverAction;
 use netlink_packet_core::{NetlinkMessage, NetlinkPayload};
-use netlink_packet_route::{link::LinkFlag, RouteNetlinkMessage};
+use netlink_packet_route::{address::AddressMessage, link::LinkFlag, RouteNetlinkMessage};
 use netlink_sys::AsyncSocket;
-use rtnetlink::{constants::RTMGRP_LINK, new_connection};
+use rtnetlink::{
+    constants::{RTMGRP_IPV4_IFADDR, RTMGRP_LINK},
+    new_connection,
+};
 use tokio::sync::broadcast;
 use tokio_stream::StreamExt;
+use tracing::instrument;
+
+pub async fn ip_observer() {
+    tokio::spawn(async move {
+        let (mut connection, _, mut messages) =
+            new_connection().map_err(|e| format!("{e}")).unwrap();
+        let mgroup_flags = RTMGRP_IPV4_IFADDR;
+
+        let addr = netlink_sys::SocketAddr::new(0, mgroup_flags);
+        connection.socket_mut().socket_mut().bind(&addr).expect("failed to bind");
+        tokio::spawn(connection);
+        while let Some((message, _)) = messages.next().await {
+            println!("Route change message - {message:?}");
+            handle_address_msg(message);
+        }
+    });
+}
 
 pub async fn dev_observer() -> broadcast::Receiver<IfaceObserverAction> {
     let (tx, rx) = broadcast::channel(30);
@@ -72,5 +92,52 @@ pub fn filter_message_status(
             }
         }
         _ => None,
+    }
+}
+
+pub fn handle_address_msg(message: NetlinkMessage<RouteNetlinkMessage>) {
+    match message.payload {
+        NetlinkPayload::InnerMessage(inner_message) => {
+            match inner_message {
+                RouteNetlinkMessage::NewAddress(link_message) => {
+                    handle_address_update(link_message, true); // 对应 add_wan_ip
+                }
+                RouteNetlinkMessage::DelAddress(link_message) => {
+                    handle_address_update(link_message, false); // 对应 del_wan_ip
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+}
+
+#[instrument(skip(link_message))]
+fn handle_address_update(link_message: AddressMessage, is_add: bool) {
+    let link_ifindex = link_message.header.index;
+    let mut addr = None;
+
+    for attr in link_message.attributes.iter() {
+        match attr {
+            netlink_packet_route::address::AddressAttribute::Address(address) => {
+                addr = Some(address);
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(addr) = addr {
+        let ip = match addr {
+            std::net::IpAddr::V4(ipv4_addr) => ipv4_addr,
+            std::net::IpAddr::V6(_) => {
+                return; // 如果是 IPv6，可以直接返回，或根据需要处理
+            }
+        };
+
+        if is_add {
+            landscape_ebpf::map_setting::add_wan_ip(link_ifindex, ip.clone());
+        } else {
+            landscape_ebpf::map_setting::del_wan_ip(link_ifindex);
+        }
     }
 }

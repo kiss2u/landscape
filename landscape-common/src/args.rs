@@ -99,6 +99,10 @@ pub struct WebCommArgs {
     /// Max log files number
     #[arg(long, default_value = "7")]
     pub max_log_files: usize,
+
+    /// Enable interface addr observer
+    #[arg(long, default_value = "false")]
+    pub iface_ob: bool,
 }
 
 const fn debug_default() -> bool {

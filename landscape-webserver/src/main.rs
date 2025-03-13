@@ -49,6 +49,10 @@ async fn main() -> LdResult<()> {
 
     info!("config path: {home_path:?}");
 
+    if LAND_ARGS.iface_ob {
+        landscape::observer::ip_observer().await;
+    }
+
     let dev_obs = landscape::observer::dev_observer().await;
     let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
     let mut iface_ipconfig_store =
