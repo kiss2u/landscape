@@ -51,13 +51,7 @@ async fn main() {
 
     let dhcp_service_status = DefaultWatchServiceStatus::new();
 
-    let config = IPV6RAConfig {
-        subnet_prefix: 64,
-        subnet_index: 1,
-        depend_iface: args.dhcp_client_iface.clone(),
-        ra_preferred_lifetime: 300,
-        ra_valid_lifetime: 300,
-    };
+    let config = IPV6RAConfig::new(args.dhcp_client_iface.clone());
 
     let status = dhcp_service_status.clone();
     tokio::spawn(async move {

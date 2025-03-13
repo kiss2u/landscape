@@ -11,7 +11,7 @@ use crate::dump::icmp::v6::option_codes::{
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
 use crate::iface::ip::addresses_by_iface_name;
 use crate::macaddr::MacAddr;
-use crate::service::ra::IPV6RAConfig;
+use crate::service::ra::{IPV6RAConfig, RouterFlags};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
@@ -41,6 +41,7 @@ pub async fn icmp_ra_server(
         depend_iface,
         ra_preferred_lifetime,
         ra_valid_lifetime,
+        ra_flag,
     } = config;
     // TODO: ip link set ens5 addrgenmode none
     // OR
@@ -166,7 +167,8 @@ pub async fn icmp_ra_server(
                     &send_socket,
                     deadline,
                     ra_preferred_lifetime,
-                    ra_valid_lifetime
+                    ra_valid_lifetime,
+                    ra_flag
                 ).await;
             }
             // 发送时间为 0 的
@@ -185,7 +187,10 @@ pub async fn icmp_ra_server(
                             &current_config_info,
                             data,
                             &send_socket,
-                            expire_time.deadline()
+                            expire_time.deadline(),
+                            ra_preferred_lifetime,
+                            ra_valid_lifetime,
+                            ra_flag
                         ).await;
                     }
                     // message_rx close
@@ -271,6 +276,7 @@ async fn interval_msg(
     current_deadline: Instant,
     ra_preferred_lifetime: u32,
     ra_valid_lifetime: u32,
+    ra_flag: RouterFlags,
 ) {
     let Some(current_info) = current_config_info else {
         tracing::error!("current config_info is None, can not handle message");
@@ -278,26 +284,16 @@ async fn interval_msg(
     };
     let remain = (current_deadline - Instant::now()).as_secs() as u32;
     tracing::debug!("remain: {remain:?}");
-    // let valid_time = current_info.watch_ia_prefix.valid_lifetime
-    //     - current_info.watch_ia_prefix.preferred_lifetime;
-    // let preferred_lifetime = if remain > valid_time { remain - valid_time } else { 0 };
-    let mut opts = IcmpV6Options::new();
-    opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
-    opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
-        current_info.subnet_prefix,
-        ra_valid_lifetime,
+    build_and_send_ra(
+        my_mac_addr,
+        current_info,
+        send_socket,
+        SocketAddr::new(IpAddr::V6(ICMPV6_MULTICAST), 0),
         ra_preferred_lifetime,
-        current_info.subnet,
-    )));
-    opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
-        current_info.watch_ia_prefix.prefix_len,
-        current_info.watch_ia_prefix.prefix_ip,
-    )));
-    opts.insert(IcmpV6Option::MTU(1500));
-    opts.insert(IcmpV6Option::AdvertisementInterval(60_000));
-    // opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, current_info.subnet_router)));
-    let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(opts));
-    send_data(&msg, send_socket, SocketAddr::new(IpAddr::V6(ICMPV6_MULTICAST), 0)).await;
+        ra_valid_lifetime,
+        ra_flag,
+    )
+    .await;
 }
 
 async fn handle_rs_msg(
@@ -306,6 +302,9 @@ async fn handle_rs_msg(
     (msg, target_addr): (Vec<u8>, SocketAddr),
     send_socket: &UdpSocket,
     current_deadline: Instant,
+    ra_preferred_lifetime: u32,
+    ra_valid_lifetime: u32,
+    ra_flag: RouterFlags,
 ) {
     let Some(current_info) = current_config_info else {
         tracing::error!("current config_info is None, can not handle message");
@@ -338,26 +337,16 @@ async fn handle_rs_msg(
             let remain = (current_deadline - Instant::now()).as_secs() as u32;
             tracing::debug!("remain: {remain:?}");
             tracing::debug!("target_ip: {target_ip:?}");
-            let valid_time = current_info.watch_ia_prefix.valid_lifetime
-                - current_info.watch_ia_prefix.preferred_lifetime;
-            let preferred_lifetime = if remain > valid_time { remain - valid_time } else { 0 };
-            let mut opts = IcmpV6Options::new();
-            opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
-            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
-                current_info.subnet_prefix,
-                remain,
-                preferred_lifetime,
-                current_info.subnet,
-            )));
-            opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
-                current_info.watch_ia_prefix.prefix_len,
-                current_info.watch_ia_prefix.prefix_ip,
-            )));
-            opts.insert(IcmpV6Option::MTU(1500));
-            opts.insert(IcmpV6Option::AdvertisementInterval(60_000));
-            opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, current_info.subnet_router)));
-            let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(opts));
-            send_data(&msg, send_socket, target_addr).await;
+            build_and_send_ra(
+                my_mac_addr,
+                current_info,
+                send_socket,
+                target_addr,
+                ra_preferred_lifetime,
+                ra_valid_lifetime,
+                ra_flag,
+            )
+            .await;
         }
         Icmpv6Message::RouterAdvertisement(_) => {}
         Icmpv6Message::Unassigned(msg_type, _) => {
@@ -465,6 +454,35 @@ pub fn set_iface_ip(
     if let Err(e) = result {
         tracing::error!("{e:?}");
     }
+}
+
+async fn build_and_send_ra(
+    my_mac_addr: &MacAddr,
+    current_info: &ICMPv6ConfigInfo,
+    send_socket: &UdpSocket,
+    target_addr: SocketAddr,
+    ra_preferred_lifetime: u32,
+    ra_valid_lifetime: u32,
+    ra_flag: RouterFlags,
+) {
+    let mut opts = IcmpV6Options::new();
+    opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
+    opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
+        current_info.subnet_prefix,
+        ra_valid_lifetime,
+        ra_preferred_lifetime,
+        current_info.subnet,
+    )));
+    opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
+        current_info.watch_ia_prefix.prefix_len,
+        current_info.watch_ia_prefix.prefix_ip,
+    )));
+    opts.insert(IcmpV6Option::MTU(1500));
+    opts.insert(IcmpV6Option::AdvertisementInterval(60_000));
+    opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, current_info.subnet_router)));
+
+    let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(ra_flag.into(), opts));
+    send_data(&msg, send_socket, target_addr).await;
 }
 
 #[cfg(test)]

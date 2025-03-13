@@ -52,7 +52,7 @@ pub static LAND_WEB_ARGS: Lazy<WebConfig> = Lazy::new(|| {
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
-    /// Static html location
+    /// Static html location [default: /root/.landscape-router/static]
     #[arg(short, long)]
     pub web: Option<PathBuf>,
 
@@ -67,6 +67,10 @@ pub struct WebCommArgs {
     /// Controls whether the WAN IP can be used to access the management interface
     #[arg(short, long, default_value = "true")]
     pub export_manager: bool,
+
+    /// Allow some ports through NAT (temporarily)
+    #[arg(short, long)]
+    pub through_nat_port: Option<Vec<u16>>,
 
     /// All Config DIR, Not file Path [default: /root/.landscape-router]
     #[clap(short, long)]

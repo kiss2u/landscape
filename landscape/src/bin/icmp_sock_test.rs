@@ -60,13 +60,8 @@ async fn main() {
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.iface_name).await {
             if let Some(mac) = iface.mac {
-                let config = IPV6RAConfig {
-                    subnet_prefix: 64,
-                    subnet_index: 1,
-                    depend_iface: args.depend_iface,
-                    ra_preferred_lifetime: 300,
-                    ra_valid_lifetime: 300,
-                };
+                let config = IPV6RAConfig::new(args.depend_iface.clone());
+
                 icmp_ra_server(config, mac, iface.name, status).await.unwrap();
             }
         }

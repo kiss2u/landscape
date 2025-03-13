@@ -172,6 +172,13 @@ pub async fn dhcp_v6_pd_client(
     let client_id = gen_client_id(mac_addr);
     service_status.just_change_status(ServiceStatus::Staring);
 
+    // if let Err(e) = std::process::Command::new("sysctl")
+    //     .args(["-w", &format!("net.ipv6.conf.{}.accept_ra=2", iface_name)])
+    //     .output()
+    // {
+    //     tracing::error!("sysctl cmd exec err: {e:#?}");
+    // }
+
     tracing::info!("DHCP V6 Client Staring");
     landscape_ebpf::map_setting::add_expose_port(client_port);
     let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), client_port);

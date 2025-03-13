@@ -56,8 +56,13 @@ impl LandScapeInterface {
                 // }
                 //     LinkAttribute::VfPorts(_) => todo!(),
                 //     LinkAttribute::PortSelf(_) => todo!(),
-                LinkAttribute::PhysPortId(id) => println!("PhysPortId: {id:?}"),
-                LinkAttribute::PhysSwitchId(id) => println!("PhysSwitchId: {id:?}"),
+                LinkAttribute::PhysPortId(id) => {
+                    println!("PhysPortId: {id:?}")
+                }
+                LinkAttribute::PhysSwitchId(_) => {
+                    // PhysSwitchId 有物理交换机
+                    // println!("PhysSwitchId: {id:?}")
+                }
                 // LinkAttribute::Xdp(xdp_link) => todo!(),
                 //     LinkAttribute::Event(_) => todo!(),
                 //     LinkAttribute::NewNetnsId(_) => todo!(),

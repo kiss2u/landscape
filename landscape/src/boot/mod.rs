@@ -97,4 +97,11 @@ pub fn init_ports() {
     if LAND_ARGS.export_manager {
         map_setting::add_expose_port(LAND_ARGS.port);
     }
+
+    if let Some(ports) = &LAND_ARGS.through_nat_port {
+        tracing::debug!("through nat port: {:?}", ports);
+        for port in ports {
+            map_setting::add_expose_port(*port);
+        }
+    }
 }

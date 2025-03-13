@@ -260,14 +260,13 @@ pub struct RouterAdvertisement {
 }
 
 impl RouterAdvertisement {
-    pub fn new(opts: IcmpV6Options) -> Self {
+    pub fn new(flags: u8, opts: IcmpV6Options) -> Self {
         Self {
             msg_type: Icmpv6Type::RouterAdvertisement,
             msg_code: 0,
             checksum: 0,
             cur_hop_limit: 64,
-            flags: 0xc0,
-            // flags: 0x00,
+            flags,
             router_lifetime: 1800,
             reachable_time: 0,
             retrans_timer: 0,
