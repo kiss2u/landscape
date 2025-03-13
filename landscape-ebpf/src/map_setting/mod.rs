@@ -64,7 +64,7 @@ pub fn del_wan_ip(ifindex: u32) {
     }
 }
 
-pub fn add_expose_port(port: u16) {
+pub fn add_expose_ports(ports: Vec<u16>) {
     let nat_expose_ports = match libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_expose_ports)
     {
         Ok(nat_expose_ports) => nat_expose_ports,
@@ -74,10 +74,21 @@ pub fn add_expose_port(port: u16) {
         }
     };
 
-    let key = port.to_be_bytes();
-    if let Err(e) = nat_expose_ports.update(&key, &[0], MapFlags::ANY) {
+    let mut keys = vec![];
+    let mut values = vec![];
+    let count = ports.len() as u32;
+    for port in ports.iter() {
+        keys.extend_from_slice(&port.to_be_bytes());
+        values.push(0);
+    }
+    if let Err(e) =
+        nat_expose_ports.update_batch(&keys, &values, count, MapFlags::ANY, MapFlags::ANY)
+    {
         tracing::error!("add_expose_port:{e:?}");
     }
+}
+pub fn add_expose_port(port: u16) {
+    add_expose_ports(vec![port]);
 }
 
 pub fn del_expose_port(port: u16) {

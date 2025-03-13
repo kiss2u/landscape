@@ -1,4 +1,4 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{collections::HashSet, fs::OpenOptions, io::Write, path::Path};
 
 use landscape_ebpf::map_setting;
 use serde::{Deserialize, Serialize};
@@ -99,9 +99,18 @@ pub fn init_ports() {
     }
 
     if let Some(ports) = &LAND_ARGS.through_nat_port {
-        tracing::debug!("through nat port: {:?}", ports);
+        let mut insert_ports = HashSet::new();
         for port in ports {
-            map_setting::add_expose_port(*port);
+            if port.start <= port.end {
+                for insert_port in port.start..=port.end {
+                    insert_ports.insert(insert_port);
+                }
+            } else {
+                tracing::error!("port range error: {port:?}");
+            }
         }
+        let ports = insert_ports.into_iter().collect();
+        tracing::debug!("through nat ports: {:?}", ports);
+        map_setting::add_expose_ports(ports);
     }
 }
