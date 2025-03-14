@@ -5,7 +5,10 @@ use std::{
 };
 
 use landscape_common::{
-    args::LAND_HOSTNAME, store::storev2::LandScapeStore, LANDSCAPE_DEFAULT_LAN_NAME,
+    args::LAND_HOSTNAME,
+    global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
+    store::storev2::LandScapeStore,
+    LANDSCAPE_DEFAULT_LAN_NAME,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
@@ -236,20 +239,27 @@ async fn init_service_from_config(
                                 && !default_router_ip.is_loopback()
                             {
                                 tracing::info!("setting default route: {:?}", default_router_ip);
-                                let result = std::process::Command::new("ip")
-                                    .args(&[
-                                        "route",
-                                        "replace",
-                                        "default",
-                                        "via",
-                                        &format!("{}", default_router_ip),
-                                        "dev",
-                                        &iface_name,
-                                    ])
-                                    .output();
-                                if let Err(e) = result {
-                                    tracing::error!("replace route error: {e:?}")
-                                }
+                                LD_ALL_ROUTERS
+                                    .add_route(RouteInfo {
+                                        iface_name: iface_name.clone(),
+                                        weight: 1,
+                                        route: RouteType::Ipv4(default_router_ip),
+                                    })
+                                    .await;
+                                // let result = std::process::Command::new("ip")
+                                //     .args(&[
+                                //         "route",
+                                //         "replace",
+                                //         "default",
+                                //         "via",
+                                //         &format!("{}", default_router_ip),
+                                //         "dev",
+                                //         &iface_name,
+                                //     ])
+                                //     .output();
+                                // if let Err(e) = result {
+                                //     tracing::error!("replace route error: {e:?}")
+                                // }
                             }
                         }
                     }
@@ -273,6 +283,9 @@ async fn init_service_from_config(
                         ])
                         .output();
 
+                    if default_router {
+                        LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
+                    }
                     landscape_ebpf::map_setting::del_wan_ip(iface.index);
                     ip_config.send_replace(ServiceStatus::Stop { message: None });
                 });

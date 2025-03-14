@@ -3,6 +3,8 @@ use std::{collections::HashMap, net::Ipv6Addr};
 use once_cell::sync::Lazy;
 use tokio::sync::{watch, RwLock};
 
+pub mod default_router;
+
 pub static LD_PD_WATCHES: Lazy<IAPrefixMap> = Lazy::new(|| IAPrefixMap::new());
 
 #[derive(Debug, Clone)]

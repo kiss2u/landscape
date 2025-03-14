@@ -5,6 +5,10 @@ use std::process::Stdio;
 
 use tokio::sync::{oneshot, watch};
 
+use landscape_common::global_const::default_router::RouteInfo;
+use landscape_common::global_const::default_router::RouteType;
+use landscape_common::global_const::default_router::LD_ALL_ROUTERS;
+
 use super::PPPDConfig;
 use crate::service::ServiceStatus;
 
@@ -39,6 +43,8 @@ pub async fn create_pppd_thread(
         return;
     };
 
+    let as_router = pppd_conf.default_route;
+
     let (updata_ip, mut updata_ip_rx) = watch::channel(());
     let ppp_iface_name_clone = ppp_iface_name.clone();
     tokio::spawn(async move {
@@ -50,6 +56,16 @@ pub async fn create_pppd_thread(
                 if update {
                     for ip in new_ip4addr.1.iter() {
                         landscape_ebpf::map_setting::add_wan_ip(new_ip4addr.0, ip.clone());
+
+                        if as_router {
+                            LD_ALL_ROUTERS
+                                .add_route(RouteInfo {
+                                    iface_name: ppp_iface_name_clone.clone(),
+                                    weight: 1,
+                                    route: RouteType::PPP,
+                                })
+                                .await;
+                        }
                     }
                 }
                 ip4addr = Some(new_ip4addr);
@@ -58,6 +74,7 @@ pub async fn create_pppd_thread(
     });
 
     tracing::info!("pppd 配置写入成功");
+    let iface_name = ppp_iface_name.clone();
     std::thread::spawn(move || {
         tracing::info!("pppd 启动中");
         let mut child = match Command::new("pppd")
@@ -111,5 +128,8 @@ pub async fn create_pppd_thread(
 
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");
+    if as_router {
+        LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
+    }
     service_status.send_replace(ServiceStatus::Stop { message: None });
 }

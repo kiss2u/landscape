@@ -27,20 +27,11 @@ impl PPPDConfig {
             return Err(());
         };
 
-        let route = if self.default_route {
-            r#"
-defaultroute
-replacedefaultroute
-"#
-        } else {
-            ""
-        };
         let config = format!(
             r#"
 # 此文件每次启动 pppd 都会被复写, 所以修改此文件不会有任何效果, 仅作为检查启动配置
 # This file is truncated each time pppd is started, so editing this file has no effect.
 noipdefault
-{route}
 hide-password
 lcp-echo-interval 30
 lcp-echo-failure 4

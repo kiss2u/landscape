@@ -8,6 +8,7 @@ use crate::{
     dump::udp_packet::dhcp::{options::DhcpOptionMessageType, DhcpOptionFrame},
     service::ServiceStatus,
 };
+use landscape_common::global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS};
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, sync::watch};
 
@@ -125,6 +126,8 @@ pub async fn dhcp_client(
     socket2.set_nonblocking(true).unwrap();
     socket2.bind_device(Some(iface_name.as_bytes())).unwrap();
     socket2.set_broadcast(true).unwrap();
+
+    let router_iface_name = iface_name.clone();
 
     let socket = UdpSocket::from_std(socket2.into()).unwrap();
 
@@ -353,17 +356,24 @@ pub async fn dhcp_client(
 
                     if default_router {
                         if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
-                            let _ = std::process::Command::new("ip")
-                                .args(&[
-                                    "route",
-                                    "replace",
-                                    "default",
-                                    "via",
-                                    &format!("{}", router_ip),
-                                    "dev",
-                                    &iface_name,
-                                ])
-                                .output();
+                            LD_ALL_ROUTERS
+                                .add_route(RouteInfo {
+                                    iface_name: iface_name.clone(),
+                                    weight: 1,
+                                    route: RouteType::Ipv4(router_ip),
+                                })
+                                .await;
+                            // let _ = std::process::Command::new("ip")
+                            //     .args(&[
+                            //         "route",
+                            //         "replace",
+                            //         "default",
+                            //         "via",
+                            //         &format!("{}", router_ip),
+                            //         "dev",
+                            //         &iface_name,
+                            //     ])
+                            //     .output();
                         }
                     }
 
@@ -467,6 +477,10 @@ pub async fn dhcp_client(
                 }
             }
         }
+    }
+
+    if default_router {
+        LD_ALL_ROUTERS.del_route_by_iface(&router_iface_name).await;
     }
 }
 
