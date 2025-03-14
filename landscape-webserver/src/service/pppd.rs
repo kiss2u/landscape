@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs::OpenOptions, io::Write, path::PathBuf, sync:
 
 use axum::{
     extract::{Path, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use landscape::service::{
@@ -70,17 +70,13 @@ pub async fn get_iface_pppd_paths(mut store: StoreFileManager<PPPDServiceConfig>
     };
     Router::new()
         .route("/pppds/status", get(get_all_pppd_status))
+        .route("/pppds", post(handle_iface_pppd_status))
         .route(
             "/pppds/attach/:iface_name",
             get(get_iface_pppd_conifg_by_attach_iface_name)
                 .delete(delete_and_stop_iface_pppd_by_attach_iface_name),
         )
-        .route(
-            "/pppds/:iface_name",
-            get(get_iface_pppd_conifg)
-                .post(handle_iface_pppd_status)
-                .delete(delete_and_stop_iface_pppd),
-        )
+        .route("/pppds/:iface_name", get(get_iface_pppd_conifg).delete(delete_and_stop_iface_pppd))
         .with_state(share_state)
 }
 
@@ -124,7 +120,6 @@ async fn get_iface_pppd_conifg(
 
 async fn handle_iface_pppd_status(
     State(state): State<LandscapeIfacePPPDServices>,
-    Path(iface_name): Path<String>,
     Json(service_config): Json<PPPDServiceConfig>,
 ) -> Json<Value> {
     let result = SimpleResult { success: true };

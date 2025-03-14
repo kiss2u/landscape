@@ -22,10 +22,9 @@ export async function get_iface_nat_config(
 }
 
 export async function update_iface_nat_config(
-  iface_name: string,
   nat_config: NatServiceConfig
 ): Promise<void> {
-  let data = await api.api.post(`services/nats/${iface_name}`, {
+  let data = await api.api.post(`services/nats`, {
     ...nat_config,
   });
   console.log(data.data);

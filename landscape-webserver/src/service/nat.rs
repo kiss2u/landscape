@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use landscape::service::nat_service::{NatService, NatServiceConfig};
@@ -52,12 +52,8 @@ pub async fn get_iface_nat_paths(
     });
     Router::new()
         .route("/nats/status", get(get_all_nat_status))
-        .route(
-            "/nats/:iface_name",
-            get(get_iface_nat_conifg)
-                .post(handle_iface_nat_status)
-                .delete(delete_and_stop_iface_nat),
-        )
+        .route("/nats", post(handle_iface_nat_status))
+        .route("/nats/:iface_name", get(get_iface_nat_conifg).delete(delete_and_stop_iface_nat))
         // .route("/nats/:iface_name/restart", post(restart_nat_service_status))
         .with_state(share_state)
 }
@@ -87,7 +83,6 @@ async fn get_iface_nat_conifg(
 
 async fn handle_iface_nat_status(
     State(state): State<LandscapeIfaceNatServices>,
-    Path(iface_name): Path<String>,
     Json(service_config): Json<NatServiceConfig>,
 ) -> Json<Value> {
     let result = SimpleResult { success: true };

@@ -185,6 +185,7 @@ async fn main() -> LdResult<()> {
     info!("listen at: {:?}:{:?}", LAND_ARGS.address, LAND_ARGS.port);
     let serve_dir = ServeDir::new(&LAND_WEB_ARGS.web_root).not_found_service(service);
 
+    auth::output_sys_token().await;
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(iface_store).await)

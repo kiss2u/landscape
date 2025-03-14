@@ -38,10 +38,7 @@ async function on_modal_enter() {
 }
 
 async function save_config() {
-  let config = await update_iface_nat_config(
-    iface_info.iface_name,
-    nat_service_config.value
-  );
+  let config = await update_iface_nat_config(nat_service_config.value);
   await natConfigStore.UPDATE_INFO();
   show_model.value = false;
 }

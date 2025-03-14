@@ -71,7 +71,6 @@ async function update_mode() {
   if (iface_data.value !== undefined) {
     try {
       let config = await update_iface_server_config(
-        iface_info.iface_name,
         iface_data.value
       );
       emit("refresh");

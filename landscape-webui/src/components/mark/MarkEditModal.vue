@@ -37,10 +37,7 @@ async function on_modal_enter() {
 }
 
 async function save_config() {
-  let config = await update_iface_mark_config(
-    iface_info.iface_name,
-    service_config.value
-  );
+  let config = await update_iface_mark_config(service_config.value);
   await markConfigStore.UPDATE_INFO();
   show_model.value = false;
 }

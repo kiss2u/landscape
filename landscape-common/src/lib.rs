@@ -27,6 +27,8 @@ pub const LANDSCAPE_WEBROOT_DIR_NAME: &'static str = "static";
 pub const INIT_FILE_NAME: &'static str = "landscape_init.toml";
 /// init lock file name
 pub const INIT_LOCK_FILE_NAME: &'static str = "landscape_init.lock";
+/// sys token
+pub const LANDSCAPE_SYS_TOKEN_FILE_ANME: &'static str = "landscape_api_token";
 
 pub const GEO_SITE_FILE_NAME: &'static str = "geosite.dat";
 pub const GEO_IP_FILE_NAME: &'static str = "geoip.dat";

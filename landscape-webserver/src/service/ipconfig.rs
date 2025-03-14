@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use landscape::service::{
@@ -31,11 +31,10 @@ pub async fn get_iface_ipconfig_paths(mut store: StoreFileManager<IfaceIpService
     };
     Router::new()
         .route("/ipconfigs/status", get(get_all_ipconfig_status))
+        .route("/ipconfigs", post(handle_iface_service_status))
         .route(
             "/ipconfigs/:iface_name",
-            get(get_iface_service_conifg)
-                .post(handle_iface_service_status)
-                .delete(delete_and_stop_iface_service),
+            get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
         .route("/ipconfigs/:iface_name/status", get(get_iface_service_status))
         .with_state(share_state)
@@ -80,7 +79,6 @@ async fn get_iface_service_status(
 
 async fn handle_iface_service_status(
     State(state): State<LandscapeIfaceIpServices>,
-    // Path(iface_name): Path<String>,
     Json(service_config): Json<IfaceIpServiceConfig>,
 ) -> Json<Value> {
     let result = SimpleResult { success: true };

@@ -22,10 +22,9 @@ export async function get_iface_mark_config(
 }
 
 export async function update_iface_mark_config(
-  iface_name: string,
   mark_config: MarkServiceConfig
 ): Promise<void> {
-  let data = await api.api.post(`services/packet_marks/${iface_name}`, {
+  let data = await api.api.post(`services/packet_marks`, {
     ...mark_config,
   });
   console.log(data.data);

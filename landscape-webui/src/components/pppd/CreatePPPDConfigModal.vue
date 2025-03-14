@@ -36,7 +36,7 @@ async function init_conf_value() {
 
 async function confirm_config() {
   if (isModified) {
-    await update_iface_pppd_config(value.value.iface_name, value.value);
+    await update_iface_pppd_config(value.value);
     show.value = false;
     emit("refresh");
   }

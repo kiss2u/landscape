@@ -30,10 +30,9 @@ export async function get_iface_server_status(
 }
 
 export async function update_iface_server_config(
-  iface_name: string,
   iface_config: IfaceIpServiceConfig
 ): Promise<void> {
-  let data = await api.api.post(`services/ipconfigs/${iface_name}`, {
+  let data = await api.api.post(`services/ipconfigs`, {
     ...iface_config,
   });
   console.log(data.data);

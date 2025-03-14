@@ -30,10 +30,9 @@ export async function get_iface_pppd_config(
 }
 
 export async function update_iface_pppd_config(
-  iface_name: string,
   pppd_config: PPPDServiceConfig
 ): Promise<void> {
-  let data = await api.api.post(`services/pppds/${iface_name}`, {
+  let data = await api.api.post(`services/pppds`, {
     ...pppd_config,
   });
   console.log(data.data);

@@ -51,11 +51,10 @@ pub async fn get_iface_packet_mark_paths(
     });
     Router::new()
         .route("/packet_marks/status", get(get_all_nat_status))
+        .route("/packet_marks", post(handle_iface_nat_status))
         .route(
             "/packet_marks/:iface_name",
-            get(get_iface_nat_conifg)
-                .post(handle_iface_nat_status)
-                .delete(delete_and_stop_iface_nat),
+            get(get_iface_nat_conifg).delete(delete_and_stop_iface_nat),
         )
         // .route("/packet_marks/:iface_name/restart", post(restart_mark_service_status))
         .with_state(share_state)
@@ -86,7 +85,6 @@ async fn get_iface_nat_conifg(
 
 async fn handle_iface_nat_status(
     State(state): State<LandscapeIfaceMarkServices>,
-    Path(iface_name): Path<String>,
     Json(service_config): Json<PacketMarkServiceConfig>,
 ) -> Json<Value> {
     let result = SimpleResult { success: true };
