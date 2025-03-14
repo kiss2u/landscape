@@ -197,7 +197,7 @@ async fn main() -> LdResult<()> {
         .nest(
             "/services",
             Router::new()
-                .merge(get_iface_ipconfig_paths(iface_ipconfig_store).await)
+                .merge(get_iface_ipconfig_paths(iface_ipconfig_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_pppd_paths(iface_pppd_store).await)
                 .merge(get_iface_pdclient_paths(ipv6pd_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_icmpv6ra_paths(icmpv6ra_store).await)

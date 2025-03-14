@@ -5,13 +5,14 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use serde_json::Value;
+use tokio::sync::{broadcast, Mutex};
+
 use landscape::service::{
     ipconfig::{IfaceIpServiceConfig, IpConfigManager},
     WatchServiceStatus,
 };
-use landscape_common::store::storev2::StoreFileManager;
-use serde_json::Value;
-use tokio::sync::Mutex;
+use landscape_common::{observer::IfaceObserverAction, store::storev2::StoreFileManager};
 
 use crate::{error::LandscapeApiError, SimpleResult};
 
@@ -21,7 +22,10 @@ struct LandscapeIfaceIpServices {
     store: Arc<Mutex<StoreFileManager<IfaceIpServiceConfig>>>,
 }
 
-pub async fn get_iface_ipconfig_paths(mut store: StoreFileManager<IfaceIpServiceConfig>) -> Router {
+pub async fn get_iface_ipconfig_paths(
+    mut store: StoreFileManager<IfaceIpServiceConfig>,
+    mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+) -> Router {
     if store.list().is_empty() {
         store.set(IfaceIpServiceConfig::get_default_lan_bridge());
     }
@@ -29,6 +33,27 @@ pub async fn get_iface_ipconfig_paths(mut store: StoreFileManager<IfaceIpService
         service: IpConfigManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
     };
+
+    let share_state_copy = share_state.clone();
+    tokio::spawn(async move {
+        while let Ok(msg) = dev_observer.recv().await {
+            match msg {
+                IfaceObserverAction::Up(iface_name) => {
+                    tracing::info!("restart {iface_name} IP config service");
+                    let mut read_lock = share_state_copy.store.lock().await;
+                    let service_config = if let Some(service_config) = read_lock.get(&iface_name) {
+                        service_config
+                    } else {
+                        continue;
+                    };
+                    drop(read_lock);
+                    let _ = share_state_copy.service.start_new_service(service_config).await;
+                }
+                IfaceObserverAction::Down(_) => {}
+            }
+        }
+    });
+
     Router::new()
         .route("/ipconfigs/status", get(get_all_ipconfig_status))
         .route("/ipconfigs", post(handle_iface_service_status))
