@@ -27,6 +27,8 @@ pub const LANDSCAPE_LOG_DIR_NAME: &'static str = "logs";
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &'static str = "static";
 /// init file name
 pub const INIT_FILE_NAME: &'static str = "landscape_init.toml";
+/// LOG Path
+pub const LANDSCAPE_HOSTAPD_TMP_DIR: &'static str = "hostapd_tmp";
 /// init lock file name
 pub const INIT_LOCK_FILE_NAME: &'static str = "landscape_init.lock";
 /// sys token

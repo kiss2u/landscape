@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::dev::{DeviceKind, DeviceType, LandScapeInterface};
 
+use super::dev_wifi::LandScapeWifiInterface;
+
 /// 用于存储网卡信息的结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NetworkIfaceConfig {
@@ -14,8 +16,12 @@ pub struct NetworkIfaceConfig {
     pub controller_name: Option<String>,
     #[serde(default)]
     pub zone_type: IfaceZoneType,
+
     #[serde(default = "yes")]
     pub enable_in_boot: bool,
+
+    #[serde(default)]
+    pub wifi_mode: WifiMode,
 }
 
 impl LandScapeStore for NetworkIfaceConfig {
@@ -30,9 +36,25 @@ fn yes() -> bool {
 
 impl NetworkIfaceConfig {
     pub fn from_phy_dev(iface: &LandScapeInterface) -> NetworkIfaceConfig {
+        Self::from_phy_dev_with_wifi_info(iface, &None)
+    }
+
+    pub fn from_phy_dev_with_wifi_info(
+        iface: &LandScapeInterface,
+        wifi_info: &Option<LandScapeWifiInterface>,
+    ) -> NetworkIfaceConfig {
         let zone_type = match iface.dev_type {
             DeviceType::Ppp => IfaceZoneType::Wan,
             _ => IfaceZoneType::Undefined,
+        };
+        let wifi_mode = if let Some(info) = wifi_info {
+            match info.wifi_type {
+                super::dev_wifi::WLANType::Station => WifiMode::Client,
+                super::dev_wifi::WLANType::Ap => WifiMode::AP,
+                _ => WifiMode::Undefined,
+            }
+        } else {
+            WifiMode::default()
         };
         NetworkIfaceConfig {
             name: iface.name.clone(),
@@ -40,6 +62,7 @@ impl NetworkIfaceConfig {
             controller_name: None,
             enable_in_boot: matches!(iface.dev_status, crate::dev::DevState::Up),
             zone_type,
+            wifi_mode,
         }
     }
 
@@ -57,6 +80,7 @@ impl NetworkIfaceConfig {
             controller_name: None,
             enable_in_boot: true,
             zone_type: zone_type.unwrap_or_default(),
+            wifi_mode: WifiMode::default(),
         }
     }
 }
@@ -91,4 +115,13 @@ impl CreateDevType {
             }
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum WifiMode {
+    #[default]
+    Undefined,
+    Client,
+    AP,
 }

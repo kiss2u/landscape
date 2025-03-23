@@ -5,7 +5,8 @@ use std::{
 
 use dev::{DevState, LandScapeInterface};
 use iface::{
-    config::{CreateDevType, NetworkIfaceConfig},
+    config::{CreateDevType, NetworkIfaceConfig, WifiMode},
+    dev_wifi::LandScapeWifiInterface,
     get_iface_by_name,
 };
 pub use routerstatus::*;
@@ -28,6 +29,7 @@ pub mod pppoe_client;
 pub mod routerstatus;
 pub mod service;
 pub mod store;
+pub mod wifi;
 
 fn gen_default_config(
     interface_map: &HashMap<String, LandScapeInterface>,
@@ -86,6 +88,9 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
             tokio::sync::mpsc::unbounded_channel::<(u8, NetworkIfaceConfig)>();
 
         for config in network_config.iter() {
+            // 检查 wifi 类型
+            using_iw_change_wifi_mode(&config.name, &config.wifi_mode);
+
             dev_tx.send((0, config.clone())).unwrap();
         }
 
@@ -158,6 +163,38 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
     need_store_config
 }
 
+pub fn using_iw_change_wifi_mode(iface_name: &str, mode: &WifiMode) {
+    tracing::debug!("setting {} to mode: {:?}", iface_name, mode);
+    match mode {
+        iface::config::WifiMode::Undefined => {}
+        iface::config::WifiMode::Client => {
+            std::process::Command::new("iw")
+                .args(["dev", iface_name, "set", "type", "managed"])
+                .output()
+                .unwrap();
+        }
+        iface::config::WifiMode::AP => {
+            std::process::Command::new("iw")
+                .args(["dev", iface_name, "set", "type", "__ap"])
+                .output()
+                .unwrap();
+        }
+    }
+}
+
+pub async fn get_all_wifi_devices() -> HashMap<String, LandScapeWifiInterface> {
+    let (connection, handle, _) = wl_nl80211::new_connection().unwrap();
+    tokio::spawn(connection);
+    let mut interface_handle = handle.interface().get().execute().await;
+    let mut result = HashMap::new();
+    while let Some(msg) = interface_handle.try_next().await.unwrap() {
+        if let Some(data) = LandScapeWifiInterface::new(msg.payload) {
+            result.insert(data.name.clone(), data);
+        }
+    }
+    result
+}
+
 pub async fn get_all_devices() -> Vec<LandScapeInterface> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
@@ -168,9 +205,6 @@ pub async fn get_all_devices() -> Vec<LandScapeInterface> {
             result.push(data);
         }
     }
-    // handle.link().add().bridge("my-bridge-1".into()).execute().await.map_err(|e| format!("{e}"));
-    // handle.link().set(27).controller(12);
-
     result
 }
 
