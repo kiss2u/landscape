@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { Add } from "@vicons/carbon";
+import { useIfaceNodeStore } from "@/stores/iface_node";
+import { Add, View, ViewOff } from "@vicons/carbon";
 // import { CashOutline as CashIcon } from "@vicons/ionicons5";
 import { ref } from "vue";
 
 const show_create_dev = ref<boolean>(false);
+const ifaceNodeStore = useIfaceNodeStore();
+async function show_down_dev() {
+  ifaceNodeStore.HIDE_DOWN(!ifaceNodeStore.hide_down_dev);
+  await ifaceNodeStore.UPDATE_INFO();
+}
 </script>
 
 <template>
@@ -16,6 +22,12 @@ const show_create_dev = ref<boolean>(false);
   >
     <n-float-button @click="show_create_dev = true">
       <n-icon><Add /></n-icon>
+    </n-float-button>
+    <n-float-button @click="show_down_dev">
+      <n-icon>
+        <View v-if="ifaceNodeStore.hide_down_dev" />
+        <ViewOff v-else />
+      </n-icon>
     </n-float-button>
     <!-- <n-float-button>
       <n-icon><cash-icon /></n-icon>

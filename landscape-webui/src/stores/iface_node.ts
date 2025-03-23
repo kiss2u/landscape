@@ -1,12 +1,15 @@
 import { ifaces } from "@/api/network";
 import { get_iface_server_status } from "@/api/service_ipconfig";
-import { NetDev } from "@/lib/dev";
+import { DevStateType, NetDev } from "@/lib/dev";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { defineStore } from "pinia";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 export const useIfaceNodeStore = defineStore("iface_node", () => {
   const net_devs = ref<NetDev[]>([]);
+
+  const _hide_down_dev = ref(false);
+  const hide_down_dev = computed(() => _hide_down_dev.value);
 
   const nodes = ref<any>([]);
   const edges = ref<any>([]);
@@ -27,6 +30,12 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
     for (const each of new_value) {
       if (each.dev_type === "Loopback") {
         continue;
+      }
+
+      if (_hide_down_dev.value) {
+        if (each.dev_status.t === DevStateType.Down) {
+          continue;
+        }
       }
 
       if (each.dev_kind === "Bridge") {
@@ -114,11 +123,17 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
     return undefined;
   }
 
+  function HIDE_DOWN(value: boolean) {
+    _hide_down_dev.value = value;
+  }
+
   return {
     nodes,
     edges,
     bridges,
     eths,
+    hide_down_dev,
+    HIDE_DOWN,
     UPDATE_INFO,
     SETTING_CALL_BACK,
     FIND_DEV_BY_IFINDEX,
