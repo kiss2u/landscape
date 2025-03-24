@@ -9,6 +9,7 @@ pub mod packet_mark_service;
 pub mod pppd_service;
 pub mod ra;
 
+#[deprecated(note = "Use `landscape_common::service::DefaultWatchServiceStatus` instead")]
 #[derive(Clone, Debug)]
 pub struct WatchServiceStatus(pub watch::Sender<ServiceStatus>);
 

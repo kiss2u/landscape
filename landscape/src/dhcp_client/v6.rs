@@ -35,7 +35,13 @@ pub enum IpV6PdState {
     /// 初始状态
     Solicit { xid: u32 },
     /// 发起地址请求
-    Request { xid: u32, service_id: Vec<u8>, iapd: v6::IAPD, service_sock: SocketAddr },
+    Request {
+        xid: u32,
+        service_id: Vec<u8>,
+        iapd: v6::IAPD,
+        service_sock: SocketAddr,
+        send_times: u8,
+    },
 
     /// 地址激活使用
     Bound { xid: u32, service_id: Vec<u8>, iapd: v6::IAPD, bound_time: Instant },
@@ -347,7 +353,7 @@ async fn send_current_status_packet(
             send_data(&msg, send_socket, None).await;
         }
         // IpV6PdState::Advertise { xid } => todo!(),
-        IpV6PdState::Request { xid, service_id, iapd, service_sock: _ } => {
+        IpV6PdState::Request { xid, service_id, iapd, service_sock: _, send_times } => {
             let mut send_msg = v6::Message::new(V6MessageType::Request);
             send_msg.set_xid_num(*xid);
             let mut options = DhcpOptions::new();
@@ -365,6 +371,15 @@ async fn send_current_status_packet(
             send_msg.opts_mut().insert(DhcpOption::ServerId(service_id.clone()));
 
             send_data(&send_msg, send_socket, None).await;
+
+            // Request 没有收到响应到达一定次数需要进行回退到 Solicit
+            if *send_times > 4 {
+                tracing::warn!("Request send times: {send_times} timeout turn to Solicit");
+                // 切换状态为 Solicit 重新开始
+                *current_status = IpV6PdState::Solicit { xid: get_new_ipv6_xid() };
+                return true;
+            }
+            *send_times += 1;
         }
         IpV6PdState::Bound { xid: _, service_id, iapd, bound_time } => {
             // t1 时间到 转换状态为 Renew
@@ -578,6 +593,7 @@ async fn handle_packet(
                         service_id: my_service_id,
                         iapd,
                         service_sock: msg_addr,
+                        send_times: 0,
                     };
 
                     tracing::debug!("current status move to: {:#?}", current_status);

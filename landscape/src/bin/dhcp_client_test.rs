@@ -1,27 +1,65 @@
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
-use landscape::{dhcp_client::dhcp_client, macaddr::MacAddr, service::ServiceStatus};
-use tokio::sync::watch;
+use landscape::{dhcp_client::v4::dhcp_v4_client, iface::get_iface_by_name};
+use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 
+use clap::Parser;
+use tracing::Level;
+
+#[derive(Parser, Debug, Clone)]
+pub struct Args {
+    #[arg(short, long, default_value = "ens4")]
+    pub iface_name: String,
+}
+
+/// cargo run --package landscape --bin dhcp_client_test
 #[tokio::main]
 async fn main() {
-    let mac_addr = MacAddr::new(00, 160, 152, 30, 211, 86);
+    let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
+    tracing_subscriber::fmt().with_max_level(Level::DEBUG).with_writer(non_blocking).init();
 
-    // let mac_addr = MacAddr::new(0xbe, 0x25, 0x85, 0x83, 0x00, 0x0d);
+    let args = Args::parse();
+    tracing::info!("using args is: {:#?}", args);
 
-    let (status, _) = watch::channel(ServiceStatus::Staring);
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    })
+    .unwrap();
 
-    let service_status = status.clone();
+    let service_status = DefaultWatchServiceStatus::new();
+
+    let status = service_status.clone();
+
     tokio::spawn(async move {
-        dhcp_client(5, "ens4".into(), mac_addr, 68, service_status, "TEST-PC".to_string(), false)
-            .await;
+        if let Some(iface) = get_iface_by_name(&args.iface_name).await {
+            if let Some(mac) = iface.mac {
+                dhcp_v4_client(
+                    iface.index,
+                    iface.name,
+                    mac,
+                    68,
+                    status,
+                    "TEST-PC".to_string(),
+                    false,
+                )
+                .await;
+            }
+        }
     });
 
-    tokio::time::sleep(Duration::from_secs(30)).await;
+    while running.load(Ordering::SeqCst) {
+        tokio::time::sleep(Duration::new(1, 0)).await;
+    }
 
-    let timeout_timer = tokio::time::sleep(tokio::time::Duration::from_secs(300));
-    timeout_timer.await;
-    status.send_replace(ServiceStatus::Stopping);
+    service_status.just_change_status(ServiceStatus::Stopping);
 
-    let _ = status.subscribe().wait_for(|s| matches!(s, ServiceStatus::Stop { .. })).await;
+    service_status.wait_stop().await;
 }

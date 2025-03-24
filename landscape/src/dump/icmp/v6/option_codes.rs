@@ -416,7 +416,7 @@ impl dhcproto::Encodable for IcmpV6Option {
                 e.write_u8(len)?;
                 e.write_slice(data)?;
             }
-            IcmpV6Option::TargetLinkLayerAddress(items) => todo!(),
+            IcmpV6Option::TargetLinkLayerAddress(_items) => todo!(),
             IcmpV6Option::PrefixInformation(items) => {
                 let mut buf = Vec::new();
                 let mut item_enc = dhcproto::Encoder::new(&mut buf);
@@ -425,32 +425,32 @@ impl dhcproto::Encodable for IcmpV6Option {
                 e.write_u8(len)?;
                 e.write_slice(&buf)?;
             }
-            IcmpV6Option::RedirectedHeader(items) => todo!(),
+            IcmpV6Option::RedirectedHeader(_items) => todo!(),
             IcmpV6Option::MTU(mtu) => {
                 e.write_u8(1)?;
                 e.write_u16(0)?;
                 e.write_u32(*mtu)?;
             }
-            IcmpV6Option::NBMAShortcutLimit(items) => todo!(),
+            IcmpV6Option::NBMAShortcutLimit(_items) => todo!(),
             IcmpV6Option::AdvertisementInterval(interval) => {
                 e.write_u8(1)?;
                 e.write_u16(0)?;
                 e.write_u32(*interval)?;
             }
-            IcmpV6Option::HomeAgentInformation(items) => todo!(),
-            IcmpV6Option::TargetAddressList(items) => todo!(),
-            IcmpV6Option::CGAOption(items) => todo!(),
-            IcmpV6Option::RSASignature(items) => todo!(),
-            IcmpV6Option::Timestamp(items) => todo!(),
-            IcmpV6Option::Nonce(items) => todo!(),
-            IcmpV6Option::TrustAnchor(items) => todo!(),
-            IcmpV6Option::Certificate(items) => todo!(),
-            IcmpV6Option::IPAddressPrefix(items) => todo!(),
-            IcmpV6Option::NewRouterPrefixInformation(items) => todo!(),
-            IcmpV6Option::LinkLayerAddress(items) => todo!(),
-            IcmpV6Option::NeighborAdvertisementAcknowledgment(items) => todo!(),
-            IcmpV6Option::PvDIDRouterAdvertisement(items) => todo!(),
-            IcmpV6Option::MAP(items) => todo!(),
+            IcmpV6Option::HomeAgentInformation(_items) => todo!(),
+            IcmpV6Option::TargetAddressList(_items) => todo!(),
+            IcmpV6Option::CGAOption(_items) => todo!(),
+            IcmpV6Option::RSASignature(_items) => todo!(),
+            IcmpV6Option::Timestamp(_items) => todo!(),
+            IcmpV6Option::Nonce(_items) => todo!(),
+            IcmpV6Option::TrustAnchor(_items) => todo!(),
+            IcmpV6Option::Certificate(_items) => todo!(),
+            IcmpV6Option::IPAddressPrefix(_items) => todo!(),
+            IcmpV6Option::NewRouterPrefixInformation(_items) => todo!(),
+            IcmpV6Option::LinkLayerAddress(_items) => todo!(),
+            IcmpV6Option::NeighborAdvertisementAcknowledgment(_items) => todo!(),
+            IcmpV6Option::PvDIDRouterAdvertisement(_items) => todo!(),
+            IcmpV6Option::MAP(_items) => todo!(),
             IcmpV6Option::RouteInformation(items) => {
                 let mut buf = Vec::new();
                 let mut item_enc = dhcproto::Encoder::new(&mut buf);
@@ -465,28 +465,28 @@ impl dhcproto::Encodable for IcmpV6Option {
                 e.write_u32(*lifetime)?;
                 e.write_slice(&ip.octets())?;
             }
-            IcmpV6Option::RAFlagsExtension(items) => todo!(),
-            IcmpV6Option::HandoverKeyRequest(items) => todo!(),
-            IcmpV6Option::HandoverKeyReply(items) => todo!(),
-            IcmpV6Option::HandoverAssistInformation(items) => todo!(),
-            IcmpV6Option::MobileNodeIdentifier(items) => todo!(),
-            IcmpV6Option::DNSSearchList(items) => todo!(),
-            IcmpV6Option::ProxySignature(items) => todo!(),
-            IcmpV6Option::AddressRegistration(items) => todo!(),
-            IcmpV6Option::LowPANContext(items) => todo!(),
-            IcmpV6Option::AuthoritativeBorderRouter(items) => todo!(),
-            IcmpV6Option::LowPANCapabilityIndication(items) => todo!(),
-            IcmpV6Option::DHCPCaptivePortal(items) => todo!(),
-            IcmpV6Option::PREF64(items) => todo!(),
-            IcmpV6Option::CryptoIDParameters(items) => todo!(),
-            IcmpV6Option::NDPSignature(items) => todo!(),
-            IcmpV6Option::ResourceDirectoryAddress(items) => todo!(),
-            IcmpV6Option::ConsistentUptime(items) => todo!(),
-            IcmpV6Option::CARDRequest(items) => todo!(),
-            IcmpV6Option::CARDReply(items) => todo!(),
-            IcmpV6Option::EncryptedDNS(items) => todo!(),
-            IcmpV6Option::RFC3692Experiment1(items) => todo!(),
-            IcmpV6Option::RFC3692Experiment2(items) => todo!(),
+            IcmpV6Option::RAFlagsExtension(_items) => todo!(),
+            IcmpV6Option::HandoverKeyRequest(_items) => todo!(),
+            IcmpV6Option::HandoverKeyReply(_items) => todo!(),
+            IcmpV6Option::HandoverAssistInformation(_items) => todo!(),
+            IcmpV6Option::MobileNodeIdentifier(_items) => todo!(),
+            IcmpV6Option::DNSSearchList(_items) => todo!(),
+            IcmpV6Option::ProxySignature(_items) => todo!(),
+            IcmpV6Option::AddressRegistration(_items) => todo!(),
+            IcmpV6Option::LowPANContext(_items) => todo!(),
+            IcmpV6Option::AuthoritativeBorderRouter(_items) => todo!(),
+            IcmpV6Option::LowPANCapabilityIndication(_items) => todo!(),
+            IcmpV6Option::DHCPCaptivePortal(_items) => todo!(),
+            IcmpV6Option::PREF64(_items) => todo!(),
+            IcmpV6Option::CryptoIDParameters(_items) => todo!(),
+            IcmpV6Option::NDPSignature(_items) => todo!(),
+            IcmpV6Option::ResourceDirectoryAddress(_items) => todo!(),
+            IcmpV6Option::ConsistentUptime(_items) => todo!(),
+            IcmpV6Option::CARDRequest(_items) => todo!(),
+            IcmpV6Option::CARDReply(_items) => todo!(),
+            IcmpV6Option::EncryptedDNS(_items) => todo!(),
+            IcmpV6Option::RFC3692Experiment1(_items) => todo!(),
+            IcmpV6Option::RFC3692Experiment2(_items) => todo!(),
             IcmpV6Option::UnknownOption(_, data) => {
                 e.write_u8(data.len() as u8)?;
                 e.write_slice(data)?;
@@ -595,7 +595,7 @@ mod tests {
             todo!()
         }
 
-        fn decode(data: &[u8]) -> Option<Self>
+        fn decode(_data: &[u8]) -> Option<Self>
         where
             Self: Sized,
         {

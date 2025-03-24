@@ -124,7 +124,7 @@ impl DhcpOptionFrame {
         }
     }
 
-    pub fn get_renew_time(&self) -> Option<(u64, u64)> {
+    pub fn get_renew_time(&self) -> Option<(u64, u64, u64)> {
         let Some(DhcpOptions::AddressLeaseTime(lease_time)) = self.has_option(51) else {
             return None;
         };
@@ -138,7 +138,7 @@ impl DhcpOptionFrame {
         } else {
             lease_time * 7 / 8
         };
-        return Some((renew_time as u64, rebinding_time as u64));
+        return Some((renew_time as u64, rebinding_time as u64, lease_time as u64));
     }
 }
 

@@ -17,6 +17,7 @@ use crate::{
     macaddr::MacAddr,
 };
 
+pub mod v4;
 pub mod v6;
 
 pub const DEFAULT_TIME_OUT: u64 = 4;
@@ -318,7 +319,7 @@ pub async fn dhcp_client(
                         siaddr,
                         options
                     );
-                    let Some((renew_time, rebinding_time)) = options.get_renew_time() else {
+                    let Some((renew_time, rebinding_time, _)) = options.get_renew_time() else {
                         continue;
                     };
                     let sleep_time = tokio::time::Instant::now() + Duration::from_secs(renew_time);
