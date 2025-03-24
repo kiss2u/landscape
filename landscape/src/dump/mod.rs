@@ -5,7 +5,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
 
-use crate::macaddr::MacAddr;
+use landscape_common::net::MacAddr;
 
 pub mod eth;
 pub mod icmp;

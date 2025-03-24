@@ -12,10 +12,8 @@ use landscape_common::global_const::default_router::{RouteInfo, RouteType, LD_AL
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, sync::watch};
 
-use crate::{
-    dump::udp_packet::dhcp::{options::DhcpOptions, DhcpEthFrame},
-    macaddr::MacAddr,
-};
+use crate::dump::udp_packet::dhcp::{options::DhcpOptions, DhcpEthFrame};
+use landscape_common::net::MacAddr;
 
 pub mod v4;
 pub mod v6;

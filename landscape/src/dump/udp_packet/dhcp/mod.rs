@@ -5,7 +5,8 @@ use pnet::util::Octets;
 use serde::{Deserialize, Serialize};
 
 pub mod options;
-use crate::macaddr::MacAddr;
+
+use landscape_common::net::MacAddr;
 
 const DHCP_MAGIC_COOKIE: u32 = 0x63825363;
 

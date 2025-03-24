@@ -3,7 +3,7 @@ use std::vec;
 use landscape::dump::eth::EthFram;
 use pnet::datalink::{self, NetworkInterface};
 
-use landscape::macaddr::MacAddr;
+use landscape_common::net::MacAddr;
 
 #[tokio::main]
 async fn main() {

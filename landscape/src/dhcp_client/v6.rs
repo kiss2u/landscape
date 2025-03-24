@@ -13,7 +13,9 @@ use dhcproto::{
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, time::Instant};
 
-use crate::{dump::udp_packet::dhcp_v6::get_solicit_options, macaddr::MacAddr};
+use crate::dump::udp_packet::dhcp_v6::get_solicit_options;
+
+use landscape_common::net::MacAddr;
 use landscape_common::{
     global_const::LD_PD_WATCHES,
     service::{DefaultWatchServiceStatus, ServiceStatus},

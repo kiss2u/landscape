@@ -1,4 +1,4 @@
-use crate::macaddr::MacAddr;
+use landscape_common::net::MacAddr;
 use serde::{Deserialize, Serialize};
 
 use super::ipv4::Ipv4EthFrame;

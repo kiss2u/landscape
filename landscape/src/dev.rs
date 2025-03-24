@@ -1,7 +1,7 @@
 use netlink_packet_route::link::{LinkAttribute, LinkMessage};
 use serde::{Deserialize, Serialize};
 
-use crate::macaddr::MacAddr;
+use landscape_common::net::MacAddr;
 
 /// 当前硬件状态结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]

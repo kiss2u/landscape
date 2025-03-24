@@ -8,13 +8,11 @@ use std::{
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, time::Instant};
 
-use crate::{
-    dump::udp_packet::dhcp::{
-        options::{DhcpOptionMessageType, DhcpOptions},
-        DhcpEthFrame, DhcpOptionFrame,
-    },
-    macaddr::MacAddr,
+use crate::dump::udp_packet::dhcp::{
+    options::{DhcpOptionMessageType, DhcpOptions},
+    DhcpEthFrame, DhcpOptionFrame,
 };
+use landscape_common::net::MacAddr;
 use landscape_common::{
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
     service::{DefaultWatchServiceStatus, ServiceStatus},

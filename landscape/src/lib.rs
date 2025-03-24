@@ -21,7 +21,6 @@ pub mod dump;
 pub mod firewall;
 pub mod icmp;
 pub mod iface;
-pub mod macaddr;
 pub mod observer;
 pub mod packet_mark;
 pub mod pppd_client;

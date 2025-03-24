@@ -10,12 +10,12 @@ use crate::{
         options::{DhcpOptionMessageType, DhcpOptions},
         DhcpEthFrame, DhcpOptionFrame,
     },
-    macaddr::MacAddr,
     service::ServiceStatus,
 };
 
 use cidr::Ipv4Inet;
 use futures::TryStreamExt;
+use landscape_common::net::MacAddr;
 use landscape_common::LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME;
 use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};

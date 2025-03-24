@@ -5,7 +5,7 @@ use landscape_common::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::macaddr::MacAddr;
+use landscape_common::net::MacAddr;
 
 #[derive(Clone)]
 pub struct IPV6PDService;

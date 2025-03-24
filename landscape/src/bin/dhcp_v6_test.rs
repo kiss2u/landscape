@@ -7,7 +7,8 @@ use std::{
 };
 
 use clap::Parser;
-use landscape::{dhcp_client::v6::dhcp_v6_pd_client, macaddr::MacAddr};
+use landscape::dhcp_client::v6::dhcp_v6_pd_client;
+use landscape_common::net::MacAddr;
 use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
