@@ -1,6 +1,5 @@
-import { DHCPv4ServiceConfig } from "@/lib/dhcp_v4";
+import { DHCPv4ServiceConfig, DHCPv4ServiceStatus } from "@/lib/dhcp_v4";
 import api from ".";
-import { DHCPv4ServiceStatus } from "@/lib/services";
 
 export async function get_all_dhcp_v4_status(): Promise<
   Map<string, DHCPv4ServiceStatus>

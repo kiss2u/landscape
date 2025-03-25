@@ -19,16 +19,21 @@ impl Watchable for DHCPv4ServiceStatus {
         self.status.clone()
     }
 
-    fn modify_curent_status(&mut self, status: ServiceStatus) {
-        self.status = status;
-    }
-
-    fn change_status(&mut self, new_status: ServiceStatus, data: Option<DHCPv4OfferInfo>) -> bool {
-        let _ = data;
-        if self.status.can_transition_to(&new_status) {
-            tracing::debug!("change to new status: {new_status:?}");
-            self.status = new_status;
+    fn change_status(&mut self, new_status: ServiceStatus, data: Option<Self::HoldData>) -> bool {
+        if let Some(data) = data {
+            self.data = data;
+            tracing::debug!("{:?}", self.data);
         }
-        true
+        if self.status != new_status {
+            if self.status.can_transition_to(&new_status) {
+                tracing::debug!("change to new status: {new_status:?}");
+                self.status = new_status;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }

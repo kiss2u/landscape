@@ -30,12 +30,9 @@ enable = true
 [ipconfigs.ip_model]
 t = "dhcpclient"
 
-[[ipconfigs]]
+[[dhcpv4_services]]
 iface_name = "br_lan"
 enable = true
-
-[ipconfigs.ip_model]
-t = "dhcpserver"
 server_ip_addr = "192.168.7.1"
 network_mask = 24
 ip_range_start = "192.168.7.100"

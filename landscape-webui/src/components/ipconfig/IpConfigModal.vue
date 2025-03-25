@@ -34,12 +34,7 @@ const ip_config_options = computed(() => {
       value: IfaceIpMode.Static,
     },
   ];
-  if (iface_info.zone == ZoneType.Lan) {
-    result.push({
-      label: "DHCP 服务端",
-      value: IfaceIpMode.DHCPServer,
-    });
-  } else if (iface_info.zone == ZoneType.Wan) {
+  if (iface_info.zone == ZoneType.Wan) {
     // result.push({
     //   label: "PPPoE",
     //   value: IfaceIpMode.PPPoE,

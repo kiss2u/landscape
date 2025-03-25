@@ -22,20 +22,6 @@ export class ServiceStatus {
   }
 }
 
-export class DHCPv4ServiceStatus {
-  status: ServiceStatus;
-  message: undefined | string;
-
-  constructor(obj?: { status: ServiceStatus; message?: string }) {
-    this.status = new ServiceStatus(obj?.status);
-    this.message = obj?.message;
-  }
-
-  get_color(themeVars: any) {
-    return this.status.get_color(themeVars);
-  }
-}
-
 export class ServiceExhibitSwitch {
   carrier: boolean;
   enable_in_boot: boolean;

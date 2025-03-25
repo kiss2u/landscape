@@ -54,12 +54,9 @@ iface_name = "eth0"
 enable = true
 
 # 配置 br_lan 网卡启用 DHCP Server
-[[ipconfigs]]
+[[dhcpv4_services]]
 iface_name = "br_lan"
 enable = true
-
-[ipconfigs.ip_model]
-t = "dhcpserver"
 server_ip_addr = "192.168.5.1"
 network_mask = 24
 ip_range_start = "192.168.5.100"

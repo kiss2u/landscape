@@ -1,4 +1,5 @@
 import { Netmask } from "netmask";
+import { ServiceStatus } from "./services";
 
 export class DHCPv4ServiceConfig {
   iface_name: string;
@@ -51,4 +52,55 @@ export function get_dhcp_range(cidr: string): [string, string] {
     }
   });
   return [sec_ip, block.broadcast];
+}
+
+export class DHCPv4ServiceStatus {
+  status: ServiceStatus;
+  data?: DHCPv4OfferInfo;
+
+  constructor(obj?: { status: ServiceStatus; data?: DHCPv4OfferInfo }) {
+    this.status = new ServiceStatus(obj?.status);
+    this.data = obj?.data;
+  }
+
+  get_color(themeVars: any) {
+    return this.status.get_color(themeVars);
+  }
+}
+
+export type DHCPv4OfferInfo = {
+  relative_boot_time: number;
+  offered_ips: DHCPv4OfferInfoItem[];
+};
+export type DHCPv4OfferInfoShow = {
+  mac: string;
+  ip: string;
+  time_left: number;
+};
+
+export type DHCPv4OfferInfoItem = {
+  mac: string;
+  ip: string;
+  relative_active_time: number;
+  expire_time: number;
+};
+
+export function conver_to_show(data?: DHCPv4OfferInfo): DHCPv4OfferInfoShow[] {
+  if (data) {
+    const result: DHCPv4OfferInfoShow[] = [];
+    let relative_boot_time = data.relative_boot_time;
+    for (const each of data.offered_ips) {
+      // console.log(each);
+      const time_left =
+        each.relative_active_time + each.expire_time - relative_boot_time;
+      result.push({
+        mac: each.mac,
+        ip: each.ip,
+        time_left: time_left,
+      });
+    }
+    return result;
+  } else {
+    return [];
+  }
 }

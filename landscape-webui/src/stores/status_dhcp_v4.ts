@@ -1,5 +1,5 @@
 import { get_all_dhcp_v4_status } from "@/api/service_dhcp_v4";
-import { DHCPv4ServiceStatus } from "@/lib/services";
+import { DHCPv4ServiceStatus } from "@/lib/dhcp_v4";
 import { defineStore } from "pinia";
 import { computed, ComputedRef, ref } from "vue";
 

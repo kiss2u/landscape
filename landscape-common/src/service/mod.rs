@@ -54,10 +54,6 @@ impl Watchable for DefaultServiceStatus {
         self.0.clone()
     }
 
-    fn modify_curent_status(&mut self, status: ServiceStatus) {
-        self.0 = status;
-    }
-
     fn change_status(&mut self, new_status: ServiceStatus, data: Option<()>) -> bool {
         let _ = data;
         if self.0.can_transition_to(&new_status) {

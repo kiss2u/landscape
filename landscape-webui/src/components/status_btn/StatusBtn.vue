@@ -2,10 +2,18 @@
 import { computed } from "vue";
 import { ServiceStatus, ServiceStatusType } from "@/lib/services";
 
-const iface_info = defineProps<{
-  status: ServiceStatus | undefined;
-}>();
+interface Props {
+  status?: ServiceStatus;
+  disable_popover?: boolean;
+}
 
+const iface_info = withDefaults(defineProps<Props>(), {
+  disable_popover: true,
+});
+
+const popover_show = computed(() => {
+  return control_show.value.disabled_popover && iface_info.disable_popover;
+});
 const control_show = computed(() => {
   let info = {
     btn_type: "default",
@@ -45,15 +53,11 @@ const control_show = computed(() => {
   return info;
 });
 
-const emit = defineEmits(["click"]);
+const emit = defineEmits(["click", "hover"]);
 </script>
 
 <template>
-  <n-popover
-    trigger="hover"
-    :show-arrow="false"
-    :disabled="control_show.disabled_popover"
-  >
+  <n-popover trigger="hover" :show-arrow="false" :disabled="popover_show">
     <template #trigger>
       <n-button
         size="tiny"
@@ -72,7 +76,9 @@ const emit = defineEmits(["click"]);
       </n-button>
     </template>
     <n-flex vertical>
-      {{ iface_info.status?.message ?? "" }}
+      <slot name="popover-panel">
+        {{ iface_info.status?.message ?? "" }}
+      </slot>
     </n-flex>
   </n-popover>
 </template>

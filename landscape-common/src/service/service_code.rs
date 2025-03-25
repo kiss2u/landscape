@@ -9,7 +9,13 @@ pub trait Watchable {
     type HoldData;
     fn get_current_status_code(&self) -> ServiceStatus;
 
-    fn modify_curent_status(&mut self, status: ServiceStatus);
+    fn modify_curent_status(&mut self, new_status: ServiceStatus) {
+        self.change_status(new_status, None);
+    }
+
+    fn just_change_data(&mut self, data: Self::HoldData) -> bool {
+        self.change_status(self.get_current_status_code(), Some(data))
+    }
 
     fn change_status(&mut self, new_status: ServiceStatus, data: Option<Self::HoldData>) -> bool;
 }
@@ -33,6 +39,10 @@ impl<T: WatchServiceTrait> WatchService<T> {
 
     pub fn send_replace(&self, status: T) -> T {
         self.0.send_replace(status)
+    }
+
+    pub fn just_change_data(&self, data: T::HoldData) {
+        self.0.send_if_modified(|current| current.just_change_data(data));
     }
 
     pub fn just_change_status(&self, new_status: ServiceStatus) {

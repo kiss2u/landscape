@@ -43,7 +43,6 @@ export enum IfaceIpMode {
   Nothing = "nothing",
   Static = "static",
   PPPoE = "pppoe",
-  DHCPServer = "dhcpserver",
   DHCPClient = "dhcpclient",
 }
 export type IfaceIpModelConfig =

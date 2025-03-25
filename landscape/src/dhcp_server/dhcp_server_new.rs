@@ -12,7 +12,7 @@ use crate::dump::udp_packet::dhcp::{
 
 use cidr::Ipv4Inet;
 use futures::TryStreamExt;
-use landscape_common::dhcp::DHCPv4ServerConfig;
+use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem, DHCPv4ServerConfig};
 use landscape_common::net::MacAddr;
 use landscape_common::service::dhcp::DHCPv4ServiceWatchStatus;
 use landscape_common::service::ServiceStatus;
@@ -22,8 +22,7 @@ use rtnetlink::{new_connection, Handle};
 use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
 
-const OFFER_VALID_TIME: u64 = 20;
-const DEFAULT_RENT_TIME: u64 = 60 * 60 * 12;
+const OFFER_VALID_TIME: u32 = 20;
 const IP_EXPIRE_INTERVAL: u64 = 60 * 10;
 
 async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Handle) {
@@ -139,12 +138,18 @@ pub async fn dhcp_v4_server(
     let timeout_timer = tokio::time::sleep(tokio::time::Duration::from_secs(IP_EXPIRE_INTERVAL));
     tokio::pin!(timeout_timer);
     let mut dhcp_server = DHCPv4Server::init(config);
+
     loop {
         tokio::select! {
             // 处理消息分支
             message = message_rx.recv() => {
                 match message {
-                    Some(message) => handle_dhcp_message(&mut dhcp_server, &send_socket, message).await,
+                    Some(message) => {
+                        let need_update_data = handle_dhcp_message(&mut dhcp_server, &send_socket, message).await;
+                        if need_update_data {
+                            service_status.just_change_data(dhcp_server.get_offed_info());
+                        }
+                    },
                     None => {
                         tracing::error!("dhcp server handle server fail, exit loop");
                         break;
@@ -154,7 +159,8 @@ pub async fn dhcp_v4_server(
             // 租期超时分支
             _ = &mut timeout_timer => {
                 // dhcp_status.expire_check();
-                // timeout_timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(IP_EXPIRE_INTERVAL));
+                timeout_timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(IP_EXPIRE_INTERVAL));
+                service_status.just_change_data(dhcp_server.get_offed_info());
             }
             // 处理外部关闭服务通知
             change_result = dhcp_server_service_status.changed() => {
@@ -181,7 +187,7 @@ async fn handle_dhcp_message(
     dhcp_server: &mut DHCPv4Server,
     send_socket: &Arc<UdpSocket>,
     (message, msg_addr): (Vec<u8>, SocketAddr),
-) {
+) -> bool {
     let dhcp = DhcpEthFrame::new(&message);
     // tracing::info!("dhcp: {dhcp:?}");
 
@@ -190,7 +196,7 @@ async fn handle_dhcp_message(
         match dhcp.op {
             1 => match dhcp.options.message_type {
                 DhcpOptionMessageType::Discover => {
-                    let Some(payload) = gen_offer(dhcp_server, dhcp) else { return };
+                    let Some(payload) = gen_offer(dhcp_server, dhcp) else { return false };
                     let payload = crate::dump::udp_packet::EthUdpType::Dhcp(Box::new(payload));
 
                     let addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::BROADCAST), 68);
@@ -204,10 +210,11 @@ async fn handle_dhcp_message(
                             tracing::error!("error: {:?}", e);
                         }
                     }
+                    return true;
                 }
                 DhcpOptionMessageType::Request => {
                     let Some(payload) = gen_ack(dhcp_server, dhcp) else {
-                        return;
+                        return false;
                     };
 
                     let addr = if payload.is_broaddcast() {
@@ -232,6 +239,7 @@ async fn handle_dhcp_message(
                             tracing::error!("error: {:?}", e);
                         }
                     }
+                    return true;
                 }
                 DhcpOptionMessageType::Decline => todo!(),
                 DhcpOptionMessageType::Ack => todo!(),
@@ -257,12 +265,13 @@ async fn handle_dhcp_message(
             _ => {}
         }
     }
+    false
 }
 
 #[derive(Debug)]
 pub struct DHCPv4Server {
     /// DHCP 服务启动时间
-    boot_time: Instant,
+    relative_boot_time: Instant,
     /// 服务器 IP
     server_ip: Ipv4Addr,
     /// 分配 IP 开始地址
@@ -272,10 +281,12 @@ pub struct DHCPv4Server {
     /// 已分配的 IP 列表
     allocated_host: HashSet<Ipv4Addr>,
     /// 已分配的 IP
-    offered_ip: HashMap<MacAddr, (Ipv4Addr, u64, u64)>,
+    offered_ip: HashMap<MacAddr, (Ipv4Addr, u64, u32)>,
 
     /// 持有的 OPTIONS
     options_map: HashMap<u8, DhcpOptions>,
+
+    pub address_lease_time: u32,
 }
 
 impl DHCPv4Server {
@@ -316,14 +327,18 @@ impl DHCPv4Server {
             options_map.insert(each.get_index(), each.clone());
         }
 
+        let address_lease_time =
+            config.address_lease_time.unwrap_or(LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME);
+
         DHCPv4Server {
-            boot_time: Instant::now(),
+            relative_boot_time: Instant::now(),
             server_ip: config.server_ip_addr,
             ip_range_start,
             range_capacity,
             allocated_host: HashSet::new(),
             offered_ip: HashMap::new(),
             options_map,
+            address_lease_time,
         }
     }
 
@@ -350,7 +365,7 @@ impl DHCPv4Server {
             } else {
                 self.offered_ip.insert(
                     mac_addr.clone(),
-                    (address, self.boot_time.elapsed().as_secs(), OFFER_VALID_TIME),
+                    (address, self.relative_boot_time.elapsed().as_secs(), OFFER_VALID_TIME),
                 );
                 self.allocated_host.insert(address);
                 return Some(address);
@@ -363,11 +378,11 @@ impl DHCPv4Server {
     /// true 表示有清理
     /// false 表示无法清理
     pub fn clean_expire_ip(&mut self) -> bool {
-        let current_time = self.boot_time.elapsed().as_secs();
+        let current_time = self.relative_boot_time.elapsed().as_secs();
 
         let mut remove_keys = vec![];
         self.offered_ip.retain(|_key, &mut value| {
-            if current_time > (value.1 + value.2) {
+            if current_time > (value.1 + value.2 as u64) {
                 remove_keys.push(value.0);
                 false
             } else {
@@ -386,8 +401,8 @@ impl DHCPv4Server {
     pub fn ack_request(&mut self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
         if let Some((ip, offer_time, valid_time)) = self.offered_ip.get_mut(mac_addr) {
             if *ip == ip_addr {
-                *offer_time = self.boot_time.elapsed().as_secs();
-                *valid_time = DEFAULT_RENT_TIME;
+                *offer_time = self.relative_boot_time.elapsed().as_secs();
+                *valid_time = self.address_lease_time;
                 return true;
             } else {
                 tracing::error!(
@@ -398,6 +413,20 @@ impl DHCPv4Server {
             tracing::error!("can not find this request offer record client: {mac_addr:?} request ip: {ip_addr:?}")
         }
         false
+    }
+
+    pub fn get_offed_info(&self) -> DHCPv4OfferInfo {
+        let mut offered_ips = Vec::with_capacity(self.offered_ip.len());
+        let relative_boot_time = self.relative_boot_time.elapsed().as_secs();
+        for (mac, (ip, relative_active_time, expire_time)) in self.offered_ip.iter() {
+            offered_ips.push(DHCPv4OfferInfoItem {
+                mac: mac.clone(),
+                ip: ip.clone(),
+                relative_active_time: *relative_active_time,
+                expire_time: *expire_time,
+            });
+        }
+        DHCPv4OfferInfo { relative_boot_time, offered_ips }
     }
 }
 
@@ -481,10 +510,8 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
     };
 
     let mut options = DhcpOptionFrame { message_type, options, end: vec![255] };
-    options.update_or_create_option(DhcpOptions::AddressLeaseTime(
-        LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME,
-    ));
 
+    options.update_or_create_option(DhcpOptions::AddressLeaseTime(server.address_lease_time));
     options.update_or_create_option(DhcpOptions::ServerIdentifier(server.server_ip));
 
     let offer = DhcpEthFrame {
