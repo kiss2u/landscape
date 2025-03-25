@@ -62,6 +62,15 @@ impl<T: WatchServiceTrait> WatchService<T> {
         }
     }
 
+    pub fn is_running(&self) -> bool {
+        let inner = self.0.borrow();
+        let status = inner.get_current_status_code();
+        match status {
+            ServiceStatus::Running => true,
+            _ => false,
+        }
+    }
+
     pub fn is_stop(&self) -> bool {
         let inner = self.0.borrow();
         let status = inner.get_current_status_code();
@@ -86,6 +95,7 @@ impl<T: WatchServiceTrait> WatchService<T> {
         self.0.subscribe().changed().await
     }
 
+    /// Will not send stop
     pub async fn wait_to_stopping(&self) {
         let _ = self
             .0

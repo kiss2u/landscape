@@ -19,7 +19,7 @@ async fn main() {
 
     println!("interface name: {:?}", interface);
     // Create a channel to receive on
-    let (mut tx, mut rx) = match datalink::channel(&interface, Default::default()) {
+    let (mut tx, _) = match datalink::channel(&interface, Default::default()) {
         Ok(Ethernet(tx, rx)) => (tx, rx),
         Ok(_) => panic!("packetdump: unhandled channel type"),
         Err(e) => panic!("packetdump: unable to create channel: {}", e),

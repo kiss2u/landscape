@@ -5,11 +5,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::{
-    pppd_service::{PPPDServiceConfig, PPPDServiceManager},
-    WatchServiceStatus,
+use landscape::service::pppd_service::{PPPDService, PPPDServiceConfig};
+use landscape_common::{
+    service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
+    store::storev2::StoreFileManager,
 };
-use landscape_common::store::storev2::StoreFileManager;
 use serde_json::Value;
 use tokio::sync::Mutex;
 
@@ -17,7 +17,7 @@ use crate::{error::LandscapeApiError, SimpleResult};
 
 #[derive(Clone)]
 struct LandscapeIfacePPPDServices {
-    service: PPPDServiceManager,
+    service: ServiceManager<PPPDService>,
     store: Arc<Mutex<StoreFileManager<PPPDServiceConfig>>>,
 }
 // 755
@@ -65,7 +65,7 @@ pub async fn get_iface_pppd_paths(mut store: StoreFileManager<PPPDServiceConfig>
     check_pppd_sh();
 
     let share_state = LandscapeIfacePPPDServices {
-        service: PPPDServiceManager::init(store.list()).await,
+        service: ServiceManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
     };
     Router::new()
@@ -125,7 +125,7 @@ async fn handle_iface_pppd_status(
     let result = SimpleResult { success: true };
 
     // TODO 调用 IfaceIpModelConfig 的 check_iface_status 检查当前的 iface 是否能切换这个状态
-    if let Ok(()) = state.service.start_new_service(service_config.clone()).await {
+    if let Ok(()) = state.service.update_service(service_config.clone()).await {
         let mut write_lock = state.store.lock().await;
         write_lock.set(service_config);
         drop(write_lock);
@@ -157,9 +157,9 @@ async fn delete_and_stop_iface_pppd_by_attach_iface_name(
         let data = if let Some((iface_status, _)) = write_lock.remove(name) {
             iface_status
         } else {
-            WatchServiceStatus::default()
+            DefaultWatchServiceStatus::new()
         };
-        data.stop().await;
+        data.wait_stop().await;
     }
 
     drop(write_lock);
@@ -178,11 +178,11 @@ async fn delete_and_stop_iface_pppd(
     let data = if let Some((iface_status, _)) = write_lock.remove(&iface_name) {
         iface_status
     } else {
-        WatchServiceStatus::default()
+        DefaultWatchServiceStatus::new()
     };
     drop(write_lock);
     // 停止服务
-    data.stop().await;
+    data.wait_stop().await;
     let result = serde_json::to_value(data);
     Json(result.unwrap())
 }

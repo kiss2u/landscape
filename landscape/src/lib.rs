@@ -22,7 +22,6 @@ pub mod firewall;
 pub mod icmp;
 pub mod iface;
 pub mod observer;
-pub mod packet_mark;
 pub mod pppd_client;
 pub mod pppoe_client;
 pub mod routerstatus;

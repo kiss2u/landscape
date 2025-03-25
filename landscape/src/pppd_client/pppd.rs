@@ -3,6 +3,8 @@ use std::net::Ipv4Addr;
 use std::process::Command;
 use std::process::Stdio;
 
+use landscape_common::service::DefaultWatchServiceStatus;
+use landscape_common::service::ServiceStatus;
 use tokio::sync::{oneshot, watch};
 
 use landscape_common::global_const::default_router::RouteInfo;
@@ -10,27 +12,23 @@ use landscape_common::global_const::default_router::RouteType;
 use landscape_common::global_const::default_router::LD_ALL_ROUTERS;
 
 use super::PPPDConfig;
-use crate::service::ServiceStatus;
 
 pub async fn create_pppd_thread(
     attach_iface_name: String,
     ppp_iface_name: String,
     pppd_conf: PPPDConfig,
-    service_status: watch::Sender<ServiceStatus>,
+    service_status: DefaultWatchServiceStatus,
 ) {
-    service_status.send_replace(ServiceStatus::Staring);
+    service_status.just_change_status(ServiceStatus::Staring);
 
     let (tx, mut rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
 
-    service_status.send_replace(ServiceStatus::Running);
-    let mut service_status_receiver = service_status.subscribe();
+    service_status.just_change_status(ServiceStatus::Running);
+    let service_status_clone = service_status.clone();
     tokio::spawn(async move {
-        let stop_wait = service_status_receiver.wait_for(|status| {
-            matches!(status, ServiceStatus::Stopping)
-                || matches!(status, ServiceStatus::Stop { .. })
-        });
-        tracing::info!("等待外部停止信号");
+        let stop_wait = service_status_clone.wait_to_stopping();
+        tracing::debug!("等待外部停止信号");
         let _ = stop_wait.await;
         tracing::info!("接收外部停止信号");
         let _ = tx.send(());
@@ -39,7 +37,7 @@ pub async fn create_pppd_thread(
 
     let Ok(_) = pppd_conf.write_config(&attach_iface_name, &ppp_iface_name) else {
         tracing::error!("pppd 配置写入失败");
-        service_status.send_replace(ServiceStatus::Stop { message: None });
+        service_status.just_change_status(ServiceStatus::Stop);
         return;
     };
 
@@ -131,5 +129,5 @@ pub async fn create_pppd_thread(
     if as_router {
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
-    service_status.send_replace(ServiceStatus::Stop { message: None });
+    service_status.just_change_status(ServiceStatus::Stop);
 }

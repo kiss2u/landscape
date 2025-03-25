@@ -8,17 +8,18 @@ use axum::{
 use serde_json::Value;
 use tokio::sync::{broadcast, Mutex};
 
-use landscape::service::{
-    ipconfig::{IfaceIpServiceConfig, IpConfigManager},
-    WatchServiceStatus,
+use landscape::service::ipconfig::{IPConfigService, IfaceIpServiceConfig};
+use landscape_common::{
+    observer::IfaceObserverAction,
+    service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
+    store::storev2::StoreFileManager,
 };
-use landscape_common::{observer::IfaceObserverAction, store::storev2::StoreFileManager};
 
 use crate::{error::LandscapeApiError, SimpleResult};
 
 #[derive(Clone)]
 struct LandscapeIfaceIpServices {
-    service: IpConfigManager,
+    service: ServiceManager<IPConfigService>,
     store: Arc<Mutex<StoreFileManager<IfaceIpServiceConfig>>>,
 }
 
@@ -27,7 +28,7 @@ pub async fn get_iface_ipconfig_paths(
     mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
 ) -> Router {
     let share_state = LandscapeIfaceIpServices {
-        service: IpConfigManager::init(store.list()).await,
+        service: ServiceManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
     };
 
@@ -44,7 +45,7 @@ pub async fn get_iface_ipconfig_paths(
                         continue;
                     };
                     drop(read_lock);
-                    let _ = share_state_copy.service.start_new_service(service_config).await;
+                    let _ = share_state_copy.service.update_service(service_config).await;
                 }
                 IfaceObserverAction::Down(_) => {}
             }
@@ -93,7 +94,7 @@ async fn get_iface_service_status(
     let data = if let Some((iface_status, _)) = read_lock.get(&iface_name) {
         iface_status.clone()
     } else {
-        WatchServiceStatus::default()
+        DefaultWatchServiceStatus::new()
     };
     let result = serde_json::to_value(data);
     Json(result.unwrap())
@@ -107,7 +108,7 @@ async fn handle_iface_service_status(
     // let write_data = serde_json::to_string(&service_config);
 
     // TODO 调用 IfaceIpModelConfig 的 check_iface_status 检查当前的 iface 是否能切换这个状态
-    if let Ok(()) = state.service.start_new_service(service_config.clone()).await {
+    if let Ok(()) = state.service.update_service(service_config.clone()).await {
         let mut write_lock = state.store.lock().await;
         write_lock.set(service_config);
         drop(write_lock);
@@ -128,11 +129,11 @@ async fn delete_and_stop_iface_service(
     let data = if let Some((iface_status, _)) = write_lock.remove(&iface_name) {
         iface_status
     } else {
-        WatchServiceStatus::default()
+        DefaultWatchServiceStatus::new()
     };
     drop(write_lock);
     // 停止服务
-    data.stop().await;
+    data.wait_stop().await;
     let result = serde_json::to_value(data);
     Json(result.unwrap())
 }

@@ -1,3 +1,4 @@
+use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use regex::Regex;
 use serde::Serialize;
 use std::{fs::File, io::BufRead, path::PathBuf};
@@ -8,38 +9,36 @@ use bollard::{
 };
 use tokio_stream::StreamExt;
 
-use crate::{
-    get_all_devices,
-    service::{ServiceStatus, WatchServiceStatus},
-};
+use crate::get_all_devices;
 
 const REDIRECT_ID_LABEL_NAME: &str = "ld_red_id";
 
 /// docker 监听服务的状态结构体
 #[derive(Serialize, Debug, Clone)]
 pub struct LandscapeDockerService {
-    pub status: WatchServiceStatus,
+    pub status: DefaultWatchServiceStatus,
     pub data_path: PathBuf,
 }
 
 impl LandscapeDockerService {
     pub fn new(data_path: PathBuf) -> Self {
-        let status = WatchServiceStatus::default();
+        let status = DefaultWatchServiceStatus::new();
         LandscapeDockerService { status, data_path }
     }
 
     pub async fn start_to_listen_event(&self) {
         // 检测是否已经启动了
-        self.status.stop().await;
-        let status = self.status.0.clone();
+        self.status.wait_stop().await;
+        let status = self.status.clone();
         tokio::spawn(async move {
-            status.send_replace(ServiceStatus::Running);
+            status.just_change_status(ServiceStatus::Staring);
             let docker = Docker::connect_with_socket_defaults();
             let docker = docker.unwrap();
             let mut event_stream = docker.events::<String>(None);
             let mut receiver = status.subscribe();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
             let mut timeout_times = 0;
+            status.just_change_status(ServiceStatus::Running);
             loop {
                 tokio::select! {
                     event_msg = event_stream.next() => {
@@ -58,14 +57,14 @@ impl LandscapeDockerService {
                             tracing::error!("get change result error. exit loop");
                             break;
                         }
-                        if matches!(*status.borrow(), ServiceStatus::Stopping | ServiceStatus::Stop { .. }) {
+                        if status.is_exit() {
                             tracing::error!("stop exit");
                             break;
                         }
 
                     }
                     _ = interval.tick() => {
-                        if matches!(*status.borrow(), ServiceStatus::Running) {
+                        if status.is_running() {
                             match docker.ping().await {
                                 Ok(_) => {
                                     // println!("docker event loop ok event: {msg:?}");
@@ -84,7 +83,7 @@ impl LandscapeDockerService {
                 };
             }
 
-            status.send_replace(ServiceStatus::Stop { message: None });
+            status.just_change_status(ServiceStatus::Stop);
         });
     }
 }

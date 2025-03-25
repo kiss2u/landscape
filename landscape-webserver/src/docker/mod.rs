@@ -49,7 +49,7 @@ async fn start_docker_status(State(state): State<LandscapeDockerService>) -> Jso
 }
 
 async fn stop_docker_status(State(state): State<LandscapeDockerService>) -> Json<Value> {
-    state.status.stop().await;
+    state.status.wait_stop().await;
     let result = serde_json::to_value(&state.status);
     Json(result.unwrap())
 }

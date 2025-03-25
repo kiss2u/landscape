@@ -1,11 +1,37 @@
-use std::{collections::HashMap, sync::Arc};
-
-use landscape_common::store::storev2::LandScapeStore;
+use landscape_common::{mark::PacketMark, service::ServiceStatus};
+use landscape_common::{
+    service::{service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus},
+    store::storev2::LandScapeStore,
+};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::oneshot;
 
-use super::{ServiceStatus, WatchServiceStatus};
 use crate::iface::get_iface_by_name;
+
+#[derive(Clone)]
+pub struct MarkService;
+
+impl ServiceHandler for MarkService {
+    type Status = DefaultServiceStatus;
+    type Config = PacketMarkServiceConfig;
+
+    async fn initialize(config: PacketMarkServiceConfig) -> DefaultWatchServiceStatus {
+        let service_status = DefaultWatchServiceStatus::new();
+
+        if config.enable {
+            if let Some(iface) = get_iface_by_name(&config.iface_name).await {
+                let status_clone = service_status.clone();
+                tokio::spawn(async move {
+                    create_mark_service(iface.index as i32, iface.mac.is_some(), status_clone).await
+                });
+            } else {
+                tracing::error!("Interface {} not found", config.iface_name);
+            }
+        }
+
+        service_status
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PacketMarkServiceConfig {
@@ -19,109 +45,60 @@ impl LandScapeStore for PacketMarkServiceConfig {
     }
 }
 
-type ServiceStatusAndConfigPair = (WatchServiceStatus, mpsc::Sender<PacketMarkServiceConfig>);
-#[derive(Clone)]
-pub struct MarkServiceManager {
-    pub services: Arc<RwLock<HashMap<String, ServiceStatusAndConfigPair>>>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+/// Mark 标记的配置
+pub struct MarkRuleConfig {
+    pub name: String,
+    // 优先级
+    pub index: u32,
+    // IP 来源
+    pub source: Vec<WallRuleSource>,
+
+    pub mark: PacketMark,
 }
 
-impl MarkServiceManager {
-    pub async fn init(init_config: Vec<PacketMarkServiceConfig>) -> MarkServiceManager {
-        //
-        let services = HashMap::new();
-        let services = Arc::new(RwLock::new(services));
-
-        for config in init_config.into_iter() {
-            new_iface_service_thread(config, services.clone()).await;
-        }
-
-        MarkServiceManager { services }
-    }
-
-    pub async fn start_new_service(
-        &self,
-        service_config: PacketMarkServiceConfig,
-    ) -> Result<(), ()> {
-        let read_lock = self.services.read().await;
-        if let Some((_, sender)) = read_lock.get(&service_config.iface_name) {
-            let result = if let Err(e) = sender.try_send(service_config) {
-                match e {
-                    mpsc::error::TrySendError::Full(_) => {
-                        tracing::error!("已经有配置在等待了");
-                        Err(())
-                    }
-                    mpsc::error::TrySendError::Closed(_) => {
-                        tracing::error!("内部错误");
-                        Err(())
-                    }
-                }
-            } else {
-                Ok(())
-            };
-            drop(read_lock);
-            result
-        } else {
-            drop(read_lock);
-            new_iface_service_thread(service_config, self.services.clone()).await;
-            Ok(())
+impl Default for MarkRuleConfig {
+    fn default() -> Self {
+        Self {
+            name: "default rule".into(),
+            index: 10000,
+            mark: Default::default(),
+            source: vec![],
         }
     }
 }
 
-async fn new_iface_service_thread(
-    service_config: PacketMarkServiceConfig,
-    services: Arc<RwLock<HashMap<String, ServiceStatusAndConfigPair>>>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum WallRuleSource {
+    Text { target_ip: [u8; 4], mask: u8 },
+    GeoKey { key: String },
+}
+
+pub async fn create_mark_service(
+    ifindex: i32,
+    has_mac: bool,
+    service_status: DefaultWatchServiceStatus,
 ) {
-    let (tx, mut rx) = mpsc::channel::<PacketMarkServiceConfig>(1);
-    let iface_name_clone = service_config.iface_name.clone();
-    let _ = tx.send(service_config).await;
-    let mut write_lock = services.write().await;
-
-    let current_status = WatchServiceStatus::default();
-    write_lock.insert(iface_name_clone.clone(), (current_status.clone(), tx));
-    drop(write_lock);
+    service_status.just_change_status(ServiceStatus::Staring);
+    let (tx, rx) = oneshot::channel::<()>();
+    let (other_tx, other_rx) = oneshot::channel::<()>();
+    service_status.just_change_status(ServiceStatus::Running);
+    let service_status_clone = service_status.clone();
     tokio::spawn(async move {
-        let mut iface_status: Option<WatchServiceStatus> = Some(current_status);
-        while let Some(config) = rx.recv().await {
-            if let Some(exist_status) = iface_status.take() {
-                exist_status.stop().await;
-                drop(exist_status);
-            }
-
-            let status = if config.enable {
-                let current_status = WatchServiceStatus::default();
-                if let Some(iface) = get_iface_by_name(&config.iface_name).await {
-                    let service_status_clone = current_status.0.clone();
-                    tokio::spawn(async move {
-                        crate::packet_mark::create_mark_service(
-                            iface.index as i32,
-                            iface.mac.is_some(),
-                            service_status_clone,
-                        )
-                        .await
-                    });
-                } else {
-                    current_status.0.send_replace(ServiceStatus::Stop {
-                        message: Some("can not find iface by name: ".into()),
-                    });
-                }
-                current_status
-            } else {
-                WatchServiceStatus::default()
-            };
-
-            iface_status = Some(status.clone());
-            let mut write_lock = services.write().await;
-            if let Some((target, _)) = write_lock.get_mut(&config.iface_name) {
-                *target = status;
-            } else {
-                break;
-            }
-            drop(write_lock);
-        }
-
-        if let Some(exist_status) = iface_status.take() {
-            exist_status.stop().await;
-        }
+        let stop_wait = service_status_clone.wait_to_stopping();
+        tracing::info!("等待外部停止信号");
+        let _ = stop_wait.await;
+        tracing::info!("接收外部停止信号");
+        let _ = tx.send(());
+        tracing::info!("向内部发送停止信号");
     });
+    std::thread::spawn(move || {
+        tracing::info!("启动 packet_mark 在 ifindex: {:?}", ifindex);
+        landscape_ebpf::packet_mark::init_packet_mark(ifindex, has_mac, rx);
+        tracing::info!("向外部线程发送解除阻塞信号");
+        let _ = other_tx.send(());
+    });
+    let _ = other_rx.await;
+    tracing::info!("结束外部线程阻塞");
+    service_status.just_change_status(ServiceStatus::Stop);
 }

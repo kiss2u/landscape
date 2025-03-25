@@ -16,6 +16,8 @@ use landscape_common::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
+use crate::iface::get_iface_by_name;
+
 #[derive(Clone)]
 pub struct WifiService;
 
@@ -28,10 +30,14 @@ impl ServiceHandler for WifiService {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
-            let status_clone = service_status.clone();
-            tokio::spawn(async move {
-                create_wifi_service(config.iface_name, config.config, status_clone).await
-            });
+            if let Some(_) = get_iface_by_name(&config.iface_name).await {
+                let status_clone = service_status.clone();
+                tokio::spawn(async move {
+                    create_wifi_service(config.iface_name, config.config, status_clone).await
+                });
+            } else {
+                tracing::error!("Interface {} not found", config.iface_name);
+            }
         }
 
         service_status

@@ -1,13 +1,13 @@
 use std::net::Ipv4Addr;
 use std::process;
 
+use landscape_common::service::ServiceStatus;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use super::{DEFAULT_CLIENT_MRU, ETH_P_PPOED, ETH_P_PPOES, LCP_ECHO_INTERVAL};
 use crate::dump::pppoe::tags::PPPoETag;
 use crate::dump::pppoe::{PPPOption, PPPoEFrame, PointToPoint};
 use crate::pppoe_client::DEFAULT_TIME_OUT;
-use crate::service::ServiceStatus;
 use landscape_common::net::MacAddr;
 use landscape_ebpf::pppoe;
 
@@ -113,7 +113,7 @@ pub async fn create_pppoe_client(
         }
     }
 
-    service_status.send_replace(ServiceStatus::Stop { message: None });
+    service_status.send_replace(ServiceStatus::Stop);
     tracing::info!("pppoe client down");
 }
 

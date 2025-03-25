@@ -7,7 +7,7 @@ use std::{
 };
 
 use clap::Parser;
-use landscape::service::ServiceStatus;
+use landscape_common::service::ServiceStatus;
 use tokio::sync::oneshot;
 
 #[derive(Parser, Clone, Debug)]
