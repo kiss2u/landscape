@@ -1,3 +1,4 @@
+pub mod dhcp_v4;
 pub mod firewall;
 pub mod icmp_ra;
 pub mod ipconfig;

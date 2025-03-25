@@ -26,7 +26,10 @@ mod iface;
 mod service;
 mod sysinfo;
 
-use service::{firewall::get_firewall_service_paths, packet_mark::get_iface_packet_mark_paths};
+use service::{
+    dhcp_v4::get_dhcp_v4_service_paths, firewall::get_firewall_service_paths,
+    packet_mark::get_iface_packet_mark_paths,
+};
 use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
 use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
@@ -70,6 +73,8 @@ async fn main() -> LdResult<()> {
     let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
 
     let mut ipv6pd_store = StoreFileManager::new(home_path.clone(), "ipv6pd_service".to_string());
+    let mut dhcpv4_service_store =
+        StoreFileManager::new(home_path.clone(), "dhcpv4_service".to_string());
     let mut icmpv6ra_store =
         StoreFileManager::new(home_path.clone(), "icmpv6ra_service".to_string());
 
@@ -100,6 +105,7 @@ async fn main() -> LdResult<()> {
         firewalls,
         firewall_rules,
         wifi_configs,
+        dhcpv4_services,
     }) = need_init_config
     {
         iface_store.truncate();
@@ -115,6 +121,7 @@ async fn main() -> LdResult<()> {
         firewall_store.truncate();
         firewall_rules_store.truncate();
         wifi_config_store.truncate();
+        dhcpv4_service_store.truncate();
 
         for each_config in ifaces {
             iface_store.set(each_config);
@@ -165,6 +172,9 @@ async fn main() -> LdResult<()> {
 
         for each_config in wifi_configs {
             wifi_config_store.set(each_config);
+        }
+        for each_config in dhcpv4_services {
+            dhcpv4_service_store.set(each_config);
         }
     }
 
@@ -229,6 +239,7 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_firewall_service_paths(firewall_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_ipconfig_paths(iface_ipconfig_store, dev_obs.resubscribe()).await)
+                .merge(get_dhcp_v4_service_paths(dhcpv4_service_store, dev_obs.resubscribe()).await)
                 .merge(get_wifi_service_paths(wifi_config_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_pppd_paths(iface_pppd_store).await)
                 .merge(get_iface_pdclient_paths(ipv6pd_store, dev_obs.resubscribe()).await)

@@ -44,7 +44,6 @@ where
     Some(first..last + 1)
 }
 
-/// 这是一个更完善的声明式宏实现
 #[macro_export]
 macro_rules! define_options {
     ($name:ident, $code_type:ty, $len_type:ty, {

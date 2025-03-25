@@ -62,6 +62,7 @@ const emit = defineEmits(["click"]);
         @click="emit('click')"
         :focusable="false"
         :type="control_show.btn_type"
+        style="min-width: 67px"
       >
         <template #icon>
           <slot name="btn-icon"> </slot>

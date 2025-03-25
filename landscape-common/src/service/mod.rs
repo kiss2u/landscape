@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use service_code::{WatchService, Watchable};
 
+pub mod dhcp;
 pub mod service_code;
 pub mod service_manager;
 
@@ -48,7 +49,7 @@ impl ServiceStatus {
 pub struct DefaultServiceStatus(pub ServiceStatus);
 
 impl Watchable for DefaultServiceStatus {
-    type HoleData = ();
+    type HoldData = ();
     fn get_current_status_code(&self) -> ServiceStatus {
         self.0.clone()
     }

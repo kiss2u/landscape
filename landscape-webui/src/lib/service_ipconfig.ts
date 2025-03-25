@@ -1,4 +1,3 @@
-import { DhcpServerConfig } from "./dhcp";
 import { ServiceStatus } from "./services";
 
 export enum ZoneType {
@@ -21,8 +20,7 @@ export type WanIpConfigMode =
 
 export type LanIpConfigMode =
   | { t: "nothing" }
-  | { t: "static"; ipv4: number[]; ipv4_mask: number; ipv6: number[] }
-  | DhcpServerConfig;
+  | { t: "static"; ipv4: number[]; ipv4_mask: number; ipv6: number[] };
 
 export type IfaceServiceConfig =
   | { t: IfaceServiceType.Undefined }
@@ -65,7 +63,6 @@ export type IfaceIpModelConfig =
       password: string;
       mtu: number;
     }
-  | DhcpServerConfig
   | { t: "dhcpclient"; default_router: boolean; hostname: string | undefined };
 
 export class IfaceIpServiceConfig {
@@ -87,9 +84,6 @@ export class IfaceIpServiceConfig {
         case IfaceIpMode.PPPoE:
         case IfaceIpMode.DHCPClient:
           this.ip_model = obj.ip_model;
-          break;
-        case IfaceIpMode.DHCPServer:
-          this.ip_model = new DhcpServerConfig(obj.ip_model);
           break;
         default:
           this.ip_model = obj?.ip_model ?? { t: "nothing" };

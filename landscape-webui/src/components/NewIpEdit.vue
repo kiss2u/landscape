@@ -67,7 +67,7 @@ watch(ip_parts_watch, (new_ip) => {
       v-model:value="ipParts[3]"
       :show-button="false"
       min="0"
-      max="254"
+      max="255"
       placeholder=""
     />
     <n-input-group-label v-if="mask !== undefined">/</n-input-group-label>

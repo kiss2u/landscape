@@ -8,6 +8,7 @@ import IPv6PDStatusBtn from "../status_btn/IPv6PDStatusBtn.vue";
 import ICMPv6RAStatusBtn from "../status_btn/ICMPv6RAStatusBtn.vue";
 import WifiStatusBtn from "@/components/status_btn/WifiStatusBtn.vue";
 import NetAddrTransBtn from "@/components/status_btn/NetAddrTransBtn.vue";
+import DHCPv4StatusBtn from "../status_btn/DHCPv4StatusBtn.vue";
 
 import IpConfigModal from "@/components/ipconfig/IpConfigModal.vue";
 import NATEditModal from "@/components/nat/NATEditModal.vue";
@@ -15,6 +16,7 @@ import MarkEditModal from "@/components/mark/MarkEditModal.vue";
 import FirewallServiceEditModal from "@/components/firewall/FirewallServiceEditModal.vue";
 import IPv6PDEditModal from "../ipv6pd/IPv6PDEditModal.vue";
 import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
+import DHCPv4ServiceEditModal from "@/components/dhcp_v4/DHCPv4ServiceEditModal.vue";
 
 import IfaceChangeZone from "../iface/IfaceChangeZone.vue";
 import { AreaCustom, Power, Link, DotMark } from "@vicons/carbon";
@@ -35,7 +37,7 @@ const ifaceNodeStore = useIfaceNodeStore();
 // })
 
 // const nodesData = useNodesData(() => connections.value[0]?.source)
-
+const iface_dhcp_v4_service_edit_show = ref(false);
 const iface_wifi_edit_show = ref(false);
 const iface_firewall_edit_show = ref(false);
 const iface_icmpv6ra_edit_show = ref(false);
@@ -236,6 +238,13 @@ const show_switch = computed(() => {
         :iface_name="node.name"
         :zone="node.zone_type"
       />
+      <!-- DHCPv4 按钮 -->
+      <DHCPv4StatusBtn
+        v-if="show_switch.dhcp_v4"
+        @click="iface_dhcp_v4_service_edit_show = true"
+        :iface_name="node.name"
+        :zone="node.zone_type"
+      />
       <FirewallStatusBtn
         v-if="show_switch.nat_config"
         @click="iface_firewall_edit_show = true"
@@ -294,6 +303,12 @@ const show_switch = computed(() => {
 
   <IpConfigModal
     v-model:show="iface_service_edit_show"
+    :zone="node.zone_type"
+    :iface_name="node.name"
+    @refresh="refresh"
+  />
+  <DHCPv4ServiceEditModal
+    v-model:show="iface_dhcp_v4_service_edit_show"
     :zone="node.zone_type"
     :iface_name="node.name"
     @refresh="refresh"

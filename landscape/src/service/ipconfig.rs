@@ -8,14 +8,12 @@ use landscape_common::{
     args::LAND_HOSTNAME,
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
     store::storev2::LandScapeStore,
-    LANDSCAPE_DEFAULT_LAN_NAME,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{
     dev::LandScapeInterface,
-    dhcp_server::{dhcp_server::init_dhcp_server, DhcpServerIpv4Config},
     iface::{
         config::{IfaceZoneType, NetworkIfaceConfig},
         get_iface_by_name,
@@ -35,16 +33,6 @@ pub struct IfaceIpServiceConfig {
 impl LandScapeStore for IfaceIpServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
-    }
-}
-
-impl IfaceIpServiceConfig {
-    pub fn get_default_lan_bridge() -> IfaceIpServiceConfig {
-        IfaceIpServiceConfig {
-            iface_name: LANDSCAPE_DEFAULT_LAN_NAME.into(),
-            enable: true,
-            ip_model: IfaceIpModelConfig::DhcpServer(DhcpServerIpv4Config::default()),
-        }
     }
 }
 
@@ -78,7 +66,6 @@ pub enum IfaceIpModelConfig {
         default_router: bool,
         hostname: Option<String>,
     },
-    DhcpServer(DhcpServerIpv4Config),
 }
 
 impl IfaceIpModelConfig {
@@ -90,9 +77,6 @@ impl IfaceIpModelConfig {
             }
             IfaceIpModelConfig::DhcpClient { .. } => {
                 matches!(iface_config.zone_type, IfaceZoneType::Wan)
-            }
-            IfaceIpModelConfig::DhcpServer { .. } => {
-                matches!(iface_config.zone_type, IfaceZoneType::Lan)
             }
             _ => true,
         }
@@ -337,10 +321,6 @@ async fn init_service_from_config(
                     message: Some("mac addr is empty".into()),
                 });
             }
-        }
-        IfaceIpModelConfig::DhcpServer(config) => {
-            tracing::info!("使用的  DHCP server 配置是: {config:?}");
-            init_dhcp_server(iface.name.clone(), config, ip_config.clone()).await;
         }
     };
 

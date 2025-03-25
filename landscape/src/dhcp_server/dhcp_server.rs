@@ -73,6 +73,7 @@ async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Han
     }
 }
 
+#[deprecated]
 pub async fn init_dhcp_server(
     iface_name: String,
     dhcp_config: DhcpServerIpv4Config,

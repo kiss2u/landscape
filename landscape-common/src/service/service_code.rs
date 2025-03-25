@@ -6,12 +6,12 @@ use tokio::sync::watch;
 use super::ServiceStatus;
 
 pub trait Watchable {
-    type HoleData;
+    type HoldData;
     fn get_current_status_code(&self) -> ServiceStatus;
 
     fn modify_curent_status(&mut self, status: ServiceStatus);
 
-    fn change_status(&mut self, new_status: ServiceStatus, data: Option<Self::HoleData>) -> bool;
+    fn change_status(&mut self, new_status: ServiceStatus, data: Option<Self::HoldData>) -> bool;
 }
 
 pub trait WatchServiceTrait: Clone + Serialize + Default + Watchable {}
@@ -26,6 +26,10 @@ impl<T: WatchServiceTrait> WatchService<T> {
         let (sender, _) = watch::channel(T::default());
         Self(sender)
     }
+    pub fn new_with_data(data: T) -> Self {
+        let (sender, _) = watch::channel(data);
+        Self(sender)
+    }
 
     pub fn send_replace(&self, status: T) -> T {
         self.0.send_replace(status)
@@ -35,7 +39,7 @@ impl<T: WatchServiceTrait> WatchService<T> {
         self.0.send_if_modified(|current| current.change_status(new_status, None));
     }
 
-    pub fn change_status_with_data(&self, new_status: ServiceStatus, data: Option<T::HoleData>) {
+    pub fn change_status_with_data(&self, new_status: ServiceStatus, data: Option<T::HoldData>) {
         self.0.send_if_modified(|current| current.change_status(new_status, data));
     }
 

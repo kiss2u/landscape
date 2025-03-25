@@ -1,8 +1,22 @@
 import { Netmask } from "netmask";
-import { IfaceIpMode } from "./service_ipconfig";
 
-export class DhcpServerConfig {
-  t: IfaceIpMode.DHCPServer;
+export class DHCPv4ServiceConfig {
+  iface_name: string;
+  enable: boolean;
+  config: DHCPv4ServerConfig;
+
+  constructor(obj?: {
+    iface_name: string;
+    enable?: boolean;
+    config?: DHCPv4ServerConfig;
+  }) {
+    this.iface_name = obj?.iface_name ?? "";
+    this.enable = obj?.enable ?? true;
+    this.config = new DHCPv4ServerConfig(obj?.config);
+  }
+}
+
+export class DHCPv4ServerConfig {
   options: any[];
   server_ip_addr: string;
   network_mask: number;
@@ -16,7 +30,6 @@ export class DhcpServerConfig {
     ip_range_start?: string;
     ip_range_end?: string;
   }) {
-    this.t = IfaceIpMode.DHCPServer;
     this.options = obj?.options ?? [];
     this.server_ip_addr = obj?.server_ip_addr ?? "192.168.5.1";
     this.network_mask = obj?.network_mask ?? 24;
@@ -37,5 +50,5 @@ export function get_dhcp_range(cidr: string): [string, string] {
       sec_ip = ip;
     }
   });
-  return [sec_ip, block.last];
+  return [sec_ip, block.broadcast];
 }

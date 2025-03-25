@@ -7,9 +7,9 @@ use crate::{
     firewall::FirewallServiceConfig,
     iface::config::NetworkIfaceConfig,
     service::{
-        ipconfig::IfaceIpServiceConfig, ipv6pd::IPV6PDServiceConfig, nat_service::NatServiceConfig,
-        packet_mark_service::PacketMarkServiceConfig, pppd_service::PPPDServiceConfig,
-        ra::IPV6RAServiceConfig,
+        dhcp_v4::DHCPv4ServiceConfig, ipconfig::IfaceIpServiceConfig, ipv6pd::IPV6PDServiceConfig,
+        nat_service::NatServiceConfig, packet_mark_service::PacketMarkServiceConfig,
+        pppd_service::PPPDServiceConfig, ra::IPV6RAServiceConfig,
     },
     wifi::WifiServiceConfig,
 };
@@ -88,6 +88,7 @@ pub struct InitConfig {
     pub firewall_rules: Vec<FirewallRuleConfig>,
 
     pub wifi_configs: Vec<WifiServiceConfig>,
+    pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
 }
 
 pub fn init_ports() {

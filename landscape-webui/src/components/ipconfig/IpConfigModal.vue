@@ -8,9 +8,7 @@ import {
   ZoneType,
   IfaceIpMode,
 } from "@/lib/service_ipconfig";
-import DhcpServerConfigForm from "@/components/ipconfig/DhcpServerConfigForm.vue";
 import { computed, ref } from "vue";
-import { DhcpServerConfig } from "@/lib/dhcp";
 import NewIpEdit from "../NewIpEdit.vue";
 
 const show_model = defineModel<boolean>("show", { required: true });
@@ -97,8 +95,6 @@ function select_ip_model(value: IfaceIpMode) {
       password: "",
       mtu: 1492,
     };
-  } else if (value === IfaceIpMode.DHCPServer) {
-    iface_data.value.ip_model = new DhcpServerConfig();
   } else if (value === IfaceIpMode.DHCPClient) {
     iface_data.value.ip_model = {
       t: IfaceIpMode.DHCPClient,
@@ -190,11 +186,6 @@ function select_ip_model(value: IfaceIpMode) {
             </n-input-group>
           </n-flex>
 
-          <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.DHCPServer">
-            <DhcpServerConfigForm
-              v-model:config="iface_data.ip_model"
-            ></DhcpServerConfigForm>
-          </n-flex>
           <n-flex
             vertical
             style="flex: 1"

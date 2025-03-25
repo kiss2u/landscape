@@ -22,6 +22,20 @@ export class ServiceStatus {
   }
 }
 
+export class DHCPv4ServiceStatus {
+  status: ServiceStatus;
+  message: undefined | string;
+
+  constructor(obj?: { status: ServiceStatus; message?: string }) {
+    this.status = new ServiceStatus(obj?.status);
+    this.message = obj?.message;
+  }
+
+  get_color(themeVars: any) {
+    return this.status.get_color(themeVars);
+  }
+}
+
 export class ServiceExhibitSwitch {
   carrier: boolean;
   enable_in_boot: boolean;
@@ -35,6 +49,7 @@ export class ServiceExhibitSwitch {
   firewall: boolean;
   wifi: boolean;
   station: boolean;
+  dhcp_v4: boolean;
 
   constructor(dev: NetDev) {
     this.carrier = true;
@@ -49,6 +64,7 @@ export class ServiceExhibitSwitch {
     this.firewall = false;
     this.wifi = false;
     this.station = false;
+    this.dhcp_v4 = false;
 
     if (dev.wifi_info !== undefined) {
       if (dev.wifi_info.wifi_type.t == WLANTypeTag.Station) {
@@ -80,7 +96,8 @@ export class ServiceExhibitSwitch {
       this.ip_config = false;
       this.icmpv6ra = true;
     } else if (dev.zone_type === ZoneType.Lan) {
-      this.ip_config = true;
+      this.dhcp_v4 = true;
+      this.ip_config = false;
       this.icmpv6ra = true;
     } else if (dev.zone_type === ZoneType.Wan) {
       this.pppd = true;

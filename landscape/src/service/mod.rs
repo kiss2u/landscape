@@ -2,6 +2,7 @@ use serde::{Serialize, Serializer};
 use tokio::sync::watch;
 use tracing::info;
 
+pub mod dhcp_v4;
 pub mod ipconfig;
 pub mod ipv6pd;
 pub mod nat_service;
