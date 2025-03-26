@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use landscape_common::{
     firewall::{FirewallRuleConfig, FirewallRuleItem, FirewallRuleMark},
     mark::PacketMark,
+    utils::range::NumberRange,
 };
 
 fn convert_mark_map_to_vec_mark(
@@ -45,7 +46,34 @@ fn firewall_rule_into_hash(
             continue;
         }
         for item in ip_rule.items.into_iter() {
-            new_mark_infos.insert(item, ip_rule.mark);
+            if let Some(port_str) = item.local_port {
+                let range = NumberRange::from_str(&port_str).unwrap();
+                if range.start <= range.end {
+                    for insert_port in range.start..=range.end {
+                        new_mark_infos.insert(
+                            FirewallRuleItem {
+                                ip_protocol: item.ip_protocol.clone(),
+                                local_port: Some(insert_port),
+                                address: item.address,
+                                ip_prefixlen: item.ip_prefixlen,
+                            },
+                            ip_rule.mark,
+                        );
+                    }
+                } else {
+                    tracing::error!("port range error: {port_str:?}");
+                }
+            } else {
+                new_mark_infos.insert(
+                    FirewallRuleItem {
+                        ip_protocol: item.ip_protocol,
+                        local_port: None,
+                        address: item.address,
+                        ip_prefixlen: item.ip_prefixlen,
+                    },
+                    ip_rule.mark,
+                );
+            }
         }
     }
     new_mark_infos

@@ -7,7 +7,7 @@ use axum::{
     Router,
 };
 
-use landscape::boot::{boot_check, init_ports, log::init_logger, InitConfig};
+use landscape::boot::{boot_check, log::init_logger, InitConfig};
 use landscape_common::{
     args::{LAND_ARGS, LAND_HOME_PATH, LAND_WEB_ARGS},
     error::LdResult,
@@ -47,14 +47,9 @@ async fn main() -> LdResult<()> {
         panic!("init log error: {e:?}");
     }
     info!("using args: {args:#?}");
-    init_ports();
     let home_path = LAND_HOME_PATH.clone();
 
     info!("config path: {home_path:?}");
-
-    if LAND_ARGS.iface_ob {
-        landscape::observer::ip_observer().await;
-    }
 
     let dev_obs = landscape::observer::dev_observer().await;
     let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());

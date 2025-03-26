@@ -61,17 +61,11 @@ pub fn init_nat(
     // println!("reuse_pinned_map: {:?}", MAP_PATHS.wan_ip);
     landscape_open.maps.wan_ipv4_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
     landscape_open.maps.static_nat_mappings.set_pin_path(&MAP_PATHS.static_nat_mappings).unwrap();
-    landscape_open.maps.nat_expose_ports.set_pin_path(&MAP_PATHS.nat_expose_ports).unwrap();
     if let Err(e) = landscape_open.maps.wan_ipv4_binding.reuse_pinned_map(&MAP_PATHS.wan_ip) {
         tracing::error!("error: {e:?}");
     }
     if let Err(e) =
         landscape_open.maps.static_nat_mappings.reuse_pinned_map(&MAP_PATHS.static_nat_mappings)
-    {
-        tracing::error!("error: {e:?}");
-    }
-    if let Err(e) =
-        landscape_open.maps.nat_expose_ports.reuse_pinned_map(&MAP_PATHS.nat_expose_ports)
     {
         tracing::error!("error: {e:?}");
     }

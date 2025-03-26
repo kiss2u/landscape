@@ -76,7 +76,7 @@ function reflush_zone() {
 
         <template #action>
           <n-flex justify="space-between">
-            <n-button>取消</n-button>
+            <n-button @click="showModal = false">取消</n-button>
             <n-button @click="chageIfaceZone" type="primary">确定</n-button>
           </n-flex>
         </template>

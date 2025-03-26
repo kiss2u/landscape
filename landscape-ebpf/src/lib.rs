@@ -25,8 +25,6 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
     let paths = LandscapeMapPath {
         wan_ip: PathBuf::from(format!("{}/wan_ipv4_binding", ebpf_map_path)),
         static_nat_mappings: PathBuf::from(format!("{}/nat_static_mapping", ebpf_map_path)),
-        nat_expose_ports: PathBuf::from(format!("{}/nat_expose_ports", ebpf_map_path)),
-        // block_ip: PathBuf::from(format!("{}/firewall_block_map", ebpf_map_path)),
         lanip_mark: PathBuf::from(format!("{}/lanip_mark_map", ebpf_map_path)),
         wanip_mark: PathBuf::from(format!("{}/wanip_mark_map", ebpf_map_path)),
         packet_mark: PathBuf::from(format!("{}/packet_mark_map", ebpf_map_path)),
@@ -48,8 +46,6 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
 pub(crate) struct LandscapeMapPath {
     pub wan_ip: PathBuf,
     pub static_nat_mappings: PathBuf,
-    /// expose port
-    pub nat_expose_ports: PathBuf,
     // pub block_ip: PathBuf,
     pub packet_mark: PathBuf,
 

@@ -979,7 +979,19 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb) {
     return TC_ACT_OK;
 }
 
-// static __always_inline int is_out_nat_range(struct __sk_buff *skb) {}
+static __always_inline bool is_out_nat_range(const struct ip_packet_info *pkt, const u16 port) {
+    if (pkt->ip_protocol == IPPROTO_TCP) {
+        if (port < tcp_range_start || port > tcp_range_end) {
+            return true;
+        }
+        return false;
+    } else if (pkt->ip_protocol == IPPROTO_UDP) {
+        if (port < udp_range_start || port > udp_range_end) {
+            return true;
+        }
+        return false;
+    }
+}
 SEC("tc")
 int ingress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">>> ingress_nat >>>"
@@ -1005,23 +1017,6 @@ int ingress_nat(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) {
         return TC_ACT_SHOT;
     }
-    u16 dst_port = bpf_ntohs(packet_info.pair_ip.dst_port);
-    u8 *expose_port = NULL;
-    if (packet_info.ip_protocol == IPPROTO_TCP) {
-        if (dst_port < tcp_range_start || dst_port > tcp_range_end) {
-            // bpf_log_info("find expose_port: %u", dst_port);
-            expose_port = bpf_map_lookup_elem(&nat_expose_ports, &packet_info.pair_ip.dst_port);
-        }
-    } else if (packet_info.ip_protocol == IPPROTO_UDP) {
-        if (dst_port < udp_range_start || dst_port > udp_range_end) {
-            // bpf_log_info("find expose_port: %u", dst_port);
-            expose_port = bpf_map_lookup_elem(&nat_expose_ports, &packet_info.pair_ip.dst_port);
-        }
-    }
-    if (expose_port != NULL) {
-        // bpf_log_info("find expose_port");
-        return TC_ACT_OK;
-    }
 
     bool is_icmpx_error = is_icmp_error_pkt(&packet_info);
     bool allow_create_mapping = packet_info.ip_protocol == IPPROTO_ICMP;
@@ -1032,9 +1027,16 @@ int ingress_nat(struct __sk_buff *skb) {
 
     // bpf_log_info("allow_create_mapping : %d", allow_create_mapping);
 
+    // 先检查是否有静态映射
     ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_INGRESS,
                                 &packet_info.pair_ip, &nat_ingress_value, &nat_egress_value);
     if (ret != TC_ACT_OK) {
+        /// 在映射范围之外的端口直接通过
+        u16 dst_port = bpf_ntohs(packet_info.pair_ip.dst_port);
+        if (is_out_nat_range(&packet_info, dst_port)) {
+            return TC_ACT_UNSPEC;
+        }
+
         ret = ingress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
                                             &packet_info.pair_ip, &nat_egress_value,
                                             &nat_ingress_value);
@@ -1090,35 +1092,6 @@ int ingress_nat(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int self_packet(struct __sk_buff *skb, struct ip_packet_info *pkt) {
-#define BPF_LOG_TOPIC "self_packet"
-    if (pkt->ip_protocol == IPPROTO_ICMP) {
-        return TC_ACT_UNSPEC;
-    }
-    struct bpf_sock_tuple server = {0};
-    struct bpf_sock *sk = NULL;
-
-    server.ipv4.saddr = pkt->pair_ip.dst_addr.ip;
-    server.ipv4.sport = pkt->pair_ip.dst_port;
-    server.ipv4.dport = pkt->pair_ip.src_port;
-    server.ipv4.daddr = pkt->pair_ip.src_addr.ip;
-    if (pkt->ip_protocol == IPPROTO_TCP) {
-        sk = bpf_sk_lookup_tcp(skb, &server, sizeof(server.ipv4), BPF_F_CURRENT_NETNS, 0);
-    } else if (pkt->ip_protocol == IPPROTO_UDP) {
-        sk = bpf_sk_lookup_udp(skb, &server, sizeof(server.ipv4), BPF_F_CURRENT_NETNS, 0);
-    }
-
-    // 找到了 SK
-    if (sk != NULL) {
-        bpf_sk_release(sk);
-        // bpf_log_info("find sk");
-        return TC_ACT_OK;
-    }
-    // 找不到
-    return TC_ACT_UNSPEC;
-#undef BPF_LOG_TOPIC
-}
-
 SEC("tc")
 int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
@@ -1148,12 +1121,6 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("packet pkt_type: %d", packet_info.pkt_type);
     // bpf_log_info("icmp_error_payload_offset: %d", packet_info.icmp_error_payload_offset);
 
-    if (bpf_map_lookup_elem(&nat_expose_ports, &packet_info.pair_ip.src_port) != NULL) {
-        if (self_packet(skb, &packet_info) == TC_ACT_OK) {
-            return TC_ACT_OK;
-        }
-    }
-
     bool is_icmpx_error = is_icmp_error_pkt(&packet_info);
     bool allow_create_mapping = !is_icmpx_error && pkt_allow_initiating_ct(packet_info.pkt_type);
 
@@ -1167,6 +1134,12 @@ int egress_nat(struct __sk_buff *skb) {
                                 &packet_info.pair_ip, &nat_egress_value, &nat_ingress_value);
 
     if (ret != TC_ACT_OK) {
+        /// 在映射范围之外的端口直接通过
+        u16 src_port = bpf_ntohs(packet_info.pair_ip.src_port);
+        if (is_out_nat_range(&packet_info, src_port)) {
+            return TC_ACT_UNSPEC;
+        }
+
         ret = egress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
                                            &packet_info.pair_ip, &nat_egress_value,
                                            &nat_ingress_value);

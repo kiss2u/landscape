@@ -1,6 +1,5 @@
-use std::{collections::HashSet, fs::OpenOptions, io::Write, path::Path};
+use std::{fs::OpenOptions, io::Write, path::Path};
 
-use landscape_ebpf::map_setting;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -14,7 +13,6 @@ use crate::{
     wifi::WifiServiceConfig,
 };
 use landscape_common::{
-    args::LAND_ARGS,
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
     firewall::FirewallRuleConfig,
@@ -89,37 +87,4 @@ pub struct InitConfig {
 
     pub wifi_configs: Vec<WifiServiceConfig>,
     pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
-}
-
-pub fn init_ports() {
-    // ssh port
-    map_setting::add_expose_port(22);
-
-    #[cfg(debug_assertions)]
-    {
-        map_setting::add_expose_port(5173);
-        map_setting::add_expose_port(5800);
-    }
-    #[cfg(not(debug_assertions))]
-    {}
-
-    if LAND_ARGS.export_manager {
-        map_setting::add_expose_port(LAND_ARGS.port);
-    }
-
-    if let Some(ports) = &LAND_ARGS.through_nat_port {
-        let mut insert_ports = HashSet::new();
-        for port in ports {
-            if port.start <= port.end {
-                for insert_port in port.start..=port.end {
-                    insert_ports.insert(insert_port);
-                }
-            } else {
-                tracing::error!("port range error: {port:?}");
-            }
-        }
-        let ports = insert_ports.into_iter().collect();
-        tracing::debug!("through nat ports: {:?}", ports);
-        map_setting::add_expose_ports(ports);
-    }
 }

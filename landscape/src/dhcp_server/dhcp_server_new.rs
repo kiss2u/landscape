@@ -544,20 +544,9 @@ mod tests {
 
     use crate::dhcp_server::dhcp_server_new::DHCPv4Server;
 
-    #[macro_export]
-    macro_rules! init_tracing {
-        () => {
-            let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
-            tracing_subscriber::fmt()
-                .with_max_level(tracing::Level::DEBUG)
-                .with_writer(non_blocking)
-                .init();
-        };
-    }
-
     #[tokio::test]
     pub async fn test_ip_alloc() {
-        init_tracing!();
+        crate::init_tracing!();
         let config = DHCPv4ServerConfig::default();
         let mut dhcp_server = DHCPv4Server::init(config);
         tracing::debug!("dhcp_server: {:#?}", dhcp_server);
@@ -576,7 +565,7 @@ mod tests {
 
     #[test]
     pub fn test_ip_alloc_same_seed_large_then_2_lap() {
-        init_tracing!();
+        crate::init_tracing!();
 
         let ipv4 = Ipv4Inet::new(Ipv4Addr::new(192, 168, 1, 1), 30).unwrap();
 

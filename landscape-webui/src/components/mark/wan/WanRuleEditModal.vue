@@ -119,7 +119,7 @@ async function saveRule() {
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button>取消</n-button>
+        <n-button @click="show = false">取消</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"

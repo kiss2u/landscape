@@ -1,7 +1,16 @@
 use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;
+use netlink_packet_core::NetlinkMessage;
 use netlink_packet_core::NetlinkPayload;
+use netlink_packet_core::NLM_F_ACK;
+use netlink_packet_core::NLM_F_DUMP;
+use netlink_packet_core::NLM_F_REQUEST;
 use netlink_packet_route::link::LinkMessage;
+use netlink_packet_route::nsid::NsidAttribute;
+use netlink_packet_route::nsid::NsidHeader;
+use netlink_packet_route::nsid::NsidMessage;
+use netlink_packet_route::AddressFamily;
+use netlink_packet_route::RouteNetlinkMessage;
 use netlink_sys::{AsyncSocket, SocketAddr};
 use rtnetlink::constants::RTMGRP_IPV4_IFADDR;
 use rtnetlink::constants::RTMGRP_IPV4_ROUTE;
@@ -12,7 +21,8 @@ use rtnetlink::{constants::RTMGRP_LINK, new_connection, Handle};
 #[tokio::main]
 async fn main() -> Result<(), String> {
     // Open the netlink socket
-    let (mut connection, handle, mut messages) = new_connection().map_err(|e| format!("{e}"))?;
+    let (mut connection, mut handle, mut messages) =
+        new_connection().map_err(|e| format!("{e}"))?;
 
     // // Listen for link changes
     let mgroup_flags = RTMGRP_LINK
@@ -38,11 +48,37 @@ async fn main() -> Result<(), String> {
     //     //     _ => todo!(),
     //     // }
     // }
+    
+    // let mut nsid_msg = NsidMessage::default();
+    // nsid_msg.header = NsidHeader { family: AddressFamily::Netlink };
+    // nsid_msg.attributes = vec![
+    //     NsidAttribute::Id(-1),
+    //     NsidAttribute::Pid(0),
+    //     NsidAttribute::Fd(4026532359),
+    //     NsidAttribute::TargetNsid(-1),
+    //     NsidAttribute::CurrentNsid(-1),
+    // ];
+    // let message = RouteNetlinkMessage::GetNsId(nsid_msg);
+    // let mut req = NetlinkMessage::from(message);
+    // req.header.flags = NLM_F_REQUEST | NLM_F_ACK;
+    // // req.header.sequence_number = 1;
+    // req.finalize();
 
-    dump_addresses(&handle, "ens3".to_string()).await;
+    // println!("{:#?}", req);
+    // match handle.request(req) {
+    //     Ok(mut response) => {
+    //         //
+    //         while let Some(msg) = response.next().await {
+    //             println!("{:#?}", msg);
+    //         }
+    //     }
+    //     Err(_) => todo!(),
+    // }
 
-    dump_addresses(&handle, "ens5".to_string()).await;
-    dump_addresses(&handle, "ens4".to_string()).await;
+    // dump_addresses(&handle, "ens3".to_string()).await;
+
+    // dump_addresses(&handle, "ens5".to_string()).await;
+    // dump_addresses(&handle, "ens4".to_string()).await;
     // flush_addresses(handle, "veth-host".to_string()).await;
     Ok(())
 }

@@ -57,6 +57,7 @@ pub fn filter_message_status(
             // println!("Received Inner message: {:?}", inner_message);
             match inner_message {
                 RouteNetlinkMessage::NewLink(link_message) => {
+                    // tracing::debug!("NewLink: {:?}", link_message);
                     if link_message.header.change_mask.contains(&LinkFlag::Up) {
                         let mut ifacename = None;
                         for attr in link_message.attributes {
@@ -87,6 +88,10 @@ pub fn filter_message_status(
                     } else {
                         None
                     }
+                }
+                RouteNetlinkMessage::DelLink(_link_message) => {
+                    // tracing::debug!("DelLink: {:?}", link_message);
+                    None
                 }
                 _ => None,
             }
@@ -138,6 +143,21 @@ fn handle_address_update(link_message: AddressMessage, is_add: bool) {
             landscape_ebpf::map_setting::add_wan_ip(link_ifindex, ip.clone());
         } else {
             landscape_ebpf::map_setting::del_wan_ip(link_ifindex);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::observer::dev_observer;
+
+    #[tokio::test]
+    async fn test_dev_observer() {
+        crate::init_tracing!();
+        let mut info = dev_observer().await;
+
+        while let Ok(msg) = info.recv().await {
+            tracing::debug!("msg: {msg:#?}");
         }
     }
 }

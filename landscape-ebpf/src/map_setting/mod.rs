@@ -26,7 +26,6 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
 
     landscape_open.maps.wan_ipv4_binding.set_pin_path(&paths.wan_ip).unwrap();
     landscape_open.maps.static_nat_mappings.set_pin_path(&paths.static_nat_mappings).unwrap();
-    landscape_open.maps.nat_expose_ports.set_pin_path(&paths.nat_expose_ports).unwrap();
     landscape_open.maps.packet_mark_map.set_pin_path(&paths.packet_mark).unwrap();
     landscape_open.maps.lanip_mark_map.set_pin_path(&paths.lanip_mark).unwrap();
     landscape_open.maps.wanip_mark_map.set_pin_path(&paths.wanip_mark).unwrap();
@@ -73,42 +72,6 @@ pub fn del_wan_ip(ifindex: u32) {
         tracing::error!("delete wan ip error:{e:?}");
     } else {
         tracing::info!("delete wan index: {ifindex:?}");
-    }
-}
-
-pub fn add_expose_ports(ports: Vec<u16>) {
-    let nat_expose_ports = match libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_expose_ports)
-    {
-        Ok(nat_expose_ports) => nat_expose_ports,
-        Err(e) => {
-            tracing::error!("reuse map nat_expose_ports error: {e:?}");
-            return;
-        }
-    };
-
-    let mut keys = vec![];
-    let mut values = vec![];
-    let count = ports.len() as u32;
-    for port in ports.iter() {
-        keys.extend_from_slice(&port.to_be_bytes());
-        values.push(0);
-    }
-    if let Err(e) =
-        nat_expose_ports.update_batch(&keys, &values, count, MapFlags::ANY, MapFlags::ANY)
-    {
-        tracing::error!("add_expose_port:{e:?}");
-    }
-}
-pub fn add_expose_port(port: u16) {
-    add_expose_ports(vec![port]);
-}
-
-pub fn del_expose_port(port: u16) {
-    let nat_expose_ports =
-        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_expose_ports).unwrap();
-    let key = port.to_be_bytes();
-    if let Err(e) = nat_expose_ports.delete(&key) {
-        tracing::error!("del_expose_port:{e:?}");
     }
 }
 

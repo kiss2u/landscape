@@ -188,7 +188,7 @@ pub async fn dhcp_v6_pd_client(
     // }
 
     tracing::info!("DHCP V6 Client Staring");
-    landscape_ebpf::map_setting::add_expose_port(client_port);
+    // landscape_ebpf::map_setting::add_expose_port(client_port);
     let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), client_port);
 
     let socket2 = socket2::Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP)).unwrap();

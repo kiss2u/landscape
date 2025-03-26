@@ -109,18 +109,18 @@ export class FirewallRuleConfig {
 
 export class FirewallRuleItem {
   ip_protocol: IPProtocol;
-  local_port: number | undefined;
+  local_port: string | undefined;
   address: string | undefined;
   ip_prefixlen: number;
 
   constructor(obj?: {
     ip_protocol?: IPProtocol;
-    local_port?: number | undefined;
+    local_port?: string | undefined;
     address?: string | undefined;
     ip_prefixlen?: number;
   }) {
     this.ip_protocol = obj?.ip_protocol ?? IPProtocol.TCP;
-    this.local_port = obj?.local_port ?? 80;
+    this.local_port = obj?.local_port ?? "80";
     this.address = obj?.address ?? "0.0.0.0";
     this.ip_prefixlen = obj?.ip_prefixlen ?? 0;
   }

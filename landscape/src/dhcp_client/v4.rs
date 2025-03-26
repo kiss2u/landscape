@@ -158,7 +158,7 @@ pub async fn dhcp_v4_client(
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
 
-    landscape_ebpf::map_setting::add_expose_port(client_port);
+    // landscape_ebpf::map_setting::add_expose_port(client_port);
 
     tracing::info!("DHCP V4 Client Staring");
 

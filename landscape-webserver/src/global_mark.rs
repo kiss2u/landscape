@@ -8,7 +8,7 @@ use axum::{
 use landscape::firewall::rules::update_firewall_rules;
 use landscape_common::{
     args::LAND_HOME_PATH,
-    firewall::FirewallRuleConfig,
+    firewall::{insert_default_firewall_rule, FirewallRuleConfig},
     ip_mark::{LanIPRuleConfig, WanIPRuleConfig},
     store::storev2::StoreFileManager,
     GEO_IP_FILE_NAME,
@@ -31,6 +31,12 @@ pub async fn get_global_mark_paths(
     mut wan_store: StoreFileManager<WanIPRuleConfig>,
     mut firewall_rules_store: StoreFileManager<FirewallRuleConfig>,
 ) -> Router {
+    if firewall_rules_store.list().is_empty() {
+        if let Some(rule) = insert_default_firewall_rule() {
+            firewall_rules_store.set(rule);
+        }
+    }
+
     let lan_rules = lan_store.list();
     let wan_rules = wan_store.list();
     let firewall_rules = firewall_rules_store.list();
