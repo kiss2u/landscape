@@ -1,3 +1,4 @@
+import { FlowNodeType, NodePositionType } from "./flow";
 import { ZoneType } from "./service_ipconfig";
 
 export class NetDev {
@@ -61,6 +62,33 @@ export class NetDev {
     } else if (this.zone_type == ZoneType.Undefined) {
       return false;
     }
+  }
+
+  get_topology_type(): NodePositionType {
+    if (this.wifi_info !== undefined) {
+      if (this.wifi_info.wifi_type.t == WLANTypeTag.Station) {
+        return NodePositionType.Other;
+      } else if (this.wifi_info.wifi_type.t == WLANTypeTag.Ap) {
+        return NodePositionType.WifiAp;
+      }
+    }
+    if (this.controller_name != undefined || this.controller_id != undefined) {
+      return NodePositionType.Other;
+    }
+
+    if (this.peer_link_id != undefined) {
+      return NodePositionType.Other;
+    }
+    if (this.dev_type === "Ppp") {
+      return NodePositionType.Wan;
+    } else if (this.name === "docker0") {
+      return NodePositionType.Lan;
+    } else if (this.zone_type === ZoneType.Lan) {
+      return NodePositionType.Lan;
+    } else if (this.zone_type === ZoneType.Wan) {
+      return NodePositionType.Wan;
+    }
+    return NodePositionType.Other;
   }
 }
 
