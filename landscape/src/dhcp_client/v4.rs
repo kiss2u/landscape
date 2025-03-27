@@ -293,6 +293,9 @@ pub async fn dhcp_v4_client(
     }
     tracing::info!("DHCP V6 Client Stop: {:#?}", service_status);
 
+    if default_router {
+        LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
+    }
     if !service_status.is_stop() {
         service_status.just_change_status(ServiceStatus::Stop);
     }
@@ -688,6 +691,8 @@ async fn bind_ipv4(
                 })
                 .await;
         }
+    } else {
+        LD_ALL_ROUTERS.del_route_by_iface(iface_name).await;
     }
 
     let renew_time = tokio::time::Instant::now() + Duration::from_secs(renew_time);

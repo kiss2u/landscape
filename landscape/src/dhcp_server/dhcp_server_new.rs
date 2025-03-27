@@ -21,6 +21,7 @@ use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};
 use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
+use tracing::instrument;
 
 const OFFER_VALID_TIME: u32 = 20;
 const IP_EXPIRE_INTERVAL: u64 = 60 * 10;
@@ -70,6 +71,7 @@ async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Han
     }
 }
 
+#[instrument(skip(config, service_status))]
 pub async fn dhcp_v4_server(
     iface_name: String,
     config: DHCPv4ServerConfig,

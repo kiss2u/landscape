@@ -7,9 +7,10 @@ use axum::{
     Router,
 };
 
+use colored::Colorize;
 use landscape::boot::{boot_check, log::init_logger, InitConfig};
 use landscape_common::{
-    args::{LAND_ARGS, LAND_HOME_PATH, LAND_WEB_ARGS},
+    args::{LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
     error::LdResult,
     store::storev2::StoreFileManager,
 };
@@ -42,14 +43,12 @@ struct SimpleResult {
 
 #[tokio::main]
 async fn main() -> LdResult<()> {
-    let args = LAND_ARGS.clone();
     if let Err(e) = init_logger() {
         panic!("init log error: {e:?}");
     }
-    info!("using args: {args:#?}");
-    let home_path = LAND_HOME_PATH.clone();
+    banner();
 
-    info!("config path: {home_path:?}");
+    let home_path = LAND_HOME_PATH.clone();
 
     let dev_obs = landscape::observer::dev_observer().await;
     let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
@@ -83,6 +82,13 @@ async fn main() -> LdResult<()> {
 
     let need_init_config = boot_check(&home_path)?;
 
+    let home_log_str = format!("{}", home_path.display()).bright_green();
+    if !LAND_ARGS.log_output_in_terminal {
+        let log_path = format!("{}", LAND_LOG_ARGS.log_path.display()).green();
+        println!("Log Folder path: {}", log_path);
+        println!("All Config Home path: {home_log_str}");
+    }
+    info!("config path: {home_log_str}");
     info!("init config: {need_init_config:#?}");
 
     // TDDO: 使用宏进行初始化
@@ -211,8 +217,15 @@ async fn main() -> LdResult<()> {
 
     let service = handle_404.into_service();
 
-    info!("web root is: {:?}", LAND_WEB_ARGS.web_root);
-    info!("listen at: {:?}:{:?}", LAND_ARGS.address, LAND_ARGS.port);
+    let web_root_str = format!("{}", LAND_WEB_ARGS.web_root.display()).green();
+    let listen_at_str = format!("{:?}:{:?}", LAND_ARGS.address, LAND_ARGS.port).green();
+    if !LAND_ARGS.log_output_in_terminal {
+        println!("Web Root path: {}", web_root_str);
+        println!("Listen   on: {}", listen_at_str);
+    }
+
+    info!("Web Root path: {}", web_root_str);
+    info!("Listen   on: {}", listen_at_str);
     let serve_dir = ServeDir::new(&LAND_WEB_ARGS.web_root).not_found_service(service);
 
     auth::output_sys_token().await;
@@ -264,4 +277,32 @@ async fn main() -> LdResult<()> {
 /// NOT Found
 async fn handle_404() -> (StatusCode, &'static str) {
     (StatusCode::NOT_FOUND, "Not found")
+}
+
+fn banner() {
+    let banner = r#"
+██╗      █████╗ ███╗   ██╗██████╗ ███████╗ ██████╗ █████╗ ██████╗ ███████╗
+██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝
+██║     ███████║██╔██╗ ██║██║  ██║███████╗██║     ███████║██████╔╝█████╗  
+██║     ██╔══██║██║╚██╗██║██║  ██║╚════██║██║     ██╔══██║██╔═══╝ ██╔══╝  
+███████╗██║  ██║██║ ╚████║██████╔╝███████║╚██████╗██║  ██║██║     ███████╗
+╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝     ╚══════╝
+                                                                          
+██████╗  ██████╗ ██╗   ██╗████████╗███████╗██████╗                        
+██╔══██╗██╔═══██╗██║   ██║╚══██╔══╝██╔════╝██╔══██╗                       
+██████╔╝██║   ██║██║   ██║   ██║   █████╗  ██████╔╝                       
+██╔══██╗██║   ██║██║   ██║   ██║   ██╔══╝  ██╔══██╗                       
+██║  ██║╚██████╔╝╚██████╔╝   ██║   ███████╗██║  ██║                       
+╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝                       
+    "#;
+    let args = LAND_ARGS.clone();
+    let banner = banner.bright_blue().bold();
+    let args_str = format!("{args:#?}").green();
+    info!("{}", banner);
+    info!("Using Args: {}", args_str);
+    if !args.log_output_in_terminal {
+        // 当日志不在 terminal 直接展示时, 仅输出一些信息
+        println!("{}", banner);
+        println!("Using Args: {}", args_str);
+    }
 }

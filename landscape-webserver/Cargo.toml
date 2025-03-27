@@ -8,6 +8,7 @@ landscape = { path = "../landscape" }
 landscape-dns = { path = "../landscape-dns" }
 landscape-common = { path = "../landscape-common" }
 
+colored = { workspace = true }
 jsonwebtoken = "9"
 once_cell = { workspace = true }
 

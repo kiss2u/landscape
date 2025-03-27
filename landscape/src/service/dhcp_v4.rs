@@ -9,6 +9,8 @@ use landscape_common::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::iface::get_iface_by_name;
+
 #[derive(Clone)]
 pub struct DHCPv4Service;
 
@@ -20,15 +22,19 @@ impl ServiceHandler for DHCPv4Service {
         let service_status = DHCPv4ServiceWatchStatus::new();
 
         if config.enable {
-            let status = service_status.clone();
-            tokio::spawn(async move {
-                crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
-                    config.iface_name,
-                    config.config,
-                    status,
-                )
-                .await;
-            });
+            if let Some(_) = get_iface_by_name(&config.iface_name).await {
+                let status = service_status.clone();
+                tokio::spawn(async move {
+                    crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
+                        config.iface_name,
+                        config.config,
+                        status,
+                    )
+                    .await;
+                });
+            } else {
+                tracing::error!("Interface {} not found", config.iface_name);
+            }
         }
 
         service_status

@@ -29,10 +29,8 @@ pub async fn get_network_paths(mut store: StoreFileManager<NetworkIfaceConfig>) 
     // let mut store = StoreFileManager::new(home_path, "network".to_string());
 
     // 从配置初始化当前网络布局环境
-    let nedd_update_config = landscape::init_devs(store.list()).await;
-    for c in nedd_update_config.into_iter() {
-        store.set(c);
-    }
+    landscape::init_devs(store.list()).await;
+
     // println!("==> {:?}", devs);
     let store = Arc::new(Mutex::new(store));
     let share_state = NetworkState { store };

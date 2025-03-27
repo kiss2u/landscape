@@ -141,6 +141,8 @@ async fn init_service_from_config(
                                 .await;
                         }
                     }
+                } else {
+                    LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                 }
 
                 service_status.just_change_status(ServiceStatus::Running);

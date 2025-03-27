@@ -63,6 +63,8 @@ pub async fn create_pppd_thread(
                                     route: RouteType::PPP,
                                 })
                                 .await;
+                        } else {
+                            LD_ALL_ROUTERS.del_route_by_iface(&ppp_iface_name_clone).await;
                         }
                     }
                 }

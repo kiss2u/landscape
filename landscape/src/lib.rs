@@ -29,39 +29,38 @@ pub mod service;
 pub mod store;
 pub mod wifi;
 
-fn gen_default_config(
-    interface_map: &HashMap<String, LandScapeInterface>,
-) -> Vec<NetworkIfaceConfig> {
-    let mut interfaces: Vec<&LandScapeInterface> = interface_map
-        .values()
-        .filter(|ifce| !ifce.is_lo())
-        .filter(|d| !d.is_virtual_dev())
-        .collect();
-    interfaces.sort_by(|&a, &b| b.index.cmp(&a.index));
-    if interfaces.len() < 2 {
-        // 只有一个设备不支持
-        return vec![];
-    }
-    let _wan_iface = interfaces.pop().unwrap();
+// fn gen_default_config(
+//     interface_map: &HashMap<String, LandScapeInterface>,
+// ) -> Vec<NetworkIfaceConfig> {
+//     let mut interfaces: Vec<&LandScapeInterface> = interface_map
+//         .values()
+//         .filter(|ifce| !ifce.is_lo())
+//         .filter(|d| !d.is_virtual_dev())
+//         .collect();
+//     interfaces.sort_by(|&a, &b| b.index.cmp(&a.index));
+//     if interfaces.len() < 2 {
+//         // 只有一个设备不支持
+//         return vec![];
+//     }
+//     let _wan_iface = interfaces.pop().unwrap();
 
-    let br = NetworkIfaceConfig::crate_default_br_lan();
-    let mut dev_configs = vec![];
-    for other_eth in interfaces {
-        // 如果已经有对应的 controller 了就不进行处理了
-        if other_eth.controller_id.is_some() {
-            continue;
-        }
-        let mut dev = NetworkIfaceConfig::from_phy_dev(other_eth);
-        dev.controller_name = Some(br.name.clone());
-        dev_configs.push(dev);
-    }
-    dev_configs.push(br);
-    return dev_configs;
-}
+//     let br = NetworkIfaceConfig::crate_default_br_lan();
+//     let mut dev_configs = vec![];
+//     for other_eth in interfaces {
+//         // 如果已经有对应的 controller 了就不进行处理了
+//         if other_eth.controller_id.is_some() {
+//             continue;
+//         }
+//         let mut dev = NetworkIfaceConfig::from_phy_dev(other_eth);
+//         dev.controller_name = Some(br.name.clone());
+//         dev_configs.push(dev);
+//     }
+//     dev_configs.push(br);
+//     return dev_configs;
+// }
 
 // 初始化配置
-pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIfaceConfig> {
-    let mut need_store_config = vec![];
+pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let mut links = handle.link().get().execute();
@@ -73,15 +72,9 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
         }
     }
 
-    let network_config = if network_config.is_empty() {
-        let tmp = gen_default_config(&interface_map);
-        need_store_config = tmp.clone();
-        tmp
+    if network_config.is_empty() {
+        tracing::warn!("network config is empty")
     } else {
-        network_config
-    };
-
-    if !network_config.is_empty() {
         let (dev_tx, mut dev_rx) =
             tokio::sync::mpsc::unbounded_channel::<(u8, NetworkIfaceConfig)>();
 
@@ -150,15 +143,6 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) -> Vec<NetworkIf
             interface_map.remove(&ifconfig.name);
         }
     }
-
-    // for iface in interface_map.into_values() {
-    //     if iface.is_lo() {
-    //         continue;
-    //     }
-    //     need_store_config.push(NetworkIfaceConfig::from_phy_dev(&iface));
-    // }
-
-    need_store_config
 }
 
 pub fn using_iw_change_wifi_mode(iface_name: &str, mode: &WifiMode) {

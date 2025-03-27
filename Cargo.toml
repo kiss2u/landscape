@@ -31,6 +31,7 @@ regex = "*"
 socket2 = "0.5.8"
 paste = "*"
 # self_cell = "*"
+colored = "2"
 
 dhcproto = "0.12.0"
 

@@ -28,9 +28,9 @@ pub async fn get_dhcp_v4_service_paths(
     mut store: StoreFileManager<DHCPv4ServiceConfig>,
     mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
 ) -> Router {
-    if store.list().is_empty() {
-        store.set(DHCPv4ServiceConfig::default());
-    }
+    // if store.list().is_empty() {
+    //     store.set(DHCPv4ServiceConfig::default());
+    // }
     let share_state = LandscapeDHCPv4Service {
         service: ServiceManager::init(store.list()).await,
         store: Arc::new(Mutex::new(store)),
