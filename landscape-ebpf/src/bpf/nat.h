@@ -101,13 +101,13 @@ struct nat_timer_key {
 struct nat_timer_value {
     // 只关注 Timer 的状态
     u64 status;
+    struct bpf_timer timer;
     // As
     union u_inet_addr trigger_saddr;
     // Ps
     u16 trigger_port;
     u8 gress;
     u8 _pad;
-    struct bpf_timer timer;
 };
 
 // 用于搜寻可用的端口
