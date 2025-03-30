@@ -402,8 +402,8 @@ int pppoe_xdp_ingress(struct xdp_md *ctx) {
 
     u8 src_mac[6];
     u8 dst_mac[6];
-    memcpy(src_mac, eth->h_source, 6);
-    memcpy(dst_mac, eth->h_dest, 6);
+    __builtin_memcpy(src_mac, eth->h_source, 6);
+    __builtin_memcpy(dst_mac, eth->h_dest, 6);
 
     // if (src_mac[0] == iface_mac[0] && src_mac[1] == iface_mac[1] && src_mac[2] == iface_mac[2] &&
     //     src_mac[3] == iface_mac[3] && src_mac[4] == iface_mac[4] && src_mac[5] == iface_mac[5]) {
@@ -456,8 +456,8 @@ int pppoe_xdp_ingress(struct xdp_md *ctx) {
         return XDP_DROP;
     }
 
-    memcpy(eth->h_source, src_mac, 6);
-    memcpy(eth->h_dest, dst_mac, 6);
+    __builtin_memcpy(eth->h_source, src_mac, 6);
+    __builtin_memcpy(eth->h_dest, dst_mac, 6);
     eth->h_proto = l2_proto;
     // bpf_log_info("after old eth MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0],
     //              eth->h_source[1], eth->h_source[2], eth->h_source[3], eth->h_source[4],

@@ -154,8 +154,8 @@ int xdp_pass(struct xdp_md *ctx) {
 
     u8 src_mac[6];
     u8 dst_mac[6];
-    memcpy(src_mac, eth->h_source, 6);
-    memcpy(dst_mac, eth->h_dest, 6);
+    __builtin_memcpy(src_mac, eth->h_source, 6);
+    __builtin_memcpy(dst_mac, eth->h_dest, 6);
     // 打印 MAC 地址
     bpf_log_info("before MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0], eth->h_source[1],
                  eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5]);
@@ -173,8 +173,8 @@ int xdp_pass(struct xdp_md *ctx) {
     if ((void *)(eth + 1) > data_end) {
         return XDP_DROP;
     }
-    memcpy(eth->h_source, src_mac, 6);
-    memcpy(eth->h_dest, dst_mac, 6);
+    __builtin_memcpy(eth->h_source, src_mac, 6);
+    __builtin_memcpy(eth->h_dest, dst_mac, 6);
     eth->h_proto = ETH_IPV4;
     bpf_log_info("after old eth MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0],
                  eth->h_source[1], eth->h_source[2], eth->h_source[3], eth->h_source[4],
