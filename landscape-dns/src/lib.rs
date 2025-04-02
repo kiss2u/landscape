@@ -7,7 +7,6 @@ use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use landscape_common::GEO_SITE_FILE_NAME;
 use lru::LruCache;
 use multi_rule_dns_server::DnsServer;
-use protos::geo::GeoSiteListOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -19,7 +18,6 @@ use tokio::sync::Mutex;
 mod connection;
 pub mod ip_rule;
 pub mod multi_rule_dns_server;
-pub mod protos;
 pub mod rule;
 
 /// Timeout for TCP connections.
@@ -44,23 +42,14 @@ impl LandscapeDnsService {
     }
 
     pub async fn read_geo_site_file(&self) -> HashMap<String, Vec<DomainConfig>> {
-        let mut result = HashMap::new();
         let geo_file_path = LAND_HOME_PATH.join(GEO_SITE_FILE_NAME);
 
         if geo_file_path.exists() && geo_file_path.is_file() {
-            // 读取文件并解析为 Owned 结构体
-            let data = tokio::fs::read(geo_file_path).await.unwrap();
-            let list = GeoSiteListOwned::try_from(data).unwrap();
-
-            for entry in list.entry.iter() {
-                let domains = entry.domain.iter().map(rule::convert_domain_from_proto).collect();
-                result.insert(entry.country_code.to_string(), domains);
-            }
+            landscape_protobuf::read_geo_sites(geo_file_path).await
         } else {
             tracing::error!("geo file don't exists or not a file, return empty map");
+            HashMap::new()
         }
-
-        result
     }
 
     pub async fn start(

@@ -9,6 +9,7 @@ members = [
     "landscape-common",
     "landscape-dns",
     "landscape-ebpf",
+    "landscape-protobuf",
     "landscape-webserver",
 ]
 

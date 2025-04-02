@@ -10,13 +10,12 @@
 
 
 use std::borrow::Cow;
-use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
-use core::convert::TryFrom;
-use core::ops::Deref;
-use core::ops::DerefMut;
+use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
+use core::convert::{TryFrom, TryInto};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Domain<'a> {
     pub type_pb: geo::mod_Domain::Type,
@@ -57,10 +56,22 @@ impl<'a> MessageWrite for Domain<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct DomainOwnedInner {
                 buf: Vec<u8>,
-                proto: Domain<'static>,
+                proto: Option<Domain<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -68,7 +79,7 @@ impl<'a> MessageWrite for Domain<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -77,8 +88,8 @@ impl<'a> MessageWrite for Domain<'a> {
                     let proto = Domain::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, Domain<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, Domain<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -94,28 +105,22 @@ impl<'a> MessageWrite for Domain<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &Domain {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a Domain<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&Domain<'static>, &Domain<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut Domain<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut Domain<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for DomainOwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for DomainOwned {
-                type Target = Domain<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for DomainOwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -127,15 +132,26 @@ impl<'a> MessageWrite for Domain<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<Domain<'a>> for DomainOwned {
-                fn from(proto: Domain) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for DomainOwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: DomainOwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<Domain<'static>> for DomainOwned {
+                fn from(proto: Domain<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(DomainOwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             
@@ -144,6 +160,7 @@ pub mod mod_Domain {
 use std::borrow::Cow;
 use super::*;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Attribute<'a> {
     pub key: Cow<'a, str>,
@@ -186,10 +203,22 @@ impl<'a> MessageWrite for Attribute<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct AttributeOwnedInner {
                 buf: Vec<u8>,
-                proto: Attribute<'static>,
+                proto: Option<Attribute<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -197,7 +226,7 @@ impl<'a> MessageWrite for Attribute<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -206,8 +235,8 @@ impl<'a> MessageWrite for Attribute<'a> {
                     let proto = Attribute::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, Attribute<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, Attribute<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -223,28 +252,22 @@ impl<'a> MessageWrite for Attribute<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &Attribute {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a Attribute<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&Attribute<'static>, &Attribute<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut Attribute<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut Attribute<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for AttributeOwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for AttributeOwned {
-                type Target = Attribute<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for AttributeOwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -256,15 +279,26 @@ impl<'a> MessageWrite for Attribute<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<Attribute<'a>> for AttributeOwned {
-                fn from(proto: Attribute) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for AttributeOwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: AttributeOwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<Attribute<'static>> for AttributeOwned {
+                fn from(proto: Attribute<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(AttributeOwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             
@@ -327,6 +361,7 @@ impl<'a> From<&'a str> for Type {
 
 }
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CIDR<'a> {
     pub ip: Cow<'a, [u8]>,
@@ -363,10 +398,22 @@ impl<'a> MessageWrite for CIDR<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct CIDROwnedInner {
                 buf: Vec<u8>,
-                proto: CIDR<'static>,
+                proto: Option<CIDR<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -374,7 +421,7 @@ impl<'a> MessageWrite for CIDR<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -383,8 +430,8 @@ impl<'a> MessageWrite for CIDR<'a> {
                     let proto = CIDR::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, CIDR<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, CIDR<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -400,28 +447,22 @@ impl<'a> MessageWrite for CIDR<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &CIDR {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a CIDR<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&CIDR<'static>, &CIDR<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut CIDR<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut CIDR<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for CIDROwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for CIDROwned {
-                type Target = CIDR<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for CIDROwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -433,18 +474,30 @@ impl<'a> MessageWrite for CIDR<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<CIDR<'a>> for CIDROwned {
-                fn from(proto: CIDR) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for CIDROwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: CIDROwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<CIDR<'static>> for CIDROwned {
+                fn from(proto: CIDR<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(CIDROwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GeoIP<'a> {
     pub country_code: Cow<'a, str>,
@@ -485,10 +538,22 @@ impl<'a> MessageWrite for GeoIP<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct GeoIPOwnedInner {
                 buf: Vec<u8>,
-                proto: GeoIP<'static>,
+                proto: Option<GeoIP<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -496,7 +561,7 @@ impl<'a> MessageWrite for GeoIP<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -505,8 +570,8 @@ impl<'a> MessageWrite for GeoIP<'a> {
                     let proto = GeoIP::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, GeoIP<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, GeoIP<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -522,28 +587,22 @@ impl<'a> MessageWrite for GeoIP<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &GeoIP {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a GeoIP<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&GeoIP<'static>, &GeoIP<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut GeoIP<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut GeoIP<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for GeoIPOwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for GeoIPOwned {
-                type Target = GeoIP<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for GeoIPOwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -555,18 +614,30 @@ impl<'a> MessageWrite for GeoIP<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<GeoIP<'a>> for GeoIPOwned {
-                fn from(proto: GeoIP) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for GeoIPOwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: GeoIPOwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<GeoIP<'static>> for GeoIPOwned {
+                fn from(proto: GeoIP<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(GeoIPOwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GeoIPList<'a> {
     pub entry: Vec<geo::GeoIP<'a>>,
@@ -599,10 +670,22 @@ impl<'a> MessageWrite for GeoIPList<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct GeoIPListOwnedInner {
                 buf: Vec<u8>,
-                proto: GeoIPList<'static>,
+                proto: Option<GeoIPList<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -610,7 +693,7 @@ impl<'a> MessageWrite for GeoIPList<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -619,8 +702,8 @@ impl<'a> MessageWrite for GeoIPList<'a> {
                     let proto = GeoIPList::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, GeoIPList<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, GeoIPList<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -636,28 +719,22 @@ impl<'a> MessageWrite for GeoIPList<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &GeoIPList {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a GeoIPList<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&GeoIPList<'static>, &GeoIPList<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut GeoIPList<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut GeoIPList<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for GeoIPListOwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for GeoIPListOwned {
-                type Target = GeoIPList<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for GeoIPListOwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -669,18 +746,30 @@ impl<'a> MessageWrite for GeoIPList<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<GeoIPList<'a>> for GeoIPListOwned {
-                fn from(proto: GeoIPList) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for GeoIPListOwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: GeoIPListOwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<GeoIPList<'static>> for GeoIPListOwned {
+                fn from(proto: GeoIPList<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(GeoIPListOwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GeoSite<'a> {
     pub country_code: Cow<'a, str>,
@@ -717,10 +806,22 @@ impl<'a> MessageWrite for GeoSite<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct GeoSiteOwnedInner {
                 buf: Vec<u8>,
-                proto: GeoSite<'static>,
+                proto: Option<GeoSite<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -728,7 +829,7 @@ impl<'a> MessageWrite for GeoSite<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -737,8 +838,8 @@ impl<'a> MessageWrite for GeoSite<'a> {
                     let proto = GeoSite::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, GeoSite<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, GeoSite<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -754,28 +855,22 @@ impl<'a> MessageWrite for GeoSite<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &GeoSite {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a GeoSite<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&GeoSite<'static>, &GeoSite<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut GeoSite<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut GeoSite<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for GeoSiteOwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for GeoSiteOwned {
-                type Target = GeoSite<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for GeoSiteOwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -787,18 +882,30 @@ impl<'a> MessageWrite for GeoSite<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<GeoSite<'a>> for GeoSiteOwned {
-                fn from(proto: GeoSite) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for GeoSiteOwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: GeoSiteOwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<GeoSite<'static>> for GeoSiteOwned {
+                fn from(proto: GeoSite<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(GeoSiteOwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GeoSiteList<'a> {
     pub entry: Vec<geo::GeoSite<'a>>,
@@ -831,10 +938,22 @@ impl<'a> MessageWrite for GeoSiteList<'a> {
 }
 
 
+            // IMPORTANT: For any future changes, note that the lifetime parameter
+            // of the `proto` field is set to 'static!!!
+            //
+            // This means that the internals of `proto` should at no point create a
+            // mutable reference to something using that lifetime parameter, on pain
+            // of UB. This applies even though it may be transmuted to a smaller
+            // lifetime later (through `proto()` or `proto_mut()`).
+            //
+            // At the time of writing, the only possible thing that uses the
+            // lifetime parameter is `Cow<'a, T>`, which never does this, so it's
+            // not UB.
+            //
             #[derive(Debug)]
             struct GeoSiteListOwnedInner {
                 buf: Vec<u8>,
-                proto: GeoSiteList<'static>,
+                proto: Option<GeoSiteList<'static>>,
                 _pin: core::marker::PhantomPinned,
             }
 
@@ -842,7 +961,7 @@ impl<'a> MessageWrite for GeoSiteList<'a> {
                 fn new(buf: Vec<u8>) -> Result<core::pin::Pin<Box<Self>>> {
                     let inner = Self {
                         buf,
-                        proto: unsafe { core::mem::MaybeUninit::zeroed().assume_init() },
+                        proto: None,
                         _pin: core::marker::PhantomPinned,
                     };
                     let mut pinned = Box::pin(inner);
@@ -851,8 +970,8 @@ impl<'a> MessageWrite for GeoSiteList<'a> {
                     let proto = GeoSiteList::from_reader(&mut reader, &pinned.buf)?;
 
                     unsafe {
-                        let proto = core::mem::transmute::<_, GeoSiteList<'static>>(proto);
-                        pinned.as_mut().get_unchecked_mut().proto = proto;
+                        let proto = core::mem::transmute::<_, GeoSiteList<'_>>(proto);
+                        pinned.as_mut().get_unchecked_mut().proto = Some(proto);
                     }
                     Ok(pinned)
                 }
@@ -868,28 +987,22 @@ impl<'a> MessageWrite for GeoSiteList<'a> {
                     &self.inner.buf
                 }
 
-                pub fn proto(&self) -> &GeoSiteList {
-                    &self.inner.proto
+                pub fn proto<'a>(&'a self) -> &'a GeoSiteList<'a> {
+                    let proto = self.inner.proto.as_ref().unwrap();
+                    unsafe { core::mem::transmute::<&GeoSiteList<'static>, &GeoSiteList<'a>>(proto) }
+                }
+
+                pub fn proto_mut<'a>(&'a mut self) -> &'a mut GeoSiteList<'a> {
+                    let inner = self.inner.as_mut();
+                    let inner = unsafe { inner.get_unchecked_mut() };
+                    let proto = inner.proto.as_mut().unwrap();
+                    unsafe { core::mem::transmute::<_, &mut GeoSiteList<'a>>(proto) }
                 }
             }
 
             impl core::fmt::Debug for GeoSiteListOwned {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    self.inner.proto.fmt(f)
-                }
-            }
-
-            impl Deref for GeoSiteListOwned {
-                type Target = GeoSiteList<'static>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.inner.proto
-                }
-            }
-
-            impl DerefMut for GeoSiteListOwned {
-                fn deref_mut(&mut self) -> &mut Self::Target {
-                    unsafe { &mut self.inner.as_mut().get_unchecked_mut().proto }
+                    self.inner.proto.as_ref().unwrap().fmt(f)
                 }
             }
 
@@ -901,15 +1014,26 @@ impl<'a> MessageWrite for GeoSiteList<'a> {
                 }
             }
 
-            #[cfg(feature = "test_helpers")]
-            impl<'a> From<GeoSiteList<'a>> for GeoSiteListOwned {
-                fn from(proto: GeoSiteList) -> Self {
-                    use quick_protobuf::{MessageWrite, Writer};
+            impl TryInto<Vec<u8>> for GeoSiteListOwned {
+                type Error=quick_protobuf::Error;
 
+                fn try_into(self) -> Result<Vec<u8>> {
                     let mut buf = Vec::new();
                     let mut writer = Writer::new(&mut buf);
-                    proto.write_message(&mut writer).expect("bad proto serialization");
-                    Self { inner: GeoSiteListOwnedInner::new(buf).unwrap() }
+                    self.inner.proto.as_ref().unwrap().write_message(&mut writer)?;
+                    Ok(buf)
+                }
+            }
+
+            impl From<GeoSiteList<'static>> for GeoSiteListOwned {
+                fn from(proto: GeoSiteList<'static>) -> Self {
+                    Self {
+                        inner: Box::pin(GeoSiteListOwnedInner {
+                            buf: Vec::new(),
+                            proto: Some(proto),
+                            _pin: core::marker::PhantomPinned,
+                        })
+                    }
                 }
             }
             

@@ -1,11 +1,8 @@
-use std::net::IpAddr;
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::{collections::HashMap, net::Ipv4Addr};
 
 use landscape_common::ip_mark::{IpConfig, IpMarkInfo, LanIPRuleConfig, WanIPRuleConfig};
 use landscape_common::mark::PacketMark;
-
-use crate::protos::geo::GeoIPListOwned;
 
 // 更新新的文件
 fn convert_mark_map_to_vec_mark(value: HashMap<IpConfig, PacketMark>) -> Vec<IpMarkInfo> {
@@ -69,7 +66,7 @@ async fn wan_mark_into_map(
     rules: Vec<WanIPRuleConfig>,
     geo_file_path: PathBuf,
 ) -> HashMap<IpConfig, PacketMark> {
-    let country_code_map = get_geo_ip_map(geo_file_path).await;
+    let country_code_map = landscape_protobuf::read_geo_ips(geo_file_path).await;
     let mut new_mark_infos = HashMap::new();
     for ip_rule in rules.into_iter() {
         if !ip_rule.enable {
@@ -160,40 +157,4 @@ fn find_delete_rule_keys(
         }
     }
     delete_keys
-}
-
-pub async fn get_geo_ip_map(geo_file_path: PathBuf) -> HashMap<String, Vec<IpConfig>> {
-    let mut result = HashMap::new();
-    if geo_file_path.exists() && geo_file_path.is_file() {
-        // 读取文件并解析为 Owned 结构体
-        let data = tokio::fs::read(geo_file_path).await.unwrap();
-        let list = GeoIPListOwned::try_from(data).unwrap();
-
-        for entry in list.entry.iter() {
-            let domains = entry.cidr.iter().filter_map(convert_ipconfig_from_proto).collect();
-            result.insert(entry.country_code.to_string(), domains);
-        }
-    } else {
-        tracing::error!("geo file don't exists or not a file, return empty map");
-    }
-
-    result
-}
-
-pub fn convert_ipconfig_from_proto(value: &crate::protos::geo::CIDR) -> Option<IpConfig> {
-    let bytes = value.ip.as_ref();
-    match bytes.len() {
-        4 => {
-            // IPv4 地址构造
-            let ip = IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]));
-            Some(IpConfig { ip, prefix: value.prefix })
-        }
-        // 16 => {
-        //     // IPv6 地址构造
-        //     let mut octets = [0u8; 16];
-        //     octets.copy_from_slice(bytes);
-        //     Some(IpAddr::V6(Ipv6Addr::from(octets)))
-        // }
-        _ => None, // 字节数不合法
-    }
 }

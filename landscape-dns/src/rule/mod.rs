@@ -19,10 +19,7 @@ use matcher::DomainMatcher;
 use std::str::FromStr;
 use std::{collections::HashMap, net::IpAddr};
 
-use crate::{
-    connection::{MarkConnectionProvider, MarkRuntimeProvider},
-    protos::geo::{mod_Domain::Type, Domain},
-};
+use crate::connection::{MarkConnectionProvider, MarkRuntimeProvider};
 
 mod matcher;
 
@@ -201,20 +198,4 @@ pub fn convert_config_to_runtime_rule(
         }
     }
     all_domain_rules
-}
-
-pub fn convert_match_type_from_proto(value: Type) -> DomainMatchType {
-    match value {
-        Type::Plain => DomainMatchType::Plain,
-        Type::Regex => DomainMatchType::Regex,
-        Type::Domain => DomainMatchType::Domain,
-        Type::Full => DomainMatchType::Full,
-    }
-}
-
-pub fn convert_domain_from_proto(value: &Domain) -> DomainConfig {
-    DomainConfig {
-        match_type: convert_match_type_from_proto(value.type_pb),
-        value: value.value.to_lowercase(),
-    }
 }
