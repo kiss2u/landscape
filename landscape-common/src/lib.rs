@@ -16,7 +16,7 @@ pub mod observer;
 pub mod service;
 pub mod store;
 pub mod sys_config;
-pub mod util;
+pub mod test;
 pub mod utils;
 
 /// Config file

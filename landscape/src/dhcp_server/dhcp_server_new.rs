@@ -607,7 +607,8 @@ mod tests {
 
     #[tokio::test]
     pub async fn test_ip_alloc() {
-        crate::init_tracing!();
+        landscape_common::init_tracing!();
+
         let config = DHCPv4ServerConfig::default();
         let mut dhcp_server = DHCPv4Server::init(config);
         tracing::debug!("dhcp_server: {:#?}", dhcp_server);
@@ -626,7 +627,7 @@ mod tests {
 
     #[test]
     pub fn test_ip_alloc_same_seed_large_then_2_lap() {
-        crate::init_tracing!();
+        landscape_common::init_tracing!();
 
         let ipv4 = Ipv4Inet::new(Ipv4Addr::new(192, 168, 1, 1), 30).unwrap();
 

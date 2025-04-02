@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use landscape_common::util::compute_checksum;
+use landscape_common::utils::checksum::compute_checksum;
 use landscape_pppoe::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},

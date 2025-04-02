@@ -16,7 +16,6 @@ use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
-use tracing::Level;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -33,8 +32,7 @@ pub struct Args {
 // cargo run --package landscape --bin dhcp_v6_pd_test
 #[tokio::main]
 async fn main() {
-    let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
-    tracing_subscriber::fmt().with_max_level(Level::DEBUG).with_writer(non_blocking).init();
+    landscape_common::init_tracing!();
 
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
