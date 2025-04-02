@@ -1,6 +1,7 @@
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize};
+use ts_rs::TS;
 
 /// The number of bytes in an ethernet (MAC) address.
 pub const ETHER_ADDR_LEN: usize = 6;
@@ -11,7 +12,9 @@ type EtherAddr = [u8; ETHER_ADDR_LEN];
 const LOCAL_ADDR_BIT: u8 = 0x02;
 const MULTICAST_ADDR_BIT: u8 = 0x01;
 
-#[derive(Clone, Copy, Default, Hash, PartialOrd, Eq)]
+#[derive(Clone, Copy, Default, Hash, PartialOrd, Eq, TS)]
+#[ts(export, export_to = "network.ts")]
+#[ts(as = "String")]
 pub struct MacAddr(pub u8, pub u8, pub u8, pub u8, pub u8, pub u8);
 
 impl MacAddr {

@@ -66,6 +66,9 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
+# export to ts
+ts-rs = "10.1"
+
 tokio-util = { version = "0.7.0", features = ["codec", "net"] }
 [workspace.dependencies.tokio]
 version = "1.38.0"

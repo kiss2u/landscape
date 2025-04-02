@@ -1,6 +1,7 @@
 use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MarkRule {
@@ -9,7 +10,8 @@ pub struct MarkRule {
     mark: PacketMark,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Eq, Hash, TS)]
+#[ts(export, export_to = "mark.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum PacketMark {
