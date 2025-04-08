@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::SocketAddr;
 use std::os::fd::RawFd;
 use std::os::unix::io::AsRawFd;
@@ -8,7 +9,7 @@ use hickory_resolver::{
     proto::runtime::{iocompat::AsyncIoTokioAsStd, RuntimeProvider, TokioHandle, TokioTime},
 };
 
-use libc::{setsockopt, SOL_SOCKET, SO_MARK};
+use libc::{setsockopt, SOL_SOCKET, SO_MARK, SO_RCVMARK};
 use std::time::Duration;
 use tokio::net::UdpSocket as TokioUdpSocket;
 use tokio::net::{TcpSocket, TcpStream as TokioTcpStream};
@@ -20,6 +21,15 @@ pub type MarkConnectionProvider = GenericConnector<MarkRuntimeProvider>;
 pub struct MarkRuntimeProvider {
     handler: TokioHandle,
     mark_value: u32,
+}
+
+impl fmt::Debug for MarkRuntimeProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MarkRuntimeProvider")
+            .field("mark_value", &self.mark_value)
+            // .field("secret", &self.secret) // 手动跳过
+            .finish()
+    }
 }
 
 impl MarkRuntimeProvider {
@@ -92,13 +102,32 @@ impl RuntimeProvider for MarkRuntimeProvider {
     }
 }
 
-fn set_socket_mark(fd: RawFd, mark_value: u32) -> io::Result<()> {
+pub fn set_socket_mark(fd: RawFd, mark_value: u32) -> io::Result<()> {
     // 设置 SO_MARK 选项
     let result = unsafe {
         setsockopt(
             fd,
             SOL_SOCKET,
             SO_MARK,
+            &mark_value as *const u32 as *const libc::c_void,
+            std::mem::size_of::<u32>() as libc::socklen_t,
+        )
+    };
+
+    if result == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub fn set_socket_income_mark(fd: RawFd, mark_value: u32) -> io::Result<()> {
+    // 设置 SO_MARK 选项
+    let result = unsafe {
+        setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_RCVMARK,
             &mark_value as *const u32 as *const libc::c_void,
             std::mem::size_of::<u32>() as libc::socklen_t,
         )

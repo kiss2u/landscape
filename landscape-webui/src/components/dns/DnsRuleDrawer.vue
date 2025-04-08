@@ -21,9 +21,6 @@ const show_create_modal = ref(false);
   >
     <n-drawer-content title="编辑 DNS 所使用规则" closable>
       <n-flex style="height: 100%" vertical>
-        <n-alert type="warning">
-          编辑规则后需要手动 `停止` 并 `开启` 后 DNS 规则才能生效
-        </n-alert>
         <n-button @click="show_create_modal = true">增加规则</n-button>
 
         <n-scrollbar>

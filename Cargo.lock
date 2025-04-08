@@ -1916,6 +1916,8 @@ dependencies = [
  "aho-corasick",
  "async-trait",
  "clap 4.5.27",
+ "ctrlc",
+ "futures-util",
  "hickory-client",
  "hickory-proto 0.25.1",
  "hickory-resolver",
@@ -1925,13 +1927,17 @@ dependencies = [
  "landscape-protobuf",
  "libc",
  "lru",
+ "nix 0.29.0",
  "regex",
  "serde",
  "serde_json",
  "socket2",
  "thiserror 2.0.9",
  "tokio",
+ "tokio-util",
  "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
  "trie-rs",
 ]
 
@@ -2049,9 +2055,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.159"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "561d97a539a36e26a9a5fad1ea11a3039a67714694aaa379433e580854bc3dc5"
+checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "linux-raw-sys"

@@ -18,10 +18,10 @@ use serde::{Deserialize, Serialize};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 mod auth;
-mod dns;
 mod docker;
 mod dump;
 mod error;
+mod flow;
 mod global_mark;
 mod iface;
 mod service;
@@ -60,6 +60,7 @@ async fn main() -> LdResult<()> {
 
     let mut iface_pppd_store = StoreFileManager::new(home_path.clone(), "iface_pppd".to_string());
 
+    let mut flow_store = StoreFileManager::new(home_path.clone(), "flow_rule".to_string());
     let mut dns_store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
 
     let mut lan_ip_mark_store = StoreFileManager::new(home_path.clone(), "lan_ip_mark".to_string());
@@ -98,6 +99,7 @@ async fn main() -> LdResult<()> {
         nats,
         marks,
         pppds,
+        flow_rules,
         dns_rules,
         lan_ip_mark,
         wan_ip_mark,
@@ -114,6 +116,7 @@ async fn main() -> LdResult<()> {
         iface_nat_store.truncate();
         iface_mark_store.truncate();
         iface_pppd_store.truncate();
+        flow_store.truncate();
         dns_store.truncate();
         lan_ip_mark_store.truncate();
         wan_ip_mark_store.truncate();
@@ -144,6 +147,9 @@ async fn main() -> LdResult<()> {
             iface_pppd_store.set(each_config);
         }
 
+        for each_config in flow_rules {
+            flow_store.set(each_config);
+        }
         for each_config in dns_rules {
             dns_store.set(each_config);
         }
@@ -241,7 +247,7 @@ async fn main() -> LdResult<()> {
             )
             .await,
         )
-        .nest("/dns", dns::get_dns_paths(dns_store).await)
+        .nest("/flow", flow::get_flow_paths(flow_store, dns_store).await)
         .nest(
             "/services",
             Router::new()

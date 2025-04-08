@@ -23,6 +23,7 @@ pub mod dhcp_server;
 pub mod docker;
 pub mod dump;
 pub mod firewall;
+pub mod flow;
 pub mod icmp;
 pub mod iface;
 pub mod observer;

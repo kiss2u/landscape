@@ -23,6 +23,7 @@ use crate::connection::{MarkConnectionProvider, MarkRuntimeProvider};
 
 mod matcher;
 
+#[derive(Debug)]
 pub struct CacheResolver {
     pub resolver: Resolver<MarkConnectionProvider>,
 }
@@ -43,6 +44,7 @@ impl CacheResolver {
     }
 }
 
+#[derive(Debug)]
 pub enum ResolverType {
     RedirectResolver(Vec<IpAddr>),
     CacheResolver(CacheResolver),
@@ -131,6 +133,7 @@ impl ResolverType {
     }
 }
 
+#[derive(Debug)]
 /// 与规则是 1:1 创建的
 pub struct ResolutionRule {
     // 启动之后配置的 matcher

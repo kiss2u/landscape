@@ -8,6 +8,7 @@ use crate::rule::DomainMatchType;
 
 use super::DomainConfig;
 
+#[derive(Debug)]
 pub struct DomainMatcher {
     regex_domains: Vec<Regex>,         // 用于存储正则表达式规则
     full_domains: HashSet<String>,     // 用于存储完全匹配的域名

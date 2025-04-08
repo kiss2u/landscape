@@ -15,10 +15,13 @@ use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::Mutex;
 
-mod connection;
+pub mod connection;
+pub mod diff_server;
 pub mod ip_rule;
 pub mod multi_rule_dns_server;
 pub mod rule;
+pub mod server;
+pub mod socket;
 
 /// Timeout for TCP connections.
 const TCP_TIMEOUT: Duration = Duration::from_secs(10);

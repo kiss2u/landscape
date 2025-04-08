@@ -5,6 +5,7 @@ use once_cell::sync::Lazy;
 
 pub mod bpf_error;
 pub mod firewall;
+pub mod flow;
 pub mod landscape;
 pub mod map_setting;
 pub mod nat;
@@ -36,6 +37,9 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
             "{}/firewall_allow_rules_map",
             ebpf_map_path
         )),
+        flow_verdict_dns_map: PathBuf::from(format!("{}/flow_verdict_dns_map", ebpf_map_path)),
+        flow_verdict_ip_map: PathBuf::from(format!("{}/flow_verdict_ip_map", ebpf_map_path)),
+        flow_match_map: PathBuf::from(format!("{}/flow_match_map", ebpf_map_path)),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
@@ -61,6 +65,11 @@ pub(crate) struct LandscapeMapPath {
     pub firewall_ipv6_block: PathBuf,
     // 允许通过的协议
     pub firewall_allow_rules_map: PathBuf,
+
+    /// Flow
+    pub flow_verdict_dns_map: PathBuf,
+    pub flow_verdict_ip_map: PathBuf,
+    pub flow_match_map: PathBuf,
 }
 
 // pppoe -> Fire wall -> nat
@@ -75,6 +84,9 @@ const MARK_EGRESS_PRIORITY: u32 = 2;
 const NAT_EGRESS_PRIORITY: u32 = 3;
 const FIREWALL_EGRESS_PRIORITY: u32 = 4;
 const PPPOE_EGRESS_PRIORITY: u32 = 5;
+
+const LAN_FLOW_MARK_INGRESS_PRIORITY: u32 = 2;
+
 pub fn init_ebpf() {
     std::thread::spawn(|| {
         landscape::test();

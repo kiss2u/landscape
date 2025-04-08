@@ -24,7 +24,7 @@ sysinfo = "0.30.12"
 # base
 once_cell = "*"
 ctrlc = "3.2"
-libc = "0.2.159"
+libc = "0.2.171"
 homedir = "0.3.4"
 thiserror = "2"
 rand = "0.8.5"

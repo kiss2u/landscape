@@ -18,6 +18,8 @@ use types::{ipv4_lpm_key, ipv4_mark_action};
 
 use crate::{LandscapeMapPath, MAP_PATHS};
 
+pub mod flow;
+
 pub(crate) fn init_path(paths: LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
     // landscape_builder.obj_builder.debug(true);
@@ -39,6 +41,11 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
         .firewall_allow_rules_map
         .set_pin_path(&paths.firewall_allow_rules_map)
         .unwrap();
+    // flow verdict map
+    landscape_open.maps.flow_v_dns_map.set_pin_path(&paths.flow_verdict_dns_map).unwrap();
+    landscape_open.maps.flow_v_ip_map.set_pin_path(&paths.flow_verdict_ip_map).unwrap();
+    landscape_open.maps.flow_match_map.set_pin_path(&paths.flow_match_map).unwrap();
+
     let _landscape_skel = landscape_open.load().unwrap();
 }
 
@@ -310,6 +317,7 @@ fn conver_rule(rule: FirewallRuleItem) -> crate::map_setting::types::firewall_st
     };
     let mut rule_port = 0;
     let mut ip_protocol = 0;
+
     if let Some(proto) = rule.ip_protocol {
         ip_protocol = proto as u8;
         prefixlen += 8;
@@ -318,6 +326,7 @@ fn conver_rule(rule: FirewallRuleItem) -> crate::map_setting::types::firewall_st
             rule_port = port;
         }
     }
+
     crate::map_setting::types::firewall_static_rule_key {
         prefixlen: rule.ip_prefixlen as u32 + prefixlen,
         ip_type: ip_type as u8,

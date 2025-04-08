@@ -25,6 +25,13 @@ pub struct DNSRuleConfig {
     /// 匹配规则列表
     #[serde(default)]
     pub source: Vec<RuleSource>,
+
+    #[serde(default = "default_flow_id")]
+    pub flow_id: u32,
+}
+
+fn default_flow_id() -> u32 {
+    0_u32
 }
 
 impl LandScapeStore for DNSRuleConfig {
@@ -43,6 +50,7 @@ impl Default for DNSRuleConfig {
             mark: Default::default(),
             source: vec![],
             resolve_mode: DNSResolveMode::default(),
+            flow_id: default_flow_id(),
         }
     }
 }
