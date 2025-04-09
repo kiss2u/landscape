@@ -85,7 +85,10 @@ const NAT_EGRESS_PRIORITY: u32 = 3;
 const FIREWALL_EGRESS_PRIORITY: u32 = 4;
 const PPPOE_EGRESS_PRIORITY: u32 = 5;
 
+// MARK ->
 const LAN_FLOW_MARK_INGRESS_PRIORITY: u32 = 2;
+// MARK ->
+const LAN_FLOW_MARK_EGRESS_PRIORITY: u32 = 2;
 
 pub fn init_ebpf() {
     std::thread::spawn(|| {

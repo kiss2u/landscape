@@ -5,6 +5,7 @@ export class DnsRule {
   mark: PacketMark;
   source: RuleSource[];
   resolve_mode: DNSResolveMode;
+  flow_id: number;
 
   constructor(obj?: {
     index?: number;
@@ -13,6 +14,7 @@ export class DnsRule {
     mark?: PacketMark;
     source?: RuleSource[];
     resolve_mode?: DNSResolveMode;
+    flow_id: number;
   }) {
     this.index = obj?.index ?? -1;
     this.name = obj?.name ?? "";
@@ -25,6 +27,7 @@ export class DnsRule {
           t: DNSResolveModeEnum.CloudFlare,
           mode: CloudFlareMode.Tls,
         };
+    this.flow_id = obj?.flow_id ?? 0;
   }
 }
 

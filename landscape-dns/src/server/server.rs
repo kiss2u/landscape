@@ -257,19 +257,6 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                             break;
                         }
                     }
-                    tracing::debug!("next");
-
-                    // recv_msg_tx.send(data).await.unwrap();
-                    // let RecvDnsMessage { message, addr, mark } = data;
-                    // if let Some(handler) = handlers.get(&mark) {
-                    //     let request_handler = handler.clone();
-                    //     let send_msg_tx_clone = send_msg_tx.clone();
-                    //     inner_join_set.spawn(async move {
-                    //         handle_raw_request(message, addr, request_handler, send_msg_tx_clone).await;
-                    //     });
-                    // } else {
-                    //     tracing::error!("mark: {mark:?}, can not found handler, addr: {addr:?}");
-                    // }
                 }
 
                 if shutdown.is_cancelled() {

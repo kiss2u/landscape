@@ -18,14 +18,25 @@ import { ref } from "vue";
 import UpstreamEdit from "@/components/dns/upstream/UpstreamEdit.vue";
 import PacketMark from "@/components/mark/PacketMark.vue";
 
+type Props = {
+  data:
+    | {
+        flow_id: number;
+      }
+    | DnsRule;
+};
+
+const props = defineProps<Props>();
+
 const message = useMessage();
 
 const emit = defineEmits(["refresh"]);
 
 const show = defineModel<boolean>("show", { required: true });
 
-const origin_rule = defineModel<DnsRule>("rule", { default: new DnsRule() });
-const rule = ref<any>(new DnsRule(origin_rule.value));
+const origin_rule = ref<DnsRule>(new DnsRule(props.data));
+
+const rule = ref<any>(new DnsRule());
 
 const commit_spin = ref(false);
 const isModified = computed(() => {
@@ -33,6 +44,7 @@ const isModified = computed(() => {
 });
 
 function enter() {
+  origin_rule.value = new DnsRule(props.data);
   rule.value = new DnsRule(origin_rule.value);
 }
 

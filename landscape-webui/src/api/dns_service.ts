@@ -24,8 +24,12 @@ export async function stop_dns_service(): Promise<ServiceStatus> {
   return new ServiceStatus(data.data.status);
 }
 
-export async function get_dns_rule(): Promise<DnsRule[]> {
-  let data = await api.api.get("flow/dns/rules");
+export async function get_dns_rule(flow_id?: number): Promise<DnsRule[]> {
+  let data = await api.api.get("flow/dns/rules", {
+    params: {
+      flow_id,
+    },
+  });
   return data.data.map((d: any) => new DnsRule(d));
 }
 

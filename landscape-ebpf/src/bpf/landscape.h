@@ -18,6 +18,9 @@
 #define ETH_IPV6 bpf_htons(0x86DD) /* ETH IPv6 packet */
 #define ETH_ARP bpf_htons(0x0806)  /* ETH ARP packet */
 
+#define AF_INET 2
+#define AF_INET6 10
+
 // L4 proto number
 #define IPPROTO_ICMPV6 58
 
@@ -30,6 +33,10 @@
 
 #define ACTION_MASK 0x00FF
 #define INDEX_MASK 0xFF00
+
+#define PRINT_MAC_ADDR(mac)                                                                        \
+    bpf_log_info("mac: %02x:%02x:%02x:%02x:%02x:%02x", (mac)[0], (mac)[1], (mac)[2], (mac)[3],     \
+                 (mac)[4], (mac)[5])
 
 static __always_inline int _validate_read(struct __sk_buff *skb, void **hdr_, u32 offset, u32 len) {
     u8 *data = (u8 *)(__u64)skb->data;

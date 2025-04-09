@@ -357,7 +357,7 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
                                 struct firewall_conntrack_action *value) {
 #define BPF_LOG_TOPIC "timer_clean_callback"
 
-    bpf_log_info("timer_clean_callback: %d", bpf_ntohs(value->trigger_port));
+    // bpf_log_info("timer_clean_callback: %d", bpf_ntohs(value->trigger_port));
 
     bpf_map_delete_elem(&firewall_conntrack_map, key);
     return 0;

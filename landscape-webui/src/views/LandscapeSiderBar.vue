@@ -1,19 +1,35 @@
 <script setup lang="ts">
 import type { MenuOption } from "naive-ui";
 import type { Component } from "vue";
-
+import { computed, h, ref, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { NIcon } from "naive-ui";
-import { h, ref } from "vue";
-import { Network4, CicsSystemGroup, ModelBuilder } from "@vicons/carbon";
 
-import { Wall } from "@vicons/tabler";
+import { Network4, CicsSystemGroup, ModelBuilder } from "@vicons/carbon";
 import { ImportExportRound } from "@vicons/material";
+import { Wall } from "@vicons/tabler";
 import { Docker } from "@vicons/fa";
 
 import CopyRight from "@/components/CopyRight.vue";
 
-const activeKey = ref<string | null>(null);
+const route = useRoute();
+const router = useRouter();
+
+const menu_active_key = ref(
+  route.name && typeof route.name === "string" ? route.name : ""
+);
+
+// const route_path = computed(() => route.name);
+// watch(route_path, (path) => {
+//   console.log(path);
+// });
 const collapsed = ref(true);
+
+function click_menu(key: string) {
+  router.push({
+    path: `/${key}`,
+  });
+}
 
 function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) });
@@ -22,7 +38,7 @@ function renderIcon(icon: Component) {
 const menuOptions: MenuOption[] = [
   {
     label: "系统基本信息",
-    key: "info",
+    key: "",
     icon: renderIcon(CicsSystemGroup),
   },
   {
@@ -34,6 +50,7 @@ const menuOptions: MenuOption[] = [
     label: "NAT",
     key: "nat",
     icon: renderIcon(ImportExportRound),
+    disabled: true,
   },
   {
     label: "防火墙",
@@ -91,8 +108,10 @@ const menuOptions: MenuOption[] = [
         </n-flex>
       </n-layout-header>
       <n-layout position="absolute" style="top: 30px; bottom: 64px">
+        <!-- {{ menu_active_key }} -->
         <n-menu
-          v-model:value="activeKey"
+          v-model:value="menu_active_key"
+          @update:value="click_menu"
           :collapsed="collapsed"
           :collapsed-width="64"
           :collapsed-icon-size="22"

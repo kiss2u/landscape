@@ -2,6 +2,7 @@
 #define __LD_FLOW_MARK_SHARE_H__
 #include <bpf/bpf_helpers.h>
 #include "landscape.h"
+#include "packet_def.h"
 
 struct flow_match_key {
     // 源 mac 地址
@@ -10,6 +11,7 @@ struct flow_match_key {
     u32 vlan_tci;
     // tos value
     u8 tos;
+    u8 _pad;
 };
 
 struct {

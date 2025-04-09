@@ -136,6 +136,7 @@ pub fn update_flow_match_rule(rules: Vec<FlowMathPair>) {
             h_source: match_rule.mac.octets(),
             vlan_tci: match_rule.vlan_id.unwrap_or(0),
             tos: match_rule.qos.unwrap_or(0),
+            ..Default::default()
         };
         keys.extend_from_slice(unsafe { plain::as_bytes(&match_key) });
         values.extend_from_slice(unsafe { plain::as_bytes(&flow_id) });
@@ -161,6 +162,7 @@ pub fn del_flow_match_rule(rules: Vec<PacketMatchMark>) {
             h_source: match_rule.mac.octets(),
             vlan_tci: match_rule.vlan_id.unwrap_or(0),
             tos: match_rule.qos.unwrap_or(0),
+            ..Default::default()
         };
         keys.extend_from_slice(unsafe { plain::as_bytes(&match_key) });
     }

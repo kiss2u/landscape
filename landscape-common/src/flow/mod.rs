@@ -1,11 +1,13 @@
 use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{net::MacAddr, store::storev2::LandScapeStore};
 
 /// 流控配置结构体
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[ts(export, export_to = "flow.ts")]
 pub struct FlowConfig {
     /// 是否启用
     pub enable: bool,
@@ -15,6 +17,9 @@ pub struct FlowConfig {
     pub flow_match_rules: Vec<PacketMatchMark>,
     /// 处理流量目标网卡, 目前只取第一个
     pub packet_handle_iface_name: Vec<FlowTarget>,
+
+    /// 备注
+    pub remark: String,
 }
 
 impl LandScapeStore for FlowConfig {
@@ -24,14 +29,18 @@ impl LandScapeStore for FlowConfig {
 }
 
 /// 数据包匹配该流控标志
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, TS)]
+#[ts(export, export_to = "flow.ts")]
 pub struct PacketMatchMark {
     pub mac: MacAddr,
     pub vlan_id: Option<u32>,
     pub qos: Option<u8>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[ts(export, export_to = "flow.ts")]
+#[serde(tag = "t")]
+#[serde(rename_all = "lowercase")]
 pub enum FlowTarget {
     Interface { name: String },
     Netns { container_name: String },

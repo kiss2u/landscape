@@ -7,15 +7,16 @@ mod flow_mark_bpf {
 use flow_mark_bpf::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    TC_INGRESS,
+    TC_EGRESS, TC_INGRESS,
 };
 use tokio::sync::oneshot;
 
 use crate::{
-    bpf_error::LdEbpfResult, landscape::TcHookProxy, LAN_FLOW_MARK_INGRESS_PRIORITY, MAP_PATHS,
+    bpf_error::LdEbpfResult, landscape::TcHookProxy, LAN_FLOW_MARK_EGRESS_PRIORITY,
+    LAN_FLOW_MARK_INGRESS_PRIORITY, MAP_PATHS,
 };
 
-pub fn attach_flow(
+pub fn attach_match_flow(
     ifindex: u32,
     has_mac: bool,
     service_status: oneshot::Receiver<()>,
@@ -39,7 +40,7 @@ pub fn attach_flow(
         TcHookProxy::new(&flow_ingress, ifindex as i32, TC_INGRESS, LAN_FLOW_MARK_INGRESS_PRIORITY);
 
     let mut flow_egress_hook =
-        TcHookProxy::new(&flow_egress, ifindex as i32, TC_INGRESS, LAN_FLOW_MARK_INGRESS_PRIORITY);
+        TcHookProxy::new(&flow_egress, ifindex as i32, TC_EGRESS, LAN_FLOW_MARK_EGRESS_PRIORITY);
 
     flow_ingress_hook.attach();
     flow_egress_hook.attach();

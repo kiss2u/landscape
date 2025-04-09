@@ -19,13 +19,13 @@ pub async fn main() {
     })
     .unwrap();
 
-    let ifindex = 24;
+    let ifindex = 9;
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
 
     std::thread::spawn(move || {
         println!("启动 packet_mark 在 ifindex: {:?}", ifindex);
-        landscape_ebpf::flow::mark::attach_flow(ifindex, true, rx).unwrap();
+        landscape_ebpf::flow::mark::attach_match_flow(ifindex, true, rx).unwrap();
         println!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
     });

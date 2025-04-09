@@ -3,11 +3,19 @@ import { ref } from "vue";
 import DnsRuleCard from "@/components/dns/DnsRuleCard.vue";
 import { get_dns_rule } from "@/api/dns_service";
 
+interface Props {
+  flow_id?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  flow_id: 0,
+});
+
 const show = defineModel<boolean>("show", { required: true });
 const rules = ref<any>([]);
 
 async function read_rules() {
-  rules.value = await get_dns_rule();
+  rules.value = await get_dns_rule(props.flow_id);
 }
 
 const show_create_modal = ref(false);
@@ -38,6 +46,7 @@ const show_create_modal = ref(false);
 
       <DnsRuleEditModal
         v-model:show="show_create_modal"
+        :data="{ flow_id: props.flow_id }"
         @refresh="read_rules()"
       ></DnsRuleEditModal>
     </n-drawer-content>

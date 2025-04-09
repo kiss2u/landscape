@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{delete, get},
     Json, Router,
 };
@@ -117,10 +117,16 @@ async fn del_flow_config(
     Json(result.unwrap())
 }
 
-async fn get_dns_rules(State(state): State<LandscapeFlowServices>) -> Json<Value> {
+async fn get_dns_rules(
+    State(state): State<LandscapeFlowServices>,
+    Query(DnsRuleQuery { flow_id }): Query<DnsRuleQuery>,
+) -> Json<Value> {
     let mut get_store = state.dns_store.lock().await;
     let mut dns_rules = get_store.list();
     dns_rules.sort_by(|a, b| a.index.cmp(&b.index));
+    if let Some(flow_id) = flow_id {
+        dns_rules.retain(|rule| rule.flow_id == flow_id);
+    }
     let result = serde_json::to_value(dns_rules);
     Json(result.unwrap())
 }
@@ -159,4 +165,9 @@ async fn del_dns_rules(
 #[derive(Clone, Serialize, Deserialize)]
 struct DNSStartRequest {
     udp_port: u16,
+}
+
+#[derive(Deserialize)]
+struct DnsRuleQuery {
+    flow_id: Option<u32>,
 }

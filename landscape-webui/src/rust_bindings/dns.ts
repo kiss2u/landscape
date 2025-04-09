@@ -32,7 +32,7 @@ mark: PacketMark,
 /**
  * 匹配规则列表
  */
-source: Array<RuleSource>, };
+source: Array<RuleSource>, flow_id: number, };
 
 export type DnsUpstreamType = { "t": "plaintext" } | { "t": "tls", domain: string, } | { "t": "https", domain: string, };
 
