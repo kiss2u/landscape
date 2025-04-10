@@ -12,6 +12,15 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 const volatile int current_eth_net_offset = 14;
 
+// todo: 将 flow_target_info 独立出来维护
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(map_flags, BPF_F_NO_COMMON_LRU);
+    __type(key, struct flow_cache_key);
+    __type(value, struct flow_target_info);
+    __uint(max_entries, 4096);
+} flow_cache_map SEC(".maps");
+
 static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_eth_net_offset,
                                             bool *is_ipv4_) {
     bool is_ipv4;
@@ -51,14 +60,16 @@ int flow_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">> flow_ingress"
     bool is_ipv4;
 
-    struct flow_match_key find_flow_key = {0};
+    skb->cb[4] = 111;
+    struct flow_cache_key cache_key = {0};
     int ret;
     if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
     if (current_eth_net_offset > 0) {
-        ret = bpf_skb_load_bytes(skb, 6, &find_flow_key.h_source, sizeof(find_flow_key.h_source));
+        ret = bpf_skb_load_bytes(skb, 6, &cache_key.match_key.h_source,
+                                 sizeof(cache_key.match_key.h_source));
         if (ret) {
             bpf_log_info("mac bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
@@ -66,8 +77,8 @@ int flow_ingress(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset + 1, &find_flow_key.tos,
-                                 sizeof(find_flow_key.tos));
+        ret = bpf_skb_load_bytes(skb, current_eth_net_offset + 1, &cache_key.match_key.tos,
+                                 sizeof(cache_key.match_key.tos));
         if (ret) {
             bpf_log_info("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
@@ -81,21 +92,24 @@ int flow_ingress(struct __sk_buff *skb) {
             return TC_ACT_SHOT;
         }
         first_2_bytes = bpf_ntohs(first_2_bytes);
-        find_flow_key.tos = (first_2_bytes >> 4) & 0xFF;
+        cache_key.match_key.tos = (first_2_bytes >> 4) & 0xFF;
     }
 
-    // find_flow_key.vlan_tci = skb->vlan_present;
-    PRINT_MAC_ADDR(find_flow_key.h_source);
-    bpf_log_info("tos: %d", find_flow_key.tos);
-    bpf_log_info("vlan_tci: %d", find_flow_key.vlan_tci);
-    u32 *flow_id = bpf_map_lookup_elem(&flow_match_map, &find_flow_key);
-    if (flow_id == NULL || *flow_id == 0) {
+    // cache_key.match_key.vlan_tci = skb->vlan_present;
+    PRINT_MAC_ADDR(cache_key.match_key.h_source);
+    bpf_log_info("tos: %d", cache_key.match_key.tos);
+    bpf_log_info("vlan_tci: %d", cache_key.match_key.vlan_tci);
+    // bpf_log_info("vlan_tci: %d", skb.);
+    u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
+
+    if (flow_id_ptr == NULL || *flow_id_ptr == 0) {
         // 查不到 flow 配置，通过使用默认路由进行处理
         return TC_ACT_UNSPEC;
     }
 
-    skb->mark = *flow_id;
-    bpf_log_info("flow_id: %d", *flow_id);
+    u32 flow_id = *flow_id_ptr;
+    skb->mark = flow_id;
+    bpf_log_info("flow_id: %d", flow_id);
 
     struct bpf_fib_lookup fib_params = {0};
     fib_params.ifindex = skb->ifindex;
@@ -133,37 +147,127 @@ int flow_ingress(struct __sk_buff *skb) {
         COPY_ADDR_FROM(fib_params.ipv6_dst, ip6h.daddr.in6_u.u6_addr32);
     }
 
-    // TODO：先检查下目标 IP 是不是在黑名单中
+    // print_bpf_fib_lookup(&fib_params);
+    // TODO：检查下目标 IP 是不是在黑名单中
 
-    int rc = bpf_fib_lookup(skb, &fib_params, sizeof(fib_params), 0);
+    // 检查缓存, 直接发往选定的网卡
+    COPY_ADDR_FROM(cache_key.src_addr.all, fib_params.ipv6_src);
+    COPY_ADDR_FROM(cache_key.dst_addr.all, fib_params.ipv6_dst);
 
-    if (rc == BPF_FIB_LKUP_RET_NOT_FWDED) {
-        // 发往本机的直接放行
+    struct flow_target_info *target_info;
+    target_info = bpf_map_lookup_elem(&flow_cache_map, &cache_key);
+    if (target_info == NULL) {
+        int rc = bpf_fib_lookup(skb, &fib_params, sizeof(fib_params), 0);
+
+        bpf_log_info("bpf_fib_lookup result is: %d", BPF_FIB_LKUP_RET_NOT_FWDED);
+        if (rc == BPF_FIB_LKUP_RET_NOT_FWDED) {
+            // 缓存查询结果
+            struct flow_target_info lo_cache = {0};
+            bpf_map_update_elem(&flow_cache_map, &cache_key, &lo_cache, BPF_ANY);
+            // 发往本机的直接放行
+            return TC_ACT_UNSPEC;
+        }
+        // 不是发往本机的
+        // 1. 先检查有没有额外的 DNS Mark 配置
+
+        // 2. 根据 flow_id 检索 flow 的配置, 目前只有一个目标网卡
+        bpf_log_info("going to find target_info using flow_id: %d", flow_id);
+        target_info = bpf_map_lookup_elem(&flow_target_map, &flow_id);
+        if (target_info == NULL) {
+            bpf_log_info("can not find target_info using flow_id: %d", flow_id);
+            return TC_ACT_SHOT;
+        }
+    }
+
+    // 为 0 表示是本机的
+    if (target_info->ifindex == 0) {
         return TC_ACT_UNSPEC;
     }
-    // 不是发往本机的
-    bpf_log_info("other");
-    // 1. 先检查有没有额外的 DNS 配置
 
-    // 2. 根据 flow_id 检索 flow 的配置
+    // 缓存当前的转发结果
+    if (bpf_map_update_elem(&flow_cache_map, &cache_key, target_info, BPF_ANY)) {
+        bpf_log_info("cache fail");
+        return TC_ACT_SHOT;
+    }
 
-    // 3. 依据配置发往具体的端口
+    // 依据配置发往具体的端口
+    if (current_eth_net_offset == 0 && target_info->has_mac) {
+        bpf_log_info("add dummy_mac");
+        // 当前数据包没有 mac 对方有 mac
+        if (prepend_dummy_mac(skb) != 0) {
+            return TC_ACT_SHOT;
+        }
 
-    return TC_ACT_UNSPEC;
+    } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
+        // 当前有, 对方没有
+        // 需要 6.6 以上支持 目前暂不实现
+        return TC_ACT_SHOT;
+    }
+
+    if (target_info->is_docker) {
+        bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
+        return bpf_redirect(target_info->ifindex, 0);
+    }
+
+    if (current_eth_net_offset != 0 && target_info->has_mac) {
+        struct bpf_fib_lookup fib_egress_param = {0};
+        fib_egress_param.ifindex = target_info->ifindex;
+        // fib_egress_param.ifindex = skb->ifindex;
+        fib_egress_param.family = is_ipv4 ? AF_INET : AF_INET6;
+        fib_egress_param.sport = 0;
+        fib_egress_param.dport = 0;
+
+        COPY_ADDR_FROM(fib_egress_param.ipv6_src, cache_key.src_addr.all);
+        COPY_ADDR_FROM(fib_egress_param.ipv6_dst, cache_key.dst_addr.all);
+
+        u32 flag = BPF_FIB_LOOKUP_OUTPUT;
+
+        int rcc = bpf_fib_lookup(skb, &fib_egress_param, sizeof(fib_egress_param), 0);
+
+        bpf_log_info("fib_egress_param result is: %d", rcc);
+        print_bpf_fib_lookup(&fib_egress_param);
+        if (rcc == 0) {
+            ret = bpf_skb_store_bytes(skb, 6, fib_egress_param.smac, sizeof(fib_egress_param.smac),
+                                      0);
+            if (ret) {
+                bpf_log_info("ret is: %d", ret);
+            }
+            ret = bpf_skb_store_bytes(skb, 0, fib_egress_param.dmac, sizeof(fib_egress_param.dmac),
+                                      0);
+            if (ret) {
+                bpf_log_info("ret2 is: %d", ret);
+            }
+        } else if (rcc == BPF_FIB_LKUP_RET_NO_NEIGH) {
+            // 发送给邻居 需要使用 bpf_redirect_neigh, 但是默认路由不属于邻居
+            struct bpf_redir_neigh param;
+            if (is_ipv4) {
+                param.nh_family = AF_INET;
+                param.ipv4_nh = fib_params.ipv4_dst;
+            } else {
+                param.nh_family = AF_INET6;
+                COPY_ADDR_FROM(param.ipv6_nh, fib_params.ipv6_dst);
+            }
+            return bpf_redirect_neigh(target_info->ifindex, &param, sizeof(param), 0);
+        } else {
+            return TC_ACT_SHOT;
+        }
+    }
+
+    // bpf_log_info("bpf_redirect to: %d", target_info->ifindex);
+    ret = bpf_redirect(target_info->ifindex, 0);
+    // bpf_log_info("bpf_redirect ret: %d", ret);
+    return ret;
 #undef BPF_LOG_TOPIC
 }
 
 SEC("tc/egress")
 int flow_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">> flow_egress"
-    struct ethhdr *eth;
-    if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-        return TC_ACT_UNSPEC;
-    }
+    // TODO: 需要记录的是 通过 NAT 而来的 静态映射流量, 避免分流到其他端口
 
-    bpf_log_info("mark: %d", skb->mark);
-    bpf_log_info("ifindex: %d", skb->ifindex);
-    bpf_log_info("ingress_ifindex: %d", skb->ingress_ifindex);
+    // bpf_log_info("mark: %d", skb->mark);
+    // bpf_log_info("ifindex: %d", skb->ifindex);
+    // bpf_log_info("ingress_ifindex: %d", skb->ingress_ifindex);
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

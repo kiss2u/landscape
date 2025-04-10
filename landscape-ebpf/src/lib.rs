@@ -40,6 +40,7 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         flow_verdict_dns_map: PathBuf::from(format!("{}/flow_verdict_dns_map", ebpf_map_path)),
         flow_verdict_ip_map: PathBuf::from(format!("{}/flow_verdict_ip_map", ebpf_map_path)),
         flow_match_map: PathBuf::from(format!("{}/flow_match_map", ebpf_map_path)),
+        flow_target_map: PathBuf::from(format!("{}/flow_target_map", ebpf_map_path)),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
@@ -70,6 +71,8 @@ pub(crate) struct LandscapeMapPath {
     pub flow_verdict_dns_map: PathBuf,
     pub flow_verdict_ip_map: PathBuf,
     pub flow_match_map: PathBuf,
+    /// 存储 flow 目标的主机
+    pub flow_target_map: PathBuf,
 }
 
 // pppoe -> Fire wall -> nat

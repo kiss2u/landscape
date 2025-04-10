@@ -5,7 +5,12 @@ import { computed, h, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { NIcon } from "naive-ui";
 
-import { Network4, CicsSystemGroup, ModelBuilder } from "@vicons/carbon";
+import {
+  Network4,
+  CicsSystemGroup,
+  ModelBuilder,
+  ChartCombo,
+} from "@vicons/carbon";
 import { ImportExportRound } from "@vicons/material";
 import { Wall } from "@vicons/tabler";
 import { Docker } from "@vicons/fa";
@@ -81,6 +86,12 @@ const menuOptions: MenuOption[] = [
     label: "Docker",
     key: "docker",
     icon: renderIcon(Docker),
+  },
+  {
+    label: "指标统计",
+    key: "metric",
+    icon: renderIcon(ChartCombo),
+    disabled: true,
   },
 ];
 </script>

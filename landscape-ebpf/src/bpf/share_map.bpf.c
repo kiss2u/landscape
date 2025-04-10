@@ -4,6 +4,7 @@
 #include "firewall_share.h"
 #include "flow_mark_share.h"
 #include "flow_verdict_share.h"
+#include "flow.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 

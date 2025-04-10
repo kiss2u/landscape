@@ -79,4 +79,14 @@ struct ipv4_mark_action {
     __u32 mark;
 };
 
+static int prepend_dummy_mac(struct __sk_buff *skb) {
+    char mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x08, 0x00};
+
+    if (bpf_skb_change_head(skb, 14, 0)) return -1;
+
+    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
+
+    return 0;
+}
+
 #endif /* __LD_LANDSCAPE_H__ */

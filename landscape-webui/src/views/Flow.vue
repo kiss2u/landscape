@@ -14,7 +14,7 @@ onMounted(async () => {
 <template>
   <n-layout :native-scrollbar="false" content-style="padding: 10px;">
     <n-flex vertical>
-      <n-flex> cccc</n-flex>
+      <!-- <n-flex> cccc</n-flex> -->
       <n-grid x-gap="12" y-gap="10" cols="1 600:2 900:3 1200:4 1600:5">
         <n-grid-item style="display: flex">
           <n-card size="small" content-style="display:flex;">

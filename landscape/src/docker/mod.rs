@@ -1,4 +1,7 @@
-use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
+use landscape_common::{
+    flow::target::{FlowTargetPair, TargetInterfaceInfo},
+    service::{DefaultWatchServiceStatus, ServiceStatus},
+};
 use regex::Regex;
 use serde::Serialize;
 use std::{fs::File, io::BufRead, path::PathBuf};
@@ -157,9 +160,12 @@ pub async fn handle_redirect_id_set(docker: &Docker, actor: EventActor) {
                             for dev in devs {
                                 if let Some(peer_id) = dev.peer_link_id {
                                     if if_id == peer_id {
-                                        landscape_ebpf::map_setting::add_redirect_iface_pair(
-                                            redirect_id,
-                                            dev.index,
+                                        let info = FlowTargetPair {
+                                            key: redirect_id as u32,
+                                            value: TargetInterfaceInfo::new_docker(dev.index),
+                                        };
+                                        landscape_ebpf::map_setting::flow_target::add_flow_target_info(
+                                            info
                                         );
                                         tracing::debug!("peer_id is :{:?}", dev.index);
                                     }

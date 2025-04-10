@@ -25,8 +25,13 @@ pub fn attach_match_flow(
     let firewall_builder = FlowMarkSkelBuilder::default();
     let mut open_skel = firewall_builder.open(&mut open_object)?;
 
+    // 检索匹配规则 MAP
     open_skel.maps.flow_match_map.set_pin_path(&MAP_PATHS.flow_match_map)?;
     open_skel.maps.flow_match_map.reuse_pinned_map(&MAP_PATHS.flow_match_map)?;
+
+    // 分流发送目标 MAP
+    open_skel.maps.flow_target_map.set_pin_path(&MAP_PATHS.flow_target_map)?;
+    open_skel.maps.flow_target_map.reuse_pinned_map(&MAP_PATHS.flow_target_map)?;
 
     if !has_mac {
         open_skel.maps.rodata_data.current_eth_net_offset = 0;

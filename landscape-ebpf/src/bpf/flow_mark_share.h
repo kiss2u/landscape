@@ -3,16 +3,7 @@
 #include <bpf/bpf_helpers.h>
 #include "landscape.h"
 #include "packet_def.h"
-
-struct flow_match_key {
-    // 源 mac 地址
-    unsigned char h_source[6];
-    // vlan id
-    u32 vlan_tci;
-    // tos value
-    u8 tos;
-    u8 _pad;
-};
+#include "flow.h"
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);

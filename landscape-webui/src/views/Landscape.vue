@@ -44,7 +44,7 @@ const { t } = useI18n({ useScope: "global" });
       <n-divider style="margin: 0px 0" title-placement="left">
         {{ t("topology_divider") }}
       </n-divider>
-      <NetFlow style="min-height: 600px; min-width: 100%"></NetFlow>
+      <NetFlow style="min-height: 550px; min-width: 100%"></NetFlow>
     </n-flex>
 
     <!-- <n-button @click="show_dump = true">Show DUMP</n-button> -->

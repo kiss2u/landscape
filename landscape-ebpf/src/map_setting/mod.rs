@@ -19,6 +19,7 @@ use types::{ipv4_lpm_key, ipv4_mark_action};
 use crate::{LandscapeMapPath, MAP_PATHS};
 
 pub mod flow;
+pub mod flow_target;
 
 pub(crate) fn init_path(paths: LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
@@ -45,6 +46,7 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
     landscape_open.maps.flow_v_dns_map.set_pin_path(&paths.flow_verdict_dns_map).unwrap();
     landscape_open.maps.flow_v_ip_map.set_pin_path(&paths.flow_verdict_ip_map).unwrap();
     landscape_open.maps.flow_match_map.set_pin_path(&paths.flow_match_map).unwrap();
+    landscape_open.maps.flow_target_map.set_pin_path(&paths.flow_target_map).unwrap();
 
     let _landscape_skel = landscape_open.load().unwrap();
 }
@@ -221,6 +223,7 @@ pub fn del_dns_marks(ip_marks: Vec<IpConfig>) {
     }
 }
 
+#[deprecated]
 pub fn add_redirect_iface_pair(redirect_index: u8, ifindex: u32) {
     let redirect_index_map =
         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.redirect_index).unwrap();
@@ -231,6 +234,7 @@ pub fn add_redirect_iface_pair(redirect_index: u8, ifindex: u32) {
     }
 }
 
+#[deprecated]
 pub fn del_redirect_iface_pair(redirect_index: u8) {
     let redirect_index_map =
         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.redirect_index).unwrap();
