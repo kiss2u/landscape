@@ -153,7 +153,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dev_observer() {
-        crate::init_tracing!();
+        landscape_common::init_tracing!();
         let mut info = dev_observer().await;
 
         while let Ok(msg) = info.recv().await {

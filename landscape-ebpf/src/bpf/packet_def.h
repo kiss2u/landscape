@@ -131,4 +131,31 @@ static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const unio
            a->all[3] == b->all[3];
 }
 
+static __inline void print_bpf_fib_lookup(const struct bpf_fib_lookup *fib_params) {
+#define BPF_LOG_TOPIC "print_bpf_fib_lookup"
+    bpf_log_info("family: %u\n", fib_params->family);
+    bpf_log_info("l4_protocol: %u\n", fib_params->l4_protocol);
+    bpf_log_info("sport: %u, dport: %u\n", __bpf_ntohs(fib_params->sport),
+                 __bpf_ntohs(fib_params->dport));
+    bpf_log_info("tot_len/mtu_result: %u\n", fib_params->tot_len);
+    bpf_log_info("ifindex: %u\n", fib_params->ifindex);
+
+    if (fib_params->family == AF_INET) {
+        bpf_log_info("tos: %u\n", fib_params->tos);
+        bpf_log_info("ipv4_src: %pI4\n", &fib_params->ipv4_src);
+        bpf_log_info("ipv4_dst: %pI4\n", &fib_params->ipv4_dst);
+    } else if (fib_params->family == AF_INET6) {
+        bpf_log_info("flowinfo: %u\n", fib_params->flowinfo);
+        bpf_log_info("ipv6_src: %pI6\n", fib_params->ipv6_src);
+        bpf_log_info("ipv6_dst: %pI6\n", fib_params->ipv6_dst);
+    }
+
+    bpf_log_info("vlan_proto: 0x%04x, vlan_tci: 0x%04x\n", __bpf_ntohs(fib_params->h_vlan_proto),
+                 __bpf_ntohs(fib_params->h_vlan_TCI));
+
+    PRINT_MAC_ADDR(fib_params->smac);
+    PRINT_MAC_ADDR(fib_params->dmac);
+#undef BPF_LOG_TOPIC
+}
+
 #endif /* __LD_PACKET_DEF_H__ */

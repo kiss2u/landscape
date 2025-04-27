@@ -1,34 +1,44 @@
 <script setup lang="ts">
 import { VueFlow, useVueFlow } from "@vue-flow/core";
 import { MiniMap } from "@vue-flow/minimap";
-import InteractionControls from "@/components/flow/InteractionControls.vue";
-import FlowHeaderExtra from "@/components/flow_v2/FlowHeaderExtra.vue";
-import TopologyNetNode from "@/components/flow_v2/TopologyNetNode.vue";
-import TopologyDockerNode from "@/components/flow_v2/TopologyDockerNode.vue";
+// import { Controls } from '@vue-flow/controls'
+import InteractionControls from "@/components/topology/InteractionControls.vue";
+import FlowHeaderExtra from "@/components/topology/FlowHeaderExtra.vue";
+import FlowNode from "@/components/topology/FlowNode.vue";
 import { add_controller } from "@/api/network";
 
 import { useMessage, SelectOption } from "naive-ui";
 
 import { onMounted, ref } from "vue";
+import { useIfaceNodeStore } from "@/stores/iface_node";
 import { WLANTypeTag } from "@/lib/dev";
-import { useTopologyStore } from "@/stores/topology";
 
+const { zoomOnScroll, fitView, onConnect } = useVueFlow();
 const naive_message = useMessage();
 
-let ifaceNodeStore = useTopologyStore();
-const { zoomOnScroll, fitView, onConnect, id } = useVueFlow();
+interface Props {
+  fit_padding?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  fit_padding: 0.3,
+});
 
 zoomOnScroll.value = false;
+let ifaceNodeStore = useIfaceNodeStore();
 
-onMounted(async () => {
-  await ifaceNodeStore.UPDATE_INFO();
-  fitView({ padding: 0.23 });
+ifaceNodeStore.SETTING_CALL_BACK(() => {
+  fitView({ padding: props.fit_padding });
+});
+
+onMounted(() => {
+  ifaceNodeStore.UPDATE_INFO();
 });
 
 onConnect(async (params: any) => {
   // source 相当于 master_ifindex
-  const is_source_bridge = ifaceNodeStore.FIND_BRIDGE_BY_IFNAME(params.source);
-  const is_target_bridge = ifaceNodeStore.FIND_BRIDGE_BY_IFNAME(params.target);
+  const is_source_bridge = ifaceNodeStore.FIND_BRIDGE_BY_IFINDEX(params.source);
+  const is_target_bridge = ifaceNodeStore.FIND_BRIDGE_BY_IFINDEX(params.target);
   if (is_source_bridge && is_target_bridge) {
     naive_message.warning("还没做好 Bridge 环路检测");
   } else if (is_target_bridge) {
@@ -39,7 +49,7 @@ onConnect(async (params: any) => {
     );
   }
 
-  let dev = ifaceNodeStore.FIND_DEV_BY_IFNAME(params.target);
+  let dev = ifaceNodeStore.FIND_DEV_BY_IFINDEX(params.target);
   if (dev?.wifi_info !== undefined) {
     if (dev.wifi_info.wifi_type.t !== WLANTypeTag.Ap) {
       naive_message.warning(
@@ -47,7 +57,7 @@ onConnect(async (params: any) => {
       );
     }
   }
-  let master_dev = ifaceNodeStore.FIND_DEV_BY_IFNAME(params.source);
+  let master_dev = ifaceNodeStore.FIND_DEV_BY_IFINDEX(params.source);
   if (dev) {
     if (dev.controller_id || dev.controller_name) {
       naive_message.error("此设备已有上级设备了");
@@ -88,14 +98,25 @@ function handleIfaceUpdate(value: string, option: SelectOption) {
 </script>
 
 <template>
-  <!-- {{ ifaceNodeStore.topo_nodes }}
-  {{ ifaceNodeStore.topo_edges }} -->
-  <VueFlow
-    :nodes="ifaceNodeStore.topo_nodes"
-    :edges="ifaceNodeStore.topo_edges"
-    fit-view-on-init
-    style="min-height: 600px; min-width: 100%"
-  >
+  <!-- <n-input-group>
+    <n-input-group-label>Bridge</n-input-group-label>
+    <n-select
+      :style="{ width: '50%' }"
+      @update:value="handleMasterUpdate"
+      v-model:value="controlelr_config.master_name"
+      :options="ifaceNodeStore.bridges"
+    />
+    <n-input-group-label>eth</n-input-group-label>
+    <n-select
+      :style="{ width: '50%' }"
+      @update:value="handleIfaceUpdate"
+      v-model:value="controlelr_config.link_name"
+      :options="ifaceNodeStore.eths"
+    />
+    <n-button type="primary" @click="create_connection" ghost> Add </n-button>
+  </n-input-group> -->
+  <!-- {{ net_devs }} -->
+  <VueFlow :nodes="ifaceNodeStore.nodes" :edges="ifaceNodeStore.edges">
     <!-- bind your custom node type to a component by using slots, slot names are always `node-<type>` -->
     <!-- <template #node-special="specialNodeProps">
         <SpecialNode v-bind="specialNodeProps" />
@@ -103,18 +124,20 @@ function handleIfaceUpdate(value: string, option: SelectOption) {
 
     <!-- bind your custom edge type to a component by using slots, slot names are always `edge-<type>` -->
     <!-- <template #edge-special="specialEdgeProps">
-      <SpecialEdge v-bind="specialEdgeProps" />
-    </template> -->
+        <SpecialEdge v-bind="specialEdgeProps" />
+      </template> -->
     <!-- <MiniMap pannable zoomable /> -->
+    <!-- <Controls position="top-right">
+        <n-button style="font-size: 16px; padding: 5px;" text >
+          <n-icon>
+            <cash-icon />
+          </n-icon>
+        </n-button>
+    </Controls> -->
     <template #node-netflow="{ data }">
       <!-- {{ nodeProps }} -->
-      <TopologyNetNode :node="data.dev" />
+      <FlowNode :node="data" />
     </template>
-    <template #node-docker="{ data }">
-      <!-- {{ nodeProps }} -->
-      <TopologyDockerNode :node="data.dev" />
-    </template>
-
     <!-- <InteractionControls /> -->
 
     <FlowHeaderExtra />

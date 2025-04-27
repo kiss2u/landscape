@@ -16,7 +16,17 @@ import { ChangeCatalog } from "@vicons/carbon";
 import { computed, onMounted } from "vue";
 import { ref } from "vue";
 import UpstreamEdit from "@/components/dns/upstream/UpstreamEdit.vue";
-import PacketMark from "@/components/mark/PacketMark.vue";
+import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
+
+type Props = {
+  data:
+    | {
+        flow_id: number;
+      }
+    | DnsRule;
+};
+
+const props = defineProps<Props>();
 
 const message = useMessage();
 
@@ -24,8 +34,9 @@ const emit = defineEmits(["refresh"]);
 
 const show = defineModel<boolean>("show", { required: true });
 
-const origin_rule = defineModel<DnsRule>("rule", { default: new DnsRule() });
-const rule = ref<any>(new DnsRule(origin_rule.value));
+const origin_rule = ref<DnsRule>(new DnsRule(props.data));
+
+const rule = ref<any>(new DnsRule());
 
 const commit_spin = ref(false);
 const isModified = computed(() => {
@@ -33,6 +44,7 @@ const isModified = computed(() => {
 });
 
 function enter() {
+  origin_rule.value = new DnsRule(props.data);
   rule.value = new DnsRule(origin_rule.value);
 }
 
@@ -145,11 +157,7 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
         <n-form-item-gi :span="2" label="备注">
           <n-input v-model:value="rule.name" type="text" />
         </n-form-item-gi>
-        <n-form-item-gi
-          v-if="!rule.redirection"
-          :span="5"
-          label="流量标记 (IPv6 暂不支持)"
-        >
+        <n-form-item-gi v-if="!rule.redirection" :span="5" label="流量动作">
           <!-- <n-popover trigger="hover">
             <template #trigger>
               <n-switch v-model:value="rule.mark">
@@ -159,7 +167,7 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
             </template>
             <span>向上游 DNS 请求时的流量是否标记</span>
           </n-popover> -->
-          <PacketMark v-model:mark="rule.mark"></PacketMark>
+          <FlowDnsMark v-model:mark="rule.mark"></FlowDnsMark>
         </n-form-item-gi>
         <n-form-item-gi :span="5" label="解析模式">
           <n-radio-group

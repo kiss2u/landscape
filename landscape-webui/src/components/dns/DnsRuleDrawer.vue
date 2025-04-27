@@ -3,11 +3,19 @@ import { ref } from "vue";
 import DnsRuleCard from "@/components/dns/DnsRuleCard.vue";
 import { get_dns_rule } from "@/api/dns_service";
 
+interface Props {
+  flow_id?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  flow_id: 0,
+});
+
 const show = defineModel<boolean>("show", { required: true });
 const rules = ref<any>([]);
 
 async function read_rules() {
-  rules.value = await get_dns_rule();
+  rules.value = await get_dns_rule(props.flow_id);
 }
 
 const show_create_modal = ref(false);
@@ -21,9 +29,6 @@ const show_create_modal = ref(false);
   >
     <n-drawer-content title="编辑 DNS 所使用规则" closable>
       <n-flex style="height: 100%" vertical>
-        <n-alert type="warning">
-          编辑规则后需要手动 `停止` 并 `开启` 后 DNS 规则才能生效
-        </n-alert>
         <n-button @click="show_create_modal = true">增加规则</n-button>
 
         <n-scrollbar>
@@ -41,6 +46,7 @@ const show_create_modal = ref(false);
 
       <DnsRuleEditModal
         v-model:show="show_create_modal"
+        :data="{ flow_id: props.flow_id }"
         @refresh="read_rules()"
       ></DnsRuleEditModal>
     </n-drawer-content>

@@ -23,6 +23,7 @@ pub mod dhcp_server;
 pub mod docker;
 pub mod dump;
 pub mod firewall;
+pub mod flow;
 pub mod icmp;
 pub mod iface;
 pub mod observer;
@@ -337,15 +338,4 @@ mod tests {
             println!("{component:?}");
         }
     }
-}
-
-#[macro_export]
-macro_rules! init_tracing {
-    () => {
-        let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .with_writer(non_blocking)
-            .init();
-    };
 }

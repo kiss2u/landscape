@@ -8,6 +8,7 @@ import { dateZhCN, zhCN } from "naive-ui";
     :locale="zhCN"
     :date-locale="dateZhCN"
     :theme="darkTheme"
+    style="display: flex; flex: 1"
     :theme-overrides="{ common: { fontWeightStrong: '600' } }"
   >
     <n-message-provider>

@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-common = { path = "../landscape-common" }
+landscape-protobuf = { path = "../landscape-protobuf" }
 
 hickory-server = "0.25.1"
 hickory-client = "0.25.1"
@@ -20,9 +21,9 @@ hickory-proto = { version = "0.25.1", features = [
     "__tls",
     "tls-ring",
 ] }
+tokio-util = { workspace = true, features = ["codec", "net"] }
 tokio = { workspace = true, features = ['fs', 'net'] }
 clap = { workspace = true }
-tracing = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 async-trait = "*"
@@ -31,13 +32,15 @@ socket2 = "*"
 lru = "*"
 serde = { workspace = true }
 serde_json = { workspace = true }
-homedir = { workspace = true }
+ctrlc = { workspace = true }
 
-quick-protobuf = "0.8" # 确保使用最新版本
 trie-rs = "0.4.2"
 regex = "*"
 aho-corasick = "1.1.3"
 
-[build-dependencies]
-pb-rs = "0.9.1"
-walkdir = "*"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-appender = { workspace = true }
+futures-util = "*"
+
+nix = { version = "0.29.0", features = ["socket", "uio"] }

@@ -13,28 +13,28 @@ use landscape_common::{
     dns::{
         DNSResolveMode, DNSRuleConfig, DnsUpstreamType, DomainConfig, DomainMatchType, RuleSource,
     },
-    mark::PacketMark,
+    flow::mark::FlowDnsMark,
 };
 use matcher::DomainMatcher;
 use std::str::FromStr;
 use std::{collections::HashMap, net::IpAddr};
 
-use crate::{
-    connection::{MarkConnectionProvider, MarkRuntimeProvider},
-    protos::geo::{mod_Domain::Type, Domain},
-};
+use crate::connection::{MarkConnectionProvider, MarkRuntimeProvider};
 
 mod matcher;
 
+#[derive(Debug)]
 pub struct CacheResolver {
     pub resolver: Resolver<MarkConnectionProvider>,
 }
 
 impl CacheResolver {
-    pub fn new(resolve: ResolverConfig, mark: &PacketMark) -> Self {
+    pub fn new(resolve: ResolverConfig, mark: &FlowDnsMark, flow_id: u32) -> Self {
         let mark_value = match mark.clone() {
-            PacketMark::Redirect { index } => PacketMark::Redirect { index }.into(),
-            _ => PacketMark::Direct.into(),
+            // 转发时候使用目标 flow 进行标记 DNS 请求
+            FlowDnsMark::Redirect { flow_id } => flow_id as u32,
+            // 其余情况使用 当前规则所属的 flow 进行标记
+            _ => flow_id,
         };
 
         let resolver = Resolver::builder_with_config(
@@ -46,12 +46,13 @@ impl CacheResolver {
     }
 }
 
+#[derive(Debug)]
 pub enum ResolverType {
     RedirectResolver(Vec<IpAddr>),
     CacheResolver(CacheResolver),
 }
 impl ResolverType {
-    pub fn new(config: &DNSRuleConfig) -> Self {
+    pub fn new(config: &DNSRuleConfig, flow_id: u32) -> Self {
         match &config.resolve_mode {
             DNSResolveMode::Redirect { ips } => ResolverType::RedirectResolver(ips.clone()),
             DNSResolveMode::Upstream { upstream, ips, port } => {
@@ -75,7 +76,7 @@ impl ResolverType {
 
                 let resolve = ResolverConfig::from_parts(None, vec![], name_server);
 
-                ResolverType::CacheResolver(CacheResolver::new(resolve, &config.mark))
+                ResolverType::CacheResolver(CacheResolver::new(resolve, &config.mark, flow_id))
             }
             DNSResolveMode::CloudFlare { mode } => {
                 let server = match mode {
@@ -90,7 +91,7 @@ impl ResolverType {
                     }
                 };
                 let resolve = ResolverConfig::from_parts(None, vec![], server);
-                ResolverType::CacheResolver(CacheResolver::new(resolve, &config.mark))
+                ResolverType::CacheResolver(CacheResolver::new(resolve, &config.mark, flow_id))
             }
         }
     }
@@ -134,26 +135,31 @@ impl ResolverType {
     }
 }
 
+#[derive(Debug)]
 /// 与规则是 1:1 创建的
 pub struct ResolutionRule {
     // 启动之后配置的 matcher
     matcher: DomainMatcher,
     //
-    config: DNSRuleConfig,
+    pub config: DNSRuleConfig,
 
     resolver: ResolverType,
 }
 
 impl ResolutionRule {
-    pub fn new(config: DNSRuleConfig, geo_file: &HashMap<String, Vec<DomainConfig>>) -> Self {
+    pub fn new(
+        config: DNSRuleConfig,
+        geo_file: &HashMap<String, Vec<DomainConfig>>,
+        flow_id: u32,
+    ) -> Self {
         let matcher = DomainMatcher::new(convert_config_to_runtime_rule(&config, geo_file));
 
-        let resolver = ResolverType::new(&config);
+        let resolver = ResolverType::new(&config, flow_id);
 
         ResolutionRule { matcher, config, resolver }
     }
 
-    pub fn mark(&self) -> &PacketMark {
+    pub fn mark(&self) -> &FlowDnsMark {
         &self.config.mark
     }
 
@@ -201,20 +207,4 @@ pub fn convert_config_to_runtime_rule(
         }
     }
     all_domain_rules
-}
-
-pub fn convert_match_type_from_proto(value: Type) -> DomainMatchType {
-    match value {
-        Type::Plain => DomainMatchType::Plain,
-        Type::Regex => DomainMatchType::Regex,
-        Type::Domain => DomainMatchType::Domain,
-        Type::Full => DomainMatchType::Full,
-    }
-}
-
-pub fn convert_domain_from_proto(value: &Domain) -> DomainConfig {
-    DomainConfig {
-        match_type: convert_match_type_from_proto(value.type_pb),
-        value: value.value.to_lowercase(),
-    }
 }

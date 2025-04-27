@@ -6,6 +6,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
     time::Instant,
+    vec,
 };
 
 use hickory_proto::{
@@ -22,8 +23,7 @@ use tokio::sync::Mutex;
 use crate::{rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
     dns::{DNSRuleConfig, DomainConfig},
-    ip_mark::{IpConfig, IpMarkInfo},
-    mark::PacketMark,
+    flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
 };
 
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
@@ -58,111 +58,118 @@ fn check_resolver_conf() {
 }
 
 /// 整个 DNS 规则匹配树
-#[derive(Clone)]
-pub struct DnsServer {
+#[derive(Clone, Debug)]
+pub struct LandscapeDnsRequestHandle {
     /// 所有的域名处理对象
     /// 遍历的顺序是小到大
     resolves: BTreeMap<u32, Arc<ResolutionRule>>,
-    cache: Arc<Mutex<DNSCache>>,
+    pub cache: Arc<Mutex<DNSCache>>,
+    pub flow_id: u32,
 }
 
-impl DnsServer {
+impl LandscapeDnsRequestHandle {
     pub fn new(
         dns_rules: Vec<DNSRuleConfig>,
-        geo_map: HashMap<String, Vec<DomainConfig>>,
-        old_cache: Option<Arc<Mutex<DNSCache>>>,
-    ) -> DnsServer {
+        geo_map: &HashMap<String, Vec<DomainConfig>>,
+        flow_id: u32,
+    ) -> LandscapeDnsRequestHandle {
+        check_resolver_conf();
+        let mut resolves = BTreeMap::new();
+        for rule in dns_rules.into_iter() {
+            // println!("dns_rules: {:?}", rule);
+            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, geo_map, flow_id)));
+        }
+        let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(2048).unwrap())));
+
+        // landscape_ebpf::map_setting::flow::create_flow_dns_inner_map(flow_id, vec![]);
+        LandscapeDnsRequestHandle { resolves, cache, flow_id }
+    }
+
+    pub fn renew_rules(
+        &mut self,
+        dns_rules: Vec<DNSRuleConfig>,
+        geo_map: &HashMap<String, Vec<DomainConfig>>,
+    ) {
         check_resolver_conf();
 
         let mut resolves = BTreeMap::new();
-
         for rule in dns_rules.into_iter() {
             // println!("dns_rules: {:?}", rule);
-            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, &geo_map)));
+            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, geo_map, self.flow_id)));
         }
 
         let mut cache = LruCache::new(NonZeroUsize::new(2048).unwrap());
-        if let Some(old_cache) = old_cache {
-            if let Ok(old_cache) = old_cache.try_lock() {
-                let mut update_dns_mark_list = HashSet::new();
-                let mut del_dns_mark_list = HashSet::new();
 
-                for ((domain, req_type), value) in old_cache.iter() {
-                    'resolver: for (_index, resolver) in resolves.iter() {
-                        // println!("old domain: {domain:?}");
-                        if resolver.is_match(&domain) {
-                            let new_mark = resolver.mark().clone();
-                            // println!("old domain match resolver: {domain:?}");
-                            let mut cache_items = vec![];
-                            for CacheDNSItem { rdatas, insert_time, mark } in value.iter() {
-                                if matches!(new_mark, PacketMark::NoMark)
-                                    && matches!(mark, PacketMark::NoMark)
-                                {
-                                    continue;
-                                }
+        if let Ok(old_cache) = self.cache.try_lock() {
+            let mut update_dns_mark_list: HashSet<FlowDnsMarkInfo> = HashSet::new();
+            let mut del_dns_mark_list: HashSet<FlowDnsMarkInfo> = HashSet::new();
 
-                                // println!("old mark: {mark:?}, new_mark: {new_mark:?}");
-                                if new_mark != *mark {
-                                    for rdata in rdatas.iter() {
-                                        match rdata.data() {
-                                            hickory_proto::rr::RData::A(a) => {
-                                                if matches!(new_mark, PacketMark::NoMark) {
-                                                    del_dns_mark_list.insert(IpConfig {
-                                                        ip: std::net::IpAddr::V4(a.0),
-                                                        prefix: 32_u32,
-                                                    });
-                                                } else {
-                                                    update_dns_mark_list.insert(IpMarkInfo {
-                                                        mark: new_mark,
-                                                        cidr: IpConfig {
-                                                            ip: std::net::IpAddr::V4(a.0),
-                                                            prefix: 32_u32,
-                                                        },
-                                                    });
-                                                }
-                                            }
-                                            _ => {}
-                                        }
+            for ((domain, req_type), value) in old_cache.iter() {
+                'resolver: for (_index, resolver) in resolves.iter() {
+                    if resolver.is_match(&domain) {
+                        println!("resolves: {:?}: match: {domain:?}", resolver.config);
+                        let new_mark = resolver.mark().clone();
+                        // println!("old domain match resolver: {domain:?}");
+                        let mut cache_items = vec![];
+                        for cache_item in value.iter() {
+                            // 新配置是 NoMark 的排除
+                            match (
+                                cache_item.mark.need_insert_in_ebpf_map(),
+                                new_mark.need_insert_in_ebpf_map(),
+                            ) {
+                                (true, true) => {
+                                    // 规则更新前后都需要写入 ebpf map
+                                    // 所以检查不相同才需要更新
+                                    if new_mark != cache_item.mark {
+                                        update_dns_mark_list.extend(
+                                            cache_item.get_update_rules_with_mark(&new_mark),
+                                        );
                                     }
-                                    cache_items.push(CacheDNSItem {
-                                        rdatas: rdatas.clone(),
-                                        insert_time: insert_time.clone(),
-                                        mark: new_mark.clone(),
-                                    });
-                                } else {
-                                    cache_items.push(CacheDNSItem {
-                                        rdatas: rdatas.clone(),
-                                        insert_time: insert_time.clone(),
-                                        mark: new_mark.clone(),
-                                    });
+                                }
+                                (true, false) => {
+                                    // 原先已经写入了
+                                    // 现在不需要了
+                                    del_dns_mark_list.extend(cache_item.get_update_rules());
+                                }
+                                (false, true) => {
+                                    // 原先没写入
+                                    // 目前需要缓存了
+                                    update_dns_mark_list
+                                        .extend(cache_item.get_update_rules_with_mark(&new_mark));
+                                }
+                                (false, false) => {
+                                    // 原先没缓存，现在也不需要存储的
                                 }
                             }
-                            if !cache_items.is_empty() {
-                                cache.push((domain.clone(), req_type.clone()), cache_items);
-                            }
-                            break 'resolver;
+
+                            let mut new_record = cache_item.clone();
+                            new_record.mark = new_mark;
+                            cache_items.push(new_record);
                         }
+                        if !cache_items.is_empty() {
+                            cache.push((domain.clone(), req_type.clone()), cache_items);
+                        }
+                        break 'resolver;
                     }
                 }
-                tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
-                tracing::info!("del_dns_marks: {:?}", del_dns_mark_list);
-                landscape_ebpf::map_setting::add_dns_marks(
-                    update_dns_mark_list.into_iter().collect(),
-                );
-                landscape_ebpf::map_setting::del_dns_marks(del_dns_mark_list.into_iter().collect());
             }
-        }
+            tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
 
-        drop(geo_map);
+            landscape_ebpf::map_setting::flow_dns::create_flow_dns_inner_map(
+                self.flow_id,
+                update_dns_mark_list.into_iter().collect(),
+            );
+            // landscape_ebpf::map_setting::flow_dns::del_flow_dns_mark_rules(
+            //     self.flow_id,
+            //     del_dns_mark_list.into_iter().collect(),
+            // );
+        }
 
         // println!("cache: {:?}", cache);
         let cache = Arc::new(Mutex::new(cache));
 
-        DnsServer { resolves, cache }
-    }
-
-    pub fn clone_cache(&self) -> Arc<Mutex<DNSCache>> {
-        self.cache.clone()
+        self.resolves = resolves;
+        self.cache = cache;
     }
 
     // 检查缓存并根据 TTL 判断是否过期
@@ -199,45 +206,32 @@ impl DnsServer {
         domain: &str,
         query_type: RecordType,
         rdata_ttl_vec: Vec<Record>,
-        mark: &PacketMark,
+        mark: &FlowDnsMark,
     ) {
-        let insert_time = Instant::now();
-
-        // 将记录和插入时间存储到缓存中
-        let mut records_with_expiration: Vec<CacheDNSItem> = vec![];
-        // TODO: 目前仅记录 IPV4 缓存
-        let mut update_dns_mark_list = HashSet::new();
-        let mut rdatas = vec![];
-        for rdata in rdata_ttl_vec.into_iter() {
-            match rdata.data() {
-                hickory_proto::rr::RData::A(a) => {
-                    update_dns_mark_list.insert(IpMarkInfo {
-                        mark: mark.clone(),
-                        cidr: IpConfig { ip: std::net::IpAddr::V4(a.0), prefix: 32_u32 },
-                    });
-                }
-                _ => {}
-            }
-            rdatas.push(rdata);
-        }
-        records_with_expiration.push(CacheDNSItem { rdatas, insert_time, mark: mark.clone() });
-        // let records_with_expiration: Vec<(Record, Instant)> =
-        //     rdata_ttl_vec.into_iter().map(|rdata| (rdata, now)).collect();
+        let cache_item = CacheDNSItem {
+            rdatas: rdata_ttl_vec,
+            insert_time: Instant::now(),
+            mark: mark.clone(),
+        };
+        let update_dns_mark_list = cache_item.get_update_rules();
 
         let mut cache = self.cache.lock().await;
-        cache.put((domain.to_string(), query_type), records_with_expiration);
+        cache.put((domain.to_string(), query_type), vec![cache_item]);
         drop(cache);
         // 将 mark 写入 mark ebpf map
-        if mark.need_add_mark_config() {
+        if mark.need_insert_in_ebpf_map() {
             tracing::info!("setting ips: {:?}, Mark: {:?}", update_dns_mark_list, mark);
             // TODO: 如果写入错误 返回错误后 向客户端返回查询错误
-            landscape_ebpf::map_setting::add_dns_marks(update_dns_mark_list.into_iter().collect());
+            landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
+                self.flow_id,
+                update_dns_mark_list.into_iter().collect(),
+            );
         }
     }
 }
 
 #[async_trait::async_trait]
-impl RequestHandler for DnsServer {
+impl RequestHandler for LandscapeDnsRequestHandle {
     async fn handle_request<R: ResponseHandler>(
         &self,
         request: &Request,

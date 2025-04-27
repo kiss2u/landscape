@@ -16,6 +16,7 @@ use landscape_common::{
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
     firewall::FirewallRuleConfig,
+    flow::FlowConfig,
     ip_mark::{LanIPRuleConfig, WanIPRuleConfig},
     INIT_FILE_NAME, INIT_LOCK_FILE_NAME,
 };
@@ -74,6 +75,8 @@ pub struct InitConfig {
     pub nats: Vec<NatServiceConfig>,
     pub marks: Vec<PacketMarkServiceConfig>,
     pub pppds: Vec<PPPDServiceConfig>,
+
+    pub flow_rules: Vec<FlowConfig>,
     pub dns_rules: Vec<DNSRuleConfig>,
 
     pub lan_ip_mark: Vec<LanIPRuleConfig>,

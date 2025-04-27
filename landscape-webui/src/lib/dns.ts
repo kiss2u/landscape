@@ -1,30 +1,36 @@
+import { FlowDnsMark } from "@/rust_bindings/flow";
+import { FlowDnsMarkType } from "./default_value";
+
 export class DnsRule {
   index: number;
   name: string;
   enable: boolean;
-  mark: PacketMark;
+  mark: FlowDnsMark;
   source: RuleSource[];
   resolve_mode: DNSResolveMode;
+  flow_id: number;
 
   constructor(obj?: {
     index?: number;
     name?: string;
     enable?: boolean;
-    mark?: PacketMark;
+    mark?: FlowDnsMark;
     source?: RuleSource[];
     resolve_mode?: DNSResolveMode;
+    flow_id: number;
   }) {
     this.index = obj?.index ?? -1;
     this.name = obj?.name ?? "";
     this.enable = obj?.enable ?? true;
-    this.mark = obj?.mark ? { ...obj.mark } : { t: MarkType.NoMark };
+    this.mark = obj?.mark ? { ...obj.mark } : { t: FlowDnsMarkType.KeepGoing };
     this.source = obj?.source ?? [];
     this.resolve_mode = obj?.resolve_mode
       ? { ...obj.resolve_mode }
       : {
           t: DNSResolveModeEnum.CloudFlare,
-          mode: CloudFlareMode.Tls,
+          mode: CloudFlareMode.Https,
         };
+    this.flow_id = obj?.flow_id ?? 0;
   }
 }
 

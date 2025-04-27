@@ -1,0 +1,21 @@
+[package]
+name = "landscape-protobuf"
+version.workspace = true
+edition.workspace = true
+
+
+[dependencies]
+landscape-common = { path = "../landscape-common" }
+
+quick-protobuf = "0.8.1"
+tokio = { workspace = true, features = ['fs', 'net'] }
+
+
+[build-dependencies]
+pb-rs = "0.10.0"
+walkdir = "*"
+
+[dev-dependencies]
+homedir = { workspace = true }
+jemallocator = "0.5"
+jemalloc-ctl = "0.5"

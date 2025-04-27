@@ -1,11 +1,13 @@
 use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-use crate::{mark::PacketMark, store::storev2::LandScapeStore};
+use crate::{flow::mark::FlowDnsMark, store::storev2::LandScapeStore};
 
 /// DNS 配置
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "dns.ts")]
 pub struct DNSRuleConfig {
     pub name: String,
     /// 优先级
@@ -19,10 +21,17 @@ pub struct DNSRuleConfig {
     pub resolve_mode: DNSResolveMode,
     /// 流量标记
     #[serde(default)]
-    pub mark: PacketMark,
+    pub mark: FlowDnsMark,
     /// 匹配规则列表
     #[serde(default)]
     pub source: Vec<RuleSource>,
+
+    #[serde(default = "default_flow_id")]
+    pub flow_id: u32,
+}
+
+fn default_flow_id() -> u32 {
+    0_u32
 }
 
 impl LandScapeStore for DNSRuleConfig {
@@ -34,18 +43,20 @@ impl LandScapeStore for DNSRuleConfig {
 impl Default for DNSRuleConfig {
     fn default() -> Self {
         Self {
-            name: "default rule".into(),
+            name: "Landscape Router default rule".into(),
             index: 10000,
             enable: true,
             filter: FilterResult::default(),
             mark: Default::default(),
             source: vec![],
             resolve_mode: DNSResolveMode::default(),
+            flow_id: default_flow_id(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "dns.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum RuleSource {
@@ -53,13 +64,15 @@ pub enum RuleSource {
     Config(DomainConfig),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "dns.ts")]
 pub struct DomainConfig {
     pub match_type: DomainMatchType,
     pub value: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "dns.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum DomainMatchType {
     /// The value is used as is.
@@ -72,7 +85,8 @@ pub enum DomainMatchType {
     Full = 3,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "dns.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum DNSResolveMode {
@@ -83,11 +97,12 @@ pub enum DNSResolveMode {
 
 impl Default for DNSResolveMode {
     fn default() -> Self {
-        DNSResolveMode::CloudFlare { mode: CloudFlareMode::Plaintext }
+        DNSResolveMode::CloudFlare { mode: CloudFlareMode::Https }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
+#[ts(export, export_to = "dns.ts")]
 #[serde(rename_all = "lowercase")]
 #[serde(tag = "t")]
 pub enum DnsUpstreamType {
@@ -101,7 +116,8 @@ pub enum DnsUpstreamType {
     }, // DNS over HTTPS (DoH)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "dns.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum CloudFlareMode {
     Plaintext, // 1.1.1.1 (UDP/TCP)
@@ -109,7 +125,8 @@ pub enum CloudFlareMode {
     Https,     // https://cloudflare-dns.com/dns-query
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
+#[ts(export, export_to = "dns.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum FilterResult {
     #[default]
