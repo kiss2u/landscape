@@ -55,14 +55,14 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
       }
       let position = { x: 600, y: 100 };
       if (each.zone_type == ZoneType.Wan) {
-        position.x = position.x - 300;
+        position.x = position.x - 400;
         position.y = position.y + wan_y;
         wan_y += 140;
       } else if (each.controller_id == undefined) {
         position.y = position.y + left_y;
         left_y += 120;
       } else {
-        position.x = position.x + 400;
+        position.x = position.x + 450;
         position.y = position.y + right_y;
         right_y += 120;
       }

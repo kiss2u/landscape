@@ -4,12 +4,13 @@ import { ZoneType } from "@/lib/service_ipconfig";
 import { NetworkPublic, Cloud, NetworkEnterprise } from "@vicons/carbon";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const ipConfigStore = useIpConfigStore();
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const status = ipConfigStore.GET_STATUS_BY_IFACE_NAME(iface_info.iface_name);

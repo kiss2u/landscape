@@ -4,12 +4,13 @@ import { Bookmark } from "@vicons/carbon";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useMarkConfigStore } from "@/stores/status_mark";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const markConfigStore = useMarkConfigStore();
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const status = markConfigStore.GET_STATUS_BY_IFACE_NAME(iface_info.iface_name);

@@ -1148,12 +1148,13 @@ int egress_nat(struct __sk_buff *skb) {
             return TC_ACT_SHOT;
         }
 
-        u8 action = skb->mark & ACTION_MASK;
-        if (action == SYMMETRIC_NAT) {
-            // SYMMETRIC_NAT check
+        
+        u8 flow_action = get_flow_action(skb->mark);
+        if (flow_action != FLOW_ALLOW_REUSE) {
+            // PORT REUSE check
             if (!ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr) ||
                 packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
-                bpf_log_info("SYMMETRIC_NAT MARK DROP PACKET");
+                bpf_log_info("FLOW_ALLOW_REUSE MARK not set, DROP PACKET");
                 bpf_log_info("dst IP: %pI4,", &packet_info.pair_ip.dst_addr);
                 bpf_log_info("trigger_addr IP: %pI4,", &nat_egress_value->trigger_addr);
                 bpf_log_info(

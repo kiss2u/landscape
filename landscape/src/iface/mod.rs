@@ -1,17 +1,22 @@
-use config::NetworkIfaceConfig;
+use std::collections::HashMap;
+
+use config::{NetworkIfaceConfig, WifiMode};
 use dev_wifi::LandScapeWifiInterface;
 use futures::stream::TryStreamExt;
+use landscape_common::iface::{AddController, BridgeCreate, ChangeZone, IfaceZoneType};
 use rtnetlink::new_connection;
 use serde::Serialize;
+use ts_rs::TS;
 
-use crate::dev::LandScapeInterface;
+use crate::{dev::LandScapeInterface, store::LandscapeStoreServiceProvider};
 
 pub mod config;
 pub mod dev_wifi;
 pub mod ip;
 
 // 前端渲染拓扑节点
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 pub struct IfaceTopology {
     // 配置
     #[serde(flatten)]
@@ -33,4 +38,218 @@ pub async fn get_iface_by_name(name: &str) -> Option<LandScapeInterface> {
     } else {
         None
     }
+}
+
+/// interface manager
+#[derive(Clone)]
+pub struct IfaceManagerService {
+    /// 配置存储
+    pub store_service: LandscapeStoreServiceProvider,
+}
+
+impl IfaceManagerService {
+    pub async fn new(store_service: LandscapeStoreServiceProvider) -> Self {
+        let mut store = store_service.iface_store.lock().await;
+        crate::init_devs(store.list()).await;
+        drop(store);
+        Self { store_service }
+    }
+
+    pub async fn manage_dev(&self, dev_name: String) {
+        if self.get_iface_config(&dev_name).await.is_none() {
+            if let Some(iface) = get_iface_by_name(&dev_name).await {
+                let config = NetworkIfaceConfig::from_phy_dev(&iface);
+                self.set_iface_config(config).await;
+            }
+        }
+    }
+
+    pub async fn old_read_ifaces(&self) -> Vec<IfaceTopology> {
+        let all_alive_devs = crate::get_all_devices().await;
+        let add_wifi_dev = crate::get_all_wifi_devices().await;
+        let all_config = self.get_iface_configs().await;
+
+        let mut comfig_map: HashMap<String, NetworkIfaceConfig> = HashMap::new();
+        for config in all_config.into_iter() {
+            comfig_map.insert(config.get_iface_name(), config);
+        }
+
+        let mut info = vec![];
+        for each in all_alive_devs.into_iter() {
+            if each.is_lo() {
+                continue;
+            }
+            let config = if let Some(config) = comfig_map.remove(&each.name) {
+                config
+            } else {
+                NetworkIfaceConfig::from_phy_dev(&each)
+            };
+
+            let wifi_info = add_wifi_dev.get(&config.name).cloned();
+            info.push(IfaceTopology { config, status: each, wifi_info });
+        }
+
+        info
+    }
+
+    /// 读取所有的配置  
+    /// 返回已配置的网卡列表和未配置的网卡列表
+    pub async fn read_ifaces(&self) -> IfacesInfo {
+        let all_config = self.get_iface_configs().await;
+        let all_alive_devs = crate::get_all_devices().await;
+        let mut all_wifi_dev = crate::get_all_wifi_devices().await;
+
+        // 已有配置的 map
+        let mut comfig_map: HashMap<String, NetworkIfaceConfig> = HashMap::new();
+        for config in all_config.into_iter() {
+            comfig_map.insert(config.get_iface_name(), config);
+        }
+
+        let mut managed = vec![];
+        let mut unmanaged = vec![];
+
+        for each in all_alive_devs.into_iter() {
+            let wifi_info = all_wifi_dev.remove(&each.name);
+
+            if let Some(config) = comfig_map.remove(&each.name) {
+                // 如果是已经纳入配置的
+                managed.push(IfaceInfo { config, status: Some(each), wifi_info });
+            } else {
+                unmanaged.push(RawIfaceInfo { status: each, wifi_info });
+            };
+        }
+        IfacesInfo { managed, unmanaged }
+    }
+
+    pub async fn create_bridge(&self, bridge_config: BridgeCreate) {
+        if crate::create_bridge(bridge_config.name.clone()).await {
+            let bridge_info = NetworkIfaceConfig::crate_bridge(bridge_config.name, None);
+            self.set_iface_config(bridge_info).await;
+        }
+    }
+
+    pub async fn set_controller(
+        &self,
+        AddController {
+            link_name,
+            link_ifindex: _,
+            master_name,
+            master_ifindex,
+        }: AddController,
+    ) {
+        let iface_info = crate::set_controller(&link_name, master_ifindex).await;
+        if let Some(iface_info) = iface_info {
+            let mut link_config = if let Some(link_config) = self.get_iface_config(&link_name).await
+            {
+                link_config
+            } else {
+                NetworkIfaceConfig::from_phy_dev(&iface_info)
+            };
+            link_config.controller_name = master_name;
+            self.set_iface_config(link_config).await;
+        }
+    }
+
+    pub async fn change_zone(&self, ChangeZone { iface_name, zone }: ChangeZone) {
+        let link_config = if let Some(link_config) = self.get_iface_config(&iface_name).await {
+            Some(link_config)
+        } else {
+            if let Some(iface) = get_iface_by_name(&iface_name).await {
+                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+            } else {
+                None
+            }
+        };
+
+        if let Some(mut link_config) = link_config {
+            if matches!(zone, IfaceZoneType::Wan) {
+                crate::set_controller(&iface_name, None).await;
+                link_config.controller_name = None;
+            }
+            link_config.zone_type = zone;
+            self.set_iface_config(link_config).await;
+        }
+    }
+
+    pub async fn change_wifi_mode(&self, iface_name: String, mode: WifiMode) {
+        let link_config = if let Some(link_config) = self.get_iface_config(&iface_name).await {
+            Some(link_config)
+        } else {
+            if let Some(iface) = get_iface_by_name(&iface_name).await {
+                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+            } else {
+                None
+            }
+        };
+
+        if let Some(mut link_config) = link_config {
+            // 如果设置为 client 需要清理 controller 配置
+            if matches!(mode, WifiMode::Client) {
+                crate::set_controller(&iface_name, None).await;
+                link_config.controller_name = None;
+            }
+            crate::using_iw_change_wifi_mode(&link_config.name, &mode);
+            link_config.wifi_mode = mode;
+            self.set_iface_config(link_config).await;
+        }
+    }
+
+    pub async fn change_dev_status(&self, iface_name: String, enable_in_boot: bool) {
+        let iface_info = crate::change_dev_status(&iface_name, enable_in_boot).await;
+
+        if let Some(iface_info) = iface_info {
+            let mut link_config =
+                if let Some(link_config) = self.get_iface_config(&iface_name).await {
+                    link_config
+                } else {
+                    NetworkIfaceConfig::from_phy_dev(&iface_info)
+                };
+            link_config.enable_in_boot = enable_in_boot;
+
+            self.set_iface_config(link_config).await;
+        }
+    }
+
+    async fn set_iface_config(&self, config: NetworkIfaceConfig) {
+        let mut store = self.store_service.iface_store.lock().await;
+        store.set(config);
+        drop(store);
+    }
+
+    async fn get_iface_config(&self, key: &str) -> Option<NetworkIfaceConfig> {
+        let mut store = self.store_service.iface_store.lock().await;
+        store.get(key)
+    }
+
+    async fn get_iface_configs(&self) -> Vec<NetworkIfaceConfig> {
+        let mut store = self.store_service.iface_store.lock().await;
+        store.list()
+    }
+}
+
+/// 已管理的网卡
+#[derive(Serialize, Debug, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
+pub struct IfaceInfo {
+    /// 持久化的配置
+    pub config: NetworkIfaceConfig,
+    /// 当前网卡的配置, 可能网卡现在不存在
+    pub status: Option<LandScapeInterface>,
+    pub wifi_info: Option<LandScapeWifiInterface>,
+}
+
+/// 未纳入配置的网卡
+#[derive(Serialize, Debug, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
+pub struct RawIfaceInfo {
+    /// 当前网卡的配置
+    pub status: LandScapeInterface,
+    pub wifi_info: Option<LandScapeWifiInterface>,
+}
+
+#[derive(Clone, Serialize, TS)]
+#[ts(export, export_to = "iface.ts")]
+pub struct IfacesInfo {
+    managed: Vec<IfaceInfo>,
+    unmanaged: Vec<RawIfaceInfo>,
 }

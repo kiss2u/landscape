@@ -2,7 +2,6 @@
 import { VueFlow, useVueFlow } from "@vue-flow/core";
 import { MiniMap } from "@vue-flow/minimap";
 // import { Controls } from '@vue-flow/controls'
-import InteractionControls from "@/components/topology/InteractionControls.vue";
 import FlowHeaderExtra from "@/components/topology/FlowHeaderExtra.vue";
 import FlowNode from "@/components/topology/FlowNode.vue";
 import { add_controller } from "@/api/network";

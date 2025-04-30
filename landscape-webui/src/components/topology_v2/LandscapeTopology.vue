@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { VueFlow, useVueFlow } from "@vue-flow/core";
 import { MiniMap } from "@vue-flow/minimap";
-import InteractionControls from "@/components/topology/InteractionControls.vue";
-import FlowHeaderExtra from "@/components/topology_v2/FlowHeaderExtra.vue";
-import TopologyNetNode from "@/components/topology_v2/TopologyNetNode.vue";
-import TopologyDockerNode from "@/components/topology_v2/TopologyDockerNode.vue";
+import InteractionControls from "@/components/topology_v2/InteractionControls.vue";
+import TopologyHeaderExtra from "@/components/topology_v2/TopologyHeaderExtra.vue";
+import TopologyManagedNode from "@/components/topology_v2/node/TopologyManagedNode.vue";
+import TopologyDockerNode from "@/components/topology_v2/node/TopologyDockerNode.vue";
 import { add_controller } from "@/api/network";
 
 import { useMessage, SelectOption } from "naive-ui";
@@ -22,7 +22,7 @@ zoomOnScroll.value = false;
 
 onMounted(async () => {
   await ifaceNodeStore.UPDATE_INFO();
-  fitView({ padding: 0.23 });
+  fitView({ padding: 0.3 });
 });
 
 onConnect(async (params: any) => {
@@ -106,18 +106,35 @@ function handleIfaceUpdate(value: string, option: SelectOption) {
       <SpecialEdge v-bind="specialEdgeProps" />
     </template> -->
     <!-- <MiniMap pannable zoomable /> -->
-    <template #node-netflow="{ data }">
-      <!-- {{ nodeProps }} -->
-      <TopologyNetNode :node="data.dev" />
+    <template #node-managed="{ data }">
+      <!-- {{ data }} -->
+      <TopologyManagedNode
+        v-if="data.dev.status !== null && data.dev.status !== undefined"
+        :config="data.dev.config"
+        :status="data.dev.status"
+        :wifi_info="data.dev.wifi_info"
+      />
+      <TopologyManagedButDevMissNode v-else :config="data.dev.config" />
     </template>
-    <template #node-docker="{ data }">
+    <template #node-unmanaged="{ data }">
+      <TopologyUnManagedNode
+        v-model:out_data="data.out_data"
+        :node="data.dev.status"
+      />
+    </template>
+    <template #node-unmanaged-docker="{ data }">
+      <!-- {{ data }} -->
+      <!-- <TopologyNetNode :node="data.dev" /> -->
+      <TopologyDockerNode :node="data.dev.status" />
+    </template>
+    <template #node-docker-leaf="{ data }">
       <!-- {{ nodeProps }} -->
-      <TopologyDockerNode :node="data.dev" />
+      <TopologyDockerLeafNode :node="data.dev.status" />
     </template>
 
     <!-- <InteractionControls /> -->
 
-    <FlowHeaderExtra />
+    <TopologyHeaderExtra />
   </VueFlow>
 </template>
 

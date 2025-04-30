@@ -13,7 +13,6 @@ import IntervalFetch from "@/components/head/IntervalFetch.vue";
 import LanguageSetting from "@/components/head/LanguageSetting.vue";
 
 import CopyRight from "@/components/CopyRight.vue";
-import NetFlow from "@/components/topology/NetFlow.vue";
 import NetTopology from "@/components/topology_v2/LandscapeTopology.vue";
 
 import { ref } from "vue";

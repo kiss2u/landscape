@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use wl_nl80211::Nl80211Message;
 
 /// 当前硬件状态结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 pub struct LandScapeWifiInterface {
     pub name: String,
     pub index: u32,
@@ -116,7 +118,8 @@ impl LandScapeWifiInterface {
 }
 
 /// 无线接口类型
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 #[serde(tag = "t")]
 pub enum WLANType {
     Unspecified,

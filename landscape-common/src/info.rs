@@ -16,7 +16,7 @@ pub struct LandScapeSystemInfo {
     pub kernel_version: Option<String>,
     pub os_version: Option<String>,
     pub landscape_version: String,
-    pub cpu_arch: Option<String>,
+    pub cpu_arch: String,
     pub start_at: u64,
 }
 

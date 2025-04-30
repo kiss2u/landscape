@@ -4,12 +4,13 @@ import { Wifi } from "@vicons/carbon";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useWifiConfigStore } from "@/stores/status_wifi";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const wifiConfigStore = useWifiConfigStore();
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const status = wifiConfigStore.GET_STATUS_BY_IFACE_NAME(iface_info.iface_name);

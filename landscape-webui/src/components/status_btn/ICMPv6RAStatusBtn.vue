@@ -4,12 +4,13 @@ import { Ad } from "@vicons/tabler";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useICMPv6RAStore } from "@/stores/status_icmpv6ra";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const icmpv6PDStore = useICMPv6RAStore();
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const status = icmpv6PDStore.GET_STATUS_BY_IFACE_NAME(iface_info.iface_name);

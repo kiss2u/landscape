@@ -8,6 +8,7 @@ import {
   update_iface_nat_config,
 } from "@/api/service_nat";
 import { useNATConfigStore } from "@/stores/status_nats";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 let natConfigStore = useNATConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
@@ -15,7 +16,7 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const nat_service_config = ref<NatServiceConfig>(

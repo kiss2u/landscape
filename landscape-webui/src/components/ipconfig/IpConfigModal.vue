@@ -10,13 +10,14 @@ import {
 } from "@/lib/service_ipconfig";
 import { computed, ref } from "vue";
 import NewIpEdit from "../NewIpEdit.vue";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const iface_data = ref<IfaceIpServiceConfig>(
