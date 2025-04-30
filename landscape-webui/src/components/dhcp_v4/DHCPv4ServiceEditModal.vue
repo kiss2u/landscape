@@ -12,6 +12,7 @@ import {
   get_iface_dhcp_v4_config,
   update_dhcp_v4_config,
 } from "@/api/service_dhcp_v4";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const dhcpv4ConfigStore = useDHCPv4ConfigStore();
 
@@ -20,7 +21,7 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const service_config = ref<DHCPv4ServiceConfig>(

@@ -7,6 +7,7 @@ import {
   get_iface_firewall_config,
   update_firewall_config,
 } from "@/api/service_firewall";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const firewallConfigStore = useFirewallConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
@@ -14,7 +15,7 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const service_config = ref<FirewallServiceConfig>(

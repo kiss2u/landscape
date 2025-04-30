@@ -2,6 +2,7 @@ import { IpConfigMode, NetworkConfig } from "@lib/network_config";
 import api from "../api";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { NetDev, WifiMode } from "@/lib/dev";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 export async function ifaces(): Promise<NetDev[]> {
   let data = await api.api.get("iface");
@@ -44,7 +45,7 @@ export async function create_bridge(name: string): Promise<any> {
 
 export async function change_zone(data: {
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }): Promise<any> {
   let result = await api.api.post("iface/zone", data);
   return result.data;

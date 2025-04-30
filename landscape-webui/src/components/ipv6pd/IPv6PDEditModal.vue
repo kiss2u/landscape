@@ -9,6 +9,7 @@ import {
 } from "@/api/service_ipv6pd";
 import { useIPv6PDStore } from "@/stores/status_ipv6pd";
 import { generateValidMAC } from "@/lib/util";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 let ipv6PDStore = useIPv6PDStore();
 const message = useMessage();
@@ -18,8 +19,8 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  mac?: string;
-  zone: ZoneType;
+  mac: string | null;
+  zone: IfaceZoneType;
 }>();
 
 const service_config = ref<IPV6PDServiceConfig>(

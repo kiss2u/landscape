@@ -19,7 +19,7 @@ default-members = ["landscape-webserver"]
 
 [workspace.dependencies]
 const_format = "0.2.34"
-sysinfo = "0.30.12"
+sysinfo = "0.34.2"
 
 # base
 once_cell = "*"
@@ -67,9 +67,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
 # export to ts
-ts-rs = "10.1"
+ts-rs = { version = "10.1", features = ["format", "serde-compat"] }
 
 tokio-util = { version = "0.7.0", features = ["codec", "net"] }
+
+async-trait = "0.1.88"
 
 [workspace.dependencies.uuid]
 version = "1.16.0"

@@ -1,6 +1,7 @@
 #ifndef __LD_PACKET_DEF_H__
 #define __LD_PACKET_DEF_H__
 #include "vmlinux.h"
+#include <bpf/bpf_endian.h>
 #include "landscape_log.h"
 
 #define IP_MF bpf_htons(0x2000)     /* Flag: "More Fragments"	*/

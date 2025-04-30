@@ -48,11 +48,11 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing-appender = { workspace = true }
 
 dhcproto = { workspace = true }
+ts-rs = { workspace = true }
+
 [dependencies.pnet]
 workspace = true
 
-[dev-dependencies]
-ts-rs = { workspace = true, features = ["serde-compat"] }
 
 [[bin]]
 name = "tap"

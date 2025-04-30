@@ -4,6 +4,7 @@ import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import { WifiServiceConfig } from "@/lib/wifi";
 import { useWifiConfigStore } from "@/stores/status_wifi";
 import { get_iface_wifi_config, update_wifi_config } from "@/api/service_wifi";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const wifiConfigStore = useWifiConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
@@ -11,7 +12,7 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const service_config = ref<WifiServiceConfig>(

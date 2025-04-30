@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use landscape_common::{
     args::LAND_HOSTNAME,
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
+    iface::IfaceZoneType,
     service::{
         service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
         ServiceStatus,
@@ -13,10 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     dev::LandScapeInterface,
-    iface::{
-        config::{IfaceZoneType, NetworkIfaceConfig},
-        get_iface_by_name,
-    },
+    iface::{config::NetworkIfaceConfig, get_iface_by_name},
 };
 
 #[derive(Clone)]

@@ -4,12 +4,13 @@ import { BareMetalServer02 } from "@vicons/carbon";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useIPv6PDStore } from "@/stores/status_ipv6pd";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 const ipv6PDStore = useIPv6PDStore();
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const status = ipv6PDStore.GET_STATUS_BY_IFACE_NAME(iface_info.iface_name);

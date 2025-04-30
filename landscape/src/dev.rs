@@ -1,10 +1,14 @@
+use std::path::Path;
+
 use netlink_packet_route::link::{LinkAttribute, LinkMessage};
 use serde::{Deserialize, Serialize};
 
 use landscape_common::net::MacAddr;
+use ts_rs::TS;
 
 /// 当前硬件状态结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 pub struct LandScapeInterface {
     pub name: String,
     pub index: u32,
@@ -18,6 +22,7 @@ pub struct LandScapeInterface {
     pub carrier: bool,
     pub netns_id: Option<i32>,
     pub peer_link_id: Option<u32>,
+    pub is_wireless: bool,
 }
 
 impl LandScapeInterface {
@@ -32,9 +37,13 @@ impl LandScapeInterface {
 
         let mut netns_id = None;
         let mut peer_link_id = None;
+        // println!("link_layer_type: {:?}", msg.header.link_layer_type);
+        // println!("interface_family: {:?}", msg.header.interface_family);
+        // println!("flags: {:?}", msg.header.flags);
         // let mut port_kind = None;
         // let mut data = None;
         // let mut port_data = None;
+        // println!("{:?}", msg.attributes);
         for nla in msg.attributes.into_iter() {
             // println!("{:?}", nla);
             // println!();
@@ -145,21 +154,25 @@ impl LandScapeInterface {
                 _ => {}
             }
         }
-
         match name {
-            Some(name) => Some(LandScapeInterface {
-                name,
-                index: msg.header.index,
-                mac,
-                dev_type: msg.header.link_layer_type.into(),
-                controller_id,
-                dev_status: status.map_or(DevState::Unknown, |status| status.into()),
-                dev_kind: kind.map_or(DeviceKind::UnKnow, |kind| kind.into()),
-                perm_mac,
-                carrier,
-                netns_id,
-                peer_link_id,
-            }),
+            Some(name) => {
+                let path = format!("/sys/class/net/{}/wireless", name);
+                let is_wireless = Path::new(&path).exists();
+                Some(LandScapeInterface {
+                    name,
+                    index: msg.header.index,
+                    mac,
+                    dev_type: msg.header.link_layer_type.into(),
+                    controller_id,
+                    dev_status: status.map_or(DevState::Unknown, |status| status.into()),
+                    dev_kind: kind.map_or(DeviceKind::UnKnow, |kind| kind.into()),
+                    perm_mac,
+                    carrier,
+                    netns_id,
+                    peer_link_id,
+                    is_wireless,
+                })
+            }
             _ => None,
         }
     }
@@ -173,7 +186,9 @@ impl LandScapeInterface {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "iface.ts")]
+#[serde(rename_all = "lowercase")]
 #[serde(tag = "t", content = "c")]
 pub enum DevState {
     /// Status can't be determined
@@ -212,7 +227,9 @@ impl Into<DevState> for netlink_packet_route::link::State {
 }
 
 /// 设备类型小类
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "iface.ts")]
+#[serde(rename_all = "lowercase")]
 pub enum DeviceKind {
     Dummy,
     Ifb,
@@ -280,7 +297,9 @@ impl Into<DeviceKind> for netlink_packet_route::link::InfoKind {
 }
 
 /// 设备类型大类
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
+#[serde(rename_all = "lowercase")]
 pub enum DeviceType {
     UnSupport,
     Loopback,
