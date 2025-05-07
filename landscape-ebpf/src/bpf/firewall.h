@@ -54,7 +54,9 @@ struct firewall_action {
 
 // 检查是否开放连接的 key
 struct firewall_conntrack_key {
+    // IPV4 / 6
     u8 ip_type;
+    // TCP UDP ICMP
     u8 ip_protocol;
     __be16 local_port;
     union u_inet_addr local_addr;
@@ -68,6 +70,12 @@ struct firewall_conntrack_action {
     __be16 _pad;
     __u32 mark;
     struct bpf_timer timer;
+    u64 create_time;
+    u64 last_upload_ts;
+    u64 ingress_bytes;
+    u64 ingress_packets;
+    u64 egress_bytes;
+    u64 egress_packets;
 };
 
 struct {

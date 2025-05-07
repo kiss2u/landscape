@@ -1,19 +1,26 @@
 use core::ops::Range;
-use std::{mem::MaybeUninit, net::Ipv4Addr};
+use std::{
+    mem::MaybeUninit,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    time::Duration,
+};
 
 use land_nat::{
-    types::{nat_mapping_key, nat_mapping_value, u_inet_addr},
+    types::{nat_conn_event, nat_mapping_key, nat_mapping_value, u_inet_addr},
     *,
 };
+use landscape_common::event::nat::{NatEvent, NatEventType};
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, MapFlags, TC_EGRESS, TC_INGRESS,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
+use tokio::sync::oneshot::{self, error::TryRecvError};
 
-use crate::MAP_PATHS;
-use crate::{landscape::TcHookProxy, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY};
+use crate::{
+    landscape::TcHookProxy, LANDSCAPE_IPV6_TYPE, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY,
+};
+use crate::{LANDSCAPE_IPV4_TYPE, MAP_PATHS};
 
 mod land_nat {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_nat.skel.rs"));
@@ -44,10 +51,46 @@ impl Default for NatConfig {
     }
 }
 
+unsafe impl plain::Plain for nat_conn_event {}
+unsafe impl plain::Plain for u_inet_addr {}
+
+impl From<&nat_conn_event> for NatEvent {
+    fn from(ev: &nat_conn_event) -> Self {
+        fn convert_ip(raw: &u_inet_addr, proto: u8) -> IpAddr {
+            match proto {
+                LANDSCAPE_IPV4_TYPE => {
+                    let ip = unsafe { raw.ip.clone().to_be() };
+                    IpAddr::V4(Ipv4Addr::from_bits(ip))
+                }
+                LANDSCAPE_IPV6_TYPE => {
+                    let bits = unsafe { raw.bits };
+                    IpAddr::V6(Ipv6Addr::from(bits))
+                }
+                _ => IpAddr::V4(Ipv4Addr::UNSPECIFIED), // fallback
+            }
+        }
+
+        let time = landscape_common::utils::time::get_relative_time_ns().unwrap_or_default();
+
+        NatEvent {
+            event_type: NatEventType::from(ev.event_type),
+            src_ip: convert_ip(&ev.src_addr, ev.l3_proto),
+            dst_ip: convert_ip(&ev.dst_addr, ev.l3_proto),
+            src_port: ev.src_port.to_be(),
+            dst_port: ev.dst_port.to_be(),
+            l4_proto: ev.l4_proto,
+            flow_id: ev.flow_id,
+            trace_id: ev.trace_id,
+            l3_proto: ev.l3_proto,
+            time: ev.time + time,
+        }
+    }
+}
+
 pub fn init_nat(
     ifindex: i32,
     has_mac: bool,
-    service_status: oneshot::Receiver<()>,
+    mut service_status: oneshot::Receiver<()>,
     config: NatConfig,
 ) {
     // bump_memlock_rlimit();
@@ -81,6 +124,25 @@ pub fn init_nat(
 
     let landscape_skel = landscape_open.load().unwrap();
 
+    // let (nat_conn_events_tx, mut nat_conn_events_rx) =
+    //     tokio::sync::mpsc::unbounded_channel::<Box<NatEvent>>();
+    // event ringbuf
+    let callback = |data: &[u8]| -> i32 {
+        let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
+        let nat_conn_event_value = plain::from_bytes::<nat_conn_event>(data);
+        if let Ok(data) = nat_conn_event_value {
+            let event = NatEvent::from(data);
+            println!("event, {:#?}, time: {time}, diff: {}", event, time - data.time);
+        }
+        // let _ = nat_conn_events_tx.send(Box::new(data.to_vec()));
+        0
+    };
+    let mut builder = libbpf_rs::RingBufferBuilder::new();
+    builder
+        .add(&landscape_skel.maps.nat_conn_events, callback)
+        .expect("failed to add nat_conn_events ringbuf");
+    let mgr = builder.build().expect("failed to build");
+
     let nat_egress = landscape_skel.progs.egress_nat;
     let nat_ingress = landscape_skel.progs.ingress_nat;
 
@@ -91,7 +153,15 @@ pub fn init_nat(
 
     nat_egress_hook.attach();
     nat_ingress_hook.attach();
-    let _ = service_status.blocking_recv();
+    'wait_stop: loop {
+        let _ = mgr.poll(Duration::from_millis(1000));
+        match service_status.try_recv() {
+            Ok(_) => break 'wait_stop,
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Closed) => break 'wait_stop,
+        }
+    }
+    // let _ = service_status.blocking_recv();
     drop(nat_egress_hook);
     drop(nat_ingress_hook);
 }

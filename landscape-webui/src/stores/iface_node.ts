@@ -38,7 +38,7 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
         }
       }
 
-      if (each.dev_kind === "Bridge") {
+      if (each.dev_kind === "bridge") {
         new_bridges.push({
           label: each.name,
           value: each.name,

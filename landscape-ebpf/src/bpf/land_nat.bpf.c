@@ -61,6 +61,27 @@ struct {
     __uint(max_entries, FRAG_CACHE_SIZE);
 } fragment_cache SEC(".maps");
 
+#define NAT_CREATE_CONN 1
+#define NAT_DELETE_CONN 2
+struct nat_conn_event {
+    union u_inet_addr src_addr;
+    union u_inet_addr dst_addr;
+    u16 src_port;
+    u16 dst_port;
+    u64 time;
+    u8 l4_proto;
+    u8 l3_proto;
+    u8 event_type;
+    u8 flow_id;
+    u8 trace_id;
+} __nat_conn_event;
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 24);
+} nat_conn_events SEC(".maps");
+
+
 volatile const u16 tcp_range_start = 32768;
 // volatile const u16 tcp_range_end = 32770;
 volatile const u16 tcp_range_end = 65535;
@@ -387,8 +408,24 @@ static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new,
     if (timer_value == NULL) {
         return TIMER_ERROR;
     }
-
     // bpf_log_debug("insert new CT");
+
+    // 发送 event
+    struct nat_conn_event* event;
+    event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    if (event != NULL) {
+        COPY_ADDR_FROM(event->dst_addr.all, nat_egress_value->trigger_addr.all);
+        COPY_ADDR_FROM(event->src_addr.all, nat_ingress_value->addr.all);
+        event->src_port = nat_ingress_value->port;
+        event->dst_port = nat_egress_value->trigger_port;
+        event->l4_proto = l4proto;
+        event->l3_proto = LANDSCAPE_IPV4_TYPE;
+        event->flow_id = 0;
+        event->trace_id = 0;
+        event->time = bpf_ktime_get_ns();
+        event->event_type = NAT_CREATE_CONN;
+        bpf_ringbuf_submit(event, 0);
+    }
 
     *timer_value_ = timer_value;
     return TIMER_CREATED;

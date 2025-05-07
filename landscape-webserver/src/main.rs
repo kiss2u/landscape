@@ -98,9 +98,10 @@ async fn main() -> LdResult<()> {
     info!("config path: {home_log_str}");
     info!("init config: {need_init_config:#?}");
 
+    // let metric_service = MetricService::new().await;
+
     // TDDO: 使用宏进行初始化
     if let Some(InitConfig {
-        ifaces,
         ipconfigs,
         nats,
         marks,
@@ -115,9 +116,9 @@ async fn main() -> LdResult<()> {
         firewall_rules,
         wifi_configs,
         dhcpv4_services,
+        ..
     }) = need_init_config
     {
-        // iface_store.truncate();
         iface_ipconfig_store.truncate();
         iface_nat_store.truncate();
         iface_mark_store.truncate();
@@ -132,10 +133,6 @@ async fn main() -> LdResult<()> {
         firewall_rules_store.truncate();
         wifi_config_store.truncate();
         dhcpv4_service_store.truncate();
-
-        // for each_config in ifaces {
-        //     iface_store.set(each_config);
-        // }
 
         for each_config in ipconfigs {
             iface_ipconfig_store.set(each_config);

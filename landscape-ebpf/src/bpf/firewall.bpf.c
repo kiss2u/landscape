@@ -46,6 +46,48 @@ struct {
     __uint(max_entries, FRAG_CACHE_SIZE);
 } fragment_cache SEC(".maps");
 
+#define FIREWALL_CREATE_CONN 1
+#define FIREWALL_DELETE_CONN 2
+struct firewall_conn_event {
+    union u_inet_addr src_addr;
+    union u_inet_addr dst_addr;
+    u16 src_port;
+    u16 dst_port;
+    u64 create_time;
+    u8 l4_proto;
+    u8 l3_proto;
+    u8 event_type;
+    u8 flow_id;
+    u8 trace_id;
+} __firewall_conn_event;
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 24);
+} firewall_conn_events SEC(".maps");
+
+struct firewall_conn_metric_event {
+    union u_inet_addr src_addr;
+    union u_inet_addr dst_addr;
+    u16 src_port;
+    u16 dst_port;
+    u64 create_time;
+    u64 time;
+    u64 ingress_bytes;
+    u64 ingress_packets;
+    u64 egress_bytes;
+    u64 egress_packets;
+    u8 l4_proto;
+    u8 l3_proto;
+    u8 flow_id;
+    u8 trace_id;
+} __firewall_conn_metric_event;
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 24);
+} firewall_conn_metric_events SEC(".maps");
+
 static __always_inline int icmp_msg_type(struct icmphdr *icmph);
 static __always_inline bool is_icmp_error_pkt(const struct packet_context *pkt) {
     return pkt->l4_payload_offset >= 0 && pkt->icmp_error_payload_offset >= 0;
@@ -305,6 +347,62 @@ static __always_inline int icmp6_msg_type(struct icmp6hdr *icmp6h) {
 
 /// ICMP Related End
 
+const volatile u64 REPORT_INTERVAL = 1E9 * 5;
+static __always_inline void
+firewall_metric_repoort(struct __sk_buff *skb,bool ingress, struct firewall_conntrack_key *timer_key, struct firewall_conntrack_action *timer_track_value) {
+    
+#define BPF_LOG_TOPIC "firewall_metric_repoort"
+    u64 packets = skb->gso_segs == 0? 1 : skb->gso_segs;
+    u64 bytes = skb->len;
+    bpf_log_info("skb->len : %d, skb->gso_segs : %d", skb->len, skb->gso_segs);
+    if (ingress) {
+        __sync_fetch_and_add(&timer_track_value->ingress_bytes, bytes);
+        __sync_fetch_and_add(&timer_track_value->ingress_packets, packets);
+    } else {
+        __sync_fetch_and_add(&timer_track_value->egress_bytes, bytes);
+        __sync_fetch_and_add(&timer_track_value->egress_packets, packets);
+    }
+
+    __u64 now = bpf_ktime_get_ns();
+    __u64 last = __sync_fetch_and_add(&timer_track_value->last_upload_ts, 0);
+    if (now - last > REPORT_INTERVAL &&
+        __sync_val_compare_and_swap(&timer_track_value->last_upload_ts, last, now) == last) {
+        // 成为唯一上报线程
+        __u64 ingress_bytes_before = __sync_fetch_and_add(&timer_track_value->ingress_bytes, 0);
+        __u64 ingress_packets_before = __sync_fetch_and_add(&timer_track_value->ingress_packets, 0);
+        __u64 egress_bytes_before = __sync_fetch_and_add(&timer_track_value->egress_bytes, 0);
+        __u64 egress_packets_before = __sync_fetch_and_add(&timer_track_value->egress_packets, 0);
+
+        // ringbuf 上报
+        struct firewall_conn_metric_event* event;
+        event = bpf_ringbuf_reserve(&firewall_conn_metric_events, sizeof(struct firewall_conn_metric_event), 0);
+        if (event != NULL) {
+            COPY_ADDR_FROM(event->dst_addr.all, timer_track_value->trigger_addr.all);
+            COPY_ADDR_FROM(event->src_addr.all, timer_key->local_addr.all);
+            event->src_port = timer_key->local_port;
+            event->dst_port = timer_track_value->trigger_port;
+            event->l4_proto = timer_key->ip_protocol;
+            event->l3_proto = timer_key->ip_type;
+            event->flow_id = 0;
+            event->trace_id = 0;
+            event->time = now;
+            event->create_time = timer_track_value->create_time;
+            event->ingress_bytes = ingress_bytes_before;
+            event->ingress_packets = ingress_packets_before;
+            event->egress_bytes = egress_bytes_before;
+            event->egress_packets = egress_packets_before;
+            bpf_ringbuf_submit(event, 0);
+        }
+
+        // 清理
+        __sync_fetch_and_sub(&timer_track_value->ingress_bytes, ingress_bytes_before);
+        __sync_fetch_and_sub(&timer_track_value->ingress_packets, ingress_packets_before);
+        __sync_fetch_and_sub(&timer_track_value->egress_bytes, egress_bytes_before);
+        __sync_fetch_and_sub(&timer_track_value->egress_packets, egress_packets_before);
+    }
+    #undef BPF_LOG_TOPIC
+}
+
 static __always_inline bool ct_change_state(struct firewall_conntrack_action *timer_track_value,
                                             u64 curr_state, u64 next_state) {
     return __sync_bool_compare_and_swap(&timer_track_value->status, curr_state, next_state);
@@ -437,11 +535,29 @@ static __always_inline int lookup_or_create_ct(bool do_new,
         .mark = 0,
         ._pad = 0,
         .trigger_port = *remote_port,
+        .create_time = bpf_ktime_get_ns(),
     };
     COPY_ADDR_FROM(action.trigger_addr.all, remote_addr->all);
     timer_value = insert_new_nat_timer(timer_key, &action);
     if (timer_value == NULL) {
         return TIMER_ERROR;
+    }
+
+    // 发送 event
+    struct firewall_conn_event* event;
+    event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
+    if (event != NULL) {
+        COPY_ADDR_FROM(event->dst_addr.all, action.trigger_addr.all);
+        COPY_ADDR_FROM(event->src_addr.all, timer_key->local_addr.all);
+        event->src_port = timer_key->local_port;
+        event->dst_port = action.trigger_port;
+        event->l4_proto = timer_key->ip_protocol;
+        event->l3_proto = timer_key->ip_type;
+        event->flow_id = 0;
+        event->trace_id = 0;
+        event->create_time = bpf_ktime_get_ns();
+        event->event_type = FIREWALL_CREATE_CONN;
+        bpf_ringbuf_submit(event, 0);
     }
 
     // bpf_log_debug("insert new CT, type: %d, ip_protocol: %d, port: %d", timer_key->ip_type,
@@ -803,6 +919,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
         if (!is_icmpx_error || ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
+            firewall_metric_repoort(skb, false, &conntrack_key, ct_timer_value);
         }
     } else {
         // bpf_log_info("has firewall rule");
@@ -874,6 +991,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
         if (ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
+            firewall_metric_repoort(skb, true, &conntrack_key, ct_timer_value);
             return TC_ACT_UNSPEC;
         }
         bpf_log_error("ct_timer_value is NULL");
@@ -988,6 +1106,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
         if (!is_icmpx_error || ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
+            firewall_metric_repoort(skb, false, &conntrack_key, ct_timer_value);
         }
     } else {
         // bpf_log_info("has firewall rule");
@@ -1050,6 +1169,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
         if (ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
+            firewall_metric_repoort(skb, true, &conntrack_key, ct_timer_value);
             return TC_ACT_UNSPEC;
         }
         bpf_log_info("ct_timer_value is NULL");

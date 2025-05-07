@@ -271,7 +271,7 @@ export const useTopologyStore = defineStore("topology", () => {
 
   function FIND_BRIDGE_BY_IFNAME(name: string): boolean {
     let data = FIND_DEV_BY_IFNAME(name);
-    if (data !== undefined && data.dev_kind === "Bridge") {
+    if (data !== undefined && data.dev_kind === "bridge") {
       return true;
     }
     return false;

@@ -2092,6 +2092,7 @@ dependencies = [
  "clap 4.5.27",
  "homedir",
  "hostname",
+ "libc",
  "once_cell",
  "serde",
  "serde_json",

@@ -7,9 +7,9 @@ pub fn main() {
     landscape_common::init_tracing!();
     landscape_ebpf::setting_libbpf_log();
 
-    landscape_ebpf::map_setting::flow_dns::create_flow_dns_inner_map(11, vec![]);
+    landscape_ebpf::map_setting::flow_dns::create_flow_dns_inner_map(12, vec![]);
     landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
-        11,
+        12,
         vec![FlowDnsMarkInfo {
             mark: FlowDnsMark::KeepGoing.into(),
             ip: std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
@@ -17,7 +17,7 @@ pub fn main() {
     );
 
     landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
-        11,
+        12,
         vec![FlowDnsMarkInfo {
             mark: FlowDnsMark::KeepGoing.into(),
             ip: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),

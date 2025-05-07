@@ -20,3 +20,5 @@ tracing = { workspace = true }
 ts-rs = { workspace = true }
 
 uuid = { workspace = true }
+
+libc = { workspace = true }
