@@ -1,6 +1,7 @@
 use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum FirewallMessage {
@@ -8,7 +9,8 @@ pub enum FirewallMessage {
     Metric(FirewallMetric),
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
+#[ts(export, export_to = "common/metric.d.ts")]
 pub struct FirewallKey {
     pub src_ip: IpAddr,
     pub dst_ip: IpAddr,
@@ -18,10 +20,12 @@ pub struct FirewallKey {
     pub l3_proto: u8,
     pub flow_id: u8,
     pub trace_id: u8,
+    #[ts(type = "number")]
     pub create_time: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/metric.d.ts")]
 pub struct FirewallEvent {
     pub event_type: FirewallEventType,
     pub src_ip: IpAddr,
@@ -33,6 +37,7 @@ pub struct FirewallEvent {
     pub l3_proto: u8,
     pub flow_id: u8,
     pub trace_id: u8,
+    #[ts(type = "number")]
     pub create_time: u64,
 }
 
@@ -55,7 +60,9 @@ impl FirewallEvent {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, TS)]
+#[ts(export, export_to = "common/metric.d.ts")]
+#[serde(rename_all = "lowercase")]
 pub enum FirewallEventType {
     #[default]
     Unknow,
@@ -74,22 +81,29 @@ impl From<u8> for FirewallEventType {
 }
 
 /// 防火墙数据上报 metric
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric.d.ts")]
 pub struct FirewallMetric {
     pub src_ip: IpAddr,
     pub dst_ip: IpAddr,
     pub src_port: u16,
     pub dst_port: u16,
+    #[ts(type = "number")]
     pub create_time: u64,
+    #[ts(type = "number")]
     pub time: u64,
     /// TCP / UDP / ICMP
     pub l4_proto: u8,
     pub l3_proto: u8,
     pub flow_id: u8,
     pub trace_id: u8,
+    #[ts(type = "number")]
     pub ingress_bytes: u64,
+    #[ts(type = "number")]
     pub ingress_packets: u64,
+    #[ts(type = "number")]
     pub egress_bytes: u64,
+    #[ts(type = "number")]
     pub egress_packets: u64,
 }
 

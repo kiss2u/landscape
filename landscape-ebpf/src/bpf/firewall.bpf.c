@@ -46,48 +46,6 @@ struct {
     __uint(max_entries, FRAG_CACHE_SIZE);
 } fragment_cache SEC(".maps");
 
-#define FIREWALL_CREATE_CONN 1
-#define FIREWALL_DELETE_CONN 2
-struct firewall_conn_event {
-    union u_inet_addr src_addr;
-    union u_inet_addr dst_addr;
-    u16 src_port;
-    u16 dst_port;
-    u64 create_time;
-    u8 l4_proto;
-    u8 l3_proto;
-    u8 event_type;
-    u8 flow_id;
-    u8 trace_id;
-} __firewall_conn_event;
-
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
-} firewall_conn_events SEC(".maps");
-
-struct firewall_conn_metric_event {
-    union u_inet_addr src_addr;
-    union u_inet_addr dst_addr;
-    u16 src_port;
-    u16 dst_port;
-    u64 create_time;
-    u64 time;
-    u64 ingress_bytes;
-    u64 ingress_packets;
-    u64 egress_bytes;
-    u64 egress_packets;
-    u8 l4_proto;
-    u8 l3_proto;
-    u8 flow_id;
-    u8 trace_id;
-} __firewall_conn_metric_event;
-
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
-} firewall_conn_metric_events SEC(".maps");
-
 static __always_inline int icmp_msg_type(struct icmphdr *icmph);
 static __always_inline bool is_icmp_error_pkt(const struct packet_context *pkt) {
     return pkt->l4_payload_offset >= 0 && pkt->icmp_error_payload_offset >= 0;
@@ -456,6 +414,22 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
 #define BPF_LOG_TOPIC "timer_clean_callback"
 
     // bpf_log_info("timer_clean_callback: %d", bpf_ntohs(value->trigger_port));
+
+    struct firewall_conn_event* event;
+    event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
+    if (event != NULL) {
+        COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.all);
+        COPY_ADDR_FROM(event->src_addr.all, key->local_addr.all);
+        event->src_port = key->local_port;
+        event->dst_port = value->trigger_port;
+        event->l4_proto = key->ip_protocol;
+        event->l3_proto = key->ip_type;
+        event->flow_id = 0;
+        event->trace_id = 0;
+        event->create_time = bpf_ktime_get_ns();
+        event->event_type = FIREWALL_DELETE_CONN;
+        bpf_ringbuf_submit(event, 0);
+    }
 
     bpf_map_delete_elem(&firewall_conntrack_map, key);
     return 0;

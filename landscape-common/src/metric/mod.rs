@@ -3,12 +3,12 @@ use firewall::FirewallMetricService;
 pub mod firewall;
 
 #[derive(Clone)]
-pub struct MetricService {
+pub struct MetricData {
     pub firewall: FirewallMetricService,
 }
 
-impl MetricService {
+impl MetricData {
     pub async fn new() -> Self {
-        MetricService { firewall: FirewallMetricService::new().await }
+        MetricData { firewall: FirewallMetricService::new().await }
     }
 }

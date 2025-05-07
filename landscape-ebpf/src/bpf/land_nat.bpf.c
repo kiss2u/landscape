@@ -61,27 +61,6 @@ struct {
     __uint(max_entries, FRAG_CACHE_SIZE);
 } fragment_cache SEC(".maps");
 
-#define NAT_CREATE_CONN 1
-#define NAT_DELETE_CONN 2
-struct nat_conn_event {
-    union u_inet_addr src_addr;
-    union u_inet_addr dst_addr;
-    u16 src_port;
-    u16 dst_port;
-    u64 time;
-    u8 l4_proto;
-    u8 l3_proto;
-    u8 event_type;
-    u8 flow_id;
-    u8 trace_id;
-} __nat_conn_event;
-
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
-} nat_conn_events SEC(".maps");
-
-
 volatile const u16 tcp_range_start = 32768;
 // volatile const u16 tcp_range_end = 32770;
 volatile const u16 tcp_range_end = 65535;

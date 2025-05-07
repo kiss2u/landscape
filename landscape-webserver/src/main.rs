@@ -27,6 +27,7 @@ mod error;
 mod flow;
 mod global_mark;
 mod iface;
+mod metric;
 mod service;
 mod sysinfo;
 
@@ -97,8 +98,6 @@ async fn main() -> LdResult<()> {
     }
     info!("config path: {home_log_str}");
     info!("init config: {need_init_config:#?}");
-
-    // let metric_service = MetricService::new().await;
 
     // TDDO: 使用宏进行初始化
     if let Some(InitConfig {
@@ -242,6 +241,7 @@ async fn main() -> LdResult<()> {
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(store_provider.clone()).await)
         .nest("/global_mark", global_mark::get_global_mark_paths(firewall_rules_store).await)
+        .nest("/metric", metric::get_metric_service_paths().await)
         .nest("/flow", flow::get_flow_paths(flow_store, dns_store, wan_ip_mark_store).await)
         .nest(
             "/services",

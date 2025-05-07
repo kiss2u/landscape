@@ -8,6 +8,7 @@ pub mod firewall;
 pub mod flow;
 pub mod landscape;
 pub mod map_setting;
+pub mod metric;
 pub mod nat;
 pub mod ns_proxy;
 pub mod packet_mark;
@@ -43,6 +44,12 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         flow_target_map: PathBuf::from(format!("{}/flow_target_map", ebpf_map_path)),
         // metric
         metric_map: PathBuf::from(format!("{}/metric_map", ebpf_map_path)),
+        nat_conn_events: PathBuf::from(format!("{}/nat_conn_events", ebpf_map_path)),
+        firewall_conn_events: PathBuf::from(format!("{}/firewall_conn_events", ebpf_map_path)),
+        firewall_conn_metric_events: PathBuf::from(format!(
+            "{}/firewall_conn_metric_events",
+            ebpf_map_path
+        )),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
@@ -56,7 +63,8 @@ pub(crate) struct LandscapeMapPath {
     // pub block_ip: PathBuf,
     pub packet_mark: PathBuf,
 
-    // LAN IP 标记
+    /// LAN IP 标记
+    #[deprecated]
     pub lanip_mark: PathBuf,
     /// WAN IP 标记
     pub wanip_mark: PathBuf,
@@ -78,6 +86,11 @@ pub(crate) struct LandscapeMapPath {
 
     /// metric
     pub metric_map: PathBuf,
+    /// nat
+    pub nat_conn_events: PathBuf,
+    /// firewall
+    pub firewall_conn_events: PathBuf,
+    pub firewall_conn_metric_events: PathBuf,
 }
 
 // pppoe -> Fire wall -> nat
