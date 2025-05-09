@@ -57,9 +57,18 @@ enable = true
 [[dhcpv4_services]]
 iface_name = "br_lan"
 enable = true
+
+[dhcpv4_services.config]
 server_ip_addr = "192.168.5.1"
-network_mask = 24
 ip_range_start = "192.168.5.100"
+ip_range_end = "192.168.5.200"
+network_mask = 24
+
+# LAN 绑定的 MAC 地址
+mac_binding_records = [
+    { mac = "00:11:22:33:44:55", ip = "192.168.5.50" },
+    { mac = "aa:bb:cc:dd:ee:ff", ip = "192.168.5.51" },
+]
 
 
 # DNS 规则

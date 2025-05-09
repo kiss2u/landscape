@@ -19,6 +19,7 @@ export default defineConfig({
           { text: "手工部署", link: "/manual" },
           { text: "注意事项", link: "/attention" },
           { text: "快速体验 (只是体验界面)", link: "/quick" },
+          { text: "部分界面截图", link: "/screenshot" },
         ],
       },
       {
