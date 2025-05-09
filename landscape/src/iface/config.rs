@@ -1,14 +1,19 @@
-use landscape_common::{store::storev2::LandScapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
+use landscape_common::{
+    iface::IfaceZoneType, store::storev2::LandScapeStore, LANDSCAPE_DEFAULT_LAN_NAME,
+};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::dev::{DeviceKind, DeviceType, LandScapeInterface};
 
 use super::dev_wifi::LandScapeWifiInterface;
 
 /// 用于存储网卡信息的结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 pub struct NetworkIfaceConfig {
     // 名称 关联的网卡名称 相当于网卡的唯一 id
+    #[ts(rename = "iface_name")]
     pub name: String,
     #[serde(default)]
     pub create_dev_type: CreateDevType,
@@ -35,6 +40,10 @@ fn yes() -> bool {
 }
 
 impl NetworkIfaceConfig {
+    pub fn get_iface_name(&self) -> String {
+        self.name.clone()
+    }
+
     pub fn from_phy_dev(iface: &LandScapeInterface) -> NetworkIfaceConfig {
         Self::from_phy_dev_with_wifi_info(iface, &None)
     }
@@ -85,18 +94,9 @@ impl NetworkIfaceConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum IfaceZoneType {
-    // 未定义类型
-    #[default]
-    Undefined,
-    Wan,
-    Lan,
-}
-
 /// 需要创建的设备类型
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum CreateDevType {
     #[default]
@@ -117,7 +117,8 @@ impl CreateDevType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
+#[ts(export, export_to = "iface.ts")]
 #[serde(rename_all = "lowercase")]
 pub enum WifiMode {
     #[default]

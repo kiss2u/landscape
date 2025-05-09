@@ -236,12 +236,12 @@ pub async fn create_pppoe_tc_ebpf_3(
         pppoe_egress_builder.attach();
         pppoe_ingress_builder.attach();
 
-        let call_back = 'wait_stoop: loop {
+        let call_back = 'wait_stop: loop {
             let _ = mgr.poll(Duration::from_millis(100));
             match notice_rx.try_recv() {
-                Ok(call_back) => break 'wait_stoop Some(call_back),
+                Ok(call_back) => break 'wait_stop Some(call_back),
                 Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Closed) => break 'wait_stoop None,
+                Err(TryRecvError::Closed) => break 'wait_stop None,
             }
         };
         tracing::info!("退出 pppoe");

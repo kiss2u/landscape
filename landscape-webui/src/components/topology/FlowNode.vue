@@ -112,7 +112,7 @@ const show_switch = computed(() => {
       @update:show="handleUpdateShow"
     >
       <template #trigger>
-        <n-card size="small" style="min-width: 220px; max-width: 230px">
+        <n-card size="small" style="min-width: 250px; max-width: 250px">
           <template #header>
             <n-flex style="gap: 3px" inline align="center">
               <n-icon

@@ -3,51 +3,73 @@
 /**
  * 流控配置结构体
  */
-export type FlowConfig = { 
-/**
- * 是否启用
- */
-enable: boolean, 
-/**
- * 流 ID
- */
-flow_id: number, 
-/**
- * 匹配规则
- */
-flow_match_rules: Array<PacketMatchMark>, 
-/**
- * 处理流量目标网卡, 目前只取第一个
- * 暂定, 可能会移动到具体的网卡上进行设置
- */
-packet_handle_iface_name: Array<FlowTarget>, 
-/**
- * 备注
- */
-remark: string, };
+export type FlowConfig = {
+  /**
+   * 是否启用
+   */
+  enable: boolean;
+  /**
+   * 流 ID
+   */
+  flow_id: number;
+  /**
+   * 匹配规则
+   */
+  flow_match_rules: Array<PacketMatchMark>;
+  /**
+   * 处理流量目标网卡, 目前只取第一个
+   * 暂定, 可能会移动到具体的网卡上进行设置
+   */
+  packet_handle_iface_name: Array<FlowTarget>;
+  /**
+   * 备注
+   */
+  remark: string;
+};
 
-export type FlowDnsMark = { "t": "keepgoing" } | { "t": "direct" } | { "t": "drop" } | { "t": "redirect", flow_id: number, } | { "t": "allowreuseport" };
+export type FlowDnsMark =
+  | { "t": "keepgoing" }
+  | { "t": "direct" }
+  | { "t": "drop" }
+  | { "t": "redirect"; flow_id: number }
+  | { "t": "allowreuseport" };
 
-export type FlowTarget = { "t": "interface", name: string, } | { "t": "netns", container_name: string, };
+export type FlowTarget = { "t": "interface"; name: string } | {
+  "t": "netns";
+  container_name: string;
+};
 
-export type IpConfig = { ip: string, prefix: number, };
+export type IpConfig = { ip: string; prefix: number };
 
 /**
  * 数据包匹配该流控标志
  */
-export type PacketMatchMark = { ip: string, vlan_id: number | null, qos: number | null, };
+export type PacketMatchMark = {
+  ip: string;
+  vlan_id: number | null;
+  qos: number | null;
+};
 
 /**
  * 对于外部 IP 规则
  */
-export type WanIPRuleConfig = { id: string, index: number, enable: boolean, 
-/**
- * 流量标记
- */
-mark: FlowDnsMark, 
-/**
- * 匹配规则列表
- */
-source: Array<WanIPRuleSource>, remark: string, flow_id: number, override_dns: boolean, };
+export type WanIPRuleConfig = {
+  id: string;
+  index: number;
+  enable: boolean;
+  /**
+   * 流量标记
+   */
+  mark: FlowDnsMark;
+  /**
+   * 匹配规则列表
+   */
+  source: Array<WanIPRuleSource>;
+  remark: string;
+  flow_id: number;
+  override_dns: boolean;
+};
 
-export type WanIPRuleSource = { "t": "geokey", country_code: string, } | { "t": "config" } & IpConfig;
+export type WanIPRuleSource =
+  | { "t": "geokey"; country_code: string }
+  | { "t": "config" } & IpConfig;

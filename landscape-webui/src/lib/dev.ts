@@ -1,4 +1,4 @@
-import { FlowNodeType, NodePositionType } from "@/lib/flow";
+import { FlowNodeType, NodePositionType } from "@/lib/topology";
 import { ZoneType } from "./service_ipconfig";
 
 export class NetDev {
@@ -55,7 +55,7 @@ export class NetDev {
   has_source_hook() {
     if (this.zone_type == ZoneType.Wan) {
       return false;
-    } else if (this.dev_kind == "Bridge") {
+    } else if (this.dev_kind == "bridge") {
       return true;
     } else if (this.zone_type == ZoneType.Lan) {
       return true;
@@ -79,7 +79,7 @@ export class NetDev {
     if (this.peer_link_id != undefined) {
       return NodePositionType.Other;
     }
-    if (this.dev_type === "Ppp") {
+    if (this.dev_type === "ppp") {
       return NodePositionType.Wan;
     } else if (this.name === "docker0") {
       return NodePositionType.Lan;
@@ -121,14 +121,14 @@ export enum WifiMode {
 
 // 定义一个单独的枚举类型，用来表示变体的标签 `t`
 export enum DevStateType {
-  Unknown = "Unknown",
-  NotPresent = "NotPresent",
-  Down = "Down",
-  LowerLayerDown = "LowerLayerDown",
-  Testing = "Testing",
-  Dormant = "Dormant",
-  Up = "Up",
-  Other = "Other",
+  Unknown = "unknown",
+  NotPresent = "notpresent",
+  Down = "down",
+  LowerLayerDown = "lowerlayerdown",
+  Testing = "testing",
+  Dormant = "dormant",
+  Up = "up",
+  Other = "other",
 }
 
 // 定义 DevState 类型，使用 DevStateType 来表示 `t` 字段

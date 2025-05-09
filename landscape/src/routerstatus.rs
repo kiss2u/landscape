@@ -66,7 +66,7 @@ pub fn get_sys_running_status() -> WatchResource<LandscapeStatus> {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
         let mut sys = System::new_with_specifics(
-            RefreshKind::new()
+            RefreshKind::nothing()
                 .with_cpu(CpuRefreshKind::everything())
                 .with_memory(MemoryRefreshKind::everything()),
         );
@@ -75,10 +75,9 @@ pub fn get_sys_running_status() -> WatchResource<LandscapeStatus> {
             ld_status.uptime = System::uptime();
             ld_status.load_avg = LoadAvg::from(System::load_average());
 
-            sys.refresh_cpu();
+            sys.refresh_cpu_all();
 
-            let cpu = sys.global_cpu_info();
-            ld_status.global_cpu_info = cpu.cpu_usage();
+            ld_status.global_cpu_info = sys.global_cpu_usage();
 
             for cpu in sys.cpus() {
                 ld_status.cpus.push(CpuUsage::from(cpu));

@@ -5,7 +5,7 @@ use libbpf_rs::{
     TC_EGRESS, TC_INGRESS,
 };
 
-mod firewall_bpf {
+pub(crate) mod firewall_bpf {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/firewall.skel.rs"));
 }
 
@@ -16,6 +16,8 @@ use crate::{
     bpf_error::LdEbpfResult, landscape::TcHookProxy, FIREWALL_EGRESS_PRIORITY,
     FIREWALL_INGRESS_PRIORITY, MAP_PATHS,
 };
+
+mod metric;
 
 pub fn new_firewall(
     ifindex: i32,
@@ -31,10 +33,21 @@ pub fn new_firewall(
 
     open_skel.maps.firewall_block_ip4_map.set_pin_path(&MAP_PATHS.firewall_ipv4_block)?;
     open_skel.maps.firewall_block_ip6_map.set_pin_path(&MAP_PATHS.firewall_ipv6_block)?;
+    open_skel.maps.firewall_conn_events.set_pin_path(&MAP_PATHS.firewall_conn_events)?;
+    open_skel
+        .maps
+        .firewall_conn_metric_events
+        .set_pin_path(&MAP_PATHS.firewall_conn_metric_events)?;
     open_skel.maps.firewall_allow_rules_map.set_pin_path(&MAP_PATHS.firewall_allow_rules_map)?;
 
     open_skel.maps.firewall_block_ip4_map.reuse_pinned_map(&MAP_PATHS.firewall_ipv4_block)?;
     open_skel.maps.firewall_block_ip6_map.reuse_pinned_map(&MAP_PATHS.firewall_ipv6_block)?;
+    open_skel.maps.firewall_conn_events.reuse_pinned_map(&MAP_PATHS.firewall_conn_events)?;
+    open_skel
+        .maps
+        .firewall_conn_metric_events
+        .reuse_pinned_map(&MAP_PATHS.firewall_conn_metric_events)?;
+
     open_skel
         .maps
         .firewall_allow_rules_map

@@ -6,7 +6,7 @@ import { Docker } from "@vicons/fa";
 import HideDocker from "@/components/icon/HideDocker.vue";
 import { useVueFlow } from "@vue-flow/core";
 // import { CashOutline as CashIcon } from "@vicons/ionicons5";
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 
 const show_create_dev = ref<boolean>(false);
 
@@ -16,15 +16,18 @@ let ifaceNodeStore = useTopologyStore();
 async function show_down_dev() {
   ifaceNodeStore.UPDATE_HIDE(!ifaceNodeStore.hide_down_dev);
   await ifaceNodeStore.UPDATE_INFO();
+  await nextTick();
+  await fit_view();
 }
 
 async function show_docker_dev() {
   ifaceNodeStore.UPDATE_DOCKER_HIDE(!ifaceNodeStore.hide_docker_dev);
   await ifaceNodeStore.UPDATE_INFO();
+  await fit_view();
 }
 
-async function fit_vieww() {
-  fitView({ padding: 0.23 });
+async function fit_view() {
+  await fitView({ padding: 0.3 });
 }
 </script>
 
@@ -39,7 +42,7 @@ async function fit_vieww() {
     <n-float-button @click="show_create_dev = true">
       <n-icon><Add /></n-icon>
     </n-float-button>
-    <n-float-button @click="fit_vieww">
+    <n-float-button @click="fit_view">
       <n-icon><PageFit16Filled /></n-icon>
     </n-float-button>
     <n-float-button @click="show_docker_dev">

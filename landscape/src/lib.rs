@@ -26,6 +26,7 @@ pub mod firewall;
 pub mod flow;
 pub mod icmp;
 pub mod iface;
+pub mod metric;
 pub mod observer;
 pub mod pppd_client;
 pub mod pppoe_client;
@@ -195,6 +196,9 @@ pub async fn get_all_devices() -> Vec<LandScapeInterface> {
     let mut result = vec![];
     while let Some(msg) = links.try_next().await.unwrap() {
         if let Some(data) = LandScapeInterface::new(msg) {
+            if data.is_lo() {
+                continue;
+            }
             result.push(data);
         }
     }
@@ -308,7 +312,7 @@ mod tests {
 
         // Display processes ID, name na disk usage:
         for (pid, process) in sys.processes() {
-            println!("[{pid}] {} {:?}", process.name(), process.disk_usage());
+            println!("[{pid}] {:?} {:?}", process.name(), process.disk_usage());
         }
 
         // We display all disks' information:

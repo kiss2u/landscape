@@ -42,11 +42,14 @@ onMounted(async () => {
         {{ sysinfo.os_version }}
       </n-descriptions-item>
       <n-descriptions-item :span="2" label="启动时间">
-        <n-time :time="sysinfo.start_at" format="yyyy-MM-dd hh:mm:ss" unix />
+        <n-flex>
+          <n-time :time="sysinfo.start_at" format="yyyy-MM-dd hh:mm:ss" unix />
+          (<n-time :to="now" :time="sysinfo.start_at * 1000" type="relative" />)
+        </n-flex>
       </n-descriptions-item>
-      <n-descriptions-item :span="2" label="运行时间">
+      <!-- <n-descriptions-item :span="2" label="运行时间">
         <n-time :to="now" :time="sysinfo.start_at * 1000" type="relative" />
-      </n-descriptions-item>
+      </n-descriptions-item> -->
       <n-descriptions-item :span="2" label="Landscape Router 版本">
         {{ sysinfo.landscape_version }}
       </n-descriptions-item>

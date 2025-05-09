@@ -145,6 +145,7 @@ struct flow_ip_trie_key {
 struct flow_ip_trie_value {
     u32 mark;
     u8 override_dns;
+    u8 _pad[3];
 } __flow_ip_trie_value;
 
 #endif /* __LD_FLOW_H__ */

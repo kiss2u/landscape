@@ -387,8 +387,24 @@ static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new,
     if (timer_value == NULL) {
         return TIMER_ERROR;
     }
-
     // bpf_log_debug("insert new CT");
+
+    // 发送 event
+    struct nat_conn_event* event;
+    event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    if (event != NULL) {
+        COPY_ADDR_FROM(event->dst_addr.all, nat_egress_value->trigger_addr.all);
+        COPY_ADDR_FROM(event->src_addr.all, nat_ingress_value->addr.all);
+        event->src_port = nat_ingress_value->port;
+        event->dst_port = nat_egress_value->trigger_port;
+        event->l4_proto = l4proto;
+        event->l3_proto = LANDSCAPE_IPV4_TYPE;
+        event->flow_id = 0;
+        event->trace_id = 0;
+        event->time = bpf_ktime_get_ns();
+        event->event_type = NAT_CREATE_CONN;
+        bpf_ringbuf_submit(event, 0);
+    }
 
     *timer_value_ = timer_value;
     return TIMER_CREATED;
@@ -1148,12 +1164,13 @@ int egress_nat(struct __sk_buff *skb) {
             return TC_ACT_SHOT;
         }
 
-        u8 action = skb->mark & ACTION_MASK;
-        if (action == SYMMETRIC_NAT) {
-            // SYMMETRIC_NAT check
+        
+        u8 flow_action = get_flow_action(skb->mark);
+        if (flow_action != FLOW_ALLOW_REUSE) {
+            // PORT REUSE check
             if (!ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr) ||
                 packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
-                bpf_log_info("SYMMETRIC_NAT MARK DROP PACKET");
+                bpf_log_info("FLOW_ALLOW_REUSE MARK not set, DROP PACKET");
                 bpf_log_info("dst IP: %pI4,", &packet_info.pair_ip.dst_addr);
                 bpf_log_info("trigger_addr IP: %pI4,", &nat_egress_value->trigger_addr);
                 bpf_log_info(

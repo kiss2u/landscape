@@ -7,6 +7,7 @@ import {
   get_iface_mark_config,
   update_iface_mark_config,
 } from "@/api/service_mark";
+import { IfaceZoneType } from "@/rust_bindings/common_iface";
 
 let markConfigStore = useMarkConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
@@ -14,7 +15,7 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: ZoneType;
+  zone: IfaceZoneType;
 }>();
 
 const service_config = ref<MarkServiceConfig>(

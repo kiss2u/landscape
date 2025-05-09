@@ -117,23 +117,22 @@ int flow_verdict_egress(struct __sk_buff *skb) {
     }
 
     u32 flow_id = *flow_id_ptr;
+    u8 flow_id_u8 = flow_id & 0xff;
 
     if (flow_id == 0) {
         return TC_ACT_UNSPEC;
     }
 
-    bpf_log_info("find flow_id: %d", *flow_id_ptr);
+    // bpf_log_info("find flow_id: %d", *flow_id_ptr);
 
-    u32 new_mark = skb->mark;
+    volatile u32 flow_mark_action = 0;
 
-    volatile u32 flow_mark_action;
-    
     struct flow_ip_trie_key ip_trie_key = {0};
     ip_trie_key.prefixlen = is_ipv4 ? 64 : 160;
     ip_trie_key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
     COPY_ADDR_FROM(ip_trie_key.addr.all, cache_key.dst_addr.all);
-    struct flow_ip_trie_value* ip_flow_mark;
-    void* ip_rules_map =  bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
+    struct flow_ip_trie_value *ip_flow_mark;
+    void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
     if (ip_rules_map != NULL) {
         ip_flow_mark = bpf_map_lookup_elem(ip_rules_map, &ip_trie_key);
         if (ip_flow_mark != NULL) {
@@ -151,12 +150,13 @@ int flow_verdict_egress(struct __sk_buff *skb) {
     key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
     COPY_ADDR_FROM(key.addr.all, cache_key.dst_addr.all);
 
-     // 查询 DNS 配置信息，查看是否有转发流的配置
-    void* dns_rules_map =  bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
+    // 查询 DNS 配置信息，查看是否有转发流的配置
+    void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
     if (dns_rules_map != NULL) {
-        u32* dns_flow_mark = bpf_map_lookup_elem(dns_rules_map, &cache_key.dst_addr.all);
+        u32 *dns_flow_mark = bpf_map_lookup_elem(dns_rules_map, &key);
         if (dns_flow_mark != NULL) {
             flow_mark_action = *dns_flow_mark;
+            // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action, &cache_key.dst_addr.ip);
         } else {
             // bpf_log_info("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
         }
@@ -164,8 +164,12 @@ int flow_verdict_egress(struct __sk_buff *skb) {
         // bpf_log_info("flow_id: %d, dns map is empty", *flow_id_ptr);
     }
 
+    // bpf_log_info("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
     u8 flow_action, dns_flow_id;
+    struct flow_target_info *target_info;
 apply_action:
+
+    skb->mark = replace_flow_id(flow_mark_action, flow_id_u8);
 
     flow_action = get_flow_action(flow_mark_action);
     dns_flow_id = get_flow_id(flow_mark_action);
@@ -184,15 +188,11 @@ apply_action:
         //              dns_flow_id);
         flow_id = dns_flow_id;
     } else if (flow_action == FLOW_ALLOW_REUSE) {
-        new_mark = replace_flow_action(new_mark, flow_action);
+        // 无动作
     }
 
 keep_going:
 
-   
-    skb->mark = new_mark;
-
-    struct flow_target_info *target_info;
     // 找到转发的目标
     target_info = bpf_map_lookup_elem(&flow_target_map, &flow_id);
 

@@ -17,6 +17,8 @@ hostname = "0.3"
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 
-ts-rs = { workspace = true, features = ["serde-compat"] }
+ts-rs = { workspace = true }
 
 uuid = { workspace = true }
+
+libc = { workspace = true }

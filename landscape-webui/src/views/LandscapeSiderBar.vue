@@ -88,10 +88,9 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(Docker),
   },
   {
-    label: "指标统计",
+    label: "连接信息",
     key: "metric",
     icon: renderIcon(ChartCombo),
-    disabled: true,
   },
 ];
 </script>
