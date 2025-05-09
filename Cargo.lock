@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "landscape"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "bollard",
  "cidr",
@@ -2087,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-common"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "clap 4.5.27",
  "homedir",
@@ -2107,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-dns"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "aho-corasick",
  "async-trait",
@@ -2139,7 +2139,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-ebpf"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "clap 4.5.27",
  "ctrlc",
@@ -2163,7 +2163,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-protobuf"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "homedir",
  "jemalloc-ctl",
@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-webserver"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "axum",
  "axum-extra",
