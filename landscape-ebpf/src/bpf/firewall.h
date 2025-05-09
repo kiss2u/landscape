@@ -67,7 +67,8 @@ struct firewall_conntrack_action {
     u64 status;
     union u_inet_addr trigger_addr;
     __be16 trigger_port;
-    __be16 _pad;
+    __u8 flow_id;
+    __u8 _pad;
     __u32 mark;
     struct bpf_timer timer;
     u64 create_time;

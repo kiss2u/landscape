@@ -7,7 +7,7 @@ use serde::Serialize;
 use tokio::sync::{mpsc, RwLock};
 use ts_rs::TS;
 
-use crate::event::firewall::{FirewallKey, FirewallMessage, FirewallMetric};
+use crate::event::firewall::{ConnectMetric, FirewallKey, FirewallMessage, FirewallMetric};
 
 const CHANNEL_SIZE: usize = 2048;
 
@@ -15,7 +15,7 @@ const CHANNEL_SIZE: usize = 2048;
 #[ts(export, export_to = "common/metric.d.ts")]
 pub struct FrontEndFirewallConnectData {
     key: FirewallKey,
-    value: Vec<FirewallMetric>,
+    value: SingleConnectMetric,
 }
 
 #[derive(Debug, Default, Serialize, TS)]
@@ -25,10 +25,18 @@ pub struct FrontEndFirewallMetricServiceData {
     pub connect_metrics: Vec<FrontEndFirewallConnectData>,
 }
 
+#[derive(Debug, Serialize, Clone, TS)]
+#[ts(export, export_to = "common/metric.d.ts")]
+pub struct SingleConnectMetric {
+    agg: ConnectMetric,
+    #[ts(type = "Array<FirewallMetric>")]
+    metrics: VecDeque<FirewallMetric>,
+}
+
 #[derive(Debug, Default)]
 pub struct FirewallMetricServiceData {
     pub connects: HashSet<FirewallKey>,
-    pub connect_metrics: HashMap<FirewallKey, VecDeque<FirewallMetric>>,
+    pub connect_metrics: HashMap<FirewallKey, SingleConnectMetric>,
 }
 
 #[derive(Clone)]
@@ -57,21 +65,27 @@ impl FirewallMetricService {
                             }
                             crate::event::firewall::FirewallEventType::DisConnct => {
                                 write.connects.remove(&key);
+                                write.connect_metrics.remove(&key);
                             }
                         }
                     }
                     FirewallMessage::Metric(firewall_metric) => {
-                        let key = firewall_metric.convert_to_key();
+                        let (key, metric) = firewall_metric.convert_to_key();
+                        // tracing::info!("key metric: {key:?}");
                         match write.connect_metrics.entry(key) {
                             std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
-                                let datas = occupied_entry.get_mut();
-                                datas.push_back(firewall_metric);
-                                if datas.len() > 60 {
-                                    datas.pop_front();
+                                let connect_info = occupied_entry.get_mut();
+                                connect_info.agg.append_other(&metric);
+                                connect_info.metrics.push_back(firewall_metric);
+                                if connect_info.metrics.len() > 60 {
+                                    connect_info.metrics.pop_front();
                                 }
                             }
                             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
-                                vacant_entry.insert(VecDeque::from(vec![firewall_metric]));
+                                vacant_entry.insert(SingleConnectMetric {
+                                    agg: metric,
+                                    metrics: VecDeque::from(vec![firewall_metric]),
+                                });
                             }
                         }
                     }
@@ -86,8 +100,8 @@ impl FirewallMetricService {
         let data = self.data.read().await;
         let mut connect_metrics = vec![];
         for (key, value) in data.connect_metrics.iter() {
-            let value = value.iter().map(|v| v.clone()).collect();
-            connect_metrics.push(FrontEndFirewallConnectData { key: key.clone(), value });
+            connect_metrics
+                .push(FrontEndFirewallConnectData { key: key.clone(), value: value.clone() });
         }
         FrontEndFirewallMetricServiceData { connects: data.connects.clone(), connect_metrics }
     }

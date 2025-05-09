@@ -310,15 +310,16 @@ static __always_inline void
 firewall_metric_repoort(struct __sk_buff *skb,bool ingress, struct firewall_conntrack_key *timer_key, struct firewall_conntrack_action *timer_track_value) {
     
 #define BPF_LOG_TOPIC "firewall_metric_repoort"
-    u64 packets = skb->gso_segs == 0? 1 : skb->gso_segs;
+    // u64 packets = skb->gso_segs == 0? 1 : skb->gso_segs;
     u64 bytes = skb->len;
-    bpf_log_info("skb->len : %d, skb->gso_segs : %d", skb->len, skb->gso_segs);
+    
+    // bpf_log_info("skb->len : %d, skb->gso_segs : %d", skb->len, skb->gso_segs);
     if (ingress) {
         __sync_fetch_and_add(&timer_track_value->ingress_bytes, bytes);
-        __sync_fetch_and_add(&timer_track_value->ingress_packets, packets);
+        __sync_fetch_and_add(&timer_track_value->ingress_packets, 1);
     } else {
         __sync_fetch_and_add(&timer_track_value->egress_bytes, bytes);
-        __sync_fetch_and_add(&timer_track_value->egress_packets, packets);
+        __sync_fetch_and_add(&timer_track_value->egress_packets, 1);
     }
 
     __u64 now = bpf_ktime_get_ns();
@@ -341,7 +342,7 @@ firewall_metric_repoort(struct __sk_buff *skb,bool ingress, struct firewall_conn
             event->dst_port = timer_track_value->trigger_port;
             event->l4_proto = timer_key->ip_protocol;
             event->l3_proto = timer_key->ip_type;
-            event->flow_id = 0;
+            event->flow_id = timer_track_value->flow_id;
             event->trace_id = 0;
             event->time = now;
             event->create_time = timer_track_value->create_time;
@@ -424,9 +425,9 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
         event->dst_port = value->trigger_port;
         event->l4_proto = key->ip_protocol;
         event->l3_proto = key->ip_type;
-        event->flow_id = 0;
+        event->flow_id = value->flow_id;
         event->trace_id = 0;
-        event->create_time = bpf_ktime_get_ns();
+        event->create_time = value->create_time;
         event->event_type = FIREWALL_DELETE_CONN;
         bpf_ringbuf_submit(event, 0);
     }
@@ -488,7 +489,7 @@ static __always_inline int lookup_static_rules(struct firewall_static_rule_key *
     return TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }
-static __always_inline int lookup_or_create_ct(bool do_new,
+static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool do_new,
                                                struct firewall_conntrack_key *timer_key,
                                                union u_inet_addr *remote_addr, __be16 *remote_port,
                                                struct firewall_conntrack_action **timer_value_) {
@@ -511,6 +512,10 @@ static __always_inline int lookup_or_create_ct(bool do_new,
         .trigger_port = *remote_port,
         .create_time = bpf_ktime_get_ns(),
     };
+    action.flow_id = get_flow_id(skb->mark);
+    // if (skb->mark !=0) {
+    //     bpf_log_info("skb->mark %d, action.flow_id: %d ", skb->mark, action.flow_id);
+    // }
     COPY_ADDR_FROM(action.trigger_addr.all, remote_addr->all);
     timer_value = insert_new_nat_timer(timer_key, &action);
     if (timer_value == NULL) {
@@ -527,9 +532,9 @@ static __always_inline int lookup_or_create_ct(bool do_new,
         event->dst_port = action.trigger_port;
         event->l4_proto = timer_key->ip_protocol;
         event->l3_proto = timer_key->ip_type;
-        event->flow_id = 0;
+        event->flow_id = action.flow_id;
         event->trace_id = 0;
-        event->create_time = bpf_ktime_get_ns();
+        event->create_time = action.create_time;
         event->event_type = FIREWALL_CREATE_CONN;
         bpf_ringbuf_submit(event, 0);
     }
@@ -883,7 +888,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
             !is_icmpx_error && pkt_allow_initiating_ct(packet_info.ip_hdr.pkt_type);
 
         struct firewall_conntrack_action *ct_timer_value;
-        ret = lookup_or_create_ct(allow_create_mapping, &conntrack_key,
+        ret = lookup_or_create_ct(skb, allow_create_mapping, &conntrack_key,
                                   &packet_info.ip_hdr.pair_ip.dst_addr,
                                   &packet_info.ip_hdr.pair_ip.dst_port, &ct_timer_value);
 
@@ -958,7 +963,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
     COPY_ADDR_FROM(conntrack_key.local_addr.all, &packet_info.ip_hdr.pair_ip.dst_addr.all);
 
     struct firewall_conntrack_action *ct_timer_value;
-    ret = lookup_or_create_ct(false, &conntrack_key, &packet_info.ip_hdr.pair_ip.src_addr,
+    ret = lookup_or_create_ct(skb, false, &conntrack_key, &packet_info.ip_hdr.pair_ip.src_addr,
                               &packet_info.ip_hdr.pair_ip.src_port, &ct_timer_value);
 
     if (ret == TIMER_EXIST || ret == TIMER_CREATED) {
@@ -1070,7 +1075,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
 
         // 没有端口开放 那就进行检查是否已经动态添加过了
         struct firewall_conntrack_action *ct_timer_value;
-        ret = lookup_or_create_ct(allow_create_mapping, &conntrack_key,
+        ret = lookup_or_create_ct(skb, allow_create_mapping, &conntrack_key,
                                   &packet_info.ip_hdr.pair_ip.dst_addr,
                                   &packet_info.ip_hdr.pair_ip.dst_port, &ct_timer_value);
 
@@ -1136,7 +1141,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
     COPY_ADDR_FROM(conntrack_key.local_addr.all, &packet_info.ip_hdr.pair_ip.dst_addr.all);
 
     struct firewall_conntrack_action *ct_timer_value;
-    ret = lookup_or_create_ct(false, &conntrack_key, &packet_info.ip_hdr.pair_ip.src_addr,
+    ret = lookup_or_create_ct(skb, false, &conntrack_key, &packet_info.ip_hdr.pair_ip.src_addr,
                               &packet_info.ip_hdr.pair_ip.src_port, &ct_timer_value);
 
     if (ret == TIMER_EXIST || ret == TIMER_CREATED) {

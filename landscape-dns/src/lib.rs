@@ -29,7 +29,7 @@ impl CacheDNSItem {
                 hickory_proto::rr::RData::A(a) => {
                     if mark.need_insert_in_ebpf_map() {
                         result.insert(FlowDnsMarkInfo {
-                            mark: self.mark.clone().into(),
+                            mark: mark.clone().into(),
                             ip: std::net::IpAddr::V4(a.0),
                         });
                     }
@@ -37,7 +37,7 @@ impl CacheDNSItem {
                 hickory_proto::rr::RData::AAAA(a) => {
                     if mark.need_insert_in_ebpf_map() {
                         result.insert(FlowDnsMarkInfo {
-                            mark: self.mark.clone().into(),
+                            mark: mark.clone().into(),
                             ip: std::net::IpAddr::V6(a.0),
                         });
                     }

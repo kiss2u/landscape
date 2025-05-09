@@ -94,10 +94,10 @@ where
     let count = ips.len() as u32;
     for IpMarkInfo { mark, cidr, override_dns } in ips.into_iter() {
         let mark: u32 = mark.into();
-        let value = flow_ip_trie_value {
-            mark,
-            override_dns: if override_dns { 1 } else { 0 },
-        };
+        let mut value = flow_ip_trie_value::default();
+
+        value.mark = mark;
+        value.override_dns = if override_dns { 1 } else { 0 };
 
         // TODO: 抽取转换逻辑
         let mut key = flow_ip_trie_key::default();

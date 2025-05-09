@@ -107,10 +107,13 @@ impl LandscapeDnsRequestHandle {
             for ((domain, req_type), value) in old_cache.iter() {
                 'resolver: for (_index, resolver) in resolves.iter() {
                     if resolver.is_match(&domain) {
-                        println!("resolves: {:?}: match: {domain:?}", resolver.config);
                         let new_mark = resolver.mark().clone();
                         // println!("old domain match resolver: {domain:?}");
                         let mut cache_items = vec![];
+                        println!(
+                            "resolves: {:?}: match: {domain:?}, new_mark: {new_mark:?}",
+                            resolver.config
+                        );
                         for cache_item in value.iter() {
                             // 新配置是 NoMark 的排除
                             match (
@@ -119,12 +122,9 @@ impl LandscapeDnsRequestHandle {
                             ) {
                                 (true, true) => {
                                     // 规则更新前后都需要写入 ebpf map
-                                    // 所以检查不相同才需要更新
-                                    if new_mark != cache_item.mark {
-                                        update_dns_mark_list.extend(
-                                            cache_item.get_update_rules_with_mark(&new_mark),
-                                        );
-                                    }
+                                    // 因为现在是创建新的 map 所以即使一样也需要更新
+                                    update_dns_mark_list
+                                        .extend(cache_item.get_update_rules_with_mark(&new_mark));
                                 }
                                 (true, false) => {
                                     // 原先已经写入了

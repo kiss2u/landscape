@@ -14,6 +14,7 @@ import { useFirewallConfigStore } from "./status_firewall";
 import { useWifiConfigStore } from "./status_wifi";
 import { useDHCPv4ConfigStore } from "./status_dhcp_v4";
 import { useTopologyStore } from "./topology";
+import { useMetricStore } from "./status_metric";
 
 export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const sysinfo = useSysInfo();
@@ -29,6 +30,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const wifiConfigStore = useWifiConfigStore();
   const dhcpv4ConfigStore = useDHCPv4ConfigStore();
   const topologyStore = useTopologyStore();
+  const metricStore = useMetricStore();
 
   const interval_function = async () => {
     if (start_count_down_callback.value !== undefined) {
@@ -48,6 +50,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
       await firewallConfigStore.UPDATE_INFO();
       await wifiConfigStore.UPDATE_INFO();
       await dhcpv4ConfigStore.UPDATE_INFO();
+      await metricStore.UPDATE_INFO();
     } catch (error) {
       // console.log("1111");
       enable_interval.value = false;

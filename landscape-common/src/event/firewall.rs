@@ -108,8 +108,8 @@ pub struct FirewallMetric {
 }
 
 impl FirewallMetric {
-    pub fn convert_to_key(&self) -> FirewallKey {
-        FirewallKey {
+    pub fn convert_to_key(&self) -> (FirewallKey, ConnectMetric) {
+        let key = FirewallKey {
             src_ip: self.src_ip,
             dst_ip: self.dst_ip,
             src_port: self.src_port,
@@ -119,6 +119,39 @@ impl FirewallMetric {
             flow_id: self.flow_id,
             trace_id: self.trace_id,
             create_time: self.create_time,
-        }
+        };
+        let metric = ConnectMetric {
+            time: self.time,
+            ingress_bytes: self.ingress_bytes,
+            ingress_packets: self.ingress_packets,
+            egress_bytes: self.egress_bytes,
+            egress_packets: self.egress_packets,
+        };
+        (key, metric)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric.d.ts")]
+pub struct ConnectMetric {
+    #[ts(type = "number")]
+    pub time: u64,
+    #[ts(type = "number")]
+    pub ingress_bytes: u64,
+    #[ts(type = "number")]
+    pub ingress_packets: u64,
+    #[ts(type = "number")]
+    pub egress_bytes: u64,
+    #[ts(type = "number")]
+    pub egress_packets: u64,
+}
+
+impl ConnectMetric {
+    pub fn append_other(&mut self, other: &Self) {
+        self.time = other.time;
+        self.ingress_bytes += other.ingress_bytes;
+        self.ingress_packets += other.ingress_packets;
+        self.egress_bytes += other.egress_bytes;
+        self.egress_packets += other.egress_packets;
     }
 }

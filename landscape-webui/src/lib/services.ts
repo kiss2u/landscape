@@ -74,7 +74,7 @@ export class ServiceExhibitSwitch {
       this.enable_in_boot = false;
       this.ip_config = false;
     }
-    if (dev.dev_type === "Ppp") {
+    if (dev.dev_type === "ppp") {
       this.enable_in_boot = false;
       this.ip_config = false;
       this.zone_type = false;

@@ -12,7 +12,6 @@ unsafe impl plain::Plain for firewall_conn_metric_event {}
 
 impl From<&firewall_conn_event> for FirewallEvent {
     fn from(ev: &firewall_conn_event) -> Self {
-        let time = landscape_common::utils::time::get_relative_time_ns().unwrap_or_default();
         FirewallEvent {
             event_type: FirewallEventType::from(ev.event_type),
             src_ip: convert_ip(&ev.src_addr, ev.l3_proto),
@@ -23,14 +22,13 @@ impl From<&firewall_conn_event> for FirewallEvent {
             flow_id: ev.flow_id,
             trace_id: ev.trace_id,
             l3_proto: ev.l3_proto,
-            create_time: ev.create_time + time,
+            create_time: ev.create_time,
         }
     }
 }
 
 impl From<&firewall_conn_metric_event> for FirewallMetric {
     fn from(ev: &firewall_conn_metric_event) -> Self {
-        let time = landscape_common::utils::time::get_relative_time_ns().unwrap_or_default();
         FirewallMetric {
             src_ip: convert_ip(&ev.src_addr, ev.l3_proto),
             dst_ip: convert_ip(&ev.dst_addr, ev.l3_proto),
@@ -40,8 +38,8 @@ impl From<&firewall_conn_metric_event> for FirewallMetric {
             flow_id: ev.flow_id,
             trace_id: ev.trace_id,
             l3_proto: ev.l3_proto,
-            create_time: ev.create_time + time,
-            time: ev.time + time,
+            create_time: ev.create_time,
+            time: ev.time,
             ingress_bytes: ev.ingress_bytes,
             ingress_packets: ev.ingress_packets,
             egress_bytes: ev.egress_bytes,

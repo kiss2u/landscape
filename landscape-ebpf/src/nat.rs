@@ -69,8 +69,6 @@ impl From<&nat_conn_event> for NatEvent {
             }
         }
 
-        let time = landscape_common::utils::time::get_relative_time_ns().unwrap_or_default();
-
         NatEvent {
             event_type: NatEventType::from(ev.event_type),
             src_ip: convert_ip(&ev.src_addr, ev.l3_proto),
@@ -81,7 +79,7 @@ impl From<&nat_conn_event> for NatEvent {
             flow_id: ev.flow_id,
             trace_id: ev.trace_id,
             l3_proto: ev.l3_proto,
-            time: ev.time + time,
+            time: ev.time,
         }
     }
 }

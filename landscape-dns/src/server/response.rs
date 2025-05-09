@@ -58,18 +58,18 @@ impl ResponseHandler for LandscapeResponse {
             impl Iterator<Item = &'a Record> + Send + 'a,
         >,
     ) -> io::Result<ResponseInfo> {
-        tracing::debug!(
-            "response: {} response_code: {}",
-            response.header().id(),
-            response.header().response_code(),
-        );
+        // tracing::debug!(
+        //     "response: {} response_code: {}",
+        //     response.header().id(),
+        //     response.header().response_code(),
+        // );
         let mut buffer = Vec::with_capacity(512);
         let encode_result = {
             let mut encoder = BinEncoder::new(&mut buffer);
 
             // Set an appropriate maximum on the encoder.
             let max_size = self.max_size_for_response(&response);
-            tracing::trace!("setting response max size: {max_size}",);
+            // tracing::trace!("setting response max size: {max_size}",);
             encoder.set_max_size(max_size);
 
             response.destructive_emit(&mut encoder)

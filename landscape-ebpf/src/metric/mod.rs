@@ -14,6 +14,8 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
     let firewall_conn_metric_events =
         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.firewall_conn_metric_events).unwrap();
 
+    let offset_time = landscape_common::utils::time::get_relative_time_ns().unwrap_or_default();
+
     let nat_conn_callback = |data: &[u8]| -> i32 {
         let nat_conn_event_value = plain::from_bytes::<nat_conn_event>(data);
         if let Ok(data) = nat_conn_event_value {
@@ -29,7 +31,8 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let firewall_conn_event_value = plain::from_bytes::<firewall_conn_event>(data);
         if let Ok(data) = firewall_conn_event_value {
-            let event = FirewallEvent::from(data);
+            let mut event = FirewallEvent::from(data);
+            event.create_time += offset_time;
             // println!("event, {:#?}, time: {time}", event);
             firewall.send_firewall_msg(FirewallMessage::Event(event));
         }
@@ -41,7 +44,9 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let firewall_conn_event_value = plain::from_bytes::<firewall_conn_metric_event>(data);
         if let Ok(data) = firewall_conn_event_value {
-            let event = FirewallMetric::from(data);
+            let mut event = FirewallMetric::from(data);
+            event.create_time += offset_time;
+            event.time += offset_time;
             // println!("FirewallMetric, {:#?}, time: {time}", event);
             firewall.send_firewall_msg(FirewallMessage::Metric(event));
         }

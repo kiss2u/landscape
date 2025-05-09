@@ -93,8 +93,8 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                     match write_socket
                         .try_io(|inner| inner.get_ref().send_to(&message, &addr.into()))
                     {
-                        Ok(Ok(sent)) => {
-                            tracing::debug!("Sent {} bytes to {:?}", sent, addr);
+                        Ok(Ok(_sent)) => {
+                            // tracing::debug!("Sent {} bytes to {:?}", sent, addr);
                         }
                         Ok(Err(e)) => {
                             tracing::debug!("Send error: {:?}", e);
@@ -128,7 +128,7 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                         },
                     };
 
-                    tracing::info!("tos: {tos:?}, addr: {addr:?}, is_ipv4: {}", addr.is_ipv4());
+                    // tracing::info!("tos: {tos:?}, addr: {addr:?}, is_ipv4: {}", addr.is_ipv4());
                     let qos = if tos == 0 { None } else { Some(tos) };
 
                     let ip = match landscape_common::utils::ip::extract_real_ip(addr) {
@@ -138,10 +138,10 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                     let find_key = PacketMatchMark { ip, vlan_id: None, qos };
                     let mark = if let Some(mark) = dispatch_rules.read().await.get(&find_key) {
                         let mark = mark.clone();
-                        // tracing::debug!("get mark: {mark:?}, using: {find_key:?}");
+                        tracing::debug!("get mark: {mark:?}, using: {find_key:?}");
                         mark
                     } else {
-                        // tracing::debug!("can not get mark, using: {find_key:?}");
+                        tracing::debug!("can not get mark, using: {find_key:?}");
                         0
                     };
 
@@ -206,11 +206,11 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                             Ok(Ok(size)) => {
                                 let mut mark = 0;
                                 let mut tos = 0;
-                                tracing::debug!("Received {} bytes", size);
+                                // tracing::debug!("Received {} bytes", size);
 
                                 // 解析辅助数据
                                 let control_len = msg_hdr.control_len();
-                                tracing::debug!("control_len {}", control_len);
+                                // tracing::debug!("control_len {}", control_len);
                                 // drop(msg_hdr);
                                 if control_len > 0 {
                                     // let cmsg =
@@ -229,11 +229,11 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                                         //     let pktinfo = unsafe { &*pktinfo_ptr };
                                         //     tracing::debug!("Received on interface index: {}", pktinfo.ipi_ifindex);
                                         // }
-                                        tracing::debug!(
-                                            "cmsg_level: {}, cmsg_type: {}",
-                                            cmsg_ref.cmsg_level,
-                                            cmsg_ref.cmsg_type
-                                        );
+                                        // tracing::debug!(
+                                        //     "cmsg_level: {}, cmsg_type: {}",
+                                        //     cmsg_ref.cmsg_level,
+                                        //     cmsg_ref.cmsg_type
+                                        // );
 
                                         if cmsg_ref.cmsg_level == libc::SOL_SOCKET
                                             && cmsg_ref.cmsg_type == libc::SO_MARK
@@ -241,7 +241,7 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                                             let mark_ptr =
                                                 unsafe { libc::CMSG_DATA(cmsg) } as *const u32;
                                             mark = unsafe { *mark_ptr };
-                                            tracing::debug!("Received SO_RCVMARK: {}", mark);
+                                            // tracing::debug!("Received SO_RCVMARK: {}", mark);
                                         }
 
                                         if cmsg_ref.cmsg_level == libc::SOL_IP
@@ -250,7 +250,7 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                                             let tos_ptr =
                                                 unsafe { libc::CMSG_DATA(cmsg) } as *const u8;
                                             tos = unsafe { *tos_ptr };
-                                            println!("Received IP_TOS: {}", tos);
+                                            // println!("Received IP_TOS: {}", tos);
                                         }
 
                                         cmsg = unsafe { libc::CMSG_NXTHDR(control_ptr, cmsg) };
@@ -283,7 +283,7 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                     // tracing::info!("data: {data:?}");
                     match recv_msg_tx.try_send(data) {
                         Ok(_) => {
-                            tracing::debug!("Message enqueued");
+                            // tracing::debug!("Message enqueued");
                             // 后续逻辑
                         }
                         Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {

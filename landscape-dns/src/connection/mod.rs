@@ -89,14 +89,14 @@ impl RuntimeProvider for MarkRuntimeProvider {
     fn bind_udp(
         &self,
         local_addr: SocketAddr,
-        server_addr: SocketAddr,
+        _server_addr: SocketAddr,
     ) -> Pin<Box<dyn Send + Future<Output = std::io::Result<Self::Udp>>>> {
         let mark_value = self.mark_value;
         Box::pin(async move {
             let socket = TokioUdpSocket::bind(local_addr).await?;
             let fd = socket.as_raw_fd();
             set_socket_mark(fd, mark_value)?;
-            tracing::info!("Create udp local_addr: {}, server_addr: {}", local_addr, server_addr);
+            // tracing::info!("Create udp local_addr: {}, server_addr: {}", local_addr, server_addr);
             Ok(socket)
         })
     }

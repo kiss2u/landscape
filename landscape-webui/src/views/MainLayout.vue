@@ -24,8 +24,14 @@ import LandscapeSiderBar from "@/views/LandscapeSiderBar.vue";
         <n-layout
           :native-scrollbar="false"
           position="absolute"
-          style="top: 30px; padding-left: 25px; height: 100%"
-          content-style="height: 100%; display: flex; padding-top: 10px; "
+          style="
+            top: 40px;
+            right: 0px;
+            bottom: 0px;
+            display: flex;
+            padding-left: 25px;
+          "
+          content-style="flex:1; display: flex; padding-right: 15px;"
           content-class="main-body"
         >
           <RouterView />
