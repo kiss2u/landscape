@@ -18,6 +18,7 @@ pub struct DNSRuleConfig {
     #[serde(default)]
     pub filter: FilterResult,
     /// 解析模式
+    #[serde(default)]
     pub resolve_mode: DNSResolveMode,
     /// 流量标记
     #[serde(default)]

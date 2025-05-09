@@ -64,5 +64,11 @@ impl Default for DHCPv4ServerConfig {
 pub struct MacBindingRecord {
     pub mac: MacAddr,
     pub ip: Ipv4Addr,
+    #[serde(default = "default_binding_record")]
     pub expire_time: u32,
+}
+
+const fn default_binding_record() -> u32 {
+    // 24 小时
+    86400
 }

@@ -59,7 +59,7 @@ fi
 docker buildx rm "$BUILDER_NAME"
 
 
-echo "Docker image built successfully for $DOCKER_ARCH: ld_redirect_image:$TARGET"
+echo "Docker image built successfully for $DOCKER_ARCH: landscape:$TARGET"
 echo "The tar file is at: $OUTPUT_PATH"
 
 #
