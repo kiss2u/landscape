@@ -115,7 +115,7 @@ impl ResolverType {
                         rdata_ip,
                     ));
                 }
-                Ok(vec![])
+                Ok(result)
             }
             ResolverType::CacheResolver(resolver) => {
                 match resolver.resolver.lookup(domain, query_type).await {
