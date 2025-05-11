@@ -2,6 +2,7 @@ use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use uuid::Uuid;
 
 use crate::{flow::mark::FlowDnsMark, store::storev2::LandScapeStore};
 
@@ -9,6 +10,7 @@ use crate::{flow::mark::FlowDnsMark, store::storev2::LandScapeStore};
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "dns.ts")]
 pub struct DNSRuleConfig {
+    pub id: Option<Uuid>,
     pub name: String,
     /// 优先级
     pub index: u32,
@@ -44,6 +46,7 @@ impl LandScapeStore for DNSRuleConfig {
 impl Default for DNSRuleConfig {
     fn default() -> Self {
         Self {
+            id: None,
             name: "Landscape Router default rule".into(),
             index: 10000,
             enable: true,
