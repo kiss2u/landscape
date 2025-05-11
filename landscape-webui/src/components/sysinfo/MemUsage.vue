@@ -59,7 +59,7 @@ const swap = computed(() => {
     <n-flex style="flex: 1" vertical justify="space-between">
       <n-flex vertical justify="space-between">
         <n-flex justify="space-between">
-          <n-flex> {{ t("mem") }} : {{ men.total_mem }} GB</n-flex>
+          <n-flex>{{ t("mem") }}: {{ men.total_mem }} GB</n-flex>
           <n-flex>{{ t("used") }}: {{ men.used_mem }} GB</n-flex>
         </n-flex>
 

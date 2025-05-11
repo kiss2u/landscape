@@ -25,7 +25,7 @@ const load_avg = computed(() => {
 <template>
   <!-- {{ sysinfo.router_status.cpus[0] }} -->
   <n-card content-style="display: flex; max-height: 240px;">
-    <template #header> CPU</template>
+    <template #header> CPU </template>
     <n-flex style="flex: 1" vertical justify="space-between">
       <n-flex vertical justify="space-between">
         <n-flex justify="space-between">
