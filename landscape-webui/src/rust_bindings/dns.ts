@@ -14,6 +14,7 @@ export type DNSResolveMode = { "t": "redirect"; ips: Array<string> } | {
  * DNS 配置
  */
 export type DNSRuleConfig = {
+  id: string | null;
   name: string;
   /**
    * 优先级

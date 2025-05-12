@@ -59,6 +59,8 @@ pub fn del_flow_match_rule(rules: Vec<PacketMatchMark>) {
         let mut match_key = flow_match_key {
             vlan_tci: match_rule.vlan_id.unwrap_or(0),
             tos: match_rule.qos.unwrap_or(0),
+            // 暂时只支持 TCP
+            l4_protocol: 6,
             ..Default::default()
         };
 

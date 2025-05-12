@@ -2,6 +2,8 @@
 
 本页面说明了如何与 Armbian 组合进行编译
 
+可参考项目: https://github.com/ThisSeanZhang/landscape-build
+
 # 初始配置文件
 文件位置：
 ```text
@@ -33,9 +35,17 @@ t = "dhcpclient"
 [[dhcpv4_services]]
 iface_name = "br_lan"
 enable = true
+
+[dhcpv4_services.config]
 server_ip_addr = "192.168.7.1"
-network_mask = 24
 ip_range_start = "192.168.7.100"
+network_mask = 24
+
+# LAN 绑定的 MAC 地址
+mac_binding_records = [
+    { mac = "00:11:22:33:44:55", ip = "192.168.7.50" },
+    { mac = "aa:bb:cc:dd:ee:ff", ip = "192.168.7.51" },
+]
 
 ```
 
@@ -113,11 +123,11 @@ EOF
 
 	if [ "$BOARD" = "uefi-x86" ]; then
 		# 当 BOARD 为 "uefi-x86" 时执行的操作
-		curl -L -o /root/landscape-webserver https://github.com/ThisSeanZhang/landscape/releases/download/v0.4.9-beta/landscape-webserver-x86_64
+		curl -L -o /root/landscape-webserver https://github.com/ThisSeanZhang/landscape/releases/download/v0.4.10-beta/landscape-webserver-x86_64
 		sudo sed -i 's/^GRUB_CMDLINE_LINUX="/GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 /' /etc/default/grub
 		sudo update-grub
 	else
-		curl -L -o /root/landscape-webserver https://github.com/ThisSeanZhang/landscape/releases/download/v0.4.9-beta/landscape-webserver-aarch64
+		curl -L -o /root/landscape-webserver https://github.com/ThisSeanZhang/landscape/releases/download/v0.4.10-beta/landscape-webserver-aarch64
 		# 当 BOARD 为其他值时执行的操作
 		cat /boot/armbianEnv.txt
 		# 使用默认的方式进行命名
@@ -127,7 +137,7 @@ EOF
 	mkdir -p /root/.landscape-router/
 	cp /tmp/overlay/landscape_init.toml /root/.landscape-router/landscape_init.toml
 	chmod +x /root/landscape-webserver
-	curl -L -o /root/static.zip https://github.com/ThisSeanZhang/landscape/releases/download/v0.4.9-beta/static.zip
+	curl -L -o /root/static.zip https://github.com/ThisSeanZhang/landscape/releases/download/v0.4.10-beta/static.zip
 	unzip /root/static.zip -d /root/.landscape-router
 	cat <<EOF > /etc/systemd/system/landscape-router.service
 [Unit]
