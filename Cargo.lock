@@ -2452,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "landscape"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "bollard",
  "cidr",
@@ -2493,7 +2493,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-common"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "clap 4.5.27",
  "homedir",
@@ -2513,7 +2513,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-database"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "async-trait",
  "landscape-common",
@@ -2529,7 +2529,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-dns"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "aho-corasick",
  "async-trait",
@@ -2561,7 +2561,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-ebpf"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "clap 4.5.27",
  "ctrlc",
@@ -2585,7 +2585,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-protobuf"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "homedir",
  "jemalloc-ctl",
@@ -2599,7 +2599,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-webserver"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "axum",
  "axum-extra",
@@ -2823,7 +2823,7 @@ dependencies = [
 
 [[package]]
 name = "migration"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "async-std",
  "sea-orm-migration",
