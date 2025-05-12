@@ -5,13 +5,13 @@ use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use tokio::net::UdpSocket;
 use tokio::time::Instant;
 
-use crate::dump::icmp::v6::option_codes::{
-    IcmpV6Option, IcmpV6Options, PrefixInformation, RouteInformation,
-};
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
 use crate::iface::ip::addresses_by_iface_name;
 use crate::service::ra::{IPV6RAConfig, RouterFlags};
 use landscape_common::net::MacAddr;
+use landscape_common::net_proto::icmpv6::options::{
+    IcmpV6Option, IcmpV6Options, PrefixInformation, RouteInformation,
+};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;

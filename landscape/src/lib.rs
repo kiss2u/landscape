@@ -5,11 +5,8 @@ use std::{
 
 use dev::{DevState, LandScapeInterface};
 use futures::stream::TryStreamExt;
-use iface::{
-    config::{CreateDevType, NetworkIfaceConfig, WifiMode},
-    dev_wifi::LandScapeWifiInterface,
-    get_iface_by_name,
-};
+use iface::{dev_wifi::LandScapeWifiInterface, get_iface_by_name};
+use landscape_common::config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode};
 use netlink_packet_route::AddressFamily;
 use rtnetlink::new_connection;
 
@@ -160,14 +157,14 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
 pub fn using_iw_change_wifi_mode(iface_name: &str, mode: &WifiMode) {
     tracing::debug!("setting {} to mode: {:?}", iface_name, mode);
     match mode {
-        iface::config::WifiMode::Undefined => {}
-        iface::config::WifiMode::Client => {
+        WifiMode::Undefined => {}
+        WifiMode::Client => {
             std::process::Command::new("iw")
                 .args(["dev", iface_name, "set", "type", "managed"])
                 .output()
                 .unwrap();
         }
-        iface::config::WifiMode::AP => {
+        WifiMode::AP => {
             std::process::Command::new("iw")
                 .args(["dev", iface_name, "set", "type", "__ap"])
                 .output()

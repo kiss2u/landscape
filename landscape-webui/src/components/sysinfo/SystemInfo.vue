@@ -42,7 +42,7 @@ onMounted(async () => {
         {{ sysinfo.os_version }}
       </n-descriptions-item>
       <n-descriptions-item :span="2" label="启动时间">
-        <n-flex>
+        <n-flex :size="[4, 4]">
           <n-time :time="sysinfo.start_at" format="yyyy-MM-dd hh:mm:ss" unix />
           (<n-time :to="now" :time="sysinfo.start_at * 1000" type="relative" />)
         </n-flex>

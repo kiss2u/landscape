@@ -1,9 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use config::{NetworkIfaceConfig, WifiMode};
+use config::from_phy_dev;
 use dev_wifi::LandScapeWifiInterface;
 use futures::stream::TryStreamExt;
 use landscape_common::{
+    config::iface::{NetworkIfaceConfig, WifiMode},
     error::LdResult,
     iface::{AddController, BridgeCreate, ChangeZone, IfaceCpuSoftBalance, IfaceZoneType},
 };
@@ -61,7 +62,7 @@ impl IfaceManagerService {
     pub async fn manage_dev(&self, dev_name: String) {
         if self.get_iface_config(&dev_name).await.is_none() {
             if let Some(iface) = get_iface_by_name(&dev_name).await {
-                let config = NetworkIfaceConfig::from_phy_dev(&iface);
+                let config = from_phy_dev(&iface);
                 self.set_iface_config(config).await;
             }
         }
@@ -85,7 +86,7 @@ impl IfaceManagerService {
             let config = if let Some(config) = comfig_map.remove(&each.name) {
                 config
             } else {
-                NetworkIfaceConfig::from_phy_dev(&each)
+                from_phy_dev(&each)
             };
 
             let wifi_info = add_wifi_dev.get(&config.name).cloned();
@@ -146,7 +147,7 @@ impl IfaceManagerService {
             {
                 link_config
             } else {
-                NetworkIfaceConfig::from_phy_dev(&iface_info)
+                from_phy_dev(&iface_info)
             };
             link_config.controller_name = master_name;
             self.set_iface_config(link_config).await;
@@ -158,7 +159,7 @@ impl IfaceManagerService {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
-                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+                Some(from_phy_dev(&iface))
             } else {
                 None
             }
@@ -179,7 +180,7 @@ impl IfaceManagerService {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
-                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+                Some(from_phy_dev(&iface))
             } else {
                 None
             }
@@ -205,7 +206,7 @@ impl IfaceManagerService {
                 if let Some(link_config) = self.get_iface_config(&iface_name).await {
                     link_config
                 } else {
-                    NetworkIfaceConfig::from_phy_dev(&iface_info)
+                    from_phy_dev(&iface_info)
                 };
             link_config.enable_in_boot = enable_in_boot;
 
@@ -222,7 +223,7 @@ impl IfaceManagerService {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
-                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+                Some(from_phy_dev(&iface))
             } else {
                 None
             }

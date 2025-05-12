@@ -1,21 +1,14 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
-
 use landscape_common::{
     args::LAND_HOSTNAME,
+    config::wanip::{IfaceIpModelConfig, IfaceIpServiceConfig},
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
-    iface::IfaceZoneType,
     service::{
         service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
         ServiceStatus,
     },
-    store::storev2::LandScapeStore,
 };
-use serde::{Deserialize, Serialize};
 
-use crate::{
-    dev::LandScapeInterface,
-    iface::{config::NetworkIfaceConfig, get_iface_by_name},
-};
+use crate::{dev::LandScapeInterface, iface::get_iface_by_name};
 
 #[derive(Clone)]
 pub struct IPConfigService;
@@ -40,66 +33,6 @@ impl ServiceHandler for IPConfigService {
         }
 
         service_status
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IfaceIpServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-    pub ip_model: IfaceIpModelConfig,
-}
-
-impl LandScapeStore for IfaceIpServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
-pub enum IfaceIpModelConfig {
-    #[default]
-    Nothing,
-    Static {
-        #[serde(default)]
-        default_router_ip: Option<Ipv4Addr>,
-        #[serde(default)]
-        default_router: bool,
-        #[serde(default)]
-        ipv4: Option<Ipv4Addr>,
-        #[serde(default)]
-        ipv4_mask: u8,
-        #[serde(default)]
-        ipv6: Option<Ipv6Addr>,
-    },
-    PPPoE {
-        #[serde(default)]
-        default_router: bool,
-        username: String,
-        password: String,
-        mtu: u32,
-    },
-    DhcpClient {
-        #[serde(default)]
-        default_router: bool,
-        hostname: Option<String>,
-    },
-}
-
-impl IfaceIpModelConfig {
-    /// 检查当前的 zone 设置是否满足 IP 配置的要求
-    pub fn check_iface_status(&self, iface_config: &NetworkIfaceConfig) -> bool {
-        match self {
-            IfaceIpModelConfig::PPPoE { .. } => {
-                matches!(iface_config.zone_type, IfaceZoneType::Wan)
-            }
-            IfaceIpModelConfig::DhcpClient { .. } => {
-                matches!(iface_config.zone_type, IfaceZoneType::Wan)
-            }
-            _ => true,
-        }
     }
 }
 
@@ -176,7 +109,7 @@ async fn init_service_from_config(
             //     });
             // }
         }
-        IfaceIpModelConfig::DhcpClient { default_router, hostname } => {
+        IfaceIpModelConfig::DhcpClient { default_router, hostname, custome_opts: _ } => {
             if let Some(mac_addr) = iface.mac {
                 let hostname =
                     hostname.filter(|h| !h.is_empty()).unwrap_or_else(|| LAND_HOSTNAME.clone());

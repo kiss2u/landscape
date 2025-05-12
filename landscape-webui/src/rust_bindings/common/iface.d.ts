@@ -11,6 +11,29 @@ export type BridgeCreate = { name: string };
 
 export type ChangeZone = { iface_name: string; zone: IfaceZoneType };
 
+/**
+ * 需要创建的设备类型
+ */
+export type CreateDevType = "noneedtocreate" | "bridge";
+
 export type IfaceCpuSoftBalance = { xps: string; rps: string };
 
 export type IfaceZoneType = "undefined" | "wan" | "lan";
+
+/**
+ * 用于存储网卡信息的结构体
+ */
+export type NetworkIfaceConfig = {
+  iface_name: string;
+  create_dev_type: CreateDevType;
+  controller_name: string | null;
+  zone_type: IfaceZoneType;
+  enable_in_boot: boolean;
+  wifi_mode: WifiMode;
+  /**
+   * NIC XPS / RPS Config
+   */
+  xps_rps: IfaceCpuSoftBalance | null;
+};
+
+export type WifiMode = "undefined" | "client" | "ap";

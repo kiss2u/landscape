@@ -27,7 +27,7 @@ import { DevStateType, NetDev } from "@/lib/dev";
 import { useIfaceNodeStore } from "@/stores/iface_node";
 import { add_controller, change_iface_status } from "@/api/network";
 import { ServiceExhibitSwitch } from "@/lib/services";
-import { NetworkIfaceConfig } from "@/rust_bindings/iface";
+import { NetworkIfaceConfig } from "@/rust_bindings/common/iface";
 
 const props = defineProps<{
   node: NetworkIfaceConfig;

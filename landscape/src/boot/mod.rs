@@ -4,15 +4,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     firewall::FirewallServiceConfig,
-    iface::config::NetworkIfaceConfig,
     service::{
-        dhcp_v4::DHCPv4ServiceConfig, ipconfig::IfaceIpServiceConfig, ipv6pd::IPV6PDServiceConfig,
-        nat_service::NatServiceConfig, packet_mark_service::PacketMarkServiceConfig,
-        pppd_service::PPPDServiceConfig, ra::IPV6RAServiceConfig,
+        dhcp_v4::DHCPv4ServiceConfig, ipv6pd::IPV6PDServiceConfig, nat_service::NatServiceConfig,
+        packet_mark_service::PacketMarkServiceConfig, pppd_service::PPPDServiceConfig,
+        ra::IPV6RAServiceConfig,
     },
-    wifi::WifiServiceConfig,
 };
 use landscape_common::{
+    config::{iface::NetworkIfaceConfig, wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig},
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
     firewall::FirewallRuleConfig,
