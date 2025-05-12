@@ -38,7 +38,7 @@ pub async fn main() {
 
     if let Some(iface) = get_iface_by_name(&args.iface_name).await {
         std::thread::spawn(move || {
-            println!("启动 packet_mark 在 ifindex: {:?}", iface.index);
+            println!("启动 verdict_flow 在 ifindex: {:?}", iface.index);
             landscape_ebpf::flow::verdict::attach_verdict_flow(
                 iface.index as i32,
                 iface.mac.is_some(),

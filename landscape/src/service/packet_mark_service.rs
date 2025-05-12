@@ -51,8 +51,7 @@ pub async fn create_mark_service(
         tracing::info!("向内部发送停止信号");
     });
     std::thread::spawn(move || {
-        tracing::info!("启动 packet_mark 在 ifindex: {:?}", ifindex);
-        // landscape_ebpf::packet_mark::init_packet_mark(ifindex, has_mac, rx);
+        tracing::info!("启动 verdict_flow 在 ifindex: {:?}", ifindex);
         landscape_ebpf::flow::verdict::attach_verdict_flow(ifindex, has_mac, rx).unwrap();
         tracing::info!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());

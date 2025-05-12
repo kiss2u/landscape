@@ -11,7 +11,6 @@ pub mod map_setting;
 pub mod metric;
 pub mod nat;
 pub mod ns_proxy;
-pub mod packet_mark;
 pub mod pppoe;
 pub mod tproxy;
 
@@ -27,10 +26,6 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
     let paths = LandscapeMapPath {
         wan_ip: PathBuf::from(format!("{}/wan_ipv4_binding", ebpf_map_path)),
         static_nat_mappings: PathBuf::from(format!("{}/nat_static_mapping", ebpf_map_path)),
-        lanip_mark: PathBuf::from(format!("{}/lanip_mark_map", ebpf_map_path)),
-        wanip_mark: PathBuf::from(format!("{}/wanip_mark_map", ebpf_map_path)),
-        packet_mark: PathBuf::from(format!("{}/packet_mark_map", ebpf_map_path)),
-        redirect_index: PathBuf::from(format!("{}/redirect_index_map", ebpf_map_path)),
 
         firewall_ipv4_block: PathBuf::from(format!("{}/firewall_block_ip4_map", ebpf_map_path)),
         firewall_ipv6_block: PathBuf::from(format!("{}/firewall_block_ip6_map", ebpf_map_path)),
@@ -60,19 +55,6 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
 pub(crate) struct LandscapeMapPath {
     pub wan_ip: PathBuf,
     pub static_nat_mappings: PathBuf,
-    // pub block_ip: PathBuf,
-    #[deprecated]
-    pub packet_mark: PathBuf,
-
-    /// LAN IP 标记
-    #[deprecated]
-    pub lanip_mark: PathBuf,
-    /// WAN IP 标记
-    #[deprecated]
-    pub wanip_mark: PathBuf,
-
-    #[deprecated]
-    pub redirect_index: PathBuf,
 
     // 防火墙黑名单
     pub firewall_ipv4_block: PathBuf,
@@ -99,13 +81,13 @@ pub(crate) struct LandscapeMapPath {
 // pppoe -> Fire wall -> nat
 const PPPOE_INGRESS_PRIORITY: u32 = 1;
 const FIREWALL_INGRESS_PRIORITY: u32 = 2;
-const MARK_INGRESS_PRIORITY: u32 = 3;
+// const MARK_INGRESS_PRIORITY: u32 = 3;
 const NAT_INGRESS_PRIORITY: u32 = 4;
 
 // Fire wall -> nat -> pppoe
 // const PPPOE_MTU_FILTER_EGRESS_PRIORITY: u32 = 1;
 const FLOW_EGRESS_PRIORITY: u32 = 2;
-const MARK_EGRESS_PRIORITY: u32 = 3;
+// const MARK_EGRESS_PRIORITY: u32 = 3;
 const NAT_EGRESS_PRIORITY: u32 = 4;
 const FIREWALL_EGRESS_PRIORITY: u32 = 5;
 const PPPOE_EGRESS_PRIORITY: u32 = 6;
