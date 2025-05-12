@@ -1,4 +1,5 @@
 use dhcproto::{Decodable, Decoder, Encodable, Encoder};
+use landscape_common::config::ra::{IPV6RAConfig, RouterFlags};
 use landscape_common::error::LdResult;
 use landscape_common::global_const::{LDIAPrefix, LD_PD_WATCHES};
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
@@ -7,7 +8,6 @@ use tokio::time::Instant;
 
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
 use crate::iface::ip::addresses_by_iface_name;
-use crate::service::ra::{IPV6RAConfig, RouterFlags};
 use landscape_common::net::MacAddr;
 use landscape_common::net_proto::icmpv6::options::{
     IcmpV6Option, IcmpV6Options, PrefixInformation, RouteInformation,
@@ -27,6 +27,7 @@ pub struct ICMPv6ConfigInfo {
     subnet_prefix: u8,
     subnet_router: Ipv6Addr,
 }
+
 pub async fn icmp_ra_server(
     config: IPV6RAConfig,
     // RA 通告要发送的 网卡 MAC 信息

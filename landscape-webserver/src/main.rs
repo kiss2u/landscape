@@ -68,7 +68,7 @@ async fn main() -> LdResult<()> {
     let mut flow_store = StoreFileManager::new(home_path.clone(), "flow_rule".to_string());
     let mut dns_store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
 
-    let mut lan_ip_mark_store = StoreFileManager::new(home_path.clone(), "lan_ip_mark".to_string());
+    // let mut lan_ip_mark_store = StoreFileManager::new(home_path.clone(), "lan_ip_mark".to_string());
 
     let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
 
@@ -107,7 +107,6 @@ async fn main() -> LdResult<()> {
         pppds,
         flow_rules,
         dns_rules,
-        lan_ip_mark,
         wan_ip_mark,
         dhcpv6pds,
         icmpras,
@@ -124,7 +123,6 @@ async fn main() -> LdResult<()> {
         iface_pppd_store.truncate();
         flow_store.truncate();
         dns_store.truncate();
-        lan_ip_mark_store.truncate();
         wan_ip_mark_store.truncate();
         ipv6pd_store.truncate();
         icmpv6ra_store.truncate();
@@ -154,10 +152,6 @@ async fn main() -> LdResult<()> {
         }
         for each_config in dns_rules {
             dns_store.set(each_config);
-        }
-
-        for each_config in lan_ip_mark {
-            lan_ip_mark_store.set(each_config);
         }
 
         for each_config in wan_ip_mark {

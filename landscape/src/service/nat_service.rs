@@ -1,12 +1,10 @@
 use landscape_common::{
+    config::nat::{NatConfig, NatServiceConfig},
     service::{
         service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
         ServiceStatus,
     },
-    store::storev2::LandScapeStore,
 };
-use landscape_ebpf::nat::NatConfig;
-use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use crate::iface::get_iface_by_name;
@@ -41,20 +39,6 @@ impl ServiceHandler for NatService {
         }
 
         service_status
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NatServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-    #[serde(default)]
-    pub nat_config: NatConfig,
-}
-
-impl LandScapeStore for NatServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
     }
 }
 

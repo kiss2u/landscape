@@ -61,14 +61,17 @@ pub(crate) struct LandscapeMapPath {
     pub wan_ip: PathBuf,
     pub static_nat_mappings: PathBuf,
     // pub block_ip: PathBuf,
+    #[deprecated]
     pub packet_mark: PathBuf,
 
     /// LAN IP 标记
     #[deprecated]
     pub lanip_mark: PathBuf,
     /// WAN IP 标记
+    #[deprecated]
     pub wanip_mark: PathBuf,
 
+    #[deprecated]
     pub redirect_index: PathBuf,
 
     // 防火墙黑名单

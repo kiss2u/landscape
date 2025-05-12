@@ -7,8 +7,9 @@ use std::{
 };
 
 use clap::Parser;
-use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name, service::ra::IPV6RAConfig};
+use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name};
 use landscape_common::{
+    config::ra::IPV6RAConfig,
     global_const::{LDIAPrefix, LD_PD_WATCHES},
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };

@@ -1,11 +1,8 @@
 use landscape_common::{
+    config::dhcp_v6_client::IPV6PDServiceConfig,
     service::{service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus},
-    store::storev2::LandScapeStore,
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
-use serde::{Deserialize, Serialize};
-
-use landscape_common::net::MacAddr;
 
 use crate::iface::get_iface_by_name;
 
@@ -37,23 +34,5 @@ impl ServiceHandler for IPV6PDService {
         }
 
         service_status
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IPV6PDServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-    pub config: IPV6PDConfig,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct IPV6PDConfig {
-    mac: MacAddr,
-}
-
-impl LandScapeStore for IPV6PDServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
     }
 }

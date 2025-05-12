@@ -5,8 +5,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::nat_service::{NatService, NatServiceConfig};
+use landscape::service::nat_service::NatService;
 use landscape_common::{
+    config::nat::NatServiceConfig,
     observer::IfaceObserverAction,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,

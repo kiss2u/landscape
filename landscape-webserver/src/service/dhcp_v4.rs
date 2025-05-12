@@ -6,8 +6,9 @@ use axum::{
     Json, Router,
 };
 
-use landscape::service::dhcp_v4::{DHCPv4Service, DHCPv4ServiceConfig};
+use landscape::service::dhcp_v4::DHCPv4Service;
 use landscape_common::{
+    config::dhcp_v4_server::DHCPv4ServiceConfig,
     observer::IfaceObserverAction,
     service::{dhcp::DHCPv4ServiceWatchStatus, service_manager::ServiceManager},
     store::storev2::StoreFileManager,

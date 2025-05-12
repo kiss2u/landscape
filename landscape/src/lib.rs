@@ -13,7 +13,6 @@ use rtnetlink::new_connection;
 pub use routerstatus::*;
 
 pub mod boot;
-pub mod config;
 pub mod dev;
 pub mod dhcp_client;
 pub mod dhcp_server;

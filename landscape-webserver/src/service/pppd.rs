@@ -5,8 +5,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::pppd_service::{PPPDService, PPPDServiceConfig};
+use landscape::service::pppd_service::PPPDService;
 use landscape_common::{
+    config::ppp::PPPDServiceConfig,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,
 };

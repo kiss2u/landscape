@@ -1,9 +1,8 @@
+use landscape_common::config::flow::PacketMarkServiceConfig;
 use landscape_common::service::ServiceStatus;
-use landscape_common::{
-    service::{service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus},
-    store::storev2::LandScapeStore,
+use landscape_common::service::{
+    service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use crate::iface::get_iface_by_name;
@@ -31,24 +30,6 @@ impl ServiceHandler for MarkService {
 
         service_status
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PacketMarkServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-}
-
-impl LandScapeStore for PacketMarkServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum WallRuleSource {
-    Text { target_ip: [u8; 4], mask: u8 },
-    GeoKey { key: String },
 }
 
 pub async fn create_mark_service(
