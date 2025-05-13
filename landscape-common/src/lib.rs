@@ -34,6 +34,8 @@ pub const LANDSCAPE_CONFIG_DIR_NAME: &str = ".landscape-router";
 pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 /// web resource
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
+/// default sqlite path
+pub const LANDSCAPE_DB_SQLITE_NAME: &str = "landscape_db.sqlite";
 /// init file name
 pub const INIT_FILE_NAME: &str = "landscape_init.toml";
 /// LOG Path

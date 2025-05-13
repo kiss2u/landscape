@@ -49,6 +49,14 @@ pub static LAND_WEB_ARGS: Lazy<WebConfig> = Lazy::new(|| {
     }
 });
 
+pub static DATABASE_ARGS: Lazy<String> = Lazy::new(|| {
+    if let Some(database_path) = &LAND_ARGS.database_path {
+        database_path.clone()
+    } else {
+        format!("sqlite://{}?mode=rwc", LAND_HOME_PATH.join(LANDSCAPE_LOG_DIR_NAME).display())
+    }
+});
+
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
@@ -71,6 +79,11 @@ pub struct WebCommArgs {
     /// All Config DIR, Not file Path [default: /root/.landscape-router]
     #[clap(short, long)]
     pub config_dir: Option<PathBuf>,
+
+    /// Database URL, SQLite Connect Like  
+    /// sqlite://./db.sqlite?mode=rwc
+    #[clap(long = "db_url", env = "DATABASE_URL")]
+    pub database_path: Option<String>,
 
     /// ebpf map space
     #[clap(long, env = "LANDSCAPE_EBPF_MAP_SPACE", default_value = "default")]
