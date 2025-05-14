@@ -16,10 +16,10 @@ struct flow_match_key {
     u32 vlan_tci;
     // tos value
     u8 tos;
-    // IP 层协议: TCP / UDP
-    u8 l4_protocol;
     // IP 协议: IPv4 Ipv6
     u8 l3_protocol;
+    // IP 层协议: TCP / UDP
+    u8 l4_protocol;
     u8 _pad;
 };
 

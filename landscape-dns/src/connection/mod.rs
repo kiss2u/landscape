@@ -62,21 +62,24 @@ impl RuntimeProvider for MarkRuntimeProvider {
                 SocketAddr::V6(_) => TcpSocket::new_v6(),
             }?;
 
+            // tracing::info!(
+            //     "Create tcp local_addr: {:?}, server_addr: {}, mark_value: {mark_value}",
+            //     bind_addr,
+            //     server_addr
+            // );
             if let Some(bind_addr) = bind_addr {
                 socket.bind(bind_addr)?;
             }
 
             socket.set_nodelay(true)?;
+            let fd = socket.as_raw_fd();
+            set_socket_mark(fd, mark_value)?;
 
             let future = socket.connect(server_addr);
             let wait_for = wait_for.unwrap_or_else(|| Duration::from_secs(5));
 
             match tokio::time::timeout(wait_for, future).await {
-                Ok(Ok(socket)) => {
-                    let fd = socket.as_raw_fd();
-                    set_socket_mark(fd, mark_value)?;
-                    Ok(AsyncIoTokioAsStd(socket))
-                }
+                Ok(Ok(socket)) => Ok(AsyncIoTokioAsStd(socket)),
                 Ok(Err(e)) => Err(e),
                 Err(_) => Err(io::Error::new(
                     io::ErrorKind::TimedOut,
@@ -96,7 +99,11 @@ impl RuntimeProvider for MarkRuntimeProvider {
             let socket = TokioUdpSocket::bind(local_addr).await?;
             let fd = socket.as_raw_fd();
             set_socket_mark(fd, mark_value)?;
-            // tracing::info!("Create udp local_addr: {}, server_addr: {}", local_addr, server_addr);
+            // tracing::info!(
+            //     "Create udp local_addr: {}, server_addr: {}, mark_value: {mark_value}",
+            //     local_addr,
+            //     server_addr
+            // );
             Ok(socket)
         })
     }
