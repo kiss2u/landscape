@@ -91,13 +91,14 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
     // tcp hdr max is 60 - 20 = 40; 40 / 2 = 20;
     int times = (tcp_size - 20) / 2;
     times = times > 20 ? 20 : times;
+    struct tcp_option_hdr top_hdr = {0};
     for (int i = 0; i < times; i++) {
-        struct tcp_option_hdr *top_hdr;
-        if (VALIDATE_READ_DATA(skb, &top_hdr, option_offset, sizeof(*top_hdr))) {
+
+        if (bpf_skb_load_bytes(skb, option_offset, &top_hdr,sizeof(top_hdr))) {
             return;
         }
 
-        if (top_hdr->kind == MAX_SEGMENT_SIZE) {
+        if (top_hdr.kind == MAX_SEGMENT_SIZE) {
             if (VALIDATE_READ_DATA(skb, &mss, option_offset + 2, sizeof(*mss))) {
                 return;
             }
@@ -119,7 +120,7 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
 
             return;
         }
-        option_offset = option_offset + top_hdr->len;
+        option_offset = option_offset + top_hdr.len;
         if (option_offset >= option_offset_end) {
             return;
         }
