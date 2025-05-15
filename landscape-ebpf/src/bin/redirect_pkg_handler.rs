@@ -34,7 +34,11 @@ pub struct CmdParams {
 //     }
 // }
 
+// ip netns exec tpns cargo run --package landscape-ebpf --bin redirect_pkg_handler
 fn main() {
+    landscape_common::init_tracing!();
+    landscape_ebpf::setting_libbpf_log();
+
     // bump_memlock_rlimit();
     let params = CmdParams::parse();
 
