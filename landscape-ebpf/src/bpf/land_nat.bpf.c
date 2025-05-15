@@ -1008,7 +1008,7 @@ static __always_inline bool is_out_nat_range(const struct ip_packet_info *pkt, c
         return false;
     }
 }
-SEC("tc")
+SEC("tc/ingress")
 int ingress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">>> ingress_nat >>>"
 
@@ -1108,7 +1108,7 @@ int ingress_nat(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/egress")
 int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
 

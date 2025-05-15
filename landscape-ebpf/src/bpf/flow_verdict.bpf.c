@@ -46,7 +46,7 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_e
     return TC_ACT_OK;
 }
 
-SEC("tc")
+SEC("tc/ingress")
 int flow_verdict_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">> flow_verdict_ingress >>"
     struct ethhdr *eth;
@@ -62,7 +62,7 @@ int flow_verdict_ingress(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/egress")
 int flow_verdict_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<< flow_verdict_egress <<"
 

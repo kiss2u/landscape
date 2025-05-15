@@ -18,10 +18,10 @@ const volatile int current_eth_net_offset = 14;
 #undef BPF_LOG_TOPIC
 #define BPF_LOG_LEVEL LOG_LEVEL
 
-SEC("tc") int ipv4_egress_firewall(struct __sk_buff *skb);
-SEC("tc") int ipv4_ingress_firewall(struct __sk_buff *skb);
-SEC("tc") int ipv6_egress_firewall(struct __sk_buff *skb);
-SEC("tc") int ipv6_ingress_firewall(struct __sk_buff *skb);
+SEC("tc/egress") int ipv4_egress_firewall(struct __sk_buff *skb);
+SEC("tc/ingress") int ipv4_ingress_firewall(struct __sk_buff *skb);
+SEC("tc/egress") int ipv6_egress_firewall(struct __sk_buff *skb);
+SEC("tc/ingress") int ipv6_ingress_firewall(struct __sk_buff *skb);
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
     __uint(max_entries, 4);
@@ -808,7 +808,7 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_e
     return TC_ACT_OK;
 }
 
-SEC("tc")
+SEC("tc/egress")
 int ipv4_egress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ipv4_egress_firewall <<<"
 
@@ -908,7 +908,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/ingress")
 int ipv4_ingress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ipv4_ingress_firewall <<<"
 
@@ -1004,7 +1004,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/egress")
 int ipv6_egress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ipv6_egress_firewall <<<"
 
@@ -1095,7 +1095,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/ingress")
 int ipv6_ingress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ipv6_ingress_firewall <<<"
 
@@ -1185,7 +1185,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
 }
 
 /// main function
-SEC("tc")
+SEC("tc/egress")
 int egress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_firewall <<<"
 
@@ -1207,7 +1207,7 @@ int egress_firewall(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/ingress")
 int ingress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ingress_firewall <<<"
 

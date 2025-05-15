@@ -8,5 +8,5 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-SEC("tc")
+SEC("tc/ingress")
 int placeholder(struct __sk_buff *skb) { return TC_ACT_UNSPEC; }
