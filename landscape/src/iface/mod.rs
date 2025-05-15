@@ -294,7 +294,10 @@ fn reset_iface_balance(iface_name: &str) -> LdResult<()> {
     setting_iface_balance(iface_name, IfaceCpuSoftBalance { xps: "0".into(), rps: "0".into() })
 }
 
-fn setting_iface_balance(iface_name: &str, balance: IfaceCpuSoftBalance) -> LdResult<()> {
+pub(crate) fn setting_iface_balance(
+    iface_name: &str,
+    balance: IfaceCpuSoftBalance,
+) -> LdResult<()> {
     let xps_cpus_path =
         PathBuf::from(format!("/sys/class/net/{}/queues/tx-0/xps_cpus", iface_name));
     let rps_cpus_path =

@@ -83,6 +83,13 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
             // 检查 wifi 类型
             using_iw_change_wifi_mode(&config.name, &config.wifi_mode);
 
+            // Setting Iface Balance
+            if let Some(balance) = &config.xps_rps {
+                if let Err(e) = iface::setting_iface_balance(&config.name, balance.clone()) {
+                    tracing::error!("setting iface balance error: {e:?}");
+                }
+            }
+
             dev_tx.send((0, config.clone())).unwrap();
         }
 

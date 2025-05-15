@@ -194,9 +194,9 @@ int flow_ingress(struct __sk_buff *skb) {
 
     // 依据配置发往具体的端口
     if (current_eth_net_offset == 0 && target_info->has_mac) {
-        bpf_log_info("add dummy_mac");
         // 当前数据包没有 mac 对方有 mac
         if (prepend_dummy_mac(skb) != 0) {
+            bpf_log_error("add dummy_mac fail");
             return TC_ACT_SHOT;
         }
 
