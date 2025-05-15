@@ -312,7 +312,7 @@ impl RequestHandler for LandscapeDnsRequestHandle {
             let result = response_handle.send_response(response).await;
             return match result {
                 Err(e) => {
-                    tracing::error!("Request failed: {}", e);
+                    tracing::error!("Record Empty and response error: {}", e);
                     serve_failed()
                 }
                 Ok(info) => info,
