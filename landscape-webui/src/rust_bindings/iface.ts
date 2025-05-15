@@ -71,12 +71,12 @@ export type IfaceInfo = {
   /**
    * 当前网卡的配置, 可能网卡现在不存在
    */
-  status: LandScapeInterface | null;
-  wifi_info: LandScapeWifiInterface | null;
+  status: LandscapeInterface | null;
+  wifi_info: LandscapeWifiInterface | null;
 };
 
 export type IfaceTopology = {
-  wifi_info: LandScapeWifiInterface | null;
+  wifi_info: LandscapeWifiInterface | null;
   iface_name: string;
   create_dev_type: CreateDevType;
   controller_name: string | null;
@@ -109,7 +109,7 @@ export type IfacesInfo = {
 /**
  * 当前硬件状态结构体
  */
-export type LandScapeInterface = {
+export type LandscapeInterface = {
   name: string;
   index: number;
   mac: MacAddr | null;
@@ -127,7 +127,7 @@ export type LandScapeInterface = {
 /**
  * 当前硬件状态结构体
  */
-export type LandScapeWifiInterface = {
+export type LandscapeWifiInterface = {
   name: string;
   index: number;
   wifi_type: WLANType;
@@ -140,8 +140,8 @@ export type RawIfaceInfo = {
   /**
    * 当前网卡的配置
    */
-  status: LandScapeInterface;
-  wifi_info: LandScapeWifiInterface | null;
+  status: LandscapeInterface;
+  wifi_info: LandscapeWifiInterface | null;
 };
 
 /**

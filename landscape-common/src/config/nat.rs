@@ -1,7 +1,7 @@
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
 
-use crate::store::storev2::LandScapeStore;
+use crate::store::storev2::LandscapeStore;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatServiceConfig {
@@ -11,7 +11,7 @@ pub struct NatServiceConfig {
     pub nat_config: NatConfig,
 }
 
-impl LandScapeStore for NatServiceConfig {
+impl LandscapeStore for NatServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }

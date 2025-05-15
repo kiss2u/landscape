@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use crate::{flow::mark::FlowDnsMark, store::storev2::LandScapeStore};
+use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -33,7 +33,7 @@ fn default_flow_id() -> u32 {
     0_u32
 }
 
-impl LandScapeStore for WanIPRuleConfig {
+impl LandscapeStore for WanIPRuleConfig {
     fn get_store_key(&self) -> String {
         self.id.clone()
     }

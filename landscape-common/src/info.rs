@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tokio::sync::watch;
 
-pub static LAND_SYS_BASE_INFO: Lazy<LandScapeSystemInfo> = Lazy::new(LandScapeSystemInfo::new);
+pub static LAND_SYS_BASE_INFO: Lazy<LandscapeSystemInfo> = Lazy::new(LandscapeSystemInfo::new);
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct LandScapeSystemInfo {
+pub struct LandscapeSystemInfo {
     pub host_name: Option<String>,
     pub system_name: Option<String>,
     pub kernel_version: Option<String>,
@@ -20,8 +20,8 @@ pub struct LandScapeSystemInfo {
     pub start_at: u64,
 }
 
-impl LandScapeSystemInfo {
-    pub fn new() -> LandScapeSystemInfo {
+impl LandscapeSystemInfo {
+    pub fn new() -> LandscapeSystemInfo {
         let start_at = System::boot_time();
         let cpu_arch = System::cpu_arch();
         let host_name = System::host_name();
@@ -30,7 +30,7 @@ impl LandScapeSystemInfo {
         let os_version = System::os_version();
         let landscape_version = VERSION.to_string();
 
-        LandScapeSystemInfo {
+        LandscapeSystemInfo {
             start_at,
             host_name,
             system_name,

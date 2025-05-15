@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 use serde::{Deserialize, Serialize};
 
 use crate::net::MacAddr;
-use crate::{store::storev2::LandScapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
+use crate::{store::storev2::LandscapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
 
 use crate::{
     LANDSCAPE_DEFAULE_LAN_DHCP_RANGE_START, LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP,
@@ -28,7 +28,7 @@ impl Default for DHCPv4ServiceConfig {
     }
 }
 
-impl LandScapeStore for DHCPv4ServiceConfig {
+impl LandscapeStore for DHCPv4ServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }

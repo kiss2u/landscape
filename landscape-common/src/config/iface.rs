@@ -1,6 +1,6 @@
 use crate::{
     iface::{IfaceCpuSoftBalance, IfaceZoneType},
-    store::storev2::LandScapeStore,
+    store::storev2::LandscapeStore,
     LANDSCAPE_DEFAULT_LAN_NAME,
 };
 use serde::{Deserialize, Serialize};
@@ -34,7 +34,7 @@ pub struct NetworkIfaceConfig {
     pub xps_rps: Option<IfaceCpuSoftBalance>,
 }
 
-impl LandScapeStore for NetworkIfaceConfig {
+impl LandscapeStore for NetworkIfaceConfig {
     fn get_store_key(&self) -> String {
         self.name.clone()
     }

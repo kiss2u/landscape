@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::store::storev2::LandScapeStore;
+use crate::store::storev2::LandscapeStore;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirewallServiceConfig {
@@ -8,7 +8,7 @@ pub struct FirewallServiceConfig {
     pub enable: bool,
 }
 
-impl LandScapeStore for FirewallServiceConfig {
+impl LandscapeStore for FirewallServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }

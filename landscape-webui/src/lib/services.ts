@@ -1,6 +1,6 @@
 import {
-  LandScapeInterface,
-  LandScapeWifiInterface,
+  LandscapeInterface,
+  LandscapeWifiInterface,
 } from "@/rust_bindings/iface";
 import { NetworkIfaceConfig } from "@/rust_bindings/common/iface";
 import { NetDev, WLANTypeTag } from "./dev";
@@ -122,8 +122,8 @@ export class TopologyServiceExhibitSwitch {
 
   constructor(
     config: NetworkIfaceConfig,
-    status: LandScapeInterface,
-    wifi_info: LandScapeWifiInterface | null
+    status: LandscapeInterface,
+    wifi_info: LandscapeWifiInterface | null
   ) {
     this.carrier = true;
     this.enable_in_boot = true;

@@ -8,7 +8,7 @@ use landscape_common::{
     },
 };
 
-use crate::{dev::LandScapeInterface, iface::get_iface_by_name};
+use crate::{dev::LandscapeInterface, iface::get_iface_by_name};
 
 #[derive(Clone)]
 pub struct IPConfigService;
@@ -37,7 +37,7 @@ impl ServiceHandler for IPConfigService {
 }
 
 async fn init_service_from_config(
-    iface: LandScapeInterface,
+    iface: LandscapeInterface,
     service_config: IfaceIpModelConfig,
     service_status: DefaultWatchServiceStatus,
 ) {

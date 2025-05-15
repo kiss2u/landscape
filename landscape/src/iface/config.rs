@@ -1,18 +1,18 @@
-use crate::dev::{DeviceKind, DeviceType, LandScapeInterface};
+use crate::dev::{DeviceKind, DeviceType, LandscapeInterface};
 use landscape_common::{
     config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode},
     iface::IfaceZoneType,
 };
 
-use super::dev_wifi::LandScapeWifiInterface;
+use super::dev_wifi::LandscapeWifiInterface;
 
-pub fn from_phy_dev(iface: &LandScapeInterface) -> NetworkIfaceConfig {
+pub fn from_phy_dev(iface: &LandscapeInterface) -> NetworkIfaceConfig {
     from_phy_dev_with_wifi_info(iface, &None)
 }
 
 pub fn from_phy_dev_with_wifi_info(
-    iface: &LandScapeInterface,
-    wifi_info: &Option<LandScapeWifiInterface>,
+    iface: &LandscapeInterface,
+    wifi_info: &Option<LandscapeWifiInterface>,
 ) -> NetworkIfaceConfig {
     let zone_type = match iface.dev_type {
         DeviceType::Ppp => IfaceZoneType::Wan,
@@ -38,7 +38,7 @@ pub fn from_phy_dev_with_wifi_info(
     }
 }
 
-pub fn create_from(iface: &LandScapeInterface) -> CreateDevType {
+pub fn create_from(iface: &LandscapeInterface) -> CreateDevType {
     if !iface.is_virtual_dev() {
         CreateDevType::default()
     } else {

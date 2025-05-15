@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{net::MacAddr, store::storev2::LandScapeStore};
+use crate::{net::MacAddr, store::storev2::LandscapeStore};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IPV6PDServiceConfig {
@@ -14,7 +14,7 @@ pub struct IPV6PDConfig {
     pub mac: MacAddr,
 }
 
-impl LandScapeStore for IPV6PDServiceConfig {
+impl LandscapeStore for IPV6PDServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }

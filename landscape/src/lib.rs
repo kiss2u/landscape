@@ -3,9 +3,9 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use dev::{DevState, LandScapeInterface};
+use dev::{DevState, LandscapeInterface};
 use futures::stream::TryStreamExt;
-use iface::{dev_wifi::LandScapeWifiInterface, get_iface_by_name};
+use iface::{dev_wifi::LandscapeWifiInterface, get_iface_by_name};
 use landscape_common::config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode};
 use netlink_packet_route::AddressFamily;
 use rtnetlink::new_connection;
@@ -31,9 +31,9 @@ pub mod store;
 pub mod wifi;
 
 // fn gen_default_config(
-//     interface_map: &HashMap<String, LandScapeInterface>,
+//     interface_map: &HashMap<String, LandscapeInterface>,
 // ) -> Vec<NetworkIfaceConfig> {
-//     let mut interfaces: Vec<&LandScapeInterface> = interface_map
+//     let mut interfaces: Vec<&LandscapeInterface> = interface_map
 //         .values()
 //         .filter(|ifce| !ifce.is_lo())
 //         .filter(|d| !d.is_virtual_dev())
@@ -66,9 +66,9 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
     tokio::spawn(connection);
     let mut links = handle.link().get().execute();
 
-    let mut interface_map: HashMap<String, LandScapeInterface> = HashMap::new();
+    let mut interface_map: HashMap<String, LandscapeInterface> = HashMap::new();
     while let Some(msg) = links.try_next().await.unwrap() {
-        if let Some(data) = LandScapeInterface::new(msg) {
+        if let Some(data) = LandscapeInterface::new(msg) {
             interface_map.insert(data.name.clone(), data);
         }
     }
@@ -171,26 +171,26 @@ pub fn using_iw_change_wifi_mode(iface_name: &str, mode: &WifiMode) {
     }
 }
 
-pub async fn get_all_wifi_devices() -> HashMap<String, LandScapeWifiInterface> {
+pub async fn get_all_wifi_devices() -> HashMap<String, LandscapeWifiInterface> {
     let (connection, handle, _) = wl_nl80211::new_connection().unwrap();
     tokio::spawn(connection);
     let mut interface_handle = handle.interface().get().execute().await;
     let mut result = HashMap::new();
     while let Some(msg) = interface_handle.try_next().await.unwrap() {
-        if let Some(data) = LandScapeWifiInterface::new(msg.payload) {
+        if let Some(data) = LandscapeWifiInterface::new(msg.payload) {
             result.insert(data.name.clone(), data);
         }
     }
     result
 }
 
-pub async fn get_all_devices() -> Vec<LandScapeInterface> {
+pub async fn get_all_devices() -> Vec<LandscapeInterface> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let mut links = handle.link().get().execute();
     let mut result = vec![];
     while let Some(msg) = links.try_next().await.unwrap() {
-        if let Some(data) = LandScapeInterface::new(msg) {
+        if let Some(data) = LandscapeInterface::new(msg) {
             if data.is_lo() {
                 continue;
             }
@@ -243,7 +243,7 @@ pub async fn create_bridge(name: String) -> bool {
 pub async fn set_controller(
     link_name: &str,
     master_index: Option<u32>,
-) -> Option<LandScapeInterface> {
+) -> Option<LandscapeInterface> {
     if let Some(dev) = get_iface_by_name(link_name).await {
         let (connection, handle, _) = new_connection().unwrap();
         tokio::spawn(connection);
@@ -259,7 +259,7 @@ pub async fn set_controller(
     }
 }
 
-pub async fn change_dev_status(iface_name: &str, up: bool) -> Option<LandScapeInterface> {
+pub async fn change_dev_status(iface_name: &str, up: bool) -> Option<LandscapeInterface> {
     if let Some(dev) = get_iface_by_name(iface_name).await {
         let status = if up { "up" } else { "down" };
         let result =

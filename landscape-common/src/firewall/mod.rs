@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use crate::{
     args::LAND_ARGS, mark::PacketMark, network::LandscapeIpProtocolCode,
-    store::storev2::LandScapeStore, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+    store::storev2::LandscapeStore, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct FirewallRuleConfig {
     pub mark: PacketMark,
 }
 
-impl LandScapeStore for FirewallRuleConfig {
+impl LandscapeStore for FirewallRuleConfig {
     fn get_store_key(&self) -> String {
         self.index.to_string()
     }

@@ -11,7 +11,7 @@ use std::{
 // 最大垃圾空间阈值
 const JUNK_DATA_MAX_SIZE: u64 = 1024 * 8;
 
-pub trait LandScapeStore {
+pub trait LandscapeStore {
     fn get_store_key(&self) -> String;
 
     fn get_query_key(&self) -> String {
@@ -64,7 +64,7 @@ pub struct StoreFileManager<T> {
 
 impl<T> StoreFileManager<T>
 where
-    T: LandScapeStore + Serialize + for<'de> Deserialize<'de>,
+    T: LandscapeStore + Serialize + for<'de> Deserialize<'de>,
 {
     /// 创建管理器
     pub fn new(path: PathBuf, name: String) -> StoreFileManager<T> {

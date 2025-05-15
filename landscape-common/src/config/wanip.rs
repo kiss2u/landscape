@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::iface::NetworkIfaceConfig;
 use crate::net_proto::udp::dhcp::DhcpOption;
-use crate::{iface::IfaceZoneType, store::storev2::LandScapeStore};
+use crate::{iface::IfaceZoneType, store::storev2::LandscapeStore};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfaceIpServiceConfig {
@@ -13,7 +13,7 @@ pub struct IfaceIpServiceConfig {
     pub ip_model: IfaceIpModelConfig,
 }
 
-impl LandScapeStore for IfaceIpServiceConfig {
+impl LandscapeStore for IfaceIpServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }

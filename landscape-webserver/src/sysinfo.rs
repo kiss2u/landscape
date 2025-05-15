@@ -1,7 +1,7 @@
 use axum::{extract::State, routing::get, Json, Router};
 
-use landscape::{dev::LandScapeInterface, get_sys_running_status, LandscapeStatus};
-use landscape_common::info::{LandScapeSystemInfo, WatchResource, LAND_SYS_BASE_INFO};
+use landscape::{dev::LandscapeInterface, get_sys_running_status, LandscapeStatus};
+use landscape_common::info::{LandscapeSystemInfo, WatchResource, LAND_SYS_BASE_INFO};
 
 type SysStatus = WatchResource<LandscapeStatus>;
 
@@ -16,12 +16,12 @@ pub fn get_sys_info_route() -> Router {
         .route("/net_dev", get(net_dev))
 }
 
-async fn net_dev() -> Json<Vec<LandScapeInterface>> {
+async fn net_dev() -> Json<Vec<LandscapeInterface>> {
     let devs = landscape::get_all_devices().await;
     Json(devs)
 }
 
-async fn basic_sys_info() -> Json<LandScapeSystemInfo> {
+async fn basic_sys_info() -> Json<LandscapeSystemInfo> {
     Json(LAND_SYS_BASE_INFO.clone())
 }
 

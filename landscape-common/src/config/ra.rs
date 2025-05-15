@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::store::storev2::LandScapeStore;
+use crate::store::storev2::LandscapeStore;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IPV6RAServiceConfig {
@@ -78,7 +78,7 @@ impl IPV6RAConfig {
     }
 }
 
-impl LandScapeStore for IPV6RAServiceConfig {
+impl LandscapeStore for IPV6RAServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }

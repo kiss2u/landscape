@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::{flow::mark::FlowDnsMark, store::storev2::LandScapeStore};
+use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 
 /// DNS 配置
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
@@ -37,7 +37,7 @@ fn default_flow_id() -> u32 {
     0_u32
 }
 
-impl LandScapeStore for DNSRuleConfig {
+impl LandscapeStore for DNSRuleConfig {
     fn get_store_key(&self) -> String {
         self.index.to_string()
     }

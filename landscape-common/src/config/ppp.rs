@@ -2,7 +2,7 @@ use std::{fs::OpenOptions, io::Write};
 
 use serde::{Deserialize, Serialize};
 
-use crate::store::storev2::LandScapeStore;
+use crate::store::storev2::LandscapeStore;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PPPDServiceConfig {
@@ -12,7 +12,7 @@ pub struct PPPDServiceConfig {
     pub pppd_config: PPPDConfig,
 }
 
-impl LandScapeStore for PPPDServiceConfig {
+impl LandscapeStore for PPPDServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }
