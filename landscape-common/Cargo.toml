@@ -22,3 +22,9 @@ ts-rs = { workspace = true }
 uuid = { workspace = true }
 
 libc = { workspace = true }
+
+paste = { workspace = true }
+
+hickory-proto = { version = "*", features = ["serde-config"] }
+
+dhcproto = { workspace = true, features = ["serde"] }

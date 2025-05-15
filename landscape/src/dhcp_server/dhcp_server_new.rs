@@ -12,7 +12,8 @@ use crate::dump::udp_packet::dhcp::{
 
 use cidr::Ipv4Inet;
 use futures::TryStreamExt;
-use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem, DHCPv4ServerConfig};
+use landscape_common::config::dhcp_v4_server::DHCPv4ServerConfig;
+use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
 use landscape_common::net::MacAddr;
 use landscape_common::service::dhcp::DHCPv4ServiceWatchStatus;
 use landscape_common::service::ServiceStatus;
@@ -601,7 +602,7 @@ mod tests {
     use std::{net::Ipv4Addr, thread::sleep, time::Duration};
 
     use cidr::Ipv4Inet;
-    use landscape_common::{dhcp::DHCPv4ServerConfig, net::MacAddr};
+    use landscape_common::{config::dhcp_v4_server::DHCPv4ServerConfig, net::MacAddr};
 
     use crate::dhcp_server::dhcp_server_new::DHCPv4Server;
 

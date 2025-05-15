@@ -9,7 +9,7 @@ use ts_rs::TS;
 /// 当前硬件状态结构体
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "iface.ts")]
-pub struct LandScapeInterface {
+pub struct LandscapeInterface {
     pub name: String,
     pub index: u32,
     pub mac: Option<MacAddr>,
@@ -25,8 +25,8 @@ pub struct LandScapeInterface {
     pub is_wireless: bool,
 }
 
-impl LandScapeInterface {
-    pub fn new(msg: LinkMessage) -> Option<LandScapeInterface> {
+impl LandscapeInterface {
+    pub fn new(msg: LinkMessage) -> Option<LandscapeInterface> {
         let mut name = None;
         let mut mac = None;
         let mut perm_mac = None;
@@ -158,7 +158,7 @@ impl LandScapeInterface {
             Some(name) => {
                 let path = format!("/sys/class/net/{}/wireless", name);
                 let is_wireless = Path::new(&path).exists();
-                Some(LandScapeInterface {
+                Some(LandscapeInterface {
                     name,
                     index: msg.header.index,
                     mac,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { manage_iface } from "@/api/iface";
-import { NetworkIfaceConfig } from "@/rust_bindings/iface";
+import { NetworkIfaceConfig } from "@/rust_bindings/common/iface";
 
 const props = defineProps<{
   node: NetworkIfaceConfig;

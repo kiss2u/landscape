@@ -1,9 +1,8 @@
+use landscape_common::config::flow::PacketMarkServiceConfig;
 use landscape_common::service::ServiceStatus;
-use landscape_common::{
-    service::{service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus},
-    store::storev2::LandScapeStore,
+use landscape_common::service::{
+    service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use crate::iface::get_iface_by_name;
@@ -33,24 +32,6 @@ impl ServiceHandler for MarkService {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PacketMarkServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-}
-
-impl LandScapeStore for PacketMarkServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum WallRuleSource {
-    Text { target_ip: [u8; 4], mask: u8 },
-    GeoKey { key: String },
-}
-
 pub async fn create_mark_service(
     ifindex: i32,
     has_mac: bool,
@@ -70,8 +51,7 @@ pub async fn create_mark_service(
         tracing::info!("向内部发送停止信号");
     });
     std::thread::spawn(move || {
-        tracing::info!("启动 packet_mark 在 ifindex: {:?}", ifindex);
-        // landscape_ebpf::packet_mark::init_packet_mark(ifindex, has_mac, rx);
+        tracing::info!("启动 verdict_flow 在 ifindex: {:?}", ifindex);
         landscape_ebpf::flow::verdict::attach_verdict_flow(ifindex, has_mac, rx).unwrap();
         tracing::info!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());

@@ -1,4 +1,5 @@
-use landscape_ebpf::nat::{init_nat, NatConfig};
+use landscape_common::config::nat::NatConfig;
+use landscape_ebpf::nat::init_nat;
 use std::{
     net::Ipv4Addr,
     sync::{

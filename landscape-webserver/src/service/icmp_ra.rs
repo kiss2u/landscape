@@ -5,8 +5,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::ra::{IPV6RAService, IPV6RAServiceConfig};
+use landscape::service::ra::IPV6RAService;
 use landscape_common::{
+    config::ra::IPV6RAServiceConfig,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,
 };

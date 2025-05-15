@@ -105,26 +105,31 @@ impl ResolverType {
             ResolverType::RedirectResolver(result_ip) => {
                 let mut result = vec![];
                 for ip in result_ip {
-                    let rdata_ip = match ip {
-                        IpAddr::V4(ip) => RData::A(A(ip.clone())),
-                        IpAddr::V6(ip) => RData::AAAA(AAAA(ip.clone())),
+                    let rdata_ip = match (ip, &query_type) {
+                        (IpAddr::V4(ip), RecordType::A) => Some(RData::A(A(*ip))),
+                        (IpAddr::V6(ip), RecordType::AAAA) => Some(RData::AAAA(AAAA(*ip))),
+                        _ => None,
                     };
-                    result.push(Record::from_rdata(
-                        hickory_resolver::Name::from_str(domain).unwrap(),
-                        300,
-                        rdata_ip,
-                    ));
+
+                    if let Some(rdata) = rdata_ip {
+                        result.push(Record::from_rdata(
+                            hickory_resolver::Name::from_str(domain).unwrap(),
+                            300,
+                            rdata,
+                        ));
+                    }
                 }
+
                 Ok(result)
             }
             ResolverType::CacheResolver(resolver) => {
                 match resolver.resolver.lookup(domain, query_type).await {
                     Ok(lookup) => Ok(lookup.records().to_vec()),
                     Err(e) => {
-                        tracing::error!("DNS resolution failed for {}: {}", domain, e);
                         let result = if e.is_no_records_found() {
                             ResponseCode::NoError
                         } else {
+                            tracing::error!("DNS resolution failed for {}: {}", domain, e);
                             ResponseCode::ServFail
                         };
                         Err(result)

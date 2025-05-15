@@ -1,13 +1,10 @@
 use landscape_common::{
-    dhcp::DHCPv4ServerConfig,
+    config::dhcp_v4_server::DHCPv4ServiceConfig,
     service::{
         dhcp::{DHCPv4ServiceStatus, DHCPv4ServiceWatchStatus},
         service_manager::ServiceHandler,
     },
-    store::storev2::LandScapeStore,
-    LANDSCAPE_DEFAULT_LAN_NAME,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::iface::get_iface_by_name;
 
@@ -38,29 +35,5 @@ impl ServiceHandler for DHCPv4Service {
         }
 
         service_status
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DHCPv4ServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-    #[serde(default)]
-    pub config: DHCPv4ServerConfig,
-}
-
-impl Default for DHCPv4ServiceConfig {
-    fn default() -> Self {
-        Self {
-            iface_name: LANDSCAPE_DEFAULT_LAN_NAME.into(),
-            enable: true,
-            config: DHCPv4ServerConfig::default(),
-        }
-    }
-}
-
-impl LandScapeStore for DHCPv4ServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
     }
 }

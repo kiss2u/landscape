@@ -5,14 +5,14 @@ use wl_nl80211::Nl80211Message;
 /// 当前硬件状态结构体
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "iface.ts")]
-pub struct LandScapeWifiInterface {
+pub struct LandscapeWifiInterface {
     pub name: String,
     pub index: u32,
     pub wifi_type: WLANType,
 }
 
-impl LandScapeWifiInterface {
-    pub fn new(msg: Nl80211Message) -> Option<LandScapeWifiInterface> {
+impl LandscapeWifiInterface {
+    pub fn new(msg: Nl80211Message) -> Option<LandscapeWifiInterface> {
         let mut name = None;
         let mut index = None;
         let mut wifi_type = None;
@@ -110,7 +110,7 @@ impl LandScapeWifiInterface {
 
         match (index, name, wifi_type) {
             (Some(index), Some(name), Some(wifi_type)) => {
-                Some(LandScapeWifiInterface { name, index, wifi_type })
+                Some(LandscapeWifiInterface { name, index, wifi_type })
             }
             _ => None,
         }

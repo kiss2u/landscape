@@ -46,7 +46,7 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_e
     return TC_ACT_OK;
 }
 
-SEC("tc")
+SEC("tc/ingress")
 int flow_verdict_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">> flow_verdict_ingress >>"
     struct ethhdr *eth;
@@ -62,13 +62,14 @@ int flow_verdict_ingress(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/egress")
 int flow_verdict_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<< flow_verdict_egress <<"
 
     // if (skb->ingress_ifindex == 0) {
     //     return TC_ACT_UNSPEC;
     // }
+
     bool is_ipv4;
 
     int ret;
@@ -89,7 +90,8 @@ int flow_verdict_egress(struct __sk_buff *skb) {
         }
 
         // 填充协议与地址
-        cache_key.match_key.l4_protocol = iph.protocol;
+        // cache_key.match_key.l4_protocol = iph.protocol;  // 暂时不区分协议
+        cache_key.match_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
         cache_key.match_key.src_addr.ip = iph.saddr;
         cache_key.dst_addr.ip = iph.daddr;
     } else {
@@ -103,25 +105,30 @@ int flow_verdict_egress(struct __sk_buff *skb) {
         }
 
         // 填充协议与地址
-        cache_key.match_key.l4_protocol = ip6h.nexthdr;
+        // cache_key.match_key.l4_protocol = ip6h.nexthdr; // 暂时不区分协议
+        cache_key.match_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
         COPY_ADDR_FROM(cache_key.match_key.src_addr.all, ip6h.saddr.in6_u.u6_addr32);
         COPY_ADDR_FROM(cache_key.dst_addr.all, ip6h.daddr.in6_u.u6_addr32);
     }
 
+
     // 获得 flow_id
     u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
 
+    volatile u32 flow_id;
     if (flow_id_ptr == NULL) {
-        // 查不到 flow 配置，放行数据包
-        return TC_ACT_UNSPEC;
+        // 查不到 flow 配置
+        if (skb->ingress_ifindex != 0) {
+            // 因为不是本机流量, 放行数据包
+            return TC_ACT_UNSPEC;
+        }
+        // 是本机路由流量 ( DNS 中的 MARK 需要按照对应的 流去处理)
+        flow_id = skb->mark;
+    } else {
+        flow_id = *flow_id_ptr;
     }
 
-    u32 flow_id = *flow_id_ptr;
     u8 flow_id_u8 = flow_id & 0xff;
-
-    if (flow_id == 0) {
-        return TC_ACT_UNSPEC;
-    }
 
     // bpf_log_info("find flow_id: %d", *flow_id_ptr);
 
@@ -193,6 +200,13 @@ apply_action:
 
 keep_going:
 
+
+    // 如果是本机的流量, 并且没有改变 flow_id 或者丢弃
+    // 还是继续发送, 其余情况就必须发往 flow target
+    if (skb->ingress_ifindex == 0 && flow_id == 0) {
+        return TC_ACT_UNSPEC;
+    }
+
     // 找到转发的目标
     target_info = bpf_map_lookup_elem(&flow_target_map, &flow_id);
 
@@ -204,23 +218,32 @@ keep_going:
 
     // 依据配置发往具体的端口， 检查 MAC 地址
     if (current_eth_net_offset == 0 && target_info->has_mac) {
-        bpf_log_info("add dummy_mac");
         // 当前数据包没有 mac 对方有 mac
         if (prepend_dummy_mac(skb) != 0) {
+            bpf_log_error("add dummy_mac fail");
             return TC_ACT_SHOT;
         }
 
     } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
         // 当前有, 对方没有
         // 需要 6.6 以上支持 目前暂不实现
+        bpf_log_info("drop");
         return TC_ACT_SHOT;
     }
 
     if (target_info->is_docker) {
-        bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
-        return bpf_redirect(target_info->ifindex, 0);
+        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
+        if (ret) {
+            bpf_log_info("bpf_skb_vlan_push error");
+        }
+        ret = bpf_redirect(target_info->ifindex, 0);
+        if (ret != 7) {
+            bpf_log_info("bpf_redirect error: %d", ret);
+        }
+        return ret;
     }
 
+    bpf_log_info("drop");
     // 当前只支持转发到 docekr 中
     return TC_ACT_SHOT;
 

@@ -1,4 +1,4 @@
-use super::option_codes::IcmpV6Options;
+use landscape_common::net_proto::icmpv6::options::IcmpV6Options;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icmpv6Type {

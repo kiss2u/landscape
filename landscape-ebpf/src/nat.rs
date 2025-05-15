@@ -1,4 +1,3 @@
-use core::ops::Range;
 use std::{
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -8,12 +7,14 @@ use land_nat::{
     types::{nat_conn_event, nat_mapping_key, nat_mapping_value, u_inet_addr},
     *,
 };
-use landscape_common::event::nat::{NatEvent, NatEventType};
+use landscape_common::{
+    config::nat::NatConfig,
+    event::nat::{NatEvent, NatEventType},
+};
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, MapFlags, TC_EGRESS, TC_INGRESS,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use crate::{
@@ -32,23 +33,6 @@ pub(crate) mod land_nat {
 //         panic!("Failed to increase rlimit");
 //     }
 // }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NatConfig {
-    tcp_range: Range<u16>,
-    udp_range: Range<u16>,
-    icmp_in_range: Range<u16>,
-}
-
-impl Default for NatConfig {
-    fn default() -> Self {
-        Self {
-            tcp_range: 32768..65535,
-            udp_range: 32768..65535,
-            icmp_in_range: 32768..65535,
-        }
-    }
-}
 
 unsafe impl plain::Plain for nat_conn_event {}
 unsafe impl plain::Plain for u_inet_addr {}

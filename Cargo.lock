@@ -1155,6 +1155,7 @@ dependencies = [
  "hex",
  "ipnet",
  "rand 0.8.5",
+ "serde",
  "thiserror 1.0.64",
  "trust-dns-proto",
  "url",
@@ -2452,7 +2453,7 @@ dependencies = [
 
 [[package]]
 name = "landscape"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "bollard",
  "cidr",
@@ -2493,13 +2494,16 @@ dependencies = [
 
 [[package]]
 name = "landscape-common"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "clap 4.5.27",
+ "dhcproto",
+ "hickory-proto 0.24.1",
  "homedir",
  "hostname",
  "libc",
  "once_cell",
+ "paste",
  "serde",
  "serde_json",
  "sysinfo",
@@ -2513,7 +2517,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-database"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "async-trait",
  "landscape-common",
@@ -2529,7 +2533,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-dns"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "aho-corasick",
  "async-trait",
@@ -2561,7 +2565,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-ebpf"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "clap 4.5.27",
  "ctrlc",
@@ -2585,7 +2589,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-protobuf"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "homedir",
  "jemalloc-ctl",
@@ -2599,7 +2603,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-webserver"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "axum",
  "axum-extra",
@@ -2823,7 +2827,7 @@ dependencies = [
 
 [[package]]
 name = "migration"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "async-std",
  "sea-orm-migration",
@@ -5411,6 +5415,7 @@ dependencies = [
  "ipnet",
  "lazy_static",
  "rand 0.8.5",
+ "serde",
  "smallvec",
  "thiserror 1.0.64",
  "tinyvec",

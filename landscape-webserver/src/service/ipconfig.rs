@@ -8,8 +8,9 @@ use axum::{
 use serde_json::Value;
 use tokio::sync::{broadcast, Mutex};
 
-use landscape::service::ipconfig::{IPConfigService, IfaceIpServiceConfig};
+use landscape::service::ipconfig::IPConfigService;
 use landscape_common::{
+    config::wanip::IfaceIpServiceConfig,
     observer::IfaceObserverAction,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,

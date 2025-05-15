@@ -2,7 +2,21 @@ use std::{fs::OpenOptions, io::Write};
 
 use serde::{Deserialize, Serialize};
 
-pub mod pppd;
+use crate::store::storev2::LandscapeStore;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PPPDServiceConfig {
+    pub attach_iface_name: String,
+    pub iface_name: String,
+    pub enable: bool,
+    pub pppd_config: PPPDConfig,
+}
+
+impl LandscapeStore for PPPDServiceConfig {
+    fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PPPDConfig {
@@ -12,10 +26,10 @@ pub struct PPPDConfig {
 }
 
 impl PPPDConfig {
-    fn delete_config(&self, ppp_iface_name: &str) {
+    pub fn delete_config(&self, ppp_iface_name: &str) {
         let _ = std::fs::remove_file(format!("/etc/ppp/peers/{}", ppp_iface_name));
     }
-    fn write_config(&self, attach_iface_name: &str, ppp_iface_name: &str) -> Result<(), ()> {
+    pub fn write_config(&self, attach_iface_name: &str, ppp_iface_name: &str) -> Result<(), ()> {
         // 打开文件（如果文件不存在则创建）
 
         let Ok(mut file) = OpenOptions::new()

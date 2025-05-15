@@ -1,9 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use config::{NetworkIfaceConfig, WifiMode};
-use dev_wifi::LandScapeWifiInterface;
+use config::from_phy_dev;
+use dev_wifi::LandscapeWifiInterface;
 use futures::stream::TryStreamExt;
 use landscape_common::{
+    config::iface::{NetworkIfaceConfig, WifiMode},
     error::LdResult,
     iface::{AddController, BridgeCreate, ChangeZone, IfaceCpuSoftBalance, IfaceZoneType},
 };
@@ -11,7 +12,7 @@ use rtnetlink::new_connection;
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::{dev::LandScapeInterface, store::LandscapeStoreServiceProvider};
+use crate::{dev::LandscapeInterface, store::LandscapeStoreServiceProvider};
 
 pub mod config;
 pub mod dev_wifi;
@@ -26,18 +27,18 @@ pub struct IfaceTopology {
     pub config: NetworkIfaceConfig,
     // 当前的状态: 除了 IP 之类的
     #[serde(flatten)]
-    pub status: LandScapeInterface,
+    pub status: LandscapeInterface,
 
-    pub wifi_info: Option<LandScapeWifiInterface>,
+    pub wifi_info: Option<LandscapeWifiInterface>,
 }
 
-pub async fn get_iface_by_name(name: &str) -> Option<LandScapeInterface> {
+pub async fn get_iface_by_name(name: &str) -> Option<LandscapeInterface> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let mut links = handle.link().get().match_name(name.to_string()).execute();
 
     if let Ok(Some(msg)) = links.try_next().await {
-        LandScapeInterface::new(msg)
+        LandscapeInterface::new(msg)
     } else {
         None
     }
@@ -61,7 +62,7 @@ impl IfaceManagerService {
     pub async fn manage_dev(&self, dev_name: String) {
         if self.get_iface_config(&dev_name).await.is_none() {
             if let Some(iface) = get_iface_by_name(&dev_name).await {
-                let config = NetworkIfaceConfig::from_phy_dev(&iface);
+                let config = from_phy_dev(&iface);
                 self.set_iface_config(config).await;
             }
         }
@@ -85,7 +86,7 @@ impl IfaceManagerService {
             let config = if let Some(config) = comfig_map.remove(&each.name) {
                 config
             } else {
-                NetworkIfaceConfig::from_phy_dev(&each)
+                from_phy_dev(&each)
             };
 
             let wifi_info = add_wifi_dev.get(&config.name).cloned();
@@ -146,7 +147,7 @@ impl IfaceManagerService {
             {
                 link_config
             } else {
-                NetworkIfaceConfig::from_phy_dev(&iface_info)
+                from_phy_dev(&iface_info)
             };
             link_config.controller_name = master_name;
             self.set_iface_config(link_config).await;
@@ -158,7 +159,7 @@ impl IfaceManagerService {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
-                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+                Some(from_phy_dev(&iface))
             } else {
                 None
             }
@@ -179,7 +180,7 @@ impl IfaceManagerService {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
-                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+                Some(from_phy_dev(&iface))
             } else {
                 None
             }
@@ -205,7 +206,7 @@ impl IfaceManagerService {
                 if let Some(link_config) = self.get_iface_config(&iface_name).await {
                     link_config
                 } else {
-                    NetworkIfaceConfig::from_phy_dev(&iface_info)
+                    from_phy_dev(&iface_info)
                 };
             link_config.enable_in_boot = enable_in_boot;
 
@@ -222,7 +223,7 @@ impl IfaceManagerService {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
-                Some(NetworkIfaceConfig::from_phy_dev(&iface))
+                Some(from_phy_dev(&iface))
             } else {
                 None
             }
@@ -270,8 +271,8 @@ pub struct IfaceInfo {
     /// 持久化的配置
     pub config: NetworkIfaceConfig,
     /// 当前网卡的配置, 可能网卡现在不存在
-    pub status: Option<LandScapeInterface>,
-    pub wifi_info: Option<LandScapeWifiInterface>,
+    pub status: Option<LandscapeInterface>,
+    pub wifi_info: Option<LandscapeWifiInterface>,
 }
 
 /// 未纳入配置的网卡
@@ -279,8 +280,8 @@ pub struct IfaceInfo {
 #[ts(export, export_to = "iface.ts")]
 pub struct RawIfaceInfo {
     /// 当前网卡的配置
-    pub status: LandScapeInterface,
-    pub wifi_info: Option<LandScapeWifiInterface>,
+    pub status: LandscapeInterface,
+    pub wifi_info: Option<LandscapeWifiInterface>,
 }
 
 #[derive(Clone, Serialize, TS)]
@@ -293,7 +294,10 @@ fn reset_iface_balance(iface_name: &str) -> LdResult<()> {
     setting_iface_balance(iface_name, IfaceCpuSoftBalance { xps: "0".into(), rps: "0".into() })
 }
 
-fn setting_iface_balance(iface_name: &str, balance: IfaceCpuSoftBalance) -> LdResult<()> {
+pub(crate) fn setting_iface_balance(
+    iface_name: &str,
+    balance: IfaceCpuSoftBalance,
+) -> LdResult<()> {
     let xps_cpus_path =
         PathBuf::from(format!("/sys/class/net/{}/queues/tx-0/xps_cpus", iface_name));
     let rps_cpus_path =

@@ -6,8 +6,9 @@ use axum::{
     Json, Router,
 };
 
-use landscape::wifi::{WifiService, WifiServiceConfig};
+use landscape::wifi::WifiService;
 use landscape_common::{
+    config::wifi::WifiServiceConfig,
     observer::IfaceObserverAction,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,

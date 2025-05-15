@@ -3,29 +3,17 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::{
-    iface::{config::WifiMode, IfaceManagerService},
-    store::LandscapeStoreServiceProvider,
-};
-use landscape_common::iface::{AddController, ChangeZone};
+use landscape::{iface::IfaceManagerService, store::LandscapeStoreServiceProvider};
 use landscape_common::iface::{BridgeCreate, IfaceCpuSoftBalance};
+use landscape_common::{
+    config::iface::WifiMode,
+    iface::{AddController, ChangeZone},
+};
 use serde_json::Value;
 
 use crate::SimpleResult;
 
-// #[derive(Clone)]
-// struct IfaceManagerService {
-//     store: LockStore<NetworkIfaceConfig>,
-// }
-
 pub async fn get_network_paths(store: LandscapeStoreServiceProvider) -> Router {
-    // let mut store = StoreFileManager::new(home_path, "network".to_string());
-
-    // 从配置初始化当前网络布局环境
-    // landscape::init_devs(store.list()).await;
-
-    // println!("==> {:?}", devs);
-    // let store = Arc::new(Mutex::new(store));
     let share_state = IfaceManagerService::new(store).await;
     Router::new()
         .route("/", get(get_ifaces))

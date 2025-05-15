@@ -1,8 +1,8 @@
 import {
-  LandScapeInterface,
-  LandScapeWifiInterface,
-  NetworkIfaceConfig,
+  LandscapeInterface,
+  LandscapeWifiInterface,
 } from "@/rust_bindings/iface";
+import { NetworkIfaceConfig } from "@/rust_bindings/common/iface";
 import { NetDev, WLANTypeTag } from "./dev";
 import { ZoneType } from "./service_ipconfig";
 
@@ -41,6 +41,7 @@ export class ServiceExhibitSwitch {
   wifi: boolean;
   station: boolean;
   dhcp_v4: boolean;
+  mss_clamp: boolean;
 
   constructor(dev: NetDev) {
     this.carrier = true;
@@ -56,6 +57,7 @@ export class ServiceExhibitSwitch {
     this.wifi = false;
     this.station = false;
     this.dhcp_v4 = false;
+    this.mss_clamp = false;
 
     if (dev.wifi_info !== undefined) {
       if (dev.wifi_info.wifi_type.t == WLANTypeTag.Station) {
@@ -82,6 +84,7 @@ export class ServiceExhibitSwitch {
       this.mark_config = true;
       this.ipv6pd = true;
       this.firewall = true;
+      this.mss_clamp = true;
     } else if (dev.name === "docker0") {
       this.zone_type = false;
       this.ip_config = false;
@@ -97,6 +100,7 @@ export class ServiceExhibitSwitch {
       this.mark_config = true;
       this.ipv6pd = true;
       this.firewall = true;
+      this.mss_clamp = true;
     }
   }
 }
@@ -118,8 +122,8 @@ export class TopologyServiceExhibitSwitch {
 
   constructor(
     config: NetworkIfaceConfig,
-    status: LandScapeInterface,
-    wifi_info: LandScapeWifiInterface | null
+    status: LandscapeInterface,
+    wifi_info: LandscapeWifiInterface | null
   ) {
     this.carrier = true;
     this.enable_in_boot = true;

@@ -5,8 +5,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::packet_mark_service::{MarkService, PacketMarkServiceConfig};
+use landscape::service::packet_mark_service::MarkService;
 use landscape_common::{
+    config::flow::PacketMarkServiceConfig,
     observer::IfaceObserverAction,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,

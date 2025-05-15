@@ -2,22 +2,18 @@ use std::{fs::OpenOptions, io::Write, path::Path};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    firewall::FirewallServiceConfig,
-    iface::config::NetworkIfaceConfig,
-    service::{
-        dhcp_v4::DHCPv4ServiceConfig, ipconfig::IfaceIpServiceConfig, ipv6pd::IPV6PDServiceConfig,
-        nat_service::NatServiceConfig, packet_mark_service::PacketMarkServiceConfig,
-        pppd_service::PPPDServiceConfig, ra::IPV6RAServiceConfig,
-    },
-    wifi::WifiServiceConfig,
-};
 use landscape_common::{
+    config::{
+        dhcp_v4_server::DHCPv4ServiceConfig, dhcp_v6_client::IPV6PDServiceConfig,
+        firewall::FirewallServiceConfig, flow::PacketMarkServiceConfig, iface::NetworkIfaceConfig,
+        mss_clamp::MSSClampServiceConfig, nat::NatServiceConfig, ppp::PPPDServiceConfig,
+        ra::IPV6RAServiceConfig, wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig,
+    },
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
     firewall::FirewallRuleConfig,
     flow::FlowConfig,
-    ip_mark::{LanIPRuleConfig, WanIPRuleConfig},
+    ip_mark::WanIPRuleConfig,
     INIT_FILE_NAME, INIT_LOCK_FILE_NAME,
 };
 
@@ -78,8 +74,6 @@ pub struct InitConfig {
 
     pub flow_rules: Vec<FlowConfig>,
     pub dns_rules: Vec<DNSRuleConfig>,
-
-    pub lan_ip_mark: Vec<LanIPRuleConfig>,
     pub wan_ip_mark: Vec<WanIPRuleConfig>,
 
     pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
@@ -90,4 +84,6 @@ pub struct InitConfig {
 
     pub wifi_configs: Vec<WifiServiceConfig>,
     pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
+
+    pub mss_clamps: Vec<MSSClampServiceConfig>,
 }

@@ -6,8 +6,9 @@ use axum::{
     Json, Router,
 };
 
-use landscape::firewall::{FirewallService, FirewallServiceConfig};
+use landscape::firewall::FirewallService;
 use landscape_common::{
+    config::firewall::FirewallServiceConfig,
     observer::IfaceObserverAction,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,

@@ -25,8 +25,8 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 volatile const __be32 proxy_addr = 0;
 volatile const __be16 proxy_port = 0;
 
-static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_protocol,
-                                               u8 *l4_protocol) {
+static __always_inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_protocol,
+                                                        u8 *l4_protocol) {
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
     struct bpf_sock_tuple *result;
@@ -56,22 +56,30 @@ static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_pr
     return result;
 }
 
-static inline int handle_pkg(struct __sk_buff *skb, struct bpf_sock_tuple *tuple, u8 l4_protocol) {
+static __always_inline int handle_pkg(struct __sk_buff *skb, struct bpf_sock_tuple *tuple,
+                                      u8 *l4_protocol_prt) {
 #define BPF_LOG_TOPIC "handle_pkg"
     struct bpf_sock_tuple server = {};
     struct bpf_sock *sk;
     size_t tuple_len;
     int ret;
     int change_type_err;
+    u8 l4_protocol = *l4_protocol_prt;
 
     tuple_len = sizeof(tuple->ipv4);
-    if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) return TC_ACT_SHOT;
+    if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) {
+        bpf_log_info("tuple_len is error");
+        return TC_ACT_SHOT;
+    }
 
     /* Reuse existing connection if it exists */
     if (l4_protocol == IPPROTO_TCP) {
         sk = bpf_skc_lookup_tcp(skb, tuple, tuple_len, BPF_F_CURRENT_NETNS, 0);
         if (sk) {
-            if (sk->state != BPF_TCP_LISTEN) goto assign;
+            if (sk->state != BPF_TCP_LISTEN) {
+                // bpf_log_info("reuse exist tcp: %p4I", );
+                goto assign;
+            }
             bpf_sk_release(sk);
         }
     }
@@ -89,10 +97,14 @@ static inline int handle_pkg(struct __sk_buff *skb, struct bpf_sock_tuple *tuple
     }
 
     if (!sk) {
+        // bpf_log_info("can not find sk: l4_protocol: %d ip: %pI4:%d =>  %pI4:%d", l4_protocol,
+        //              &tuple->ipv4.saddr, bpf_ntohs(tuple->ipv4.sport), &tuple->ipv4.daddr,
+        //              bpf_ntohs(tuple->ipv4.dport));
         return TC_ACT_SHOT;
     }
     if (l4_protocol == IPPROTO_TCP && sk->state != BPF_TCP_LISTEN) {
         bpf_sk_release(sk);
+        bpf_log_info("sk not ready");
         return TC_ACT_SHOT;
     }
 assign:
@@ -111,7 +123,7 @@ assign:
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc")
+SEC("tc/ingress")
 int tproxy_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "tproxy_ingress"
 
@@ -135,7 +147,8 @@ int tproxy_ingress(struct __sk_buff *skb) {
         return TC_ACT_OK;
     }
 
-    ret = handle_pkg(skb, tuple, l4_protocol);
+    ret = handle_pkg(skb, tuple, &l4_protocol);
+
     return ret == 0 ? TC_ACT_OK : TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }

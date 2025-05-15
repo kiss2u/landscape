@@ -2,13 +2,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::{mpsc, RwLock};
 
-use crate::store::storev2::LandScapeStore;
+use crate::store::storev2::LandscapeStore;
 
 use super::service_code::{WatchService, WatchServiceTrait};
 
 pub trait ServiceHandler {
     type Status: WatchServiceTrait + Send + Sync + 'static;
-    type Config: LandScapeStore + Send + Sync + 'static;
+    type Config: LandscapeStore + Send + Sync + 'static;
 
     /// 核心服务初始化逻辑
     fn initialize(

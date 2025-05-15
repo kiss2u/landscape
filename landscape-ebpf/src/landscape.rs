@@ -171,9 +171,9 @@ impl Drop for TcHookProxy {
                     debug!("detach success");
                 }
             }
-            if let Err(e) = hook.destroy() {
-                debug!("destroy error: {:?}", e);
-            }
+            // if let Err(e) = hook.destroy() {
+            //     debug!("destroy error: {:?}", e);
+            // }
         }
         // if let Ok(_) = self.query() {
         //     self.detach().unwrap();

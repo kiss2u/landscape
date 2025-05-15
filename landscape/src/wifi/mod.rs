@@ -6,14 +6,13 @@ use std::{
 
 use landscape_common::{
     args::LAND_HOME_PATH,
+    config::wifi::WifiServiceConfig,
     service::{
         service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
         ServiceStatus,
     },
-    store::storev2::LandScapeStore,
     LANDSCAPE_HOSTAPD_TMP_DIR,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use crate::iface::get_iface_by_name;
@@ -41,19 +40,6 @@ impl ServiceHandler for WifiService {
         }
 
         service_status
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WifiServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-    pub config: String,
-}
-
-impl LandScapeStore for WifiServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
     }
 }
 

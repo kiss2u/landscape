@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use crate::{flow::mark::FlowDnsMark, mark::PacketMark, store::storev2::LandScapeStore};
+use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -33,33 +33,9 @@ fn default_flow_id() -> u32 {
     0_u32
 }
 
-impl LandScapeStore for WanIPRuleConfig {
+impl LandscapeStore for WanIPRuleConfig {
     fn get_store_key(&self) -> String {
         self.id.clone()
-    }
-}
-
-#[deprecated]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-/// 对于外部 IP 规则
-pub struct LanIPRuleConfig {
-    // 优先级 用作存储主键
-    pub index: u32,
-    // 是否启用
-    pub enable: bool,
-    /// 流量标记
-    #[serde(default)]
-    pub mark: PacketMark,
-    /// 匹配规则列表
-    #[serde(default)]
-    pub source: Vec<IpConfig>,
-    // 备注
-    pub remark: String,
-}
-
-impl LandScapeStore for LanIPRuleConfig {
-    fn get_store_key(&self) -> String {
-        self.index.to_string()
     }
 }
 

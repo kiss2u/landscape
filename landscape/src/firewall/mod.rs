@@ -1,11 +1,10 @@
 use landscape_common::{
+    config::firewall::FirewallServiceConfig,
     service::{
         service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
         ServiceStatus,
     },
-    store::storev2::LandScapeStore,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use crate::iface::get_iface_by_name;
@@ -36,18 +35,6 @@ impl ServiceHandler for FirewallService {
         }
 
         service_status
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FirewallServiceConfig {
-    pub iface_name: String,
-    pub enable: bool,
-}
-
-impl LandScapeStore for FirewallServiceConfig {
-    fn get_store_key(&self) -> String {
-        self.iface_name.clone()
     }
 }
 

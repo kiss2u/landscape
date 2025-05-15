@@ -5,8 +5,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::ipv6pd::{IPV6PDService, IPV6PDServiceConfig};
+use landscape::service::ipv6pd::IPV6PDService;
 use landscape_common::{
+    config::dhcp_v6_client::IPV6PDServiceConfig,
     observer::IfaceObserverAction,
     service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
     store::storev2::StoreFileManager,

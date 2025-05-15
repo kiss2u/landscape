@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::store::storev2::LandScapeStore;
+use crate::store::storev2::LandscapeStore;
 
 pub mod mark;
 pub mod target;
@@ -25,7 +25,7 @@ pub struct FlowConfig {
     pub remark: String,
 }
 
-impl LandScapeStore for FlowConfig {
+impl LandscapeStore for FlowConfig {
     fn get_store_key(&self) -> String {
         self.flow_id.to_string()
     }
