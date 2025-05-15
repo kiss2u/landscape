@@ -17,7 +17,7 @@ const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 #undef BPF_LOG_TOPIC
 #define BPF_LOG_LEVEL LOG_LEVEL
 
-const volatile u16 mss_size = 1492;
+const volatile u16 mtu_size = 1492;
 
 const volatile int current_eth_net_offset = 14;
 
@@ -67,7 +67,7 @@ found_tcp:
 
     if (nexthdr != NEXTHDR_TCP) return TC_ACT_UNSPEC;
 
-    *l4_offset = offset + len;
+    *l4_offset = offset;
     return TC_ACT_OK;
 }
 
@@ -169,7 +169,7 @@ static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, int current
         if (iph->protocol != IPPROTO_TCP) {
             return TC_ACT_UNSPEC;
         }
-        *tcp_offset = l3_offset + iph->ihl * 4;
+        *tcp_offset = iph->ihl * 4;
     } else {
         ret = extract_ipv6_tcp_offset(skb, l3_offset, tcp_offset);
         if (ret != TC_ACT_OK) {
@@ -179,13 +179,15 @@ static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, int current
     return TC_ACT_OK;
 }
 
+#define TCP_HDR_LEN 20
+
 SEC("tc/ingress")
 int clamp_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "clamp_ingress"
 
-    __u32 l4_offset = 0;
+    volatile __u32 l4_offset = 0;
     if (!find_and_clamp_tcp(skb, current_eth_net_offset, &l4_offset)) {
-        do_mss_clamp(skb, l4_offset, 1200);
+        do_mss_clamp(skb, l4_offset + current_eth_net_offset, mtu_size - l4_offset - TCP_HDR_LEN);
     }
 
     return TC_ACT_UNSPEC;
@@ -196,9 +198,9 @@ SEC("tc/egress")
 int clamp_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "clamp_egress"
 
-    __u32 l4_offset = 0;
+    volatile __u32 l4_offset = 0;
     if (!find_and_clamp_tcp(skb, current_eth_net_offset, &l4_offset)) {
-        do_mss_clamp(skb, l4_offset, 1200);
+        do_mss_clamp(skb, l4_offset + current_eth_net_offset, mtu_size - l4_offset - TCP_HDR_LEN);
     }
 
     return TC_ACT_UNSPEC;

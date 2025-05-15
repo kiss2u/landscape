@@ -37,6 +37,7 @@ const ifaceNodeStore = useIfaceNodeStore();
 // })
 
 // const nodesData = useNodesData(() => connections.value[0]?.source)
+const show_mss_clamp_edit = ref(false);
 const iface_dhcp_v4_service_edit_show = ref(false);
 const iface_wifi_edit_show = ref(false);
 const iface_firewall_edit_show = ref(false);
@@ -245,6 +246,13 @@ const show_switch = computed(() => {
 
     <n-flex style="min-width: 230px; max-width: 230px">
       <!-- IP 配置 按钮 -->
+      <MSSClampStatusBtn
+        v-if="show_switch.mss_clamp"
+        @click="show_mss_clamp_edit = true"
+        :iface_name="node.name"
+        :zone="node.zone_type"
+      />
+      <!-- IP 配置 按钮 -->
       <IPConfigStatusBtn
         v-if="show_switch.ip_config"
         @click="iface_service_edit_show = true"
@@ -385,6 +393,11 @@ const show_switch = computed(() => {
     :iface_name="node.name"
   >
   </IfaceCpuSoftBalance>
+  <MSSClampServiceEditModal
+    v-model:show="show_mss_clamp_edit"
+    :iface_name="node.name"
+  >
+  </MSSClampServiceEditModal>
 </template>
 
 <style scoped>

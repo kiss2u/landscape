@@ -13,7 +13,12 @@ use tokio::sync::oneshot;
 
 use crate::{landscape::TcHookProxy, MSS_CLAMP_EGRESS_PRIORITY, MSS_CLAMP_INGRESS_PRIORITY};
 
-pub fn run_mss_clamp(ifindex: i32, has_mac: bool, service_status: oneshot::Receiver<()>) {
+pub fn run_mss_clamp(
+    ifindex: i32,
+    mtu_size: u16,
+    has_mac: bool,
+    service_status: oneshot::Receiver<()>,
+) {
     let landscape_builder = MssClampSkelBuilder::default();
 
     let mut open_object = MaybeUninit::uninit();
@@ -23,6 +28,7 @@ pub fn run_mss_clamp(ifindex: i32, has_mac: bool, service_status: oneshot::Recei
         landscape_open.maps.rodata_data.current_eth_net_offset = 0;
     }
 
+    landscape_open.maps.rodata_data.mtu_size = mtu_size;
     let landscape_skel = landscape_open.load().unwrap();
 
     let mss_clamp_egress = landscape_skel.progs.clamp_egress;

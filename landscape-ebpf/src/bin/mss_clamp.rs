@@ -27,7 +27,7 @@ pub async fn main() {
 
     std::thread::spawn(move || {
         println!("启动 run_mss_clamp 在 ifindex: {:?}", ifindex);
-        landscape_ebpf::mss_clamp::run_mss_clamp(ifindex, true, rx);
+        landscape_ebpf::mss_clamp::run_mss_clamp(ifindex, 1492, true, rx);
         println!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
     });

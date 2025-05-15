@@ -6,8 +6,8 @@ use landscape_common::{
     config::{
         dhcp_v4_server::DHCPv4ServiceConfig, dhcp_v6_client::IPV6PDServiceConfig,
         firewall::FirewallServiceConfig, flow::PacketMarkServiceConfig, iface::NetworkIfaceConfig,
-        nat::NatServiceConfig, ppp::PPPDServiceConfig, ra::IPV6RAServiceConfig,
-        wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig,
+        mss_clamp::MSSClampServiceConfig, nat::NatServiceConfig, ppp::PPPDServiceConfig,
+        ra::IPV6RAServiceConfig, wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig,
     },
     dns::DNSRuleConfig,
     error::{LdError, LdResult},
@@ -84,4 +84,6 @@ pub struct InitConfig {
 
     pub wifi_configs: Vec<WifiServiceConfig>,
     pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
+
+    pub mss_clamps: Vec<MSSClampServiceConfig>,
 }

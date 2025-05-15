@@ -7,6 +7,6 @@ pub fn main() {
 
     landscape_ebpf::map_setting::flow_target::add_flow_target_info(FlowTargetPair {
         key: 9,
-        value: TargetInterfaceInfo::new_docker(34),
+        value: TargetInterfaceInfo::new_docker(28),
     });
 }
