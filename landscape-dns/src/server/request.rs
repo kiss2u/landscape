@@ -22,7 +22,7 @@ use tokio::sync::Mutex;
 
 use crate::{rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
-    dns::{DNSRuleConfig, DomainConfig},
+    dns::{DNSRuleConfig, DomainConfig, FilterResult},
     flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
 };
 
@@ -144,6 +144,7 @@ impl LandscapeDnsRequestHandle {
 
                             let mut new_record = cache_item.clone();
                             new_record.mark = new_mark;
+                            new_record.filter = resolver.config.filter.clone();
                             cache_items.push(new_record);
                         }
                         if !cache_items.is_empty() {
@@ -174,17 +175,27 @@ impl LandscapeDnsRequestHandle {
 
     // 检查缓存并根据 TTL 判断是否过期
     // 不同的记录可能的过期时间不同
-    pub async fn lookup_cache(&self, domain: &str, query_type: RecordType) -> Option<Vec<Record>> {
+    pub async fn lookup_cache(
+        &self,
+        domain: &str,
+        query_type: RecordType,
+    ) -> Option<(Vec<Record>, FilterResult)> {
         let mut cache = self.cache.lock().await;
         if let Some(records) = cache.get(&(domain.to_string(), query_type)) {
             let mut is_expire = false;
             let mut valid_records: Vec<Record> = vec![];
-            'a_record: for CacheDNSItem { rdatas, insert_time, .. } in records.iter() {
+            let mut ret_fiter = FilterResult::Unfilter;
+            'a_record: for CacheDNSItem { rdatas, insert_time, filter, .. } in records.iter() {
+                ret_fiter = filter.clone();
                 for rdata in rdatas.iter() {
                     if insert_time.elapsed().as_secs() > rdata.ttl() as u64 {
                         is_expire = true;
                         break 'a_record;
                     }
+
+                    // tracing::debug!(
+                    //     "query {domain} , filter: {filter:?}, result: {valid_records:?}"
+                    // );
                 }
                 valid_records.extend_from_slice(rdatas);
             }
@@ -195,7 +206,7 @@ impl LandscapeDnsRequestHandle {
 
             // 如果有有效的记录，返回它们
             if !valid_records.is_empty() {
-                return Some(valid_records);
+                return Some((valid_records, ret_fiter));
             }
         }
         None
@@ -207,11 +218,13 @@ impl LandscapeDnsRequestHandle {
         query_type: RecordType,
         rdata_ttl_vec: Vec<Record>,
         mark: &FlowDnsMark,
+        filter: FilterResult,
     ) {
         let cache_item = CacheDNSItem {
             rdatas: rdata_ttl_vec,
             insert_time: Instant::now(),
             mark: mark.clone(),
+            filter,
         };
         let update_dns_mark_list = cache_item.get_update_rules();
 
@@ -267,8 +280,8 @@ impl RequestHandler for LandscapeDnsRequestHandle {
         let mut records = vec![];
 
         // TODO: 修改逻辑
-        if let Some(result) = self.lookup_cache(&domain, query_type).await {
-            records = result;
+        if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
+            records = fiter_result(result, &filter);
         } else {
             for (_index, resolver) in self.resolves.iter() {
                 if resolver.is_match(&domain) {
@@ -280,10 +293,11 @@ impl RequestHandler for LandscapeDnsRequestHandle {
                                     query_type,
                                     rdata_vec.clone(),
                                     resolver.mark(),
+                                    resolver.config.filter.clone(),
                                 )
                                 .await;
                             }
-                            rdata_vec
+                            fiter_result(rdata_vec, &resolver.config.filter)
                         }
                         Err(error_code) => {
                             // 构建并返回错误响应
@@ -342,4 +356,30 @@ fn serve_failed() -> ResponseInfo {
     let mut header = Header::new();
     header.set_response_code(ResponseCode::ServFail);
     header.into()
+}
+
+fn fiter_result(un_filter_records: Vec<Record>, filter: &FilterResult) -> Vec<Record> {
+    let mut valid_records = Vec::with_capacity(un_filter_records.len());
+    for rdata in un_filter_records.into_iter() {
+        if matches!(filter, FilterResult::Unfilter) {
+            valid_records.push(rdata.clone());
+        } else {
+            match (rdata.record_type(), filter) {
+                (RecordType::A, FilterResult::OnlyIPv4) => {
+                    valid_records.push(rdata.clone());
+                }
+                (RecordType::A, FilterResult::OnlyIPv6)
+                | (RecordType::AAAA, FilterResult::OnlyIPv4) => {
+                    // 过滤
+                }
+                (RecordType::AAAA, FilterResult::OnlyIPv6) => {
+                    valid_records.push(rdata.clone());
+                }
+                _ => {
+                    valid_records.push(rdata.clone());
+                }
+            }
+        }
+    }
+    valid_records
 }

@@ -2,13 +2,13 @@
 import { push_dns_rule } from "@/api/dns_service";
 import {
   DnsRule,
-  DomainMatchType,
-  RuleSource,
   get_dns_resolve_mode_options,
   get_dns_upstream_type_options,
+  get_dns_filter_options,
   DNSResolveModeEnum,
   DnsUpstreamTypeEnum,
-  CloudFlareMode,
+  CloudflareMode,
+  DomainMatchTypeEnum,
 } from "@/lib/dns";
 import { useMessage } from "naive-ui";
 
@@ -17,6 +17,7 @@ import { computed, onMounted } from "vue";
 import { ref } from "vue";
 import UpstreamEdit from "@/components/dns/upstream/UpstreamEdit.vue";
 import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
+import { RuleSource } from "@/rust_bindings/dns";
 
 type Props = {
   data:
@@ -50,16 +51,16 @@ function enter() {
 
 function onCreate(): RuleSource {
   return {
-    t: "geokey",
+    t: "geo_key",
     key: "",
   };
 }
 
 function changeCurrentRuleType(value: RuleSource, index: number) {
-  if (value.t == "geokey") {
+  if (value.t == "geo_key") {
     rule.value.source[index] = {
       t: "config",
-      match_type: DomainMatchType.Full,
+      match_type: DomainMatchTypeEnum.Full,
       value: value.key,
     };
   } else {
@@ -89,19 +90,19 @@ async function saveRule() {
 const source_style = [
   {
     label: "精确匹配",
-    value: DomainMatchType.Full,
+    value: DomainMatchTypeEnum.Full,
   },
   {
     label: "域名匹配",
-    value: DomainMatchType.Domain,
+    value: DomainMatchTypeEnum.Domain,
   },
   {
     label: "正则匹配",
-    value: DomainMatchType.Regex,
+    value: DomainMatchTypeEnum.Regex,
   },
   {
     label: "关键词匹配",
-    value: DomainMatchType.Plain,
+    value: DomainMatchTypeEnum.Plain,
   },
 ];
 
@@ -123,7 +124,7 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
     case DNSResolveModeEnum.CloudFlare: {
       rule.value.resolve_mode = {
         t: DNSResolveModeEnum.CloudFlare,
-        mode: CloudFlareMode.Tls,
+        mode: CloudflareMode.Tls,
       };
       break;
     }
@@ -154,10 +155,26 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
           </n-switch>
         </n-form-item-gi>
 
+        <n-form-item-gi :span="5" label="是否过滤结果">
+          <!-- {{ rule }} -->
+          <n-radio-group v-model:value="rule.filter" name="filter">
+            <n-radio-button
+              v-for="opt in get_dns_filter_options()"
+              :key="opt.value"
+              :value="opt.value"
+              :label="opt.label"
+            />
+          </n-radio-group>
+        </n-form-item-gi>
+
         <n-form-item-gi :span="2" label="备注">
           <n-input v-model:value="rule.name" type="text" />
         </n-form-item-gi>
-        <n-form-item-gi v-if="!rule.redirection" :span="5" label="流量动作">
+        <n-form-item-gi
+          v-if="rule.resolve_mode.t !== DNSResolveModeEnum.Redirect"
+          :span="5"
+          label="流量动作"
+        >
           <!-- <n-popover trigger="hover">
             <template #trigger>
               <n-switch v-model:value="rule.mark">

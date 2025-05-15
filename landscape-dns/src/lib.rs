@@ -1,5 +1,8 @@
 use hickory_proto::rr::{Record, RecordType};
-use landscape_common::flow::{mark::FlowDnsMark, FlowDnsMarkInfo};
+use landscape_common::{
+    dns::FilterResult,
+    flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
+};
 use lru::LruCache;
 use std::{collections::HashSet, time::Instant};
 
@@ -15,6 +18,7 @@ pub struct CacheDNSItem {
     rdatas: Vec<Record>,
     insert_time: Instant,
     mark: FlowDnsMark,
+    filter: FilterResult,
 }
 
 impl CacheDNSItem {

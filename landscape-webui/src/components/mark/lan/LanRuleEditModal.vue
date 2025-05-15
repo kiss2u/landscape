@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { post_lan_ip_rules } from "@/api/mark";
-import { DomainMatchType, RuleSource } from "@/lib/dns";
+import { DomainMatchTypeEnum } from "@/lib/dns";
 import { useMessage } from "naive-ui";
 
 import { computed, onMounted } from "vue";
@@ -52,19 +52,19 @@ async function saveRule() {
 const source_style = [
   {
     label: "精确匹配",
-    value: DomainMatchType.Full,
+    value: DomainMatchTypeEnum.Full,
   },
   {
     label: "域名匹配",
-    value: DomainMatchType.Domain,
+    value: DomainMatchTypeEnum.Domain,
   },
   {
     label: "正则匹配",
-    value: DomainMatchType.Regex,
+    value: DomainMatchTypeEnum.Regex,
   },
   {
     label: "关键词匹配",
-    value: DomainMatchType.Plain,
+    value: DomainMatchTypeEnum.Plain,
   },
 ];
 </script>
