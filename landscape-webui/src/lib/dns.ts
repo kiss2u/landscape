@@ -28,7 +28,7 @@ export class DnsRule implements DNSRuleConfig {
     this.resolve_mode = obj?.resolve_mode
       ? { ...obj.resolve_mode }
       : {
-          t: DNSResolveModeEnum.CloudFlare,
+          t: DNSResolveModeEnum.Cloudflare,
           mode: CloudflareMode.Https,
         };
     this.flow_id = obj?.flow_id ?? 0;
@@ -41,6 +41,11 @@ export enum DomainMatchTypeEnum {
   Regex = "regex",
   Domain = "domain",
   Full = "full",
+}
+
+export enum RuleSourceEnum {
+  GeoKey = "geo_key",
+  Config = "config",
 }
 
 // export type RuleSource =
@@ -86,7 +91,7 @@ export function get_dns_resolve_mode_options(): {
   return [
     { label: "重定向", value: DNSResolveModeEnum.Redirect },
     { label: "自定义上游", value: DNSResolveModeEnum.Upstream },
-    { label: "CloudFlare", value: DNSResolveModeEnum.CloudFlare },
+    { label: "Cloudflare", value: DNSResolveModeEnum.Cloudflare },
   ];
 }
 
@@ -104,7 +109,7 @@ export function get_dns_upstream_type_options(): {
 export enum DNSResolveModeEnum {
   Redirect = "redirect",
   Upstream = "upstream",
-  CloudFlare = "cloudflare",
+  Cloudflare = "cloudflare",
 }
 
 export enum DnsUpstreamTypeEnum {
@@ -127,7 +132,7 @@ export type DnsUpstreamType =
 // export type DNSResolveMode =
 //   | { t: DNSResolveModeEnum.Redirect; ips: string[] }
 //   | DnsUpstreamMode
-//   | { t: DNSResolveModeEnum.CloudFlare; mode: CloudFlareMode };
+//   | { t: DNSResolveModeEnum.Cloudflare; mode: CloudFlareMode };
 
 export type DnsUpstreamMode = {
   t: DNSResolveModeEnum.Upstream;

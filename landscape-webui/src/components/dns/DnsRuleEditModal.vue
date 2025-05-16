@@ -9,6 +9,7 @@ import {
   DnsUpstreamTypeEnum,
   CloudflareMode,
   DomainMatchTypeEnum,
+  RuleSourceEnum,
 } from "@/lib/dns";
 import { useMessage } from "naive-ui";
 
@@ -51,20 +52,20 @@ function enter() {
 
 function onCreate(): RuleSource {
   return {
-    t: "geo_key",
+    t: RuleSourceEnum.GeoKey,
     key: "",
   };
 }
 
 function changeCurrentRuleType(value: RuleSource, index: number) {
-  if (value.t == "geo_key") {
+  if (value.t == RuleSourceEnum.GeoKey) {
     rule.value.source[index] = {
       t: "config",
       match_type: DomainMatchTypeEnum.Full,
       value: value.key,
     };
   } else {
-    rule.value.source[index] = { t: "geokey", key: value.value };
+    rule.value.source[index] = { t: RuleSourceEnum.GeoKey, key: value.value };
   }
 }
 
@@ -121,9 +122,9 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
       };
       break;
     }
-    case DNSResolveModeEnum.CloudFlare: {
+    case DNSResolveModeEnum.Cloudflare: {
       rule.value.resolve_mode = {
-        t: DNSResolveModeEnum.CloudFlare,
+        t: DNSResolveModeEnum.Cloudflare,
         mode: CloudflareMode.Tls,
       };
       break;
@@ -201,9 +202,9 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
           </n-radio-group>
         </n-form-item-gi>
         <n-form-item-gi
-          v-if="rule.resolve_mode.t === DNSResolveModeEnum.CloudFlare"
+          v-if="rule.resolve_mode.t === DNSResolveModeEnum.Cloudflare"
           :span="5"
-          label="CloudFlare 连接方式"
+          label="Cloudflare 连接方式"
         >
           <n-radio-group v-model:value="rule.resolve_mode.mode" name="ra_flag">
             <n-radio-button
@@ -251,7 +252,7 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
                 </n-icon>
               </n-button>
               <n-input
-                v-if="value.t === 'geokey'"
+                v-if="value.t === RuleSourceEnum.GeoKey"
                 v-model:value="value.key"
                 placeholder="geo key"
                 type="text"
