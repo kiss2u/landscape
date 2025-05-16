@@ -117,11 +117,12 @@ int flow_verdict_egress(struct __sk_buff *skb) {
 
     volatile u32 flow_id;
     if (flow_id_ptr == NULL) {
-        // 查不到 flow 配置
-        if (skb->ingress_ifindex != 0) {
-            // 因为不是本机流量, 放行数据包
-            return TC_ACT_UNSPEC;
-        }
+        // 查不到 flow 配置, 如果按照原逻辑直接放行 会导致默认流中, 设置了转发 DNS 查询生效
+        // 但是 访问时 IP 在进行到此处时 被直接发送 就导致行为不一致
+        // if (skb->ingress_ifindex != 0) {
+        //     // 因为不是本机流量, 放行数据包
+        //     return TC_ACT_UNSPEC;
+        // }
         // 是本机路由流量 ( DNS 中的 MARK 需要按照对应的 流去处理)
         flow_id = skb->mark;
     } else {
@@ -203,7 +204,8 @@ keep_going:
 
     // 如果是本机的流量, 并且没有改变 flow_id 或者丢弃
     // 还是继续发送, 其余情况就必须发往 flow target
-    if (skb->ingress_ifindex == 0 && flow_id == 0) {
+    if (flow_id == 0) {
+    // if (skb->ingress_ifindex == 0 && flow_id == 0) {
         return TC_ACT_UNSPEC;
     }
 
