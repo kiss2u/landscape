@@ -62,7 +62,7 @@ impl Default for DNSRuleConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "dns.ts")]
 #[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum RuleSource {
     GeoKey { key: String },
     Config(DomainConfig),
@@ -77,7 +77,7 @@ pub struct DomainConfig {
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "dns.ts")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum DomainMatchType {
     /// The value is used as is.
     Plain = 0,
@@ -92,22 +92,22 @@ pub enum DomainMatchType {
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "dns.ts")]
 #[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum DNSResolveMode {
     Redirect { ips: Vec<IpAddr> },
     Upstream { upstream: DnsUpstreamType, ips: Vec<IpAddr>, port: Option<u16> },
-    CloudFlare { mode: CloudFlareMode },
+    Cloudflare { mode: CloudflareMode },
 }
 
 impl Default for DNSResolveMode {
     fn default() -> Self {
-        DNSResolveMode::CloudFlare { mode: CloudFlareMode::Https }
+        DNSResolveMode::Cloudflare { mode: CloudflareMode::Https }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
 #[ts(export, export_to = "dns.ts")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 #[serde(tag = "t")]
 pub enum DnsUpstreamType {
     #[default]
@@ -122,8 +122,8 @@ pub enum DnsUpstreamType {
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "dns.ts")]
-#[serde(rename_all = "lowercase")]
-pub enum CloudFlareMode {
+#[serde(rename_all = "snake_case")]
+pub enum CloudflareMode {
     Plaintext, // 1.1.1.1 (UDP/TCP)
     Tls,       // tls://1.1.1.1
     Https,     // https://cloudflare-dns.com/dns-query
@@ -131,11 +131,13 @@ pub enum CloudFlareMode {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
 #[ts(export, export_to = "dns.ts")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum FilterResult {
     #[default]
     Unfilter,
+    #[serde(rename = "only_ipv4")]
     OnlyIPv4,
+    #[serde(rename = "only_ipv6")]
     OnlyIPv6,
 }
 

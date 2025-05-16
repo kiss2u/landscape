@@ -33,6 +33,8 @@ impl CacheResolver {
         let mark_value = match mark.clone() {
             // 转发时候使用目标 flow 进行标记 DNS 请求
             FlowDnsMark::Redirect { flow_id } => flow_id as u32,
+            // 忽略流的配置
+            FlowDnsMark::Direct => 0,
             // 其余情况使用 当前规则所属的 flow 进行标记
             _ => flow_id,
         };
@@ -78,15 +80,15 @@ impl ResolverType {
 
                 ResolverType::CacheResolver(CacheResolver::new(resolve, &config.mark, flow_id))
             }
-            DNSResolveMode::CloudFlare { mode } => {
+            DNSResolveMode::Cloudflare { mode } => {
                 let server = match mode {
-                    landscape_common::dns::CloudFlareMode::Plaintext => {
+                    landscape_common::dns::CloudflareMode::Plaintext => {
                         NameServerConfigGroup::cloudflare()
                     }
-                    landscape_common::dns::CloudFlareMode::Tls => {
+                    landscape_common::dns::CloudflareMode::Tls => {
                         NameServerConfigGroup::cloudflare_tls()
                     }
-                    landscape_common::dns::CloudFlareMode::Https => {
+                    landscape_common::dns::CloudflareMode::Https => {
                         NameServerConfigGroup::cloudflare_https()
                     }
                 };

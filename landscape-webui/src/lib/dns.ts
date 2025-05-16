@@ -1,7 +1,14 @@
 import { FlowDnsMark } from "@/rust_bindings/flow";
 import { FlowDnsMarkType } from "./default_value";
+import {
+  DNSResolveMode,
+  DNSRuleConfig,
+  FilterResult,
+  RuleSource,
+} from "@/rust_bindings/dns";
 
-export class DnsRule {
+export class DnsRule implements DNSRuleConfig {
+  id: string | null;
   index: number;
   name: string;
   enable: boolean;
@@ -9,16 +16,10 @@ export class DnsRule {
   source: RuleSource[];
   resolve_mode: DNSResolveMode;
   flow_id: number;
+  filter: FilterResult;
 
-  constructor(obj?: {
-    index?: number;
-    name?: string;
-    enable?: boolean;
-    mark?: FlowDnsMark;
-    source?: RuleSource[];
-    resolve_mode?: DNSResolveMode;
-    flow_id: number;
-  }) {
+  constructor(obj?: Partial<DNSRuleConfig>) {
+    this.id = obj?.id ?? null;
     this.index = obj?.index ?? -1;
     this.name = obj?.name ?? "";
     this.enable = obj?.enable ?? true;
@@ -27,23 +28,29 @@ export class DnsRule {
     this.resolve_mode = obj?.resolve_mode
       ? { ...obj.resolve_mode }
       : {
-          t: DNSResolveModeEnum.CloudFlare,
-          mode: CloudFlareMode.Https,
+          t: DNSResolveModeEnum.Cloudflare,
+          mode: CloudflareMode.Https,
         };
     this.flow_id = obj?.flow_id ?? 0;
+    this.filter = obj?.filter ?? "unfilter";
   }
 }
 
-export enum DomainMatchType {
+export enum DomainMatchTypeEnum {
   Plain = "plain",
   Regex = "regex",
   Domain = "domain",
   Full = "full",
 }
 
-export type RuleSource =
-  | { t: "geokey"; key: string }
-  | { t: "config"; match_type: DomainMatchType; value: string };
+export enum RuleSourceEnum {
+  GeoKey = "geo_key",
+  Config = "config",
+}
+
+// export type RuleSource =
+//   | { t: "geokey"; key: string }
+//   | { t: "config"; match_type: DomainMatchType; value: string };
 
 export enum MarkType {
   NoMark = "nomark",
@@ -66,6 +73,17 @@ export type PacketMark =
   | { t: MarkType.SymmetricNat }
   | { t: MarkType.RedirectNetns; index: number };
 
+export function get_dns_filter_options(): {
+  label: string;
+  value: string;
+}[] {
+  return [
+    { label: "不过滤", value: FilterResultEnum.Unfilter },
+    { label: "仅 IPv4", value: FilterResultEnum.OnlyIPv4 },
+    { label: "仅 IPv6", value: FilterResultEnum.OnlyIPv6 },
+  ];
+}
+
 export function get_dns_resolve_mode_options(): {
   label: string;
   value: string;
@@ -73,7 +91,7 @@ export function get_dns_resolve_mode_options(): {
   return [
     { label: "重定向", value: DNSResolveModeEnum.Redirect },
     { label: "自定义上游", value: DNSResolveModeEnum.Upstream },
-    { label: "CloudFlare", value: DNSResolveModeEnum.CloudFlare },
+    { label: "Cloudflare", value: DNSResolveModeEnum.Cloudflare },
   ];
 }
 
@@ -91,7 +109,7 @@ export function get_dns_upstream_type_options(): {
 export enum DNSResolveModeEnum {
   Redirect = "redirect",
   Upstream = "upstream",
-  CloudFlare = "cloudflare",
+  Cloudflare = "cloudflare",
 }
 
 export enum DnsUpstreamTypeEnum {
@@ -100,7 +118,7 @@ export enum DnsUpstreamTypeEnum {
   Https = "https",
 }
 
-export enum CloudFlareMode {
+export enum CloudflareMode {
   Plaintext = "plaintext",
   Tls = "tls",
   Https = "https",
@@ -111,10 +129,10 @@ export type DnsUpstreamType =
   | { t: DnsUpstreamTypeEnum.Tls; domain: string }
   | { t: DnsUpstreamTypeEnum.Https; domain: string };
 
-export type DNSResolveMode =
-  | { t: DNSResolveModeEnum.Redirect; ips: string[] }
-  | DnsUpstreamMode
-  | { t: DNSResolveModeEnum.CloudFlare; mode: CloudFlareMode };
+// export type DNSResolveMode =
+//   | { t: DNSResolveModeEnum.Redirect; ips: string[] }
+//   | DnsUpstreamMode
+//   | { t: DNSResolveModeEnum.Cloudflare; mode: CloudFlareMode };
 
 export type DnsUpstreamMode = {
   t: DNSResolveModeEnum.Upstream;

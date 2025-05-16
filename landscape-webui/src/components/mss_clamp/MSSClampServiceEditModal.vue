@@ -13,7 +13,6 @@ const emit = defineEmits(["refresh"]);
 
 const iface_info = defineProps<{
   iface_name: string;
-  zone: IfaceZoneType;
 }>();
 
 const service_config = ref<MSSClampServiceConfig>({
