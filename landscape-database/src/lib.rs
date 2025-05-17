@@ -8,6 +8,5 @@ pub mod repository;
 pub(crate) type DBId = Uuid;
 /// 定义 JSON
 pub(crate) type DBJson = serde_json::Value;
-/// 定义通用时间存储
-#[allow(dead_code)]
-pub(crate) type DBTime = f64;
+/// 定义通用时间戳存储
+pub(crate) type DBTimestamp = f64;

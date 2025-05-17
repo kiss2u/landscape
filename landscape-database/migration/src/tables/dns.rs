@@ -12,4 +12,5 @@ pub enum DNSRuleConfigs {
     Mark,
     Source,
     FlowId,
+    UpdateAt,
 }

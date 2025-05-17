@@ -4,9 +4,9 @@ use config::from_phy_dev;
 use dev_wifi::LandscapeWifiInterface;
 use futures::stream::TryStreamExt;
 use landscape_common::{
-    config::iface::{NetworkIfaceConfig, WifiMode},
+    config::iface::{IfaceCpuSoftBalance, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     error::LdResult,
-    iface::{AddController, BridgeCreate, ChangeZone, IfaceCpuSoftBalance, IfaceZoneType},
+    iface::{AddController, BridgeCreate, ChangeZone},
 };
 use rtnetlink::new_connection;
 use serde::Serialize;
@@ -325,7 +325,8 @@ pub fn cpu_nums() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use landscape_common::iface::IfaceCpuSoftBalance;
+
+    use landscape_common::config::iface::IfaceCpuSoftBalance;
 
     use super::setting_iface_balance;
 

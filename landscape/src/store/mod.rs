@@ -1,9 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
-use landscape_common::{config::iface::NetworkIfaceConfig, store::storev2::StoreFileManager};
+use landscape_common::{
+    config::{iface::NetworkIfaceConfig, InitConfig},
+    store::storev2::StoreFileManager,
+};
 use tokio::sync::Mutex;
-
-use crate::boot::InitConfig;
 
 pub type LockStore<T> = Arc<Mutex<StoreFileManager<T>>>;
 

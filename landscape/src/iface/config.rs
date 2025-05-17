@@ -1,8 +1,5 @@
 use crate::dev::{DeviceKind, DeviceType, LandscapeInterface};
-use landscape_common::{
-    config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode},
-    iface::IfaceZoneType,
-};
+use landscape_common::config::iface::{CreateDevType, IfaceZoneType, NetworkIfaceConfig, WifiMode};
 
 use super::dev_wifi::LandscapeWifiInterface;
 

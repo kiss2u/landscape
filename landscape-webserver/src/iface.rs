@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
 };
 use landscape::{iface::IfaceManagerService, store::LandscapeStoreServiceProvider};
-use landscape_common::iface::{BridgeCreate, IfaceCpuSoftBalance};
+use landscape_common::{config::iface::IfaceCpuSoftBalance, iface::BridgeCreate};
 use landscape_common::{
     config::iface::WifiMode,
     iface::{AddController, ChangeZone},

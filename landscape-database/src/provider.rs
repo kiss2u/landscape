@@ -1,11 +1,14 @@
 use std::time::Duration;
 
+use landscape_common::config::InitConfig;
 use sea_orm::{Database, DatabaseConnection};
 
 use migration::{Migrator, MigratorTrait};
 
-use crate::repository::dns::DNSRepository;
+use crate::repository::{dns::DNSRepository, iface::NetIfaceRepository};
 
+/// 存储提供者
+/// 后续有需要再进行抽象
 pub struct LandscapeDBServiceProvider {
     database: DatabaseConnection,
 }
@@ -21,8 +24,23 @@ impl LandscapeDBServiceProvider {
         Self { database }
     }
 
+    /// 清空数据并且从配置从初始化
+    pub async fn truncate_and_fit_from(&mut self, config: Option<InitConfig>) {
+        if let Some(config) = config {
+            let iface_store = self.iface_store();
+            iface_store.truncate().await.unwrap();
+            for each_config in config.ifaces {
+                iface_store.set(each_config).await.unwrap();
+            }
+        }
+    }
+
     pub fn dns_store(&self) -> DNSRepository {
         DNSRepository::new(self.database.clone())
+    }
+
+    pub fn iface_store(&self) -> NetIfaceRepository {
+        NetIfaceRepository::new(self.database.clone())
     }
 }
 

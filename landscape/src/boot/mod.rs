@@ -1,19 +1,8 @@
 use std::{fs::OpenOptions, io::Write, path::Path};
 
-use serde::{Deserialize, Serialize};
-
 use landscape_common::{
-    config::dns::DNSRuleConfig,
-    config::{
-        dhcp_v4_server::DHCPv4ServiceConfig, dhcp_v6_client::IPV6PDServiceConfig,
-        firewall::FirewallServiceConfig, flow::PacketMarkServiceConfig, iface::NetworkIfaceConfig,
-        mss_clamp::MSSClampServiceConfig, nat::NatServiceConfig, ppp::PPPDServiceConfig,
-        ra::IPV6RAServiceConfig, wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig,
-    },
+    config::InitConfig,
     error::{LdError, LdResult},
-    firewall::FirewallRuleConfig,
-    flow::FlowConfig,
-    ip_mark::WanIPRuleConfig,
     INIT_FILE_NAME, INIT_LOCK_FILE_NAME,
 };
 
@@ -60,30 +49,4 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     }
 
     Err(LdError::Boot("check boot lock file faile: is not a file".to_string()))
-}
-
-/// 初始化配置结构体
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(default)]
-pub struct InitConfig {
-    pub ifaces: Vec<NetworkIfaceConfig>,
-    pub ipconfigs: Vec<IfaceIpServiceConfig>,
-    pub nats: Vec<NatServiceConfig>,
-    pub marks: Vec<PacketMarkServiceConfig>,
-    pub pppds: Vec<PPPDServiceConfig>,
-
-    pub flow_rules: Vec<FlowConfig>,
-    pub dns_rules: Vec<DNSRuleConfig>,
-    pub wan_ip_mark: Vec<WanIPRuleConfig>,
-
-    pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
-    pub icmpras: Vec<IPV6RAServiceConfig>,
-
-    pub firewalls: Vec<FirewallServiceConfig>,
-    pub firewall_rules: Vec<FirewallRuleConfig>,
-
-    pub wifi_configs: Vec<WifiServiceConfig>,
-    pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
-
-    pub mss_clamps: Vec<MSSClampServiceConfig>,
 }

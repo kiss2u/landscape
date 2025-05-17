@@ -9,11 +9,12 @@ use axum::{
 
 use colored::Colorize;
 use landscape::{
-    boot::{boot_check, log::init_logger, InitConfig},
+    boot::{boot_check, log::init_logger},
     store::LandscapeStoreServiceProvider,
 };
 use landscape_common::{
     args::{LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
+    config::InitConfig,
     error::LdResult,
     store::storev2::StoreFileManager,
 };
@@ -55,6 +56,9 @@ async fn main() -> LdResult<()> {
     let home_path = LAND_HOME_PATH.clone();
 
     let mut store_provider = LandscapeStoreServiceProvider::new(home_path.clone());
+
+    // let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
+
     let dev_obs = landscape::observer::dev_observer().await;
     // let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
     let mut iface_ipconfig_store =

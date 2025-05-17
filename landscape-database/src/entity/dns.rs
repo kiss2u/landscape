@@ -2,7 +2,7 @@ use landscape_common::config::dns::DNSRuleConfig;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{DBId, DBJson};
+use crate::{DBId, DBJson, DBTimestamp};
 
 pub type DNSRuleConfigModel = Model;
 pub type DNSRuleConfigEntity = Entity;
@@ -24,6 +24,7 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub source: String,
     pub flow_id: u32,
+    pub update_at: DBTimestamp,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

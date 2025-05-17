@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::iface::NetworkIfaceConfig;
+use crate::config::iface::IfaceZoneType;
 use crate::net_proto::udp::dhcp::DhcpOption;
-use crate::{iface::IfaceZoneType, store::storev2::LandscapeStore};
+use crate::store::storev2::LandscapeStore;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/wanip.d.ts")]

@@ -22,6 +22,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(DNSRuleConfigs::Mark).unsigned())
                     .col(ColumnDef::new(DNSRuleConfigs::Source).text().not_null())
                     .col(ColumnDef::new(DNSRuleConfigs::FlowId).unsigned())
+                    .col(ColumnDef::new(DNSRuleConfigs::UpdateAt).double().default(0).not_null())
                     .to_owned(),
             )
             .await

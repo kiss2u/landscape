@@ -1,8 +1,5 @@
-use crate::{
-    iface::{IfaceCpuSoftBalance, IfaceZoneType},
-    store::storev2::LandscapeStore,
-    LANDSCAPE_DEFAULT_LAN_NAME,
-};
+use crate::{store::storev2::LandscapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
+use sea_orm::{prelude::StringLen, DeriveActiveEnum, EnumIter};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -70,21 +67,45 @@ impl NetworkIfaceConfig {
 }
 
 /// 需要创建的设备类型
-#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
+#[derive(Serialize, Deserialize, TS, Debug, Clone, PartialEq, Eq, Hash, Default)]
 #[ts(export, export_to = "common/iface.d.ts")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
+#[derive(EnumIter, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(100))", rename_all = "snake_case")]
 pub enum CreateDevType {
     #[default]
     NoNeedToCreate,
     Bridge,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
+#[derive(Serialize, Deserialize, TS, Debug, Clone, PartialEq, Eq, Hash, Default)]
 #[ts(export, export_to = "common/iface.d.ts")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
+#[derive(EnumIter, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(100))", rename_all = "snake_case")]
 pub enum WifiMode {
     #[default]
     Undefined,
     Client,
     AP,
+}
+
+#[derive(Serialize, Deserialize, TS, Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[ts(export, export_to = "common/iface.d.ts")]
+#[serde(rename_all = "snake_case")]
+#[derive(EnumIter, DeriveActiveEnum)]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(100))", rename_all = "snake_case")]
+pub enum IfaceZoneType {
+    // 未定义类型
+    #[default]
+    Undefined,
+    Wan,
+    Lan,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
+#[ts(export, export_to = "common/iface.d.ts")]
+pub struct IfaceCpuSoftBalance {
+    pub xps: String,
+    pub rps: String,
 }

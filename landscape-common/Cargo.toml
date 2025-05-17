@@ -28,3 +28,4 @@ paste = { workspace = true }
 hickory-proto = { version = "*", features = ["serde-config"] }
 
 dhcproto = { workspace = true, features = ["serde"] }
+sea-orm = { workspace = true, features = ["with-uuid", "with-json"] }
