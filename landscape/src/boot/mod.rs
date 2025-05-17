@@ -3,13 +3,13 @@ use std::{fs::OpenOptions, io::Write, path::Path};
 use serde::{Deserialize, Serialize};
 
 use landscape_common::{
+    config::dns::DNSRuleConfig,
     config::{
         dhcp_v4_server::DHCPv4ServiceConfig, dhcp_v6_client::IPV6PDServiceConfig,
         firewall::FirewallServiceConfig, flow::PacketMarkServiceConfig, iface::NetworkIfaceConfig,
         mss_clamp::MSSClampServiceConfig, nat::NatServiceConfig, ppp::PPPDServiceConfig,
         ra::IPV6RAServiceConfig, wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig,
     },
-    dns::DNSRuleConfig,
     error::{LdError, LdResult},
     firewall::FirewallRuleConfig,
     flow::FlowConfig,

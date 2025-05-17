@@ -8,7 +8,7 @@ use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 
 /// DNS 配置
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 pub struct DNSRuleConfig {
     pub id: Option<Uuid>,
     pub name: String,
@@ -60,7 +60,7 @@ impl Default for DNSRuleConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "snake_case")]
 pub enum RuleSource {
@@ -69,14 +69,14 @@ pub enum RuleSource {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 pub struct DomainConfig {
     pub match_type: DomainMatchType,
     pub value: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 #[serde(rename_all = "snake_case")]
 pub enum DomainMatchType {
     /// The value is used as is.
@@ -90,7 +90,7 @@ pub enum DomainMatchType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "snake_case")]
 pub enum DNSResolveMode {
@@ -106,7 +106,7 @@ impl Default for DNSResolveMode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "t")]
 pub enum DnsUpstreamType {
@@ -121,7 +121,7 @@ pub enum DnsUpstreamType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 #[serde(rename_all = "snake_case")]
 pub enum CloudflareMode {
     Plaintext, // 1.1.1.1 (UDP/TCP)
@@ -130,7 +130,7 @@ pub enum CloudflareMode {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
-#[ts(export, export_to = "dns.ts")]
+#[ts(export, export_to = "common/dns.d.ts")]
 #[serde(rename_all = "snake_case")]
 pub enum FilterResult {
     #[default]

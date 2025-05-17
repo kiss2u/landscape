@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use landscape_common::dns::DNSRuleConfig;
+use landscape_common::config::dns::DNSRuleConfig;
 use landscape_dns::server::{request::LandscapeDnsRequestHandle, server::DiffFlowServer};
 use tokio::sync::RwLock;
 

@@ -18,7 +18,7 @@ import { computed, onMounted } from "vue";
 import { ref } from "vue";
 import UpstreamEdit from "@/components/dns/upstream/UpstreamEdit.vue";
 import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
-import { RuleSource } from "@/rust_bindings/dns";
+import { RuleSource } from "@/rust_bindings/common/dns";
 
 type Props = {
   data:

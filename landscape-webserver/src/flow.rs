@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::{
-    args::LAND_HOME_PATH, dns::DNSRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig,
+    args::LAND_HOME_PATH, config::dns::DNSRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig,
     store::storev2::StoreFileManager, GEO_IP_FILE_NAME,
 };
 use landscape_dns::{diff_server::LandscapeFiffFlowDnsService, ip_rule::update_wan_rules};

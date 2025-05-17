@@ -5,7 +5,7 @@ use std::{
 };
 
 use landscape_common::{
-    dns::{DomainConfig, DomainMatchType},
+    config::dns::{DomainConfig, DomainMatchType},
     ip_mark::IpConfig,
 };
 use protos::geo::{mod_Domain::Type, Domain, GeoIPListOwned, GeoSiteListOwned};

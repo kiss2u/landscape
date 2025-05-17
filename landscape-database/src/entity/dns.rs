@@ -1,4 +1,4 @@
-use landscape_common::dns::DNSRuleConfig;
+use landscape_common::config::dns::DNSRuleConfig;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 

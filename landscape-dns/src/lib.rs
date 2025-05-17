@@ -1,6 +1,6 @@
 use hickory_proto::rr::{Record, RecordType};
 use landscape_common::{
-    dns::FilterResult,
+    config::dns::FilterResult,
     flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
 };
 use lru::LruCache;

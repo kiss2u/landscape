@@ -5,7 +5,7 @@ import {
   DNSRuleConfig,
   FilterResult,
   RuleSource,
-} from "@/rust_bindings/dns";
+} from "@/rust_bindings/common/dns";
 
 export class DnsRule implements DNSRuleConfig {
   id: string | null;

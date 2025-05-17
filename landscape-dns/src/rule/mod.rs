@@ -10,7 +10,7 @@ use hickory_resolver::{
     Resolver,
 };
 use landscape_common::{
-    dns::{
+    config::dns::{
         DNSResolveMode, DNSRuleConfig, DnsUpstreamType, DomainConfig, DomainMatchType, RuleSource,
     },
     flow::mark::FlowDnsMark,
@@ -82,13 +82,13 @@ impl ResolverType {
             }
             DNSResolveMode::Cloudflare { mode } => {
                 let server = match mode {
-                    landscape_common::dns::CloudflareMode::Plaintext => {
+                    landscape_common::config::dns::CloudflareMode::Plaintext => {
                         NameServerConfigGroup::cloudflare()
                     }
-                    landscape_common::dns::CloudflareMode::Tls => {
+                    landscape_common::config::dns::CloudflareMode::Tls => {
                         NameServerConfigGroup::cloudflare_tls()
                     }
-                    landscape_common::dns::CloudflareMode::Https => {
+                    landscape_common::config::dns::CloudflareMode::Https => {
                         NameServerConfigGroup::cloudflare_https()
                     }
                 };

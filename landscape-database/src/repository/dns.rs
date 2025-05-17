@@ -1,4 +1,4 @@
-use landscape_common::dns::DNSRuleConfig;
+use landscape_common::config::dns::DNSRuleConfig;
 use sea_orm::{DatabaseConnection, DbErr, EntityTrait};
 
 use crate::{entity::dns::DNSRuleConfigEntity, DBId};

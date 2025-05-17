@@ -1,5 +1,5 @@
 use landscape_common::args::LAND_HOME_PATH;
-use landscape_common::dns::{DNSRuleConfig, DomainConfig};
+use landscape_common::config::dns::{DNSRuleConfig, DomainConfig};
 use landscape_common::flow::{FlowConfig, PacketMatchMark};
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use landscape_common::GEO_SITE_FILE_NAME;

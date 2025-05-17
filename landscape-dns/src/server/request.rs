@@ -22,7 +22,7 @@ use tokio::sync::Mutex;
 
 use crate::{rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
-    dns::{DNSRuleConfig, DomainConfig, FilterResult},
+    config::dns::{DNSRuleConfig, DomainConfig, FilterResult},
     flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
 };
 
