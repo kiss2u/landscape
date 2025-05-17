@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::store::storev2::LandscapeStore;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/flow.d.ts")]
 pub struct PacketMarkServiceConfig {
     pub iface_name: String,
     pub enable: bool,

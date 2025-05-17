@@ -1,9 +1,11 @@
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::store::storev2::LandscapeStore;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/nat.d.ts")]
 pub struct NatServiceConfig {
     pub iface_name: String,
     pub enable: bool,
@@ -17,7 +19,8 @@ impl LandscapeStore for NatServiceConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/nat.d.ts")]
 pub struct NatConfig {
     pub tcp_range: Range<u16>,
     pub udp_range: Range<u16>,

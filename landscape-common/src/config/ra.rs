@@ -1,15 +1,18 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::store::storev2::LandscapeStore;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/ra.d.ts")]
 pub struct IPV6RAServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub config: IPV6RAConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/ra.d.ts")]
 pub struct IPV6RAConfig {
     /// 子网前缀长度, 一般是使用 64
     pub subnet_prefix: u8,
@@ -25,7 +28,8 @@ pub struct IPV6RAConfig {
     pub ra_flag: RouterFlags,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, TS)]
+#[ts(export, export_to = "common/ra.d.ts")]
 pub struct RouterFlags {
     pub managed_address_config: bool, // 0b1000_0000
     pub other_config: bool,           // 0b0100_0000

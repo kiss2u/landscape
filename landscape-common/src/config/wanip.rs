@@ -1,12 +1,14 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use super::iface::NetworkIfaceConfig;
 use crate::net_proto::udp::dhcp::DhcpOption;
 use crate::{iface::IfaceZoneType, store::storev2::LandscapeStore};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/wanip.d.ts")]
 pub struct IfaceIpServiceConfig {
     pub iface_name: String,
     pub enable: bool,
@@ -19,7 +21,8 @@ impl LandscapeStore for IfaceIpServiceConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "common/wanip.d.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum IfaceIpModelConfig {
@@ -50,6 +53,7 @@ pub enum IfaceIpModelConfig {
         hostname: Option<String>,
         /// Custome Options
         #[serde(default)]
+        #[ts(type = "Array<any>")]
         custome_opts: Vec<DhcpOption>,
     },
 }

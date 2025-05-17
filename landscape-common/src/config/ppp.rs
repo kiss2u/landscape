@@ -1,10 +1,12 @@
 use std::{fs::OpenOptions, io::Write};
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::store::storev2::LandscapeStore;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/ppp.d.ts")]
 pub struct PPPDServiceConfig {
     pub attach_iface_name: String,
     pub iface_name: String,
@@ -18,7 +20,8 @@ impl LandscapeStore for PPPDServiceConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/ppp.d.ts")]
 pub struct PPPDConfig {
     pub default_route: bool,
     pub peer_id: String,
