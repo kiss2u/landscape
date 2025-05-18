@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// 仅定义当前 common 错误
 #[derive(Error, Debug)]
 pub enum LdError {
     #[error("Lnadscape boot error: {0}")]

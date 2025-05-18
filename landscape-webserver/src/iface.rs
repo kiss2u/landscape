@@ -3,17 +3,18 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape::{iface::IfaceManagerService, store::LandscapeStoreServiceProvider};
+use landscape::iface::IfaceManagerService;
 use landscape_common::{config::iface::IfaceCpuSoftBalance, iface::BridgeCreate};
 use landscape_common::{
     config::iface::WifiMode,
     iface::{AddController, ChangeZone},
 };
+use landscape_database::provider::LandscapeDBServiceProvider;
 use serde_json::Value;
 
 use crate::SimpleResult;
 
-pub async fn get_network_paths(store: LandscapeStoreServiceProvider) -> Router {
+pub async fn get_network_paths(store: LandscapeDBServiceProvider) -> Router {
     let share_state = IfaceManagerService::new(store).await;
     Router::new()
         .route("/", get(get_ifaces))

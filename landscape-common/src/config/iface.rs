@@ -1,3 +1,4 @@
+use crate::utils::time::get_f64_timestamp;
 use crate::{store::storev2::LandscapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
 use sea_orm::{prelude::StringLen, DeriveActiveEnum, EnumIter};
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,9 @@ pub struct NetworkIfaceConfig {
     /// NIC XPS / RPS Config
     #[serde(default)]
     pub xps_rps: Option<IfaceCpuSoftBalance>,
+
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl LandscapeStore for NetworkIfaceConfig {
@@ -62,6 +66,7 @@ impl NetworkIfaceConfig {
             zone_type: zone_type.unwrap_or_default(),
             wifi_mode: WifiMode::default(),
             xps_rps: None,
+            update_at: get_f64_timestamp(),
         }
     }
 }
@@ -87,6 +92,7 @@ pub enum WifiMode {
     #[default]
     Undefined,
     Client,
+    #[ts(rename = "ap")]
     AP,
 }
 

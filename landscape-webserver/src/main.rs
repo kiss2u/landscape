@@ -8,16 +8,14 @@ use axum::{
 };
 
 use colored::Colorize;
-use landscape::{
-    boot::{boot_check, log::init_logger},
-    store::LandscapeStoreServiceProvider,
-};
+use landscape::boot::{boot_check, log::init_logger};
 use landscape_common::{
-    args::{LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
+    args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
     config::InitConfig,
     error::LdResult,
     store::storev2::StoreFileManager,
 };
+use landscape_database::provider::LandscapeDBServiceProvider;
 use serde::{Deserialize, Serialize};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
@@ -55,9 +53,7 @@ async fn main() -> LdResult<()> {
 
     let home_path = LAND_HOME_PATH.clone();
 
-    let mut store_provider = LandscapeStoreServiceProvider::new(home_path.clone());
-
-    // let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
+    let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
 
     let dev_obs = landscape::observer::dev_observer().await;
     // let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
@@ -92,7 +88,7 @@ async fn main() -> LdResult<()> {
 
     let need_init_config = boot_check(&home_path)?;
 
-    store_provider.truncate_and_fit_from(need_init_config.clone()).await;
+    db_store_provider.truncate_and_fit_from(need_init_config.clone()).await;
 
     let home_log_str = format!("{}", home_path.display()).bright_green();
     if !LAND_ARGS.log_output_in_terminal {
@@ -243,7 +239,7 @@ async fn main() -> LdResult<()> {
     auth::output_sys_token().await;
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
-        .nest("/iface", iface::get_network_paths(store_provider.clone()).await)
+        .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest("/global_mark", global_mark::get_global_mark_paths(firewall_rules_store).await)
         .nest("/metric", metric::get_metric_service_paths().await)
         .nest("/flow", flow::get_flow_paths(flow_store, dns_store, wan_ip_mark_store).await)

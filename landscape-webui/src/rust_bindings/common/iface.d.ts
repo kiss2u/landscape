@@ -14,7 +14,7 @@ export type ChangeZone = { iface_name: string; zone: IfaceZoneType };
 /**
  * 需要创建的设备类型
  */
-export type CreateDevType = "noneedtocreate" | "bridge";
+export type CreateDevType = "no_need_to_create" | "bridge";
 
 export type IfaceCpuSoftBalance = { xps: string; rps: string };
 
@@ -34,6 +34,7 @@ export type NetworkIfaceConfig = {
    * NIC XPS / RPS Config
    */
   xps_rps: IfaceCpuSoftBalance | null;
+  update_at: number;
 };
 
 export type WifiMode = "undefined" | "client" | "ap";

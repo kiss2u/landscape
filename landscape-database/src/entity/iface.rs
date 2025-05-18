@@ -1,4 +1,5 @@
 use sea_orm::entity::prelude::*;
+use sea_orm::ActiveValue::Set;
 use serde::{Deserialize, Serialize};
 
 use landscape_common::config::iface::CreateDevType;
@@ -44,6 +45,22 @@ impl From<Model> for NetworkIfaceConfig {
             wifi_mode: entity.wifi_mode,
             // TODO: 打印错误并提示序列化失败
             xps_rps: entity.xps_rps.and_then(|val| serde_json::from_value(val).ok()),
+            update_at: entity.update_at,
+        }
+    }
+}
+
+impl Into<ActiveModel> for NetworkIfaceConfig {
+    fn into(self) -> ActiveModel {
+        ActiveModel {
+            name: Set(self.name),
+            create_dev_type: Set(self.create_dev_type),
+            controller_name: Set(self.controller_name),
+            zone_type: Set(self.zone_type),
+            enable_in_boot: Set(self.enable_in_boot),
+            wifi_mode: Set(self.wifi_mode),
+            xps_rps: Set(self.xps_rps.and_then(|val| serde_json::to_value(&val).ok())),
+            update_at: Set(self.update_at),
         }
     }
 }

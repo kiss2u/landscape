@@ -8,11 +8,12 @@ use landscape_common::{
     error::LdResult,
     iface::{AddController, BridgeCreate, ChangeZone},
 };
+use landscape_database::provider::LandscapeDBServiceProvider;
 use rtnetlink::new_connection;
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::{dev::LandscapeInterface, store::LandscapeStoreServiceProvider};
+use crate::dev::LandscapeInterface;
 
 pub mod config;
 pub mod dev_wifi;
@@ -48,13 +49,13 @@ pub async fn get_iface_by_name(name: &str) -> Option<LandscapeInterface> {
 #[derive(Clone)]
 pub struct IfaceManagerService {
     /// 配置存储
-    pub store_service: LandscapeStoreServiceProvider,
+    pub store_service: LandscapeDBServiceProvider,
 }
 
 impl IfaceManagerService {
-    pub async fn new(store_service: LandscapeStoreServiceProvider) -> Self {
-        let mut store = store_service.iface_store.lock().await;
-        crate::init_devs(store.list()).await;
+    pub async fn new(store_service: LandscapeDBServiceProvider) -> Self {
+        let store = store_service.iface_store();
+        crate::init_devs(store.list().await.unwrap()).await;
         drop(store);
         Self { store_service }
     }
@@ -248,19 +249,19 @@ impl IfaceManagerService {
     }
 
     async fn set_iface_config(&self, config: NetworkIfaceConfig) {
-        let mut store = self.store_service.iface_store.lock().await;
-        store.set(config);
+        let store = self.store_service.iface_store();
+        store.set(config).await.unwrap();
         drop(store);
     }
 
     pub async fn get_iface_config(&self, key: &str) -> Option<NetworkIfaceConfig> {
-        let mut store = self.store_service.iface_store.lock().await;
-        store.get(key)
+        let store = self.store_service.iface_store();
+        store.get_by_name(key).await.ok()?
     }
 
     async fn get_iface_configs(&self) -> Vec<NetworkIfaceConfig> {
-        let mut store = self.store_service.iface_store.lock().await;
-        store.list()
+        let store = self.store_service.iface_store();
+        store.list().await.unwrap()
     }
 }
 

@@ -7,8 +7,9 @@ use migration::{Migrator, MigratorTrait};
 
 use crate::repository::{dns::DNSRepository, iface::NetIfaceRepository};
 
-/// 存储提供者
+/// 存储提供者  
 /// 后续有需要再进行抽象
+#[derive(Clone)]
 pub struct LandscapeDBServiceProvider {
     database: DatabaseConnection,
 }
@@ -25,7 +26,7 @@ impl LandscapeDBServiceProvider {
     }
 
     /// 清空数据并且从配置从初始化
-    pub async fn truncate_and_fit_from(&mut self, config: Option<InitConfig>) {
+    pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
         if let Some(config) = config {
             let iface_store = self.iface_store();
             iface_store.truncate().await.unwrap();

@@ -6,7 +6,10 @@ use std::{
 use clap::{arg, Parser};
 use once_cell::sync::Lazy;
 
-use crate::{LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_LOG_DIR_NAME, LANDSCAPE_WEBROOT_DIR_NAME};
+use crate::{
+    LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_DB_SQLITE_NAME, LANDSCAPE_LOG_DIR_NAME,
+    LANDSCAPE_WEBROOT_DIR_NAME,
+};
 
 pub static LAND_HOSTNAME: Lazy<String> = Lazy::new(|| {
     let hostname = hostname::get().expect("无法获取主机名");
@@ -53,7 +56,25 @@ pub static DATABASE_ARGS: Lazy<String> = Lazy::new(|| {
     if let Some(database_path) = &LAND_ARGS.database_path {
         database_path.clone()
     } else {
-        format!("sqlite://{}?mode=rwc", LAND_HOME_PATH.join(LANDSCAPE_LOG_DIR_NAME).display())
+        let path = LAND_HOME_PATH.join(LANDSCAPE_DB_SQLITE_NAME);
+        // 检查路径是否存在
+        if path.exists() {
+            if path.is_dir() {
+                panic!(
+                    "Expected a file path for database, but found a directory: {}",
+                    path.display()
+                );
+            }
+        } else {
+            // 确保目录存在
+            if let Some(parent) = path.parent() {
+                if !parent.exists() {
+                    std::fs::create_dir_all(parent).expect("Failed to create database directory");
+                }
+            }
+            std::fs::File::create(&path).expect("Failed to create database file");
+        }
+        format!("sqlite://{}?mode=rwc", path.display())
     }
 });
 
