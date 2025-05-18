@@ -92,7 +92,7 @@ pub enum WifiMode {
     #[default]
     Undefined,
     Client,
-    #[ts(rename = "ap")]
+    #[serde(rename = "ap")]
     AP,
 }
 
