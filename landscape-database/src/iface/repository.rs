@@ -1,7 +1,7 @@
 use landscape_common::config::iface::NetworkIfaceConfig;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait};
 
-use crate::entity::iface::{NetIfaceConfigActiveModel, NetIfaceConfigEntity};
+use crate::iface::entity::{NetIfaceConfigActiveModel, NetIfaceConfigEntity};
 
 pub struct NetIfaceRepository {
     db: DatabaseConnection,

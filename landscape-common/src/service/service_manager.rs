@@ -100,4 +100,24 @@ impl<H: ServiceHandler> ServiceManager<H> {
             Ok(())
         }
     }
+
+    pub async fn get_all_status(&self) -> HashMap<String, WatchService<H::Status>> {
+        let read_lock = self.services.read().await;
+        let mut result = HashMap::new();
+        for (key, (iface_status, _)) in read_lock.iter() {
+            result.insert(key.clone(), iface_status.clone());
+        }
+        result
+    }
+
+    pub async fn stop_service(&self, name: String) -> Option<WatchService<H::Status>> {
+        let mut write_lock = self.services.write().await;
+        if let Some((iface_status, _)) = write_lock.remove(&name) {
+            drop(write_lock);
+            iface_status.wait_stop().await;
+            Some(iface_status)
+        } else {
+            None
+        }
+    }
 }

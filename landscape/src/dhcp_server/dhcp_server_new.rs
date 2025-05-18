@@ -58,7 +58,7 @@ async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Han
                 if ip_equal && perfix_len_equal {
                     need_create_ip = false;
                 } else {
-                    tracing::info!("del: {addr:?}");
+                    tracing::info!("stop dhcp v4 server and del: {addr:?}");
                     handle.address().del(addr).execute().await.unwrap();
                     need_create_ip = true;
                 }

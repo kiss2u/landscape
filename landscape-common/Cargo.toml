@@ -13,6 +13,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 homedir = { workspace = true }
 hostname = "0.3"
+dotenvy = { workspace = true }
 
 toml_edit = { workspace = true }
 tracing = { workspace = true }

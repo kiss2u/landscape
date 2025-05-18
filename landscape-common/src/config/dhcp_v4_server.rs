@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::net::MacAddr;
+use crate::utils::time::get_f64_timestamp;
 use crate::{store::storev2::LandscapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
 
 use crate::{
@@ -18,6 +19,9 @@ pub struct DHCPv4ServiceConfig {
     pub enable: bool,
     #[serde(default)]
     pub config: DHCPv4ServerConfig,
+    /// 最近一次编译时间
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl Default for DHCPv4ServiceConfig {
@@ -26,6 +30,7 @@ impl Default for DHCPv4ServiceConfig {
             iface_name: LANDSCAPE_DEFAULT_LAN_NAME.into(),
             enable: true,
             config: DHCPv4ServerConfig::default(),
+            update_at: get_f64_timestamp(),
         }
     }
 }

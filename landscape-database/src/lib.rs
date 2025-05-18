@@ -1,7 +1,9 @@
 use sea_orm::prelude::Uuid;
 
+pub mod dhcp_v4_server;
 pub mod entity;
 pub mod error;
+pub mod iface;
 pub mod provider;
 pub mod repository;
 

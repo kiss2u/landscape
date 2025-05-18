@@ -5,7 +5,11 @@ use sea_orm::{Database, DatabaseConnection};
 
 use migration::{Migrator, MigratorTrait};
 
-use crate::repository::{dns::DNSRepository, iface::NetIfaceRepository};
+use crate::{
+    dhcp_v4_server::repository::DHCPv4ServerRepository,
+    iface::repository::NetIfaceRepository,
+    repository::{dns::DNSRepository, Repository},
+};
 
 /// 存储提供者  
 /// 后续有需要再进行抽象
@@ -33,6 +37,11 @@ impl LandscapeDBServiceProvider {
             for each_config in config.ifaces {
                 iface_store.set(each_config).await.unwrap();
             }
+            let dhcp_v4_server_store = self.dhcp_v4_server_store();
+            dhcp_v4_server_store.truncate_table().await.unwrap();
+            for each_config in config.dhcpv4_services {
+                dhcp_v4_server_store.set_model(each_config).await.unwrap();
+            }
         }
     }
 
@@ -42,6 +51,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn iface_store(&self) -> NetIfaceRepository {
         NetIfaceRepository::new(self.database.clone())
+    }
+
+    pub fn dhcp_v4_server_store(&self) -> DHCPv4ServerRepository {
+        DHCPv4ServerRepository::new(self.database.clone())
     }
 }
 

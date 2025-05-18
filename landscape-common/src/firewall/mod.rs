@@ -27,7 +27,6 @@ impl LandscapeStore for FirewallRuleConfig {
 
 /// 配置的小项
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
 pub struct FirewallRuleConfigItem {
     // IP 承载的协议
     pub ip_protocol: Option<LandscapeIpProtocolCode>,
@@ -38,7 +37,6 @@ pub struct FirewallRuleConfigItem {
 
 /// 存入 bpf map 中的遍历项
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
 pub struct FirewallRuleItem {
     pub ip_protocol: Option<LandscapeIpProtocolCode>,
     pub local_port: Option<u16>,

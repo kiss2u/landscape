@@ -249,7 +249,10 @@ async fn main() -> LdResult<()> {
                 .merge(get_mss_clamp_service_paths(mss_clamp_store, dev_obs.resubscribe()).await)
                 .merge(get_firewall_service_paths(firewall_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_ipconfig_paths(iface_ipconfig_store, dev_obs.resubscribe()).await)
-                .merge(get_dhcp_v4_service_paths(dhcpv4_service_store, dev_obs.resubscribe()).await)
+                .merge(
+                    get_dhcp_v4_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
                 .merge(get_wifi_service_paths(wifi_config_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_pppd_paths(iface_pppd_store).await)
                 .merge(get_iface_pdclient_paths(ipv6pd_store, dev_obs.resubscribe()).await)

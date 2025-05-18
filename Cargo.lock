@@ -2499,6 +2499,7 @@ version = "0.4.12"
 dependencies = [
  "clap 4.5.27",
  "dhcproto",
+ "dotenvy",
  "hickory-proto 0.24.1",
  "homedir",
  "hostname",
