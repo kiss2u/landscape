@@ -3,9 +3,11 @@ use std::net::Ipv4Addr;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::database::repository::LandscapeDBStore;
 use crate::net::MacAddr;
+use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
-use crate::{store::storev2::LandscapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
+use crate::LANDSCAPE_DEFAULT_LAN_NAME;
 
 use crate::{
     LANDSCAPE_DEFAULE_LAN_DHCP_RANGE_START, LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP,
@@ -37,6 +39,12 @@ impl Default for DHCPv4ServiceConfig {
 
 impl LandscapeStore for DHCPv4ServiceConfig {
     fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
+}
+
+impl LandscapeDBStore<String> for DHCPv4ServiceConfig {
+    fn get_id(&self) -> String {
         self.iface_name.clone()
     }
 }

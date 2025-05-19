@@ -1,4 +1,7 @@
-use landscape_common::config::dhcp_v6_client::{IPV6PDConfig, IPV6PDServiceConfig};
+use landscape_common::{
+    config::dhcp_v6_client::{IPV6PDConfig, IPV6PDServiceConfig},
+    database::repository::UpdateActiveModel,
+};
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
@@ -43,13 +46,21 @@ impl Into<ActiveModel> for IPV6PDServiceConfig {
             iface_name: Set(self.iface_name.clone()),
             ..Default::default()
         };
-        update(self, &mut active);
+        self.update(&mut active);
         active
     }
 }
 
-pub(crate) fn update(config: IPV6PDServiceConfig, active: &mut ActiveModel) {
-    active.enable = Set(config.enable);
-    active.mac = Set(config.config.mac.to_string());
-    active.update_at = Set(config.update_at);
+impl UpdateActiveModel<ActiveModel> for IPV6PDServiceConfig {
+    fn update(self, active: &mut ActiveModel) {
+        active.enable = Set(self.enable);
+        active.mac = Set(self.config.mac.to_string());
+        active.update_at = Set(self.update_at);
+    }
 }
+
+// pub(crate) fn update(config: IPV6PDServiceConfig, active: &mut ActiveModel) {
+//     active.enable = Set(config.enable);
+//     active.mac = Set(config.config.mac.to_string());
+//     active.update_at = Set(config.update_at);
+// }

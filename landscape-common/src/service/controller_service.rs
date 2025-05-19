@@ -12,7 +12,7 @@ use super::{
 pub trait ControllerService {
     type ID: ToString + Clone + Send;
     type Config: Send + Sync + Clone;
-    type DatabseAction: LandscapeServiceDBTrait<Data = Self::Config, ID = Self::ID> + Send;
+    type DatabseAction: LandscapeServiceDBTrait<Data = Self::Config, Id = Self::ID> + Send;
     type H: ServiceHandler<Config = Self::Config>;
 
     fn get_service(&self) -> &ServiceManager<Self::H>;

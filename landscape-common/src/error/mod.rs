@@ -1,3 +1,4 @@
+use sea_orm::DbErr;
 use thiserror::Error;
 
 /// 仅定义当前 common 错误
@@ -14,6 +15,9 @@ pub enum LdError {
 
     #[error("setting cpu balance error: {0}")]
     SettingCpuBalanceError(String),
+
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] DbErr),
 }
 
 pub type LdResult<T> = Result<T, LdError>;

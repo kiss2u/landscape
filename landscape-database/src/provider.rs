@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use landscape_common::config::InitConfig;
+use landscape_common::{config::InitConfig, database::repository::Repository};
 use sea_orm::{Database, DatabaseConnection};
 
 use migration::{Migrator, MigratorTrait};
@@ -8,7 +8,7 @@ use migration::{Migrator, MigratorTrait};
 use crate::{
     dhcp_v4_server::repository::DHCPv4ServerRepository,
     dhcp_v6_client::repository::DHCPv6ClientRepository, dns::repository::DNSRepository,
-    iface::repository::NetIfaceRepository, repository::Repository,
+    iface::repository::NetIfaceRepository,
 };
 
 /// 存储提供者  

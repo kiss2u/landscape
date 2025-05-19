@@ -125,22 +125,22 @@ impl<R: ResponseHandler> ResponseHandler for ReportingResponseHandler<R> {
         let additional_count = response_info.additional_count();
         let response_code = response_info.response_code();
 
-        tracing::info!(
-            "request:{id} src:{proto}://{addr}#{port} {op} qflags:{qflags} response:{code:?} rr:{answers}/{authorities}/{additionals} rflags:{rflags}",
-            id = rid,
-            proto = self.protocol,
-            addr = self.src_addr.ip(),
-            port = self.src_addr.port(),
-            op = self.request_header.op_code(),
-            qflags = self.request_header.flags(),
-            code = response_code,
-            answers = answer_count,
-            authorities = authority_count,
-            additionals = additional_count,
-            rflags = rflags
-        );
+        tracing::debug!(
+                "request:{id} src:{proto}://{addr}#{port} {op} qflags:{qflags} response:{code:?} rr:{answers}/{authorities}/{additionals} rflags:{rflags}",
+                id = rid,
+                proto = self.protocol,
+                addr = self.src_addr.ip(),
+                port = self.src_addr.port(),
+                op = self.request_header.op_code(),
+                qflags = self.request_header.flags(),
+                code = response_code,
+                answers = answer_count,
+                authorities = authority_count,
+                additionals = additional_count,
+                rflags = rflags
+            );
         for query in self.queries.iter() {
-            tracing::info!(
+            tracing::debug!(
                 "query:{query}:{qtype}:{class}",
                 query = query.name(),
                 qtype = query.query_type(),

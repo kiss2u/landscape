@@ -6,7 +6,6 @@ pub mod dns;
 pub mod error;
 pub mod iface;
 pub mod provider;
-pub mod repository;
 
 /// 定义 ID 类型
 pub(crate) type DBId = Uuid;

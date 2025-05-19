@@ -1,4 +1,7 @@
-use landscape_common::config::dhcp_v4_server::{DHCPv4ServerConfig, DHCPv4ServiceConfig};
+use landscape_common::{
+    config::dhcp_v4_server::{DHCPv4ServerConfig, DHCPv4ServiceConfig},
+    database::repository::UpdateActiveModel,
+};
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
@@ -60,6 +63,20 @@ impl Into<ActiveModel> for DHCPv4ServiceConfig {
         };
         update(self, &mut active);
         active
+    }
+}
+
+impl UpdateActiveModel<ActiveModel> for DHCPv4ServiceConfig {
+    fn update(self, active: &mut ActiveModel) {
+        active.enable = Set(self.enable);
+        active.ip_range_start = Set(self.config.ip_range_start.to_string());
+        active.ip_range_end = Set(self.config.ip_range_end.map(|ip| ip.to_string()));
+        active.server_ip_addr = Set(self.config.server_ip_addr.to_string());
+        active.network_mask = Set(self.config.network_mask);
+        active.address_lease_time = Set(self.config.address_lease_time);
+        active.mac_binding_records = Set(serde_json::to_value(&self.config.mac_binding_records)
+            .unwrap_or(serde_json::Value::Array(vec![])));
+        active.update_at = Set(self.update_at);
     }
 }
 
