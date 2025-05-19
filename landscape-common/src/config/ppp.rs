@@ -3,7 +3,9 @@ use std::{fs::OpenOptions, io::Write};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::database::repository::LandscapeDBStore;
 use crate::store::storev2::LandscapeStore;
+use crate::utils::time::get_f64_timestamp;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/ppp.d.ts")]
@@ -12,10 +14,18 @@ pub struct PPPDServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub pppd_config: PPPDConfig,
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl LandscapeStore for PPPDServiceConfig {
     fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
+}
+
+impl LandscapeDBStore<String> for PPPDServiceConfig {
+    fn get_id(&self) -> String {
         self.iface_name.clone()
     }
 }

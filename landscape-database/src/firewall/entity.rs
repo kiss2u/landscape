@@ -12,8 +12,9 @@ pub type FirewallServiceConfigActiveModel = ActiveModel;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "firewall_service_configs")]
+#[cfg_attr(feature = "postgres", sea_orm(schema_name = "public"))]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub iface_name: String,
     pub enable: bool,
 

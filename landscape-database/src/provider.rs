@@ -11,6 +11,7 @@ use crate::{
     firewall::repository::FirewallServiceRepository,
     flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
     mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
+    pppd::repository::PPPDServiceRepository,
 };
 
 /// 存储提供者  
@@ -77,6 +78,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn nat_service_store(&self) -> NatServiceRepository {
         NatServiceRepository::new(self.database.clone())
+    }
+
+    pub fn pppd_service_store(&self) -> PPPDServiceRepository {
+        PPPDServiceRepository::new(self.database.clone())
     }
 }
 

@@ -76,7 +76,13 @@ where
             config.update(&mut d);
             Ok(d.update(self.db()).await?.into())
         } else {
-            Ok(self.set_model(config).await?)
+            match self.set_model(config).await {
+                Ok(data) => Ok(data),
+                Err(e) => {
+                    tracing::error!("e: {e:?}");
+                    Err(e)
+                }
+            }
         }
     }
 }

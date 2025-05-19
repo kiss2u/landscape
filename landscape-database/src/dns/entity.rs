@@ -10,6 +10,7 @@ pub type DNSRuleConfigActiveModel = ActiveModel;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "dns_rule_configs")]
+#[cfg_attr(feature = "postgres", sea_orm(schema_name = "public"))]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     /// 主键 ID

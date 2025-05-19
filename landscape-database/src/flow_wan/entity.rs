@@ -13,7 +13,7 @@ pub type FlowWanServiceConfigActiveModel = ActiveModel;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "flow_wan_service_configs")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub iface_name: String,
     pub enable: bool,
 
