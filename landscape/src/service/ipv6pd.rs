@@ -83,7 +83,7 @@ impl DHCPv6ClientManagerService {
             while let Ok(msg) = dev_observer.recv().await {
                 match msg {
                     IfaceObserverAction::Up(iface_name) => {
-                        tracing::info!("restart {iface_name} Firewall service");
+                        tracing::info!("restart {iface_name} IPv6PD service");
                         let service_config = if let Some(service_config) =
                             store.find_by_iface_name(iface_name.clone()).await.unwrap()
                         {

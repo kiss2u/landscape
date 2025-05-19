@@ -247,7 +247,10 @@ async fn main() -> LdResult<()> {
             "/services",
             Router::new()
                 .merge(get_mss_clamp_service_paths(mss_clamp_store, dev_obs.resubscribe()).await)
-                .merge(get_firewall_service_paths(firewall_store, dev_obs.resubscribe()).await)
+                .merge(
+                    get_firewall_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
                 .merge(get_iface_ipconfig_paths(iface_ipconfig_store, dev_obs.resubscribe()).await)
                 .merge(
                     get_dhcp_v4_service_paths(db_store_provider.clone(), dev_obs.resubscribe())

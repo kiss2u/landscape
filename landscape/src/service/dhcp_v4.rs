@@ -51,6 +51,7 @@ pub struct DHCPv4ServerManagerService {
     service: ServiceManager<DHCPv4Service>,
     store: DHCPv4ServerRepository,
 }
+
 impl ControllerService for DHCPv4ServerManagerService {
     type ID = String;
 
