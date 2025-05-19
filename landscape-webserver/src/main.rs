@@ -246,7 +246,10 @@ async fn main() -> LdResult<()> {
         .nest(
             "/services",
             Router::new()
-                .merge(get_mss_clamp_service_paths(mss_clamp_store, dev_obs.resubscribe()).await)
+                .merge(
+                    get_mss_clamp_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
                 .merge(
                     get_firewall_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,

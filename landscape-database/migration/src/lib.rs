@@ -6,6 +6,7 @@ mod m20250518_081203_dhcp_v4_server;
 mod m20250519_004726_dhcp_v6_client;
 mod m20250519_070236_firewall;
 mod m20250519_074411_flow_wan;
+mod m20250519_081012_mss_clamp;
 mod tables;
 
 pub struct Migrator;
@@ -20,6 +21,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250519_004726_dhcp_v6_client::Migration),
             Box::new(m20250519_070236_firewall::Migration),
             Box::new(m20250519_074411_flow_wan::Migration),
+            Box::new(m20250519_081012_mss_clamp::Migration),
         ]
     }
 }

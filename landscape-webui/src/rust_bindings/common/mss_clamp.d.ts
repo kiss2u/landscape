@@ -8,4 +8,5 @@ export type MSSClampServiceConfig = {
    * PPPoE: 1500 - 8 = 1492
    */
   clamp_size: number;
+  update_at: number;
 };

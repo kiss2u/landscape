@@ -1,58 +1,27 @@
-use std::{collections::HashMap, sync::Arc};
-
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
+use landscape_common::service::controller_service::ControllerService;
 
-use landscape::service::mss_clamp::MSSClampService;
+use landscape::service::mss_clamp::MssClampServiceManagerService;
 use landscape_common::{
-    config::mss_clamp::MSSClampServiceConfig,
-    observer::IfaceObserverAction,
-    service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
-    store::storev2::StoreFileManager,
+    config::mss_clamp::MSSClampServiceConfig, observer::IfaceObserverAction,
+    service::DefaultWatchServiceStatus,
 };
 
+use landscape_database::provider::LandscapeDBServiceProvider;
 use serde_json::Value;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::broadcast;
 
 use crate::{error::LandscapeApiError, SimpleResult};
 
-#[derive(Clone)]
-struct LandscapeMSSClampService {
-    service: ServiceManager<MSSClampService>,
-    store: Arc<Mutex<StoreFileManager<MSSClampServiceConfig>>>,
-}
-
 pub async fn get_mss_clamp_service_paths(
-    mut store: StoreFileManager<MSSClampServiceConfig>,
-    mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+    store: LandscapeDBServiceProvider,
+    dev_observer: broadcast::Receiver<IfaceObserverAction>,
 ) -> Router {
-    let share_state = LandscapeMSSClampService {
-        service: ServiceManager::init(store.list()).await,
-        store: Arc::new(Mutex::new(store)),
-    };
-
-    let share_state_copy = share_state.clone();
-    tokio::spawn(async move {
-        while let Ok(msg) = dev_observer.recv().await {
-            match msg {
-                IfaceObserverAction::Up(iface_name) => {
-                    tracing::info!("restart {iface_name} mss_clamp service");
-                    let mut read_lock = share_state_copy.store.lock().await;
-                    let service_config = if let Some(service_config) = read_lock.get(&iface_name) {
-                        service_config
-                    } else {
-                        continue;
-                    };
-                    drop(read_lock);
-                    let _ = share_state_copy.service.update_service(service_config).await;
-                }
-                IfaceObserverAction::Down(_) => {}
-            }
-        }
-    });
+    let share_state = MssClampServiceManagerService::new(store, dev_observer).await;
     Router::new()
         .route("/mss_clamp/status", get(get_all_iface_service_status))
         .route("/mss_clamp", post(handle_service_config))
@@ -65,24 +34,17 @@ pub async fn get_mss_clamp_service_paths(
 }
 
 async fn get_all_iface_service_status(
-    State(state): State<LandscapeMSSClampService>,
+    State(state): State<MssClampServiceManagerService>,
 ) -> Json<Value> {
-    let read_lock = state.service.services.read().await;
-    let mut result = HashMap::new();
-    for (key, (iface_status, _)) in read_lock.iter() {
-        result.insert(key.clone(), iface_status.clone());
-    }
-    drop(read_lock);
-    let result = serde_json::to_value(result);
+    let result = serde_json::to_value(state.get_all_status().await);
     Json(result.unwrap())
 }
 
 async fn get_iface_service_conifg(
-    State(state): State<LandscapeMSSClampService>,
+    State(state): State<MssClampServiceManagerService>,
     Path(iface_name): Path<String>,
 ) -> Result<Json<MSSClampServiceConfig>, LandscapeApiError> {
-    let mut read_lock = state.store.lock().await;
-    if let Some(iface_config) = read_lock.get(&iface_name) {
+    if let Some(iface_config) = state.get_config_by_name(iface_name).await {
         Ok(Json(iface_config))
     } else {
         Err(LandscapeApiError::NotFound("can not find".into()))
@@ -90,38 +52,17 @@ async fn get_iface_service_conifg(
 }
 
 async fn handle_service_config(
-    State(state): State<LandscapeMSSClampService>,
-    Json(service_config): Json<MSSClampServiceConfig>,
-) -> Json<Value> {
+    State(state): State<MssClampServiceManagerService>,
+    Json(config): Json<MSSClampServiceConfig>,
+) -> Json<SimpleResult> {
     let result = SimpleResult { success: true };
-
-    // TODO 调用 IfaceIpModelConfig 的 check_iface_status 检查当前的 iface 是否能切换这个状态
-    if let Ok(()) = state.service.update_service(service_config.clone()).await {
-        let mut write_lock = state.store.lock().await;
-        write_lock.set(service_config);
-        drop(write_lock);
-    }
-    let result = serde_json::to_value(result);
-    Json(result.unwrap())
+    state.handle_service_config(config).await;
+    Json(result)
 }
 
 async fn delete_and_stop_iface_service(
-    State(state): State<LandscapeMSSClampService>,
+    State(state): State<MssClampServiceManagerService>,
     Path(iface_name): Path<String>,
-) -> Json<Value> {
-    let mut write_lock = state.store.lock().await;
-    write_lock.del(&iface_name);
-    drop(write_lock);
-
-    let mut write_lock = state.service.services.write().await;
-    let data = if let Some((iface_status, _)) = write_lock.remove(&iface_name) {
-        iface_status
-    } else {
-        DefaultWatchServiceStatus::new()
-    };
-    drop(write_lock);
-    // 停止服务
-    data.wait_stop().await;
-    let result = serde_json::to_value(data);
-    Json(result.unwrap())
+) -> Json<Option<DefaultWatchServiceStatus>> {
+    Json(state.delete_and_stop_iface_service(iface_name).await)
 }
