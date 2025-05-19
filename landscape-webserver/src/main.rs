@@ -255,7 +255,10 @@ async fn main() -> LdResult<()> {
                 )
                 .merge(get_wifi_service_paths(wifi_config_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_pppd_paths(iface_pppd_store).await)
-                .merge(get_iface_pdclient_paths(ipv6pd_store, dev_obs.resubscribe()).await)
+                .merge(
+                    get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
                 .merge(get_iface_icmpv6ra_paths(icmpv6ra_store).await)
                 .merge(get_iface_nat_paths(iface_nat_store, dev_obs.resubscribe()).await)
                 .merge(get_iface_packet_mark_paths(iface_mark_store, dev_obs).await),

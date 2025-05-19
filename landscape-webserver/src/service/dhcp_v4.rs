@@ -5,6 +5,7 @@ use axum::{
 };
 
 use landscape::service::dhcp_v4::DHCPv4ServerManagerService;
+use landscape_common::service::controller_service::ControllerService;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig, observer::IfaceObserverAction,
     service::dhcp::DHCPv4ServiceWatchStatus,

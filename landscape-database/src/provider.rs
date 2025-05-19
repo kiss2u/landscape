@@ -6,7 +6,8 @@ use sea_orm::{Database, DatabaseConnection};
 use migration::{Migrator, MigratorTrait};
 
 use crate::{
-    dhcp_v4_server::repository::DHCPv4ServerRepository, dns::repository::DNSRepository,
+    dhcp_v4_server::repository::DHCPv4ServerRepository,
+    dhcp_v6_client::repository::DHCPv6ClientRepository, dns::repository::DNSRepository,
     iface::repository::NetIfaceRepository, repository::Repository,
 };
 
@@ -54,6 +55,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn dhcp_v4_server_store(&self) -> DHCPv4ServerRepository {
         DHCPv4ServerRepository::new(self.database.clone())
+    }
+
+    pub fn dhcp_v6_client_store(&self) -> DHCPv6ClientRepository {
+        DHCPv6ClientRepository::new(self.database.clone())
     }
 }
 

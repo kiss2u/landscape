@@ -58,3 +58,8 @@ where
         Ok(())
     }
 }
+
+// pub trait UpdateActiveModel {
+
+//     fn update()
+// }

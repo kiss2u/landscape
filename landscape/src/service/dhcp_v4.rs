@@ -1,5 +1,6 @@
-use std::collections::HashMap;
-
+use landscape_common::database::LandscapeDBTrait;
+use landscape_common::database::LandscapeServiceDBTrait;
+use landscape_common::service::controller_service::ControllerService;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig,
     observer::IfaceObserverAction,
@@ -8,6 +9,7 @@ use landscape_common::{
         service_manager::{ServiceHandler, ServiceManager},
     },
 };
+use landscape_database::dhcp_v4_server::repository::DHCPv4ServerRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use tokio::sync::broadcast;
 
@@ -45,8 +47,26 @@ impl ServiceHandler for DHCPv4Service {
 
 #[derive(Clone)]
 pub struct DHCPv4ServerManagerService {
-    store_service: LandscapeDBServiceProvider,
+    // store_service: LandscapeDBServiceProvider,
     service: ServiceManager<DHCPv4Service>,
+    store: DHCPv4ServerRepository,
+}
+impl ControllerService for DHCPv4ServerManagerService {
+    type ID = String;
+
+    type Config = DHCPv4ServiceConfig;
+
+    type DatabseAction = DHCPv4ServerRepository;
+
+    type H = DHCPv4Service;
+
+    fn get_service(&self) -> &ServiceManager<Self::H> {
+        &self.service
+    }
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
 }
 
 impl DHCPv4ServerManagerService {
@@ -64,7 +84,7 @@ impl DHCPv4ServerManagerService {
                     IfaceObserverAction::Up(iface_name) => {
                         tracing::info!("restart {iface_name} Firewall service");
                         let service_config = if let Some(service_config) =
-                            store.find_by_iface_name(&iface_name).await.unwrap()
+                            store.find_by_iface_name(iface_name.clone()).await.unwrap()
                         {
                             service_config
                         } else {
@@ -78,28 +98,29 @@ impl DHCPv4ServerManagerService {
             }
         });
 
-        Self { store_service, service }
+        let store = store_service.dhcp_v4_server_store();
+        Self { service, store }
     }
 
-    pub async fn get_all_status(&self) -> HashMap<String, DHCPv4ServiceWatchStatus> {
-        self.service.get_all_status().await
-    }
+    // pub async fn get_all_status(&self) -> HashMap<String, DHCPv4ServiceWatchStatus> {
+    //     self.service.get_all_status().await
+    // }
 
-    pub async fn get_config_by_name(&self, iface_name: String) -> Option<DHCPv4ServiceConfig> {
-        self.store_service.dhcp_v4_server_store().find_by_iface_name(&iface_name).await.unwrap()
-    }
+    // pub async fn get_config_by_name(&self, iface_name: String) -> Option<DHCPv4ServiceConfig> {
+    //     self.store_service.dhcp_v4_server_store().find_by_iface_name(iface_name).await.unwrap()
+    // }
 
-    pub async fn handle_service_config(&self, config: DHCPv4ServiceConfig) {
-        if let Ok(()) = self.service.update_service(config.clone()).await {
-            self.store_service.dhcp_v4_server_store().set(config).await.unwrap();
-        }
-    }
+    // pub async fn handle_service_config(&self, config: DHCPv4ServiceConfig) {
+    //     if let Ok(()) = self.service.update_service(config.clone()).await {
+    //         self.store_service.dhcp_v4_server_store().set(config).await.unwrap();
+    //     }
+    // }
 
-    pub async fn delete_and_stop_iface_service(
-        &self,
-        iface_name: String,
-    ) -> Option<DHCPv4ServiceWatchStatus> {
-        self.store_service.dhcp_v4_server_store().delete(&iface_name).await.unwrap();
-        self.service.stop_service(iface_name).await
-    }
+    // pub async fn delete_and_stop_iface_service(
+    //     &self,
+    //     iface_name: String,
+    // ) -> Option<DHCPv4ServiceWatchStatus> {
+    //     self.store_service.dhcp_v4_server_store().delete(iface_name.clone()).await.unwrap();
+    //     self.service.stop_service(iface_name).await
+    // }
 }
