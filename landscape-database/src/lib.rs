@@ -8,6 +8,7 @@ pub mod firewall;
 pub mod flow_wan;
 pub mod iface;
 pub mod mss_clamp;
+pub mod nat;
 pub mod provider;
 
 /// 定义 ID 类型

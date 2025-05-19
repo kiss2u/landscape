@@ -1,3 +1,7 @@
+use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
+use landscape_common::observer::IfaceObserverAction;
+use landscape_common::service::controller_service::ControllerService;
+use landscape_common::service::service_manager::ServiceManager;
 use landscape_common::{
     config::nat::{NatConfig, NatServiceConfig},
     service::{
@@ -5,7 +9,9 @@ use landscape_common::{
         ServiceStatus,
     },
 };
-use tokio::sync::oneshot;
+use landscape_database::nat::repository::NatServiceRepository;
+use landscape_database::provider::LandscapeDBServiceProvider;
+use tokio::sync::{broadcast, oneshot};
 
 use crate::iface::get_iface_by_name;
 
@@ -69,4 +75,59 @@ pub async fn create_nat_service(
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");
     service_status.just_change_status(ServiceStatus::Stop);
+}
+
+#[derive(Clone)]
+pub struct NatServiceManagerService {
+    store: NatServiceRepository,
+    service: ServiceManager<NatService>,
+}
+
+impl ControllerService for NatServiceManagerService {
+    type ID = String;
+    type Config = NatServiceConfig;
+    type DatabseAction = NatServiceRepository;
+    type H = NatService;
+
+    fn get_service(&self) -> &ServiceManager<Self::H> {
+        &self.service
+    }
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
+}
+
+impl NatServiceManagerService {
+    pub async fn new(
+        store_service: LandscapeDBServiceProvider,
+        mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+    ) -> Self {
+        let store = store_service.nat_service_store();
+        let service = ServiceManager::init(store.list().await.unwrap()).await;
+
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            while let Ok(msg) = dev_observer.recv().await {
+                match msg {
+                    IfaceObserverAction::Up(iface_name) => {
+                        tracing::info!("restart {iface_name} Nat service");
+                        let service_config = if let Some(service_config) =
+                            store.find_by_iface_name(iface_name.clone()).await.unwrap()
+                        {
+                            service_config
+                        } else {
+                            continue;
+                        };
+
+                        let _ = service_clone.update_service(service_config).await;
+                    }
+                    IfaceObserverAction::Down(_) => {}
+                }
+            }
+        });
+
+        let store = store_service.nat_service_store();
+        Self { service, store }
+    }
 }

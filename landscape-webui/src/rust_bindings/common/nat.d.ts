@@ -10,4 +10,5 @@ export type NatServiceConfig = {
   iface_name: string;
   enable: boolean;
   nat_config: NatConfig;
+  update_at: number;
 };

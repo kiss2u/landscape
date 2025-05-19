@@ -10,7 +10,7 @@ use crate::{
     dhcp_v6_client::repository::DHCPv6ClientRepository, dns::repository::DNSRepository,
     firewall::repository::FirewallServiceRepository,
     flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
-    mss_clamp::repository::MssClampServiceRepository,
+    mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
 };
 
 /// 存储提供者  
@@ -73,6 +73,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn mss_clamp_service_store(&self) -> MssClampServiceRepository {
         MssClampServiceRepository::new(self.database.clone())
+    }
+
+    pub fn nat_service_store(&self) -> NatServiceRepository {
+        NatServiceRepository::new(self.database.clone())
     }
 }
 
