@@ -11,6 +11,7 @@ pub mod mss_clamp;
 pub mod nat;
 pub mod pppd;
 pub mod provider;
+pub mod ra;
 
 /// 定义 ID 类型
 pub(crate) type DBId = Uuid;

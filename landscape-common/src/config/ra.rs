@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::database::repository::LandscapeDBStore;
 use crate::store::storev2::LandscapeStore;
+use crate::utils::time::get_f64_timestamp;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/ra.d.ts")]
@@ -9,6 +11,14 @@ pub struct IPV6RAServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub config: IPV6RAConfig,
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
+}
+
+impl LandscapeDBStore<String> for IPV6RAServiceConfig {
+    fn get_id(&self) -> String {
+        self.iface_name.clone()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
@@ -16,8 +26,9 @@ pub struct IPV6RAServiceConfig {
 pub struct IPV6RAConfig {
     /// 子网前缀长度, 一般是使用 64
     pub subnet_prefix: u8,
-    /// 子网索引
-    pub subnet_index: u128,
+    /// 子网索引 // u64 unsupported by sqlx-sqlite
+    // #[ts(type = "number")]
+    pub subnet_index: u32,
     /// 当前主机的 mac 地址
     pub depend_iface: String,
     /// 通告 IP 时间

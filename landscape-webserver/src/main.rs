@@ -265,7 +265,10 @@ async fn main() -> LdResult<()> {
                     get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,
                 )
-                .merge(get_iface_icmpv6ra_paths(icmpv6ra_store).await)
+                .merge(
+                    get_iface_icmpv6ra_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
                 .merge(get_iface_nat_paths(db_store_provider.clone(), dev_obs.resubscribe()).await)
                 .merge(get_iface_flow_wan_paths(db_store_provider.clone(), dev_obs).await),
         )

@@ -1,32 +1,22 @@
-use std::{collections::HashMap, sync::Arc};
-
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
-use landscape::service::ra::IPV6RAService;
-use landscape_common::{
-    config::ra::IPV6RAServiceConfig,
-    service::{service_manager::ServiceManager, DefaultWatchServiceStatus},
-    store::storev2::StoreFileManager,
-};
+use landscape::service::ra::IPV6RAManagerService;
+use landscape_common::service::{controller_service::ControllerService, DefaultWatchServiceStatus};
+use landscape_common::{config::ra::IPV6RAServiceConfig, observer::IfaceObserverAction};
+use landscape_database::provider::LandscapeDBServiceProvider;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::broadcast;
 
 use crate::{error::LandscapeApiError, SimpleResult};
 
-#[derive(Clone)]
-struct LandscapeICMPv6RAServices {
-    service: ServiceManager<IPV6RAService>,
-    store: Arc<Mutex<StoreFileManager<IPV6RAServiceConfig>>>,
-}
-
-pub async fn get_iface_icmpv6ra_paths(mut store: StoreFileManager<IPV6RAServiceConfig>) -> Router {
-    let share_state = LandscapeICMPv6RAServices {
-        service: ServiceManager::init(store.list()).await,
-        store: Arc::new(Mutex::new(store)),
-    };
+pub async fn get_iface_icmpv6ra_paths(
+    store: LandscapeDBServiceProvider,
+    dev_observer: broadcast::Receiver<IfaceObserverAction>,
+) -> Router {
+    let share_state = IPV6RAManagerService::new(store, dev_observer).await;
 
     Router::new()
         .route("/icmpv6ra/status", get(get_all_status))
@@ -39,23 +29,16 @@ pub async fn get_iface_icmpv6ra_paths(mut store: StoreFileManager<IPV6RAServiceC
         .with_state(share_state)
 }
 
-async fn get_all_status(State(state): State<LandscapeICMPv6RAServices>) -> Json<Value> {
-    let read_lock = state.service.services.read().await;
-    let mut result = HashMap::new();
-    for (key, (iface_status, _)) in read_lock.iter() {
-        result.insert(key.clone(), iface_status.clone());
-    }
-    drop(read_lock);
-    let result = serde_json::to_value(result);
+async fn get_all_status(State(state): State<IPV6RAManagerService>) -> Json<Value> {
+    let result = serde_json::to_value(state.get_all_status().await);
     Json(result.unwrap())
 }
 
 async fn get_iface_icmpv6_conifg(
-    State(state): State<LandscapeICMPv6RAServices>,
+    State(state): State<IPV6RAManagerService>,
     Path(iface_name): Path<String>,
 ) -> Result<Json<IPV6RAServiceConfig>, LandscapeApiError> {
-    let mut read_lock = state.store.lock().await;
-    if let Some(iface_config) = read_lock.get(&iface_name) {
+    if let Some(iface_config) = state.get_config_by_name(iface_name).await {
         Ok(Json(iface_config))
     } else {
         Err(LandscapeApiError::NotFound("can not find".into()))
@@ -63,37 +46,17 @@ async fn get_iface_icmpv6_conifg(
 }
 
 async fn handle_iface_icmpv6(
-    State(state): State<LandscapeICMPv6RAServices>,
-    Json(service_config): Json<IPV6RAServiceConfig>,
-) -> Json<Value> {
+    State(state): State<IPV6RAManagerService>,
+    Json(config): Json<IPV6RAServiceConfig>,
+) -> Json<SimpleResult> {
     let result = SimpleResult { success: true };
-
-    if let Ok(()) = state.service.update_service(service_config.clone()).await {
-        let mut write_lock = state.store.lock().await;
-        write_lock.set(service_config);
-        drop(write_lock);
-    }
-    let result = serde_json::to_value(result);
-    Json(result.unwrap())
+    state.handle_service_config(config).await;
+    Json(result)
 }
 
 async fn delete_and_stop_iface_icmpv6(
-    State(state): State<LandscapeICMPv6RAServices>,
+    State(state): State<IPV6RAManagerService>,
     Path(iface_name): Path<String>,
-) -> Json<Value> {
-    let mut write_lock = state.store.lock().await;
-    write_lock.del(&iface_name);
-    drop(write_lock);
-
-    let mut write_lock = state.service.services.write().await;
-    let data = if let Some((iface_status, _)) = write_lock.remove(&iface_name) {
-        iface_status
-    } else {
-        DefaultWatchServiceStatus::new()
-    };
-    drop(write_lock);
-    // 停止服务
-    data.wait_stop().await;
-    let result = serde_json::to_value(data);
-    Json(result.unwrap())
+) -> Json<Option<DefaultWatchServiceStatus>> {
+    Json(state.delete_and_stop_iface_service(iface_name).await)
 }
