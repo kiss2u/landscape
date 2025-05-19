@@ -1,5 +1,3 @@
-pub mod dns;
-
 use async_trait::async_trait;
 use sea_orm::{
     ActiveModelBehavior, ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, FromQueryResult,

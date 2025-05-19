@@ -1,7 +1,7 @@
 use landscape_common::config::dns::DNSRuleConfig;
 use sea_orm::{DatabaseConnection, DbErr, EntityTrait};
 
-use crate::{entity::dns::DNSRuleConfigEntity, DBId};
+use crate::{dns::entity::DNSRuleConfigEntity, DBId};
 
 pub struct DNSRepository {
     db: DatabaseConnection,

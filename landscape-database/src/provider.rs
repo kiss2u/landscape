@@ -6,9 +6,8 @@ use sea_orm::{Database, DatabaseConnection};
 use migration::{Migrator, MigratorTrait};
 
 use crate::{
-    dhcp_v4_server::repository::DHCPv4ServerRepository,
-    iface::repository::NetIfaceRepository,
-    repository::{dns::DNSRepository, Repository},
+    dhcp_v4_server::repository::DHCPv4ServerRepository, dns::repository::DNSRepository,
+    iface::repository::NetIfaceRepository, repository::Repository,
 };
 
 /// 存储提供者  
