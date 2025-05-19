@@ -7,4 +7,5 @@ export type IPV6PDServiceConfig = {
   iface_name: string;
   enable: boolean;
   config: IPV6PDConfig;
+  update_at: number;
 };

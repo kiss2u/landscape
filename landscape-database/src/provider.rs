@@ -8,7 +8,8 @@ use migration::{Migrator, MigratorTrait};
 use crate::{
     dhcp_v4_server::repository::DHCPv4ServerRepository,
     dhcp_v6_client::repository::DHCPv6ClientRepository, dns::repository::DNSRepository,
-    firewall::repository::FirewallServiceRepository, iface::repository::NetIfaceRepository,
+    firewall::repository::FirewallServiceRepository,
+    flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
 };
 
 /// 存储提供者  
@@ -63,6 +64,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn firewall_service_store(&self) -> FirewallServiceRepository {
         FirewallServiceRepository::new(self.database.clone())
+    }
+
+    pub fn flow_wan_service_store(&self) -> FlowWanServiceRepository {
+        FlowWanServiceRepository::new(self.database.clone())
     }
 }
 

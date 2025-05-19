@@ -15,7 +15,7 @@ use dhcp_v4_server::DHCPv4ServiceConfig;
 use dhcp_v6_client::IPV6PDServiceConfig;
 use dns::DNSRuleConfig;
 use firewall::FirewallServiceConfig;
-use flow::PacketMarkServiceConfig;
+use flow::FlowWanServiceConfig;
 use iface::NetworkIfaceConfig;
 use mss_clamp::MSSClampServiceConfig;
 use nat::NatServiceConfig;
@@ -37,7 +37,7 @@ pub struct InitConfig {
     pub ifaces: Vec<NetworkIfaceConfig>,
     pub ipconfigs: Vec<IfaceIpServiceConfig>,
     pub nats: Vec<NatServiceConfig>,
-    pub marks: Vec<PacketMarkServiceConfig>,
+    pub marks: Vec<FlowWanServiceConfig>,
     pub pppds: Vec<PPPDServiceConfig>,
 
     pub flow_rules: Vec<FlowConfig>,

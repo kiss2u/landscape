@@ -4,6 +4,7 @@ use repository::{LandscapeDBStore, Repository};
 
 use crate::error::LdError;
 
+/// 基础 Trait
 #[async_trait::async_trait]
 pub trait LandscapeDBTrait: Repository {
     async fn set(&self, config: Self::Data) -> Result<Self::Data, LdError> {
@@ -19,6 +20,7 @@ pub trait LandscapeDBTrait: Repository {
     }
 }
 
+/// 基于 Iface 的服务 Trait
 #[async_trait::async_trait]
 pub trait LandscapeServiceDBTrait: LandscapeDBTrait {
     async fn find_by_iface_name(&self, id: Self::Id) -> Result<Option<Self::Data>, LdError> {

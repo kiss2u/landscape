@@ -33,6 +33,10 @@ export type DHCPv4ServiceConfig = {
   iface_name: string;
   enable: boolean;
   config: DHCPv4ServerConfig;
+  /**
+   * 最近一次编译时间
+   */
+  update_at: number;
 };
 
 export type MacBindingRecord = {

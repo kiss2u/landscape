@@ -5,6 +5,7 @@ pub mod dhcp_v6_client;
 pub mod dns;
 pub mod error;
 pub mod firewall;
+pub mod flow_wan;
 pub mod iface;
 pub mod provider;
 
