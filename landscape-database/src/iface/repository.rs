@@ -1,41 +1,37 @@
-use landscape_common::config::iface::NetworkIfaceConfig;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait};
+use landscape_common::{
+    config::iface::NetworkIfaceConfig,
+    database::{repository::Repository, LandscapeDBTrait, LandscapeServiceDBTrait},
+};
+use sea_orm::DatabaseConnection;
 
-use crate::iface::entity::{NetIfaceConfigActiveModel, NetIfaceConfigEntity};
+use super::entity::{NetIfaceConfigActiveModel, NetIfaceConfigEntity, NetIfaceConfigModel};
 
+#[derive(Clone)]
 pub struct NetIfaceRepository {
     db: DatabaseConnection,
 }
+
+#[async_trait::async_trait]
+impl LandscapeServiceDBTrait for NetIfaceRepository {}
+
+#[async_trait::async_trait]
+impl LandscapeDBTrait for NetIfaceRepository {}
 
 impl NetIfaceRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
+}
 
-    pub async fn truncate(&self) -> Result<(), DbErr> {
-        NetIfaceConfigEntity::delete_many().exec(&self.db).await?;
-        Ok(())
-    }
+#[async_trait::async_trait]
+impl Repository for NetIfaceRepository {
+    type Model = NetIfaceConfigModel;
+    type Entity = NetIfaceConfigEntity;
+    type ActiveModel = NetIfaceConfigActiveModel;
+    type Data = NetworkIfaceConfig;
+    type Id = String;
 
-    pub async fn get_by_name(&self, name: &str) -> Result<Option<NetworkIfaceConfig>, DbErr> {
-        Ok(NetIfaceConfigEntity::find_by_id(name)
-            .one(&self.db)
-            .await?
-            .map(|model| NetworkIfaceConfig::from(model)))
-    }
-
-    pub async fn set(&self, config: NetworkIfaceConfig) -> Result<NetworkIfaceConfig, DbErr> {
-        let active_model: NetIfaceConfigActiveModel = config.into();
-        let model = active_model.insert(&self.db).await?;
-        Ok(NetworkIfaceConfig::from(model))
-    }
-
-    pub async fn list(&self) -> Result<Vec<NetworkIfaceConfig>, DbErr> {
-        Ok(NetIfaceConfigEntity::find()
-            .all(&self.db)
-            .await?
-            .into_iter()
-            .map(|model| NetworkIfaceConfig::from(model))
-            .collect())
+    fn db(&self) -> &DatabaseConnection {
+        &self.db
     }
 }

@@ -95,7 +95,7 @@ async fn get_cpu_balance(
     State(state): State<IfaceManagerService>,
     Path(iface_name): Path<String>,
 ) -> Json<Option<IfaceCpuSoftBalance>> {
-    let iface = state.get_iface_config(&iface_name).await;
+    let iface = state.get_iface_config(iface_name).await;
     Json(iface.and_then(|iface| iface.xps_rps))
 }
 

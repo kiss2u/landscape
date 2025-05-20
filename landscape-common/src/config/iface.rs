@@ -4,6 +4,8 @@ use sea_orm::{prelude::StringLen, DeriveActiveEnum, EnumIter};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::database::repository::LandscapeDBStore;
+
 /// 用于存储网卡信息的结构体
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/iface.d.ts")]
@@ -37,6 +39,12 @@ pub struct NetworkIfaceConfig {
 
 impl LandscapeStore for NetworkIfaceConfig {
     fn get_store_key(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl LandscapeDBStore<String> for NetworkIfaceConfig {
+    fn get_id(&self) -> String {
         self.name.clone()
     }
 }

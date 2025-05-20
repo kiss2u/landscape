@@ -1,11 +1,9 @@
-use sea_orm::entity::prelude::*;
-use sea_orm::ActiveValue::Set;
+use landscape_common::{
+    config::iface::CreateDevType, config::iface::IfaceZoneType, config::iface::NetworkIfaceConfig,
+    config::iface::WifiMode, database::repository::UpdateActiveModel,
+};
+use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
-
-use landscape_common::config::iface::CreateDevType;
-use landscape_common::config::iface::IfaceZoneType;
-use landscape_common::config::iface::NetworkIfaceConfig;
-use landscape_common::config::iface::WifiMode;
 
 use crate::{DBJson, DBTimestamp};
 
@@ -43,7 +41,6 @@ impl From<Model> for NetworkIfaceConfig {
             zone_type: entity.zone_type,
             enable_in_boot: entity.enable_in_boot,
             wifi_mode: entity.wifi_mode,
-            // TODO: 打印错误并提示序列化失败
             xps_rps: entity.xps_rps.and_then(|val| serde_json::from_value(val).ok()),
             update_at: entity.update_at,
         }
@@ -52,15 +49,20 @@ impl From<Model> for NetworkIfaceConfig {
 
 impl Into<ActiveModel> for NetworkIfaceConfig {
     fn into(self) -> ActiveModel {
-        ActiveModel {
-            name: Set(self.name),
-            create_dev_type: Set(self.create_dev_type),
-            controller_name: Set(self.controller_name),
-            zone_type: Set(self.zone_type),
-            enable_in_boot: Set(self.enable_in_boot),
-            wifi_mode: Set(self.wifi_mode),
-            xps_rps: Set(self.xps_rps.and_then(|val| serde_json::to_value(&val).ok())),
-            update_at: Set(self.update_at),
-        }
+        let mut active = ActiveModel { name: Set(self.name.clone()), ..Default::default() };
+        self.update(&mut active);
+        active
+    }
+}
+
+impl UpdateActiveModel<ActiveModel> for NetworkIfaceConfig {
+    fn update(self, active: &mut ActiveModel) {
+        active.create_dev_type = Set(self.create_dev_type);
+        active.controller_name = Set(self.controller_name);
+        active.zone_type = Set(self.zone_type);
+        active.enable_in_boot = Set(self.enable_in_boot);
+        active.wifi_mode = Set(self.wifi_mode);
+        active.xps_rps = Set(self.xps_rps.and_then(|val| serde_json::to_value(&val).ok()));
+        active.update_at = Set(self.update_at);
     }
 }

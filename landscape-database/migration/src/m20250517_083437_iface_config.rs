@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(NetIfaceConfigs::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(NetIfaceConfigs::Name).string())
+                    .col(ColumnDef::new(NetIfaceConfigs::Name).string().primary_key())
                     .col(ColumnDef::new(NetIfaceConfigs::UpdateAt).double().default(0).not_null())
                     .col(
                         ColumnDef::new(NetIfaceConfigs::CreateDevType)

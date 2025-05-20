@@ -38,9 +38,9 @@ impl LandscapeDBServiceProvider {
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
         if let Some(config) = config {
             let iface_store = self.iface_store();
-            iface_store.truncate().await.unwrap();
+            iface_store.truncate_table().await.unwrap();
             for each_config in config.ifaces {
-                iface_store.set(each_config).await.unwrap();
+                iface_store.set_model(each_config).await.unwrap();
             }
             let dhcp_v4_server_store = self.dhcp_v4_server_store();
             dhcp_v4_server_store.truncate_table().await.unwrap();

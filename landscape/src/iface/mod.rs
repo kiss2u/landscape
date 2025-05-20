@@ -3,6 +3,8 @@ use std::{collections::HashMap, path::PathBuf};
 use config::from_phy_dev;
 use dev_wifi::LandscapeWifiInterface;
 use futures::stream::TryStreamExt;
+use landscape_common::database::repository::Repository;
+use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::{
     config::iface::{IfaceCpuSoftBalance, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     error::LdResult,
@@ -55,13 +57,13 @@ pub struct IfaceManagerService {
 impl IfaceManagerService {
     pub async fn new(store_service: LandscapeDBServiceProvider) -> Self {
         let store = store_service.iface_store();
-        crate::init_devs(store.list().await.unwrap()).await;
+        crate::init_devs(store.list_all().await.unwrap()).await;
         drop(store);
         Self { store_service }
     }
 
     pub async fn manage_dev(&self, dev_name: String) {
-        if self.get_iface_config(&dev_name).await.is_none() {
+        if self.get_iface_config(dev_name.clone()).await.is_none() {
             if let Some(iface) = get_iface_by_name(&dev_name).await {
                 let config = from_phy_dev(&iface);
                 self.set_iface_config(config).await;
@@ -144,7 +146,7 @@ impl IfaceManagerService {
     ) {
         let iface_info = crate::set_controller(&link_name, master_ifindex).await;
         if let Some(iface_info) = iface_info {
-            let mut link_config = if let Some(link_config) = self.get_iface_config(&link_name).await
+            let mut link_config = if let Some(link_config) = self.get_iface_config(link_name).await
             {
                 link_config
             } else {
@@ -156,7 +158,8 @@ impl IfaceManagerService {
     }
 
     pub async fn change_zone(&self, ChangeZone { iface_name, zone }: ChangeZone) {
-        let link_config = if let Some(link_config) = self.get_iface_config(&iface_name).await {
+        let link_config = if let Some(link_config) = self.get_iface_config(iface_name.clone()).await
+        {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
@@ -177,7 +180,8 @@ impl IfaceManagerService {
     }
 
     pub async fn change_wifi_mode(&self, iface_name: String, mode: WifiMode) {
-        let link_config = if let Some(link_config) = self.get_iface_config(&iface_name).await {
+        let link_config = if let Some(link_config) = self.get_iface_config(iface_name.clone()).await
+        {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
@@ -203,12 +207,12 @@ impl IfaceManagerService {
         let iface_info = crate::change_dev_status(&iface_name, enable_in_boot).await;
 
         if let Some(iface_info) = iface_info {
-            let mut link_config =
-                if let Some(link_config) = self.get_iface_config(&iface_name).await {
-                    link_config
-                } else {
-                    from_phy_dev(&iface_info)
-                };
+            let mut link_config = if let Some(link_config) = self.get_iface_config(iface_name).await
+            {
+                link_config
+            } else {
+                from_phy_dev(&iface_info)
+            };
             link_config.enable_in_boot = enable_in_boot;
 
             self.set_iface_config(link_config).await;
@@ -220,7 +224,8 @@ impl IfaceManagerService {
         iface_name: String,
         balance: Option<IfaceCpuSoftBalance>,
     ) {
-        let link_config = if let Some(link_config) = self.get_iface_config(&iface_name).await {
+        let link_config = if let Some(link_config) = self.get_iface_config(iface_name.clone()).await
+        {
             Some(link_config)
         } else {
             if let Some(iface) = get_iface_by_name(&iface_name).await {
@@ -250,13 +255,13 @@ impl IfaceManagerService {
 
     async fn set_iface_config(&self, config: NetworkIfaceConfig) {
         let store = self.store_service.iface_store();
-        store.set(config).await.unwrap();
+        store.set_or_update_model(config.name.clone(), config).await.unwrap();
         drop(store);
     }
 
-    pub async fn get_iface_config(&self, key: &str) -> Option<NetworkIfaceConfig> {
+    pub async fn get_iface_config(&self, key: String) -> Option<NetworkIfaceConfig> {
         let store = self.store_service.iface_store();
-        store.get_by_name(key).await.ok()?
+        store.find_by_iface_name(key).await.ok()?
     }
 
     async fn get_iface_configs(&self) -> Vec<NetworkIfaceConfig> {
