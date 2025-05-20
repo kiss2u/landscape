@@ -12,7 +12,7 @@ pub type DHCPv4ServiceConfigEntity = Entity;
 pub type DHCPv4ServiceConfigActiveModel = ActiveModel;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "dhcpv4_server_configs")]
+#[sea_orm(table_name = "dhcp_v4_server_configs")]
 #[cfg_attr(feature = "postgres", sea_orm(schema_name = "public"))]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

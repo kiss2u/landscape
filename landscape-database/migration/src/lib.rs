@@ -10,6 +10,7 @@ mod m20250519_081012_mss_clamp;
 mod m20250519_083637_nat_service;
 mod m20250519_094250_pppd;
 mod m20250519_125555_ipv6_ra;
+mod m20250520_013248_iface_ip;
 mod tables;
 
 pub struct Migrator;
@@ -28,6 +29,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250519_083637_nat_service::Migration),
             Box::new(m20250519_094250_pppd::Migration),
             Box::new(m20250519_125555_ipv6_ra::Migration),
+            Box::new(m20250520_013248_iface_ip::Migration),
         ]
     }
 }

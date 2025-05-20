@@ -5,8 +5,10 @@ use ts_rs::TS;
 
 use super::iface::NetworkIfaceConfig;
 use crate::config::iface::IfaceZoneType;
+use crate::database::repository::LandscapeDBStore;
 use crate::net_proto::udp::dhcp::DhcpOption;
 use crate::store::storev2::LandscapeStore;
+use crate::utils::time::get_f64_timestamp;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/wanip.d.ts")]
@@ -14,10 +16,18 @@ pub struct IfaceIpServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub ip_model: IfaceIpModelConfig,
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl LandscapeStore for IfaceIpServiceConfig {
     fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
+}
+
+impl LandscapeDBStore<String> for IfaceIpServiceConfig {
+    fn get_id(&self) -> String {
         self.iface_name.clone()
     }
 }

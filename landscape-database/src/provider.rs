@@ -10,6 +10,7 @@ use crate::{
     dhcp_v6_client::repository::DHCPv6ClientRepository, dns::repository::DNSRepository,
     firewall::repository::FirewallServiceRepository,
     flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
+    iface_ip::repository::IfaceIpServiceRepository,
     mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
     pppd::repository::PPPDServiceRepository, ra::repository::IPV6RAServiceRepository,
 };
@@ -86,6 +87,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn ra_service_store(&self) -> IPV6RAServiceRepository {
         IPV6RAServiceRepository::new(self.database.clone())
+    }
+
+    pub fn iface_ip_service_store(&self) -> IfaceIpServiceRepository {
+        IfaceIpServiceRepository::new(self.database.clone())
     }
 }
 

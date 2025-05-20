@@ -4,11 +4,11 @@ pub mod dns;
 pub mod firewall;
 pub mod flow;
 pub mod iface;
+pub mod iface_ip;
 pub mod mss_clamp;
 pub mod nat;
 pub mod ppp;
 pub mod ra;
-pub mod wanip;
 pub mod wifi;
 
 use dhcp_v4_server::DHCPv4ServiceConfig;
@@ -17,12 +17,12 @@ use dns::DNSRuleConfig;
 use firewall::FirewallServiceConfig;
 use flow::FlowWanServiceConfig;
 use iface::NetworkIfaceConfig;
+use iface_ip::IfaceIpServiceConfig;
 use mss_clamp::MSSClampServiceConfig;
 use nat::NatServiceConfig;
 use ppp::PPPDServiceConfig;
 use ra::IPV6RAServiceConfig;
 use serde::{Deserialize, Serialize};
-use wanip::IfaceIpServiceConfig;
 use wifi::WifiServiceConfig;
 
 use crate::{firewall::FirewallRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig};

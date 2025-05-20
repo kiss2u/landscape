@@ -4,6 +4,7 @@ pub mod dns;
 pub mod firewall;
 pub mod flow;
 pub mod iface;
+pub mod iface_ip;
 pub mod mss_clamp;
 pub mod nat;
 pub mod pppd;
