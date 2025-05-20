@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use async_trait::async_trait;
 use sea_orm::{
     ActiveModelBehavior, ActiveModelTrait, DatabaseConnection, EntityTrait, FromQueryResult,
@@ -20,10 +22,12 @@ where
         + Into<Self::ActiveModel>
         + From<Self::Model>
         + UpdateActiveModel<Self::ActiveModel>
-        + LandscapeDBStore<Self::Id>;
+        + LandscapeDBStore<Self::Id>
+        + Debug;
     type Id: Into<<<Self::Entity as EntityTrait>::PrimaryKey as PrimaryKeyTrait>::ValueType>
         + Send
-        + Sync;
+        + Sync
+        + Debug;
 
     /// 提供数据库连接
     fn db(&self) -> &DatabaseConnection;
@@ -71,7 +75,9 @@ where
         id: Self::Id,
         config: Self::Data,
     ) -> Result<Self::Data, LdError> {
+        // tracing::info!("try to find id: {id:?}");
         if let Some(data) = self.find_by_id(id).await? {
+            // tracing::info!("data: {data:?}");
             let mut d: Self::ActiveModel = data.into();
             config.update(&mut d);
             Ok(d.update(self.db()).await?.into())

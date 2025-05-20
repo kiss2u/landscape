@@ -13,6 +13,7 @@ use crate::{
     iface_ip::repository::IfaceIpServiceRepository,
     mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
     pppd::repository::PPPDServiceRepository, ra::repository::IPV6RAServiceRepository,
+    wifi::repository::WifiServiceRepository,
 };
 
 /// 存储提供者  
@@ -91,6 +92,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn iface_ip_service_store(&self) -> IfaceIpServiceRepository {
         IfaceIpServiceRepository::new(self.database.clone())
+    }
+
+    pub fn wifi_service_store(&self) -> WifiServiceRepository {
+        WifiServiceRepository::new(self.database.clone())
     }
 }
 

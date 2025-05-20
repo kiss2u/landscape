@@ -9,3 +9,4 @@ pub mod mss_clamp;
 pub mod nat;
 pub mod pppd;
 pub mod ra;
+pub mod wifi;

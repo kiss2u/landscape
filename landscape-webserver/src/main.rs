@@ -262,7 +262,7 @@ async fn main() -> LdResult<()> {
                     get_dhcp_v4_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,
                 )
-                .merge(get_wifi_service_paths(wifi_config_store, dev_obs.resubscribe()).await)
+                .merge(get_wifi_service_paths(db_store_provider.clone()).await)
                 .merge(get_iface_pppd_paths(db_store_provider.clone()).await)
                 .merge(
                     get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
