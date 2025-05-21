@@ -9,8 +9,8 @@ use axum::{
 
 use colored::Colorize;
 use config_service::{
-    dns_rule::get_dns_rule_config_paths, firewall_rule::get_firewall_rule_config_paths,
-    flow_rule::get_flow_rule_config_paths,
+    dns_rule::get_dns_rule_config_paths, dst_ip_rule::get_dst_ip_rule_config_paths,
+    firewall_rule::get_firewall_rule_config_paths, flow_rule::get_flow_rule_config_paths,
 };
 use landscape::boot::{boot_check, log::init_logger};
 use landscape_common::{
@@ -71,7 +71,7 @@ async fn main() -> LdResult<()> {
     let mut flow_store = StoreFileManager::new(home_path.clone(), "flow_rule".to_string());
     let mut dns_store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
 
-    let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
+    // let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
 
     let mut ipv6pd_store = StoreFileManager::new(home_path.clone(), "ipv6pd_service".to_string());
     let mut dhcpv4_service_store =
@@ -110,7 +110,6 @@ async fn main() -> LdResult<()> {
         pppds,
         flow_rules,
         dns_rules,
-        wan_ip_mark,
         dhcpv6pds,
         icmpras,
         firewalls,
@@ -127,7 +126,7 @@ async fn main() -> LdResult<()> {
         iface_pppd_store.truncate();
         flow_store.truncate();
         dns_store.truncate();
-        wan_ip_mark_store.truncate();
+        // wan_ip_mark_store.truncate();
         ipv6pd_store.truncate();
         icmpv6ra_store.truncate();
         firewall_store.truncate();
@@ -163,9 +162,9 @@ async fn main() -> LdResult<()> {
             dns_store.set(each_config);
         }
 
-        for each_config in wan_ip_mark {
-            wan_ip_mark_store.set(each_config);
-        }
+        // for each_config in wan_ip_mark {
+        //     wan_ip_mark_store.set(each_config);
+        // }
 
         for each_config in dhcpv6pds {
             ipv6pd_store.set(each_config);
@@ -249,7 +248,8 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_dns_rule_config_paths(db_store_provider.clone()).await)
                 .merge(get_firewall_rule_config_paths(db_store_provider.clone()).await)
-                .merge(get_flow_rule_config_paths(db_store_provider.clone()).await),
+                .merge(get_flow_rule_config_paths(db_store_provider.clone()).await)
+                .merge(get_dst_ip_rule_config_paths(db_store_provider.clone()).await),
         )
         .nest(
             "/services",

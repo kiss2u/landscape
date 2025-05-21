@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use wifi::WifiServiceConfig;
 
-use crate::{firewall::FirewallRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig};
+use crate::{firewall::FirewallRuleConfig, flow::FlowConfig, ip_mark::WanIpRuleConfig};
 
 pub type FlowId = u32;
 pub type ConfigId = Uuid;
@@ -46,7 +46,7 @@ pub struct InitConfig {
 
     pub flow_rules: Vec<FlowConfig>,
     pub dns_rules: Vec<DNSRuleConfig>,
-    pub wan_ip_mark: Vec<WanIPRuleConfig>,
+    pub wan_ip_mark: Vec<WanIpRuleConfig>,
 
     pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
     pub icmpras: Vec<IPV6RAServiceConfig>,

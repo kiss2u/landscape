@@ -14,6 +14,7 @@ mod m20250520_013248_iface_ip;
 mod m20250520_055039_wifi;
 mod m20250521_095934_firewall_rule;
 mod m20250521_130018_flow_rule;
+mod m20250521_150250_dst_ip_rule;
 mod tables;
 
 pub struct Migrator;
@@ -36,6 +37,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250520_055039_wifi::Migration),
             Box::new(m20250521_095934_firewall_rule::Migration),
             Box::new(m20250521_130018_flow_rule::Migration),
+            Box::new(m20250521_150250_dst_ip_rule::Migration),
         ]
     }
 }

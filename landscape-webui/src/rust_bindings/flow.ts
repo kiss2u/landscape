@@ -9,26 +9,6 @@ export type FlowDnsMark =
 
 export type IpConfig = { ip: string; prefix: number };
 
-/**
- * 对于外部 IP 规则
- */
-export type WanIPRuleConfig = {
-  id: string;
-  index: number;
-  enable: boolean;
-  /**
-   * 流量标记
-   */
-  mark: FlowDnsMark;
-  /**
-   * 匹配规则列表
-   */
-  source: Array<WanIPRuleSource>;
-  remark: string;
-  flow_id: number;
-  override_dns: boolean;
-};
-
 export type WanIPRuleSource =
   | { "t": "geokey"; country_code: string }
   | { "t": "config" } & IpConfig;

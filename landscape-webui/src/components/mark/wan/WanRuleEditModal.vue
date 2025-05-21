@@ -4,20 +4,21 @@ import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { ChangeCatalog } from "@vicons/carbon";
 
-import {
-  post_wan_ip_rules,
-  get_wan_ip_rule,
-  update_wan_ip_rules,
-} from "@/api/flow/wanip";
 import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
 import NewIpEdit from "@/components/NewIpEdit.vue";
-import { WanIPRuleSource, WanIPRuleConfig } from "@/rust_bindings/flow";
+import { WanIPRuleSource } from "@/rust_bindings/flow";
 
-import { new_wan_rules, WanIPRuleConfigClass } from "@/lib/mark";
+import { new_wan_rules, WanIpRuleConfigClass } from "@/lib/mark";
+import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+import {
+  get_dst_ip_rules_rule,
+  push_dst_ip_rules_rule,
+  update_dst_ip_rules_rule,
+} from "@/api/dst_ip_rule";
 
 interface Props {
   flow_id: number;
-  id?: string;
+  id: string | null;
 }
 
 const props = defineProps<Props>();
@@ -27,10 +28,10 @@ const emit = defineEmits(["refresh"]);
 const show = defineModel<boolean>("show", { required: true });
 
 async function enter() {
-  if (props.id) {
-    rule.value = await get_wan_ip_rule(props.flow_id, props.id);
+  if (props.id !== null) {
+    rule.value = await get_dst_ip_rules_rule(props.id);
   } else {
-    rule.value = new WanIPRuleConfigClass({
+    rule.value = new WanIpRuleConfigClass({
       flow_id: props.flow_id,
     });
   }
@@ -43,7 +44,7 @@ const origin_rule_json = ref("");
 //     flow_id: props.flow_id,
 //   }),
 // });
-const rule = ref<WanIPRuleConfig>();
+const rule = ref<WanIpRuleConfig>();
 
 const commit_spin = ref(false);
 const isModified = computed(() => {
@@ -77,9 +78,9 @@ async function saveRule() {
     try {
       commit_spin.value = true;
       if (props.id) {
-        await update_wan_ip_rules(props.flow_id, props.id, rule.value);
+        await update_dst_ip_rules_rule(props.id, rule.value);
       } else {
-        await post_wan_ip_rules(props.flow_id, rule.value);
+        await push_dst_ip_rules_rule(rule.value);
       }
       console.log("submit success");
       show.value = false;

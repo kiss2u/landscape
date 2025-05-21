@@ -8,7 +8,7 @@ use migration::{Migrator, MigratorTrait};
 use crate::{
     dhcp_v4_server::repository::DHCPv4ServerRepository,
     dhcp_v6_client::repository::DHCPv6ClientRepository, dns_rule::repository::DNSRuleRepository,
-    firewall::repository::FirewallServiceRepository,
+    dst_ip_rule::repository::DstIpRuleRepository, firewall::repository::FirewallServiceRepository,
     firewall_rule::repository::FirewallRuleRepository, flow_rule::repository::FlowConfigRepository,
     flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
     iface_ip::repository::IfaceIpServiceRepository,
@@ -63,6 +63,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn flow_rule_store(&self) -> FlowConfigRepository {
         FlowConfigRepository::new(self.database.clone())
+    }
+
+    pub fn dst_ip_rule_store(&self) -> DstIpRuleRepository {
+        DstIpRuleRepository::new(self.database.clone())
     }
 
     // service

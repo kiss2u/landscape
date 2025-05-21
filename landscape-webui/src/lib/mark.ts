@@ -51,18 +51,15 @@ export class LanIPRuleConfig {
   }
 }
 
-import type {
-  FlowDnsMark,
-  WanIPRuleConfig,
-  WanIPRuleSource,
-} from "@/rust_bindings/flow";
+import type { FlowDnsMark, WanIPRuleSource } from "@/rust_bindings/flow";
 import {
   FirewallRuleConfig,
   FirewallRuleConfigItem,
   LandscapeIpProtocolCode,
 } from "@/rust_bindings/common/firewall";
-export class WanIPRuleConfigClass implements WanIPRuleConfig {
-  id: string;
+import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+export class WanIpRuleConfigClass implements WanIpRuleConfig {
+  id: string | null;
   index: number;
   enable: boolean;
   mark: FlowDnsMark;
@@ -70,9 +67,10 @@ export class WanIPRuleConfigClass implements WanIPRuleConfig {
   remark: string;
   flow_id: number;
   override_dns: boolean;
+  update_at: number;
 
-  constructor(obj: Partial<WanIPRuleConfig> = {}) {
-    this.id = obj?.id ?? "";
+  constructor(obj: Partial<WanIpRuleConfig> = {}) {
+    this.id = obj?.id ?? null;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
     this.mark = obj?.mark ? { ...obj.mark } : { t: FlowMarkType.KEEP_GOING };
@@ -80,6 +78,7 @@ export class WanIPRuleConfigClass implements WanIPRuleConfig {
     this.remark = obj?.remark ?? "";
     this.flow_id = obj?.flow_id ?? 0;
     this.override_dns = obj?.override_dns ?? false;
+    this.update_at = obj?.update_at ?? new Date().getTime();
   }
 }
 

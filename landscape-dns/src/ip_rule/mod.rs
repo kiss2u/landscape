@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use landscape_common::flow::mark::FlowDnsMark;
-use landscape_common::ip_mark::{IpConfig, IpMarkInfo, WanIPRuleConfig};
+use landscape_common::ip_mark::{IpConfig, IpMarkInfo, WanIpRuleConfig};
 
 // 更新新的文件
 fn convert_mark_map_to_vec_mark(value: HashMap<IpConfig, (FlowDnsMark, bool)>) -> Vec<IpMarkInfo> {
@@ -27,8 +27,8 @@ fn convert_mark_map_to_vec_mark(value: HashMap<IpConfig, (FlowDnsMark, bool)>) -
 
 async fn update_wan_rules_flow(
     flow_id: u32,
-    mut rules: Vec<WanIPRuleConfig>,
-    mut old_rules: Vec<WanIPRuleConfig>,
+    mut rules: Vec<WanIpRuleConfig>,
+    mut old_rules: Vec<WanIpRuleConfig>,
     new_path: PathBuf,
     old_path: Option<PathBuf>,
 ) {
@@ -54,14 +54,14 @@ async fn update_wan_rules_flow(
 
 /// TODO: using database to replace
 pub async fn update_wan_rules(
-    rules: Vec<WanIPRuleConfig>,
-    old_rules: Vec<WanIPRuleConfig>,
+    rules: Vec<WanIpRuleConfig>,
+    old_rules: Vec<WanIpRuleConfig>,
     new_path: PathBuf,
     old_path: Option<PathBuf>,
 ) {
     let mut flow_ids = HashSet::new();
-    let mut rule_map: HashMap<u32, Vec<WanIPRuleConfig>> = HashMap::new();
-    let mut old_rule_map: HashMap<u32, Vec<WanIPRuleConfig>> = HashMap::new();
+    let mut rule_map: HashMap<u32, Vec<WanIpRuleConfig>> = HashMap::new();
+    let mut old_rule_map: HashMap<u32, Vec<WanIpRuleConfig>> = HashMap::new();
 
     for r in rules.into_iter() {
         if !flow_ids.contains(&r.flow_id) {
@@ -109,7 +109,7 @@ pub async fn update_wan_rules(
 // }
 
 async fn wan_mark_into_map(
-    rules: Vec<WanIPRuleConfig>,
+    rules: Vec<WanIpRuleConfig>,
     geo_file_path: PathBuf,
 ) -> HashMap<IpConfig, (FlowDnsMark, bool)> {
     let country_code_map = landscape_protobuf::read_geo_ips(geo_file_path).await;
@@ -155,7 +155,7 @@ async fn wan_mark_into_map(
 //     landscape_ebpf::map_setting::add_lan_ip_mark(convert_mark_map_to_vec_mark(new_mark_infos));
 // }
 
-// pub async fn init_wan_mark_ips(rules: Vec<WanIPRuleConfig>) {
+// pub async fn init_wan_mark_ips(rules: Vec<WanIpRuleConfig>) {
 //     let geo_file_path = LAND_HOME_PATH.join(GEO_IP_FILE_NAME);
 //     let country_code_map = get_geo_ip_map(geo_file_path).await;
 //     let mut new_mark_infos = HashMap::new();
