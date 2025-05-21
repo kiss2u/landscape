@@ -4,7 +4,7 @@ use landscape_common::{
 };
 use sea_orm::{DatabaseConnection, DbErr, EntityTrait};
 
-use crate::{dns::entity::DNSRuleConfigEntity, DBId};
+use crate::{dns_rule::entity::DNSRuleConfigEntity, DBId};
 
 use super::entity::{DNSRuleConfigActiveModel, DNSRuleConfigModel};
 

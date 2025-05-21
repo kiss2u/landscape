@@ -3,7 +3,7 @@ use landscape_common::{
     service::controller_service::{ConfigController, FlowConfigController},
 };
 use landscape_database::{
-    dns::repository::DNSConfigRepository, provider::LandscapeDBServiceProvider,
+    dns_rule::repository::DNSConfigRepository, provider::LandscapeDBServiceProvider,
 };
 use uuid::Uuid;
 

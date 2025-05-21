@@ -7,7 +7,7 @@ use migration::{Migrator, MigratorTrait};
 
 use crate::{
     dhcp_v4_server::repository::DHCPv4ServerRepository,
-    dhcp_v6_client::repository::DHCPv6ClientRepository, dns::repository::DNSConfigRepository,
+    dhcp_v6_client::repository::DHCPv6ClientRepository, dns_rule::repository::DNSConfigRepository,
     firewall::repository::FirewallServiceRepository,
     flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
     iface_ip::repository::IfaceIpServiceRepository,

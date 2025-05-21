@@ -2,7 +2,7 @@ use sea_orm::prelude::Uuid;
 
 pub mod dhcp_v4_server;
 pub mod dhcp_v6_client;
-pub mod dns;
+pub mod dns_rule;
 pub mod error;
 pub mod firewall;
 pub mod flow_wan;
