@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use crate::tables::dns::DNSRuleConfigs;
+use crate::tables::dns_rule::DNSRuleConfigs;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

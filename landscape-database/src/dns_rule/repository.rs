@@ -9,11 +9,11 @@ use crate::{dns_rule::entity::DNSRuleConfigEntity, DBId};
 use super::entity::{DNSRuleConfigActiveModel, DNSRuleConfigModel};
 
 #[derive(Clone)]
-pub struct DNSConfigRepository {
+pub struct DNSRuleRepository {
     db: DatabaseConnection,
 }
 
-impl DNSConfigRepository {
+impl DNSRuleRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
     }
@@ -27,13 +27,13 @@ impl DNSConfigRepository {
 }
 
 #[async_trait::async_trait]
-impl LandscapeDBTrait for DNSConfigRepository {}
+impl LandscapeDBTrait for DNSRuleRepository {}
 
 #[async_trait::async_trait]
-impl LandscapeFlowTrait for DNSConfigRepository {}
+impl LandscapeFlowTrait for DNSRuleRepository {}
 
 #[async_trait::async_trait]
-impl Repository for DNSConfigRepository {
+impl Repository for DNSRuleRepository {
     type Model = DNSRuleConfigModel;
     type Entity = DNSRuleConfigEntity;
     type ActiveModel = DNSRuleConfigActiveModel;

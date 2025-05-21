@@ -3,7 +3,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use landscape::config_service::dns_rule::DNSConfigService;
+use landscape::config_service::dns_rule::DNSRuleService;
 use landscape_common::config::{dns::DNSRuleConfig, ConfigId, FlowId};
 use landscape_common::service::controller_service::ConfigController;
 use landscape_common::service::controller_service::FlowConfigController;
@@ -15,7 +15,7 @@ use crate::{
 };
 
 pub async fn get_dns_rule_config_paths(store: LandscapeDBServiceProvider) -> Router {
-    let share_state = DNSConfigService::new(store);
+    let share_state = DNSRuleService::new(store);
 
     Router::new()
         .route("/dns_rules", get(get_dns_rules).post(add_dns_rules))
@@ -24,13 +24,13 @@ pub async fn get_dns_rule_config_paths(store: LandscapeDBServiceProvider) -> Rou
         .with_state(share_state)
 }
 
-async fn get_dns_rules(State(state): State<DNSConfigService>) -> Json<Vec<DNSRuleConfig>> {
+async fn get_dns_rules(State(state): State<DNSRuleService>) -> Json<Vec<DNSRuleConfig>> {
     let result = state.list().await;
     Json(result)
 }
 
 async fn get_flow_dns_rules(
-    State(state): State<DNSConfigService>,
+    State(state): State<DNSRuleService>,
     Path(id): Path<FlowId>,
 ) -> Json<Vec<DNSRuleConfig>> {
     let result = state.list_flow_configs(id).await;
@@ -38,7 +38,7 @@ async fn get_flow_dns_rules(
 }
 
 async fn get_dns_rule(
-    State(state): State<DNSConfigService>,
+    State(state): State<DNSRuleService>,
     Path(id): Path<ConfigId>,
 ) -> LandscapeResult<Json<DNSRuleConfig>> {
     let result = state.find_by_id(id).await;
@@ -50,7 +50,7 @@ async fn get_dns_rule(
 }
 
 async fn add_dns_rules(
-    State(state): State<DNSConfigService>,
+    State(state): State<DNSRuleService>,
     Json(dns_rule): Json<DNSRuleConfig>,
 ) -> Json<DNSRuleConfig> {
     let result = state.set(dns_rule).await;
@@ -58,7 +58,7 @@ async fn add_dns_rules(
 }
 
 async fn del_dns_rules(
-    State(state): State<DNSConfigService>,
+    State(state): State<DNSRuleService>,
     Path(id): Path<ConfigId>,
 ) -> Json<SimpleResult> {
     state.delete(id).await;

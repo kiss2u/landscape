@@ -1,6 +1,6 @@
 pub use sea_orm_migration::prelude::*;
 
-mod m20250511_170500_dns_config;
+mod m20250511_170500_dns_rule;
 mod m20250517_083437_iface_config;
 mod m20250518_081203_dhcp_v4_server;
 mod m20250519_004726_dhcp_v6_client;
@@ -20,7 +20,7 @@ pub struct Migrator;
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
-            Box::new(m20250511_170500_dns_config::Migration),
+            Box::new(m20250511_170500_dns_rule::Migration),
             Box::new(m20250517_083437_iface_config::Migration),
             Box::new(m20250518_081203_dhcp_v4_server::Migration),
             Box::new(m20250519_004726_dhcp_v6_client::Migration),
