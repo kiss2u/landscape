@@ -2,7 +2,6 @@ use sea_orm::prelude::Uuid;
 
 pub mod dhcp_v4_server;
 pub mod dhcp_v6_client;
-pub mod dns_rule;
 pub mod error;
 pub mod firewall;
 pub mod flow_wan;
@@ -14,6 +13,9 @@ pub mod pppd;
 pub mod provider;
 pub mod ra;
 pub mod wifi;
+
+pub mod dns_rule;
+pub mod firewall_rule;
 
 /// 定义 ID 类型
 pub(crate) type DBId = Uuid;

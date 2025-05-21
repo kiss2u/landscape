@@ -73,7 +73,7 @@ fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {
     vec![
         FirewallRuleMark {
             item: FirewallRuleItem {
-                ip_protocol: Some(LandscapeIpProtocolCode::ICMPV6),
+                ip_protocol: Some(LandscapeIpProtocolCode::ICMPv6),
                 local_port: Some(128),
                 address: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                 ip_prefixlen: 0,
@@ -82,7 +82,7 @@ fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {
         },
         FirewallRuleMark {
             item: FirewallRuleItem {
-                ip_protocol: Some(LandscapeIpProtocolCode::ICMPV6),
+                ip_protocol: Some(LandscapeIpProtocolCode::ICMPv6),
                 local_port: Some(129),
                 address: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                 ip_prefixlen: 0,

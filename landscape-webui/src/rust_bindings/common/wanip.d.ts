@@ -27,4 +27,5 @@ export type IfaceIpServiceConfig = {
   iface_name: string;
   enable: boolean;
   ip_model: IfaceIpModelConfig;
+  update_at: number;
 };

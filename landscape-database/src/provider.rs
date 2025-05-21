@@ -9,6 +9,7 @@ use crate::{
     dhcp_v4_server::repository::DHCPv4ServerRepository,
     dhcp_v6_client::repository::DHCPv6ClientRepository, dns_rule::repository::DNSRuleRepository,
     firewall::repository::FirewallServiceRepository,
+    firewall_rule::repository::FirewallRuleRepository,
     flow_wan::repository::FlowWanServiceRepository, iface::repository::NetIfaceRepository,
     iface_ip::repository::IfaceIpServiceRepository,
     mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
@@ -50,9 +51,17 @@ impl LandscapeDBServiceProvider {
         }
     }
 
-    pub fn dns_store(&self) -> DNSRuleRepository {
+    // config
+
+    pub fn dns_rule_store(&self) -> DNSRuleRepository {
         DNSRuleRepository::new(self.database.clone())
     }
+
+    pub fn firewall_rule_store(&self) -> FirewallRuleRepository {
+        FirewallRuleRepository::new(self.database.clone())
+    }
+
+    // service
 
     pub fn iface_store(&self) -> NetIfaceRepository {
         NetIfaceRepository::new(self.database.clone())

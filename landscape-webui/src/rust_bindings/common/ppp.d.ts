@@ -11,4 +11,5 @@ export type PPPDServiceConfig = {
   iface_name: string;
   enable: boolean;
   pppd_config: PPPDConfig;
+  update_at: number;
 };

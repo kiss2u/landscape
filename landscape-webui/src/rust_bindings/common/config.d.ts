@@ -7,4 +7,5 @@ export type WifiServiceConfig = {
    * hostapd config file
    */
   config: string;
+  update_at: number;
 };

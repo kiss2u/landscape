@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export, export_to = "common/firewall.d.ts")]
 #[repr(u8)]
 #[serde(rename_all = "lowercase")]
 pub enum LandscapeIpProtocolCode {
     TCP = 6,
     UDP = 17,
     ICMP = 1,
-    ICMPV6 = 58,
+    ICMPv6 = 58,
 }

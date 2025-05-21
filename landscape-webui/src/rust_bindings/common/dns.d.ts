@@ -41,6 +41,7 @@ export type DNSRuleConfig = {
    */
   source: Array<RuleSource>;
   flow_id: number;
+  update_at: number;
 };
 
 export type DnsUpstreamType = { "t": "plaintext" } | {

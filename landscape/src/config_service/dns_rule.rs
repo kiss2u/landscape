@@ -14,7 +14,7 @@ pub struct DNSRuleService {
 
 impl DNSRuleService {
     pub fn new(store: LandscapeDBServiceProvider) -> Self {
-        let store = store.dns_store();
+        let store = store.dns_rule_store();
         Self { store }
     }
 }

@@ -6,9 +6,9 @@ export type IPV6RAConfig = {
    */
   subnet_prefix: number;
   /**
-   * 子网索引
+   * 子网索引 // u64 unsupported by sqlx-sqlite
    */
-  subnet_index: bigint;
+  subnet_index: number;
   /**
    * 当前主机的 mac 地址
    */
@@ -28,6 +28,7 @@ export type IPV6RAServiceConfig = {
   iface_name: string;
   enable: boolean;
   config: IPV6RAConfig;
+  update_at: number;
 };
 
 export type RouterFlags = {
