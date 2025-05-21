@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import DnsRuleCard from "@/components/dns/DnsRuleCard.vue";
-import { get_dns_rule } from "@/api/dns_service";
+import { get_flow_dns_rules } from "@/api/dns_rule";
 
 interface Props {
   flow_id?: number;
@@ -15,7 +15,7 @@ const show = defineModel<boolean>("show", { required: true });
 const rules = ref<any>([]);
 
 async function read_rules() {
-  rules.value = await get_dns_rule(props.flow_id);
+  rules.value = await get_flow_dns_rules(props.flow_id);
 }
 
 const show_create_modal = ref(false);

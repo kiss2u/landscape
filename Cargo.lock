@@ -2489,6 +2489,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "ts-rs",
+ "uuid",
  "wl-nl80211",
  "zbus",
 ]

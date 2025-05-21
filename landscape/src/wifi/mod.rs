@@ -179,7 +179,7 @@ pub struct WifiServiceManagerService {
 }
 
 impl ControllerService for WifiServiceManagerService {
-    type ID = String;
+    type Id = String;
     type Config = WifiServiceConfig;
     type DatabseAction = WifiServiceRepository;
     type H = WifiService;

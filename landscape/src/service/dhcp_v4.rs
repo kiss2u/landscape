@@ -53,7 +53,7 @@ pub struct DHCPv4ServerManagerService {
 }
 
 impl ControllerService for DHCPv4ServerManagerService {
-    type ID = String;
+    type Id = String;
 
     type Config = DHCPv4ServiceConfig;
 

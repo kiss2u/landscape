@@ -23,9 +23,13 @@ use nat::NatServiceConfig;
 use ppp::PPPDServiceConfig;
 use ra::IPV6RAServiceConfig;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use wifi::WifiServiceConfig;
 
 use crate::{firewall::FirewallRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig};
+
+pub type FlowId = u32;
+pub type ConfigId = Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LandscapeConfig {}

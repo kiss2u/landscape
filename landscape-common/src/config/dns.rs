@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::database::repository::LandscapeDBStore;
+use crate::utils::time::get_f64_timestamp;
 use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 
 /// DNS 配置
@@ -31,6 +33,9 @@ pub struct DNSRuleConfig {
 
     #[serde(default = "default_flow_id")]
     pub flow_id: u32,
+
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 fn default_flow_id() -> u32 {
@@ -40,6 +45,12 @@ fn default_flow_id() -> u32 {
 impl LandscapeStore for DNSRuleConfig {
     fn get_store_key(&self) -> String {
         self.index.to_string()
+    }
+}
+
+impl LandscapeDBStore<Uuid> for DNSRuleConfig {
+    fn get_id(&self) -> Uuid {
+        self.id.unwrap_or(Uuid::new_v4())
     }
 }
 
@@ -55,6 +66,7 @@ impl Default for DNSRuleConfig {
             source: vec![],
             resolve_mode: DNSResolveMode::default(),
             flow_id: default_flow_id(),
+            update_at: get_f64_timestamp(),
         }
     }
 }

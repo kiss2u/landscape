@@ -51,7 +51,7 @@ pub struct IPV6RAManagerService {
 }
 
 impl ControllerService for IPV6RAManagerService {
-    type ID = String;
+    type Id = String;
     type Config = IPV6RAServiceConfig;
     type DatabseAction = IPV6RAServiceRepository;
     type H = IPV6RAService;

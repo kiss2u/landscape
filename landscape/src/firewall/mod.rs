@@ -82,7 +82,7 @@ pub struct FirewallServiceManagerService {
 }
 
 impl ControllerService for FirewallServiceManagerService {
-    type ID = String;
+    type Id = String;
     type Config = FirewallServiceConfig;
     type DatabseAction = FirewallServiceRepository;
     type H = FirewallService;

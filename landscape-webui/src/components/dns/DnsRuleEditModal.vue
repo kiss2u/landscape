@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { push_dns_rule } from "@/api/dns_service";
+import { push_dns_rule } from "@/api/dns_rule";
 import {
   DnsRule,
   get_dns_resolve_mode_options,

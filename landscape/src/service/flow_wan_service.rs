@@ -74,7 +74,7 @@ pub struct FlowWanServiceManagerService {
 }
 
 impl ControllerService for FlowWanServiceManagerService {
-    type ID = String;
+    type Id = String;
     type Config = FlowWanServiceConfig;
     type DatabseAction = FlowWanServiceRepository;
     type H = FlowWanService;

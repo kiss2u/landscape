@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import DnsRuleEditModal from "@/components/dns/DnsRuleEditModal.vue";
 import { DnsRule } from "@/lib/dns";
-import { delete_dns_rule } from "@/api/dns_service";
+import { delete_dns_rule } from "@/api/dns_rule";
 const rule = defineModel<DnsRule>("rule", { required: true });
 
 const show_edit_modal = ref(false);
@@ -10,8 +10,10 @@ const show_edit_modal = ref(false);
 const emit = defineEmits(["refresh"]);
 
 async function del() {
-  await delete_dns_rule(rule.value.index);
-  emit("refresh");
+  if (rule.value.id !== null) {
+    await delete_dns_rule(rule.value.id);
+    emit("refresh");
+  }
 }
 </script>
 <template>

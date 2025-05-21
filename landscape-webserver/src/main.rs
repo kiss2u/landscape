@@ -8,6 +8,7 @@ use axum::{
 };
 
 use colored::Colorize;
+use config_service::dns_rule::get_dns_rule_config_paths;
 use landscape::boot::{boot_check, log::init_logger};
 use landscape_common::{
     args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
@@ -20,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 mod auth;
+mod config_service;
 mod docker;
 mod dump;
 mod error;
@@ -243,6 +245,10 @@ async fn main() -> LdResult<()> {
         .nest("/global_mark", global_mark::get_global_mark_paths(firewall_rules_store).await)
         .nest("/metric", metric::get_metric_service_paths().await)
         .nest("/flow", flow::get_flow_paths(flow_store, dns_store, wan_ip_mark_store).await)
+        .nest(
+            "/config",
+            Router::new().merge(get_dns_rule_config_paths(db_store_provider.clone()).await),
+        )
         .nest(
             "/services",
             Router::new()

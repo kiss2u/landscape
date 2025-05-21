@@ -144,7 +144,7 @@ pub struct IfaceIpServiceManagerService {
 }
 
 impl ControllerService for IfaceIpServiceManagerService {
-    type ID = String;
+    type Id = String;
     type Config = IfaceIpServiceConfig;
     type DatabseAction = IfaceIpServiceRepository;
     type H = IPConfigService;

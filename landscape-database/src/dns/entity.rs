@@ -1,5 +1,9 @@
-use landscape_common::config::dns::DNSRuleConfig;
-use sea_orm::entity::prelude::*;
+use landscape_common::{
+    config::dns::DNSRuleConfig,
+    database::{repository::UpdateActiveModel, LandscapeDBFlowFilterExpr},
+};
+use migration::SimpleExpr;
+use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
 use crate::{DBId, DBJson, DBTimestamp};
@@ -38,7 +42,7 @@ impl ActiveModelBehavior for ActiveModel {
         C: ConnectionTrait,
     {
         if insert && self.id.is_not_set() {
-            self.id = sea_orm::ActiveValue::Set(Uuid::new_v4());
+            self.id = Set(Uuid::new_v4());
         }
         Ok(self)
     }
@@ -56,6 +60,38 @@ impl From<Model> for DNSRuleConfig {
             mark: entity.mark.into(),
             source: serde_json::from_str(&entity.source).unwrap(),
             flow_id: entity.flow_id,
+            update_at: entity.update_at,
         }
+    }
+}
+
+impl Into<ActiveModel> for DNSRuleConfig {
+    fn into(self) -> ActiveModel {
+        let mut active = ActiveModel {
+            id: Set(self.id.unwrap_or_else(Uuid::new_v4)),
+            ..Default::default()
+        };
+        self.update(&mut active);
+        active
+    }
+}
+
+impl UpdateActiveModel<ActiveModel> for DNSRuleConfig {
+    fn update(self, active: &mut ActiveModel) {
+        active.name = Set(self.name);
+        active.index = Set(self.index);
+        active.enable = Set(self.enable);
+        active.filter = Set(serde_json::to_value(self.filter).unwrap().into());
+        active.resolve_mode = Set(serde_json::to_value(self.resolve_mode).unwrap().into());
+        active.mark = Set(self.mark.into());
+        active.source = Set(serde_json::to_string(&self.source).unwrap());
+        active.flow_id = Set(self.flow_id);
+        active.update_at = Set(self.update_at);
+    }
+}
+
+impl LandscapeDBFlowFilterExpr for DNSRuleConfigModel {
+    fn get_flow_filter(id: landscape_common::config::FlowId) -> SimpleExpr {
+        Column::FlowId.eq(id)
     }
 }

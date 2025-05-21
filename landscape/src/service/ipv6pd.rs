@@ -56,7 +56,7 @@ pub struct DHCPv6ClientManagerService {
 }
 
 impl ControllerService for DHCPv6ClientManagerService {
-    type ID = String;
+    type Id = String;
     type Config = IPV6PDServiceConfig;
     type DatabseAction = DHCPv6ClientRepository;
     type H = IPV6PDService;

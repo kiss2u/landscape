@@ -83,7 +83,7 @@ pub struct MssClampServiceManagerService {
 }
 
 impl ControllerService for MssClampServiceManagerService {
-    type ID = String;
+    type Id = String;
     type Config = MSSClampServiceConfig;
     type DatabseAction = MssClampServiceRepository;
     type H = MssClampService;

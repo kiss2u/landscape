@@ -84,7 +84,7 @@ pub struct NatServiceManagerService {
 }
 
 impl ControllerService for NatServiceManagerService {
-    type ID = String;
+    type Id = String;
     type Config = NatServiceConfig;
     type DatabseAction = NatServiceRepository;
     type H = NatService;

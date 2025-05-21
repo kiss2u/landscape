@@ -181,7 +181,7 @@ pub struct PPPDServiceConfigManagerService {
 }
 
 impl ControllerService for PPPDServiceConfigManagerService {
-    type ID = String;
+    type Id = String;
     type Config = PPPDServiceConfig;
     type DatabseAction = PPPDServiceRepository;
     type H = PPPDService;
