@@ -2,16 +2,20 @@ use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use uuid::Uuid;
 
+use crate::database::repository::LandscapeDBStore;
 use crate::store::storev2::LandscapeStore;
+use crate::utils::time::get_f64_timestamp;
 
 pub mod mark;
 pub mod target;
 
 /// 流控配置结构体
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
-#[ts(export, export_to = "flow.ts")]
+#[ts(export, export_to = "common/flow.ts")]
 pub struct FlowConfig {
+    pub id: Option<Uuid>,
     /// 是否启用
     pub enable: bool,
     /// 流 ID
@@ -23,6 +27,8 @@ pub struct FlowConfig {
     pub packet_handle_iface_name: Vec<FlowTarget>,
     /// 备注
     pub remark: String,
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl LandscapeStore for FlowConfig {
@@ -31,9 +37,15 @@ impl LandscapeStore for FlowConfig {
     }
 }
 
+impl LandscapeDBStore<Uuid> for FlowConfig {
+    fn get_id(&self) -> Uuid {
+        self.id.unwrap_or(Uuid::new_v4())
+    }
+}
+
 /// 数据包匹配该流控标志
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, TS)]
-#[ts(export, export_to = "flow.ts")]
+#[ts(export, export_to = "common/flow.ts")]
 pub struct PacketMatchMark {
     pub ip: IpAddr,
     pub vlan_id: Option<u32>,
@@ -41,7 +53,7 @@ pub struct PacketMatchMark {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
-#[ts(export, export_to = "flow.ts")]
+#[ts(export, export_to = "common/flow.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum FlowTarget {

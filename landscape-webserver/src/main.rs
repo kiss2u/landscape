@@ -10,6 +10,7 @@ use axum::{
 use colored::Colorize;
 use config_service::{
     dns_rule::get_dns_rule_config_paths, firewall_rule::get_firewall_rule_config_paths,
+    flow_rule::get_flow_rule_config_paths,
 };
 use landscape::boot::{boot_check, log::init_logger};
 use landscape_common::{
@@ -27,8 +28,6 @@ mod config_service;
 mod docker;
 mod dump;
 mod error;
-mod flow;
-mod global_mark;
 mod iface;
 mod metric;
 mod service;
@@ -244,14 +243,13 @@ async fn main() -> LdResult<()> {
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
-        .nest("/global_mark", global_mark::get_global_mark_paths(firewall_rules_store).await)
         .nest("/metric", metric::get_metric_service_paths().await)
-        .nest("/flow", flow::get_flow_paths(flow_store, dns_store, wan_ip_mark_store).await)
         .nest(
             "/config",
             Router::new()
                 .merge(get_dns_rule_config_paths(db_store_provider.clone()).await)
-                .merge(get_firewall_rule_config_paths(db_store_provider.clone()).await),
+                .merge(get_firewall_rule_config_paths(db_store_provider.clone()).await)
+                .merge(get_flow_rule_config_paths(db_store_provider.clone()).await),
         )
         .nest(
             "/services",

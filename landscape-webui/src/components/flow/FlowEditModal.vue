@@ -11,7 +11,7 @@ import {
   FlowTargetTypes,
   flow_target_options,
 } from "@/lib/default_value";
-import { FlowConfig, FlowTarget } from "@/rust_bindings/flow";
+import { FlowConfig, FlowTarget } from "@/rust_bindings/common/flow";
 
 const message = useMessage();
 
@@ -73,7 +73,12 @@ function switch_target() {}
     <n-form style="flex: 1" ref="formRef" :model="rule" :cols="5">
       <n-grid :cols="5">
         <n-form-item-gi label="流 ID 标识" :span="2">
-          <n-input-number v-model:value="rule.flow_id" clearable />
+          <n-input-number
+            :min="1"
+            :max="255"
+            v-model:value="rule.flow_id"
+            clearable
+          />
         </n-form-item-gi>
         <n-form-item-gi label="启用" :offset="1" :span="1">
           <n-switch v-model:value="rule.enable">

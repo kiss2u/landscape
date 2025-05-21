@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { FlowConfig } from "@/rust_bindings/flow";
+import { FlowConfig } from "@/rust_bindings/common/flow";
 import { get_flow_rules } from "@/api/flow";
 import FlowEditModal from "@/components/flow/FlowEditModal.vue";
 
@@ -8,8 +8,12 @@ const flows = ref<FlowConfig[]>([]);
 
 const show_edit = ref(false);
 onMounted(async () => {
-  flows.value = await get_flow_rules();
+  await refresh();
 });
+
+async function refresh() {
+  flows.value = await get_flow_rules();
+}
 </script>
 <template>
   <n-layout :native-scrollbar="false" content-style="padding: 10px;">
@@ -36,10 +40,10 @@ onMounted(async () => {
           :key="flow.flow_id"
           style="display: flex"
         >
-          <FlowConfigCard :config="flow"></FlowConfigCard>
+          <FlowConfigCard @refresh="refresh" :config="flow"></FlowConfigCard>
         </n-grid-item>
       </n-grid>
     </n-flex>
-    <FlowEditModal v-model:show="show_edit" />
+    <FlowEditModal @refresh="refresh" v-model:show="show_edit" />
   </n-layout>
 </template>

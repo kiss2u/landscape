@@ -16,6 +16,7 @@ pub mod wifi;
 
 pub mod dns_rule;
 pub mod firewall_rule;
+pub mod flow_rule;
 
 /// 定义 ID 类型
 pub(crate) type DBId = Uuid;

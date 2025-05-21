@@ -37,7 +37,7 @@ async fn get_firewall_rule(
     if let Some(config) = result {
         Ok(Json(config))
     } else {
-        Err(LandscapeApiError::NotFound(format!("Dns Rule id: {:?}", id)))
+        Err(LandscapeApiError::NotFound(format!("Firewall Rule id: {:?}", id)))
     }
 }
 
