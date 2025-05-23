@@ -12,7 +12,13 @@ use config_service::{
     dns_rule::get_dns_rule_config_paths, dst_ip_rule::get_dst_ip_rule_config_paths,
     firewall_rule::get_firewall_rule_config_paths, flow_rule::get_flow_rule_config_paths,
 };
-use landscape::boot::{boot_check, log::init_logger};
+use landscape::{
+    boot::{boot_check, log::init_logger},
+    config_service::{
+        dns_rule::DNSRuleService, flow_rule::FlowRuleService, geo_site_service::GeoSiteService,
+    },
+    sys_service::dns_service::LandscapeDnsService,
+};
 use landscape_common::{
     args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
     config::InitConfig,
@@ -21,6 +27,8 @@ use landscape_common::{
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use serde::{Deserialize, Serialize};
+use sys_service::dns_service::get_dns_paths;
+use tokio::sync::mpsc;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 mod auth;
@@ -31,6 +39,7 @@ mod error;
 mod iface;
 mod metric;
 mod service;
+mod sys_service;
 mod sysinfo;
 
 use service::{
@@ -41,6 +50,16 @@ use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
 use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::{error, info};
+
+const DNS_EVENT_CHANNEL_SIZE: usize = 128;
+
+#[derive(Clone)]
+pub struct LandscapeApp {
+    pub dns_service: LandscapeDnsService,
+    pub dns_rule_service: DNSRuleService,
+    pub flow_rule_service: FlowRuleService,
+    pub geosite_service: GeoSiteService,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 struct SimpleResult {
@@ -57,6 +76,28 @@ async fn main() -> LdResult<()> {
     let home_path = LAND_HOME_PATH.clone();
 
     let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
+
+    // 初始化 App
+
+    let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
+    let geosite_service =
+        GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let dns_rule_service =
+        DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let flow_rule_service = FlowRuleService::new(db_store_provider.clone()).await;
+    let dns_service = LandscapeDnsService::new(
+        dns_service_rx,
+        dns_rule_service.clone(),
+        flow_rule_service.clone(),
+    )
+    .await;
+    let landscape_app_status = LandscapeApp {
+        dns_service,
+        dns_rule_service,
+        flow_rule_service,
+        geosite_service,
+    };
+    // 初始化结束
 
     let dev_obs = landscape::observer::dev_observer().await;
     // let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
@@ -243,12 +284,13 @@ async fn main() -> LdResult<()> {
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest("/metric", metric::get_metric_service_paths().await)
+        .nest("/sys_service", get_dns_paths().await.with_state(landscape_app_status.clone()))
         .nest(
             "/config",
             Router::new()
-                .merge(get_dns_rule_config_paths(db_store_provider.clone()).await)
+                .merge(get_dns_rule_config_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_firewall_rule_config_paths(db_store_provider.clone()).await)
-                .merge(get_flow_rule_config_paths(db_store_provider.clone()).await)
+                .merge(get_flow_rule_config_paths().await.with_state(landscape_app_status))
                 .merge(get_dst_ip_rule_config_paths(db_store_provider.clone()).await),
         )
         .nest(

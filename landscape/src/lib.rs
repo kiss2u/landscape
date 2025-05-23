@@ -28,6 +28,7 @@ pub mod observer;
 pub mod pppoe_client;
 pub mod routerstatus;
 pub mod service;
+pub mod sys_service;
 pub mod wifi;
 
 // fn gen_default_config(

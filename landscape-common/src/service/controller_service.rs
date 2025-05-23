@@ -56,8 +56,18 @@ pub trait ConfigController {
 
     fn get_repository(&self) -> &Self::DatabseAction;
 
+    async fn after_update_config(
+        &self,
+        new_configs: Vec<Self::Config>,
+        old_configs: Vec<Self::Config>,
+    );
+
     async fn set(&self, config: Self::Config) -> Self::Config {
-        self.get_repository().set(config).await.unwrap()
+        let old_configs = self.list().await;
+        let add_result = self.get_repository().set(config).await.unwrap();
+        let new_configs = self.list().await;
+        self.after_update_config(old_configs, new_configs).await;
+        add_result
     }
 
     async fn list(&self) -> Vec<Self::Config> {
@@ -69,7 +79,10 @@ pub trait ConfigController {
     }
 
     async fn delete(&self, id: Self::Id) {
-        self.get_repository().delete(id).await.unwrap()
+        let old_configs = self.list().await;
+        self.get_repository().delete(id).await.unwrap();
+        let new_configs = self.list().await;
+        self.after_update_config(old_configs, new_configs).await;
     }
 }
 

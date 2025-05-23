@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub async fn get_firewall_rule_config_paths(store: LandscapeDBServiceProvider) -> Router {
-    let share_state = FirewallRuleService::new(store);
+    let share_state = FirewallRuleService::new(store).await;
 
     Router::new()
         .route("/firewall_rules", get(get_firewall_rules).post(add_firewall_rule))

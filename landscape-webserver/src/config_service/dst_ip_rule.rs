@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub async fn get_dst_ip_rule_config_paths(store: LandscapeDBServiceProvider) -> Router {
-    let share_state = DstIpRuleService::new(store);
+    let share_state = DstIpRuleService::new(store).await;
 
     Router::new()
         .route("/dst_ip_rules", get(get_dst_ip_rules).post(add_dst_ip_rules))
