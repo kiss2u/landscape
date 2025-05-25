@@ -1,21 +1,146 @@
-use std::collections::HashMap;
+use landscape_common::{
+    config::geo::GeoDomainConfig,
+    database::LandscapeDBTrait,
+    service::controller_service::ConfigController,
+    utils::time::{get_f64_timestamp, MILL_A_DAY},
+};
+use uuid::Uuid;
 
-use landscape_common::{config::dns::DomainConfig, event::dns::DnsEvent};
-use landscape_database::provider::LandscapeDBServiceProvider;
-use tokio::sync::mpsc;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use landscape_common::{
+    args::LAND_HOME_PATH,
+    config::{dns::DomainConfig, geo::GeoSiteConfig},
+    event::dns::DnsEvent,
+    store::storev2::StoreFileManager,
+    LANDSCAPE_GEO_CACHE_TMP_DIR,
+};
+use landscape_database::{
+    geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,
+};
+use reqwest::Client;
+use tokio::sync::{mpsc, Mutex};
+
+const A_DAY: u64 = 60 * 60 * 24;
 
 #[derive(Clone)]
-pub struct GeoSiteService {}
+pub struct GeoSiteService {
+    store: GeoSiteConfigRepository,
+    file_cache: Arc<Mutex<StoreFileManager<GeoDomainConfig>>>,
+    dns_events_tx: mpsc::Sender<DnsEvent>,
+}
 
 impl GeoSiteService {
     pub async fn new(
-        _store: LandscapeDBServiceProvider,
-        _dns_events_tx: mpsc::Sender<DnsEvent>,
+        store: LandscapeDBServiceProvider,
+        dns_events_tx: mpsc::Sender<DnsEvent>,
     ) -> Self {
-        Self {}
+        let store = store.geo_site_rule_store();
+
+        let file_cache = Arc::new(Mutex::new(StoreFileManager::new(
+            LAND_HOME_PATH.join(LANDSCAPE_GEO_CACHE_TMP_DIR),
+            "site".to_string(),
+        )));
+
+        let service = Self { store, file_cache, dns_events_tx };
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            //
+            let mut ticker = tokio::time::interval(Duration::from_secs(A_DAY));
+            loop {
+                service_clone.refresh().await;
+                // 等待下一次 tick
+                ticker.tick().await;
+            }
+        });
+        service
     }
 
     pub fn get_geo_site_config(&self) -> HashMap<String, Vec<DomainConfig>> {
         HashMap::new()
+    }
+
+    pub async fn refresh(&self) {
+        // 读取当前规则
+        let configs: Vec<GeoSiteConfig> = self.store.list().await.unwrap();
+
+        // let mut file_cache_lock = self.file_cache.lock().await;
+
+        // file_cache_lock.truncate();
+        // drop(file_cache_lock);
+        let client = Client::new();
+        for mut config in configs {
+            let url = config.url.clone();
+
+            tracing::debug!("download file: {}", url);
+            let time = Instant::now();
+
+            match client.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                    Ok(bytes) => {
+                        let result = landscape_protobuf::read_geo_sites_from_bytes(bytes).await;
+                        // tracing::debug!("get response file: {:?}", result);
+
+                        let mut file_cache_lock = self.file_cache.lock().await;
+                        for (key, values) in result {
+                            file_cache_lock.set(GeoDomainConfig {
+                                name: config.name.clone(),
+                                key,
+                                values,
+                            });
+                        }
+                        drop(file_cache_lock);
+
+                        config.next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
+                        let _ = self.store.set(config).await;
+
+                        tracing::debug!(
+                            "handle file done: {}, time: {}s",
+                            url,
+                            time.elapsed().as_secs()
+                        );
+                    }
+                    Err(e) => tracing::error!("read {} response error: {}", url, e),
+                },
+                Ok(resp) => {
+                    tracing::error!("download {} error, HTTP status: {}", url, resp.status());
+                }
+                Err(e) => {
+                    tracing::error!("request {} error: {}", url, e);
+                }
+            }
+        }
+        let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+    }
+}
+
+impl GeoSiteService {
+    pub async fn list_all_keys(&self) -> Vec<GeoDomainConfig> {
+        let mut lock = self.file_cache.lock().await;
+        lock.list()
+    }
+}
+
+#[async_trait::async_trait]
+impl ConfigController for GeoSiteService {
+    type Id = Uuid;
+
+    type Config = GeoSiteConfig;
+
+    type DatabseAction = GeoSiteConfigRepository;
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
+
+    async fn after_update_config(
+        &self,
+        _new_configs: Vec<Self::Config>,
+        _old_configs: Vec<Self::Config>,
+    ) {
     }
 }

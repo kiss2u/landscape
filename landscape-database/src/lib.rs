@@ -19,6 +19,8 @@ pub mod dst_ip_rule;
 pub mod firewall_rule;
 pub mod flow_rule;
 
+pub mod geo_site;
+
 /// 定义 ID 类型
 pub(crate) type DBId = Uuid;
 /// 定义 JSON

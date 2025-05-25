@@ -8,6 +8,7 @@ import Docker from "@/views/Docker.vue";
 import Topology from "@/views/Topology.vue";
 import Firewall from "@/views/Firewall.vue";
 import Metric from "@/views/Metric.vue";
+import Geo from "@/views/Geo.vue";
 
 import Login from "@/views/Login.vue";
 
@@ -41,6 +42,11 @@ const inner_zone: Array<RouteRecordRaw> = [
     path: "/metric",
     name: "metric",
     component: Metric,
+  },
+  {
+    path: "/geo",
+    name: "geo",
+    component: Geo,
   },
 ];
 

@@ -78,6 +78,7 @@ pub fn get_relative_time_ns() -> Result<u64, i32> {
     }
 }
 
+pub const MILL_A_DAY: u32 = 1000 * 60 * 60 * 24;
 ///
 pub fn get_f64_timestamp() -> f64 {
     const MILLIS_PER_SEC: u64 = 1_000;

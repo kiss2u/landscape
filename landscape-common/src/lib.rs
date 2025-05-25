@@ -40,6 +40,8 @@ pub const LANDSCAPE_DB_SQLITE_NAME: &str = "landscape_db.sqlite";
 pub const INIT_FILE_NAME: &str = "landscape_init.toml";
 /// LOG Path
 pub const LANDSCAPE_HOSTAPD_TMP_DIR: &str = "hostapd_tmp";
+/// GEO_CACHE Path
+pub const LANDSCAPE_GEO_CACHE_TMP_DIR: &str = "geo_tmp";
 /// init lock file name
 pub const INIT_LOCK_FILE_NAME: &str = "landscape_init.lock";
 /// sys token

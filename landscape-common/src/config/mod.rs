@@ -3,6 +3,7 @@ pub mod dhcp_v6_client;
 pub mod dns;
 pub mod firewall;
 pub mod flow;
+pub mod geo;
 pub mod iface;
 pub mod iface_ip;
 pub mod mss_clamp;

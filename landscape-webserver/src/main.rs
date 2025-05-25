@@ -11,6 +11,7 @@ use colored::Colorize;
 use config_service::{
     dns_rule::get_dns_rule_config_paths, dst_ip_rule::get_dst_ip_rule_config_paths,
     firewall_rule::get_firewall_rule_config_paths, flow_rule::get_flow_rule_config_paths,
+    geo_site::get_geo_site_config_paths,
 };
 use landscape::{
     boot::{boot_check, log::init_logger},
@@ -58,7 +59,7 @@ pub struct LandscapeApp {
     pub dns_service: LandscapeDnsService,
     pub dns_rule_service: DNSRuleService,
     pub flow_rule_service: FlowRuleService,
-    pub geosite_service: GeoSiteService,
+    pub geo_site_service: GeoSiteService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -80,7 +81,7 @@ async fn main() -> LdResult<()> {
     // 初始化 App
 
     let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
-    let geosite_service =
+    let geo_site_service =
         GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_rule_service =
         DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
@@ -89,13 +90,14 @@ async fn main() -> LdResult<()> {
         dns_service_rx,
         dns_rule_service.clone(),
         flow_rule_service.clone(),
+        geo_site_service.clone(),
     )
     .await;
     let landscape_app_status = LandscapeApp {
         dns_service,
         dns_rule_service,
         flow_rule_service,
-        geosite_service,
+        geo_site_service,
     };
     // 初始化结束
 
@@ -290,7 +292,8 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_dns_rule_config_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_firewall_rule_config_paths(db_store_provider.clone()).await)
-                .merge(get_flow_rule_config_paths().await.with_state(landscape_app_status))
+                .merge(get_flow_rule_config_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_geo_site_config_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_dst_ip_rule_config_paths(db_store_provider.clone()).await),
         )
         .nest(

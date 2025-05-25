@@ -12,6 +12,19 @@ use protos::geo::{mod_Domain::Type, Domain, GeoIPListOwned, GeoSiteListOwned};
 
 mod protos;
 
+pub async fn read_geo_sites_from_bytes(
+    contents: impl Into<Vec<u8>>,
+) -> HashMap<String, Vec<DomainConfig>> {
+    let mut result = HashMap::new();
+    let list = GeoSiteListOwned::try_from(contents.into()).unwrap();
+
+    for entry in list.proto().entry.iter() {
+        let domains = entry.domain.iter().map(convert_domain_from_proto).collect();
+        result.insert(entry.country_code.to_string(), domains);
+    }
+    result
+}
+
 pub async fn read_geo_sites<T: AsRef<Path>>(
     geo_file_path: T,
 ) -> HashMap<String, Vec<DomainConfig>> {
@@ -98,8 +111,10 @@ mod tests {
         test_memory_usage();
         let result = read_geo_sites("/root/.landscape-router/geosite.dat1").await;
         for (domain, domain_configs) in result {
-            for domain_config in domain_configs {
-                println!("{domain:?}: {:?}", domain_config);
+            if domain == "test" {
+                for domain_config in domain_configs {
+                    println!("{domain:?}: {:?}", domain_config);
+                }
             }
         }
         test_memory_usage();
@@ -107,6 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read() {
+        test_memory_usage();
         let home_path = homedir::my_home().unwrap().unwrap().join(".landscape-router");
         let geo_file_path = home_path.join("geoip.dat");
 
@@ -127,5 +143,6 @@ mod tests {
             // }
         }
         println!("other count: {sum:?}");
+        test_memory_usage();
     }
 }

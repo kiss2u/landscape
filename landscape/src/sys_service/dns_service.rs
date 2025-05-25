@@ -5,14 +5,16 @@ use landscape_common::{
 use landscape_dns::diff_server::LandscapeFiffFlowDnsService;
 use tokio::sync::mpsc;
 
-use crate::config_service::{dns_rule::DNSRuleService, flow_rule::FlowRuleService};
+use crate::config_service::{
+    dns_rule::DNSRuleService, flow_rule::FlowRuleService, geo_site_service::GeoSiteService,
+};
 
 #[derive(Clone)]
 pub struct LandscapeDnsService {
     dns_service: LandscapeFiffFlowDnsService,
     dns_rule_service: DNSRuleService,
     flow_rule_service: FlowRuleService,
-    // geo_service: GeoService,
+    geo_site_service: GeoSiteService,
 }
 
 impl LandscapeDnsService {
@@ -20,6 +22,7 @@ impl LandscapeDnsService {
         mut receiver: mpsc::Receiver<DnsEvent>,
         dns_rule_service: DNSRuleService,
         flow_rule_service: FlowRuleService,
+        geo_site_service: GeoSiteService,
     ) -> Self {
         let dns_service = LandscapeFiffFlowDnsService::new().await;
 
@@ -44,7 +47,12 @@ impl LandscapeDnsService {
                 }
             }
         });
-        Self { dns_service, dns_rule_service, flow_rule_service }
+        Self {
+            dns_service,
+            dns_rule_service,
+            flow_rule_service,
+            geo_site_service,
+        }
     }
 
     // pub async fn get_event_sender(&self) -> mpsc::Sender<DnsEvent> {
@@ -58,6 +66,7 @@ impl LandscapeDnsService {
     pub async fn start_dns_service(&self) {
         let dns_rules = self.dns_rule_service.list().await;
         let flow_rules = self.flow_rule_service.list().await;
+        let _ = self.geo_site_service.get_geo_site_config();
         // TODO 重置 Flow 相关 map 信息
 
         self.dns_service.init_handle(dns_rules).await;

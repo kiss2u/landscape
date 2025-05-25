@@ -5,12 +5,12 @@ import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 const base_url = import.meta.env.VITE_AXIOS_BASE_URL;
 const instance = axios.create({
   baseURL: `${base_url}src/`,
-  timeout: 1000,
+  timeout: 10000,
 });
 
 const auth_instance = axios.create({
   baseURL: `${base_url}auth/`,
-  timeout: 1000,
+  timeout: 10000,
 });
 
 instance.interceptors.request.use(

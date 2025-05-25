@@ -36,6 +36,7 @@ paste = "*"
 # self_cell = "*"
 colored = "2"
 dotenvy = "*"
+reqwest = "*"
 
 dhcproto = "0.12.0"
 

@@ -9,6 +9,7 @@ landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-common = { path = "../landscape-common" }
 landscape-database = { path = "../landscape-database" }
 landscape-dns = { path = "../landscape-dns" }
+landscape-protobuf = { path = "../landscape-protobuf" }
 
 paste = { workspace = true }
 toml = { workspace = true }
@@ -19,6 +20,7 @@ zbus = "4.1.2"
 sysinfo = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
+reqwest = { workspace = true }
 
 rtnetlink = { workspace = true }
 netlink-sys = { workspace = true }
