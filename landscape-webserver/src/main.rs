@@ -16,15 +16,15 @@ use config_service::{
 use landscape::{
     boot::{boot_check, log::init_logger},
     config_service::{
-        dns_rule::DNSRuleService, flow_rule::FlowRuleService, geo_site_service::GeoSiteService,
+        dns_rule::DNSRuleService, dst_ip_rule::DstIpRuleService,
+        firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
+        geo_site_service::GeoSiteService,
     },
     sys_service::dns_service::LandscapeDnsService,
 };
 use landscape_common::{
     args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
-    config::InitConfig,
     error::LdResult,
-    store::storev2::StoreFileManager,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use serde::{Deserialize, Serialize};
@@ -60,6 +60,8 @@ pub struct LandscapeApp {
     pub dns_rule_service: DNSRuleService,
     pub flow_rule_service: FlowRuleService,
     pub geo_site_service: GeoSiteService,
+    pub fire_wall_rule_service: FirewallRuleService,
+    pub dst_ip_rule_service: DstIpRuleService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -78,6 +80,9 @@ async fn main() -> LdResult<()> {
 
     let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
 
+    let need_init_config = boot_check(&home_path)?;
+    db_store_provider.truncate_and_fit_from(need_init_config.clone()).await;
+
     // 初始化 App
 
     let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
@@ -93,48 +98,20 @@ async fn main() -> LdResult<()> {
         geo_site_service.clone(),
     )
     .await;
+    let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
+    let dst_ip_rule_service = DstIpRuleService::new(db_store_provider.clone()).await;
+
     let landscape_app_status = LandscapeApp {
         dns_service,
         dns_rule_service,
         flow_rule_service,
         geo_site_service,
+        fire_wall_rule_service,
+        dst_ip_rule_service,
     };
     // 初始化结束
 
     let dev_obs = landscape::observer::dev_observer().await;
-    // let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
-    let mut iface_ipconfig_store =
-        StoreFileManager::new(home_path.clone(), "iface_ipconfig".to_string());
-    let mut iface_nat_store = StoreFileManager::new(home_path.clone(), "iface_nat".to_string());
-
-    let mut iface_mark_store = StoreFileManager::new(home_path.clone(), "iface_mark".to_string());
-
-    let mut iface_pppd_store = StoreFileManager::new(home_path.clone(), "iface_pppd".to_string());
-
-    let mut flow_store = StoreFileManager::new(home_path.clone(), "flow_rule".to_string());
-    let mut dns_store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
-
-    // let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
-
-    let mut ipv6pd_store = StoreFileManager::new(home_path.clone(), "ipv6pd_service".to_string());
-    let mut dhcpv4_service_store =
-        StoreFileManager::new(home_path.clone(), "dhcpv4_service".to_string());
-    let mut icmpv6ra_store =
-        StoreFileManager::new(home_path.clone(), "icmpv6ra_service".to_string());
-
-    let mut firewall_store =
-        StoreFileManager::new(home_path.clone(), "firewall_service".to_string());
-
-    let mut firewall_rules_store =
-        StoreFileManager::new(home_path.clone(), "firewall_rules".to_string());
-
-    let mut wifi_config_store = StoreFileManager::new(home_path.clone(), "iface_wifi".to_string());
-
-    let mut mss_clamp_store = StoreFileManager::new(home_path.clone(), "mss_clamp".to_string());
-
-    let need_init_config = boot_check(&home_path)?;
-
-    db_store_provider.truncate_and_fit_from(need_init_config.clone()).await;
 
     let home_log_str = format!("{}", home_path.display()).bright_green();
     if !LAND_ARGS.log_output_in_terminal {
@@ -144,93 +121,6 @@ async fn main() -> LdResult<()> {
     }
     info!("config path: {home_log_str}");
     info!("init config: {need_init_config:#?}");
-
-    // TDDO: 使用宏进行初始化
-    if let Some(InitConfig {
-        ipconfigs,
-        nats,
-        marks,
-        pppds,
-        flow_rules,
-        dns_rules,
-        dhcpv6pds,
-        icmpras,
-        firewalls,
-        firewall_rules,
-        wifi_configs,
-        dhcpv4_services,
-        mss_clamps,
-        ..
-    }) = need_init_config
-    {
-        iface_ipconfig_store.truncate();
-        iface_nat_store.truncate();
-        iface_mark_store.truncate();
-        iface_pppd_store.truncate();
-        flow_store.truncate();
-        dns_store.truncate();
-        // wan_ip_mark_store.truncate();
-        ipv6pd_store.truncate();
-        icmpv6ra_store.truncate();
-        firewall_store.truncate();
-        firewall_rules_store.truncate();
-        wifi_config_store.truncate();
-        dhcpv4_service_store.truncate();
-        mss_clamp_store.truncate();
-
-        for each_config in mss_clamps {
-            mss_clamp_store.set(each_config);
-        }
-
-        for each_config in ipconfigs {
-            iface_ipconfig_store.set(each_config);
-        }
-
-        for each_config in nats {
-            iface_nat_store.set(each_config);
-        }
-
-        for each_config in marks {
-            iface_mark_store.set(each_config);
-        }
-
-        for each_config in pppds {
-            iface_pppd_store.set(each_config);
-        }
-
-        for each_config in flow_rules {
-            flow_store.set(each_config);
-        }
-        for each_config in dns_rules {
-            dns_store.set(each_config);
-        }
-
-        // for each_config in wan_ip_mark {
-        //     wan_ip_mark_store.set(each_config);
-        // }
-
-        for each_config in dhcpv6pds {
-            ipv6pd_store.set(each_config);
-        }
-
-        for each_config in icmpras {
-            icmpv6ra_store.set(each_config);
-        }
-
-        for each_config in firewalls {
-            firewall_store.set(each_config);
-        }
-        for each_config in firewall_rules {
-            firewall_rules_store.set(each_config);
-        }
-
-        for each_config in wifi_configs {
-            wifi_config_store.set(each_config);
-        }
-        for each_config in dhcpv4_services {
-            dhcpv4_service_store.set(each_config);
-        }
-    }
 
     // need iproute2
     if let Err(e) =
@@ -290,11 +180,12 @@ async fn main() -> LdResult<()> {
         .nest(
             "/config",
             Router::new()
-                .merge(get_dns_rule_config_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_firewall_rule_config_paths(db_store_provider.clone()).await)
-                .merge(get_flow_rule_config_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_geo_site_config_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_dst_ip_rule_config_paths(db_store_provider.clone()).await),
+                .merge(get_dns_rule_config_paths().await)
+                .merge(get_firewall_rule_config_paths().await)
+                .merge(get_flow_rule_config_paths().await)
+                .merge(get_geo_site_config_paths().await)
+                .merge(get_dst_ip_rule_config_paths().await)
+                .with_state(landscape_app_status.clone()),
         )
         .nest(
             "/services",

@@ -3,37 +3,30 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use landscape::config_service::firewall_rule::FirewallRuleService;
 use landscape_common::service::controller_service::ConfigController;
 use landscape_common::{config::ConfigId, firewall::FirewallRuleConfig};
-use landscape_database::provider::LandscapeDBServiceProvider;
 
 use crate::{
     error::{LandscapeApiError, LandscapeResult},
-    SimpleResult,
+    LandscapeApp, SimpleResult,
 };
 
-pub async fn get_firewall_rule_config_paths(store: LandscapeDBServiceProvider) -> Router {
-    let share_state = FirewallRuleService::new(store).await;
-
+pub async fn get_firewall_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/firewall_rules", get(get_firewall_rules).post(add_firewall_rule))
         .route("/firewall_rules/:id", get(get_firewall_rule).delete(del_firewall_rule))
-        .with_state(share_state)
 }
 
-async fn get_firewall_rules(
-    State(state): State<FirewallRuleService>,
-) -> Json<Vec<FirewallRuleConfig>> {
-    let result = state.list().await;
+async fn get_firewall_rules(State(state): State<LandscapeApp>) -> Json<Vec<FirewallRuleConfig>> {
+    let result = state.fire_wall_rule_service.list().await;
     Json(result)
 }
 
 async fn get_firewall_rule(
-    State(state): State<FirewallRuleService>,
+    State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
 ) -> LandscapeResult<Json<FirewallRuleConfig>> {
-    let result = state.find_by_id(id).await;
+    let result = state.fire_wall_rule_service.find_by_id(id).await;
     if let Some(config) = result {
         Ok(Json(config))
     } else {
@@ -42,17 +35,17 @@ async fn get_firewall_rule(
 }
 
 async fn add_firewall_rule(
-    State(state): State<FirewallRuleService>,
+    State(state): State<LandscapeApp>,
     Json(firewall_rule): Json<FirewallRuleConfig>,
 ) -> Json<FirewallRuleConfig> {
-    let result = state.set(firewall_rule).await;
+    let result = state.fire_wall_rule_service.set(firewall_rule).await;
     Json(result)
 }
 
 async fn del_firewall_rule(
-    State(state): State<FirewallRuleService>,
+    State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
 ) -> Json<SimpleResult> {
-    state.delete(id).await;
+    state.fire_wall_rule_service.delete(id).await;
     Json(SimpleResult { success: true })
 }

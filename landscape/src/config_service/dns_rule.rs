@@ -21,7 +21,15 @@ impl DNSRuleService {
         dns_events_tx: mpsc::Sender<DnsEvent>,
     ) -> Self {
         let store = store.dns_rule_store();
-        Self { store, dns_events_tx }
+        let dns_rule_service = Self { store, dns_events_tx };
+
+        let rules = dns_rule_service.list().await;
+
+        if rules.is_empty() {
+            dns_rule_service.set(DNSRuleConfig::default()).await;
+        }
+
+        dns_rule_service
     }
 }
 

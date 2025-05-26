@@ -47,7 +47,7 @@ pub struct InitConfig {
 
     pub flow_rules: Vec<FlowConfig>,
     pub dns_rules: Vec<DNSRuleConfig>,
-    pub wan_ip_mark: Vec<WanIpRuleConfig>,
+    pub dst_ip_mark: Vec<WanIpRuleConfig>,
 
     pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
     pub icmpras: Vec<IPV6RAServiceConfig>,

@@ -29,6 +29,7 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     let lock_path = home_path.as_ref().join(INIT_LOCK_FILE_NAME);
 
     if !lock_path.exists() {
+        tracing::info!("init lock file not exist, do init");
         let mut file =
             OpenOptions::new().write(true).truncate(true).create(true).open(&lock_path)?;
         file.write_all(INIT_LOCK_FILE_CONTENT.as_bytes())?;
@@ -45,6 +46,7 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     }
 
     if lock_path.is_file() {
+        tracing::info!("init lock file is exist, skip init");
         return Ok(None);
     }
 

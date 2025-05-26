@@ -37,16 +37,109 @@ impl LandscapeDBServiceProvider {
 
     /// 清空数据并且从配置从初始化
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
-        if let Some(config) = config {
+        if let Some(InitConfig {
+            ipconfigs,
+            nats,
+            marks,
+            pppds,
+            flow_rules,
+            dns_rules,
+            dhcpv6pds,
+            icmpras,
+            firewalls,
+            firewall_rules,
+            wifi_configs,
+            mss_clamps,
+            ifaces,
+            dst_ip_mark,
+            dhcpv4_services,
+        }) = config
+        {
             let iface_store = self.iface_store();
             iface_store.truncate_table().await.unwrap();
-            for each_config in config.ifaces {
+            for each_config in ifaces {
                 iface_store.set_model(each_config).await.unwrap();
             }
+
             let dhcp_v4_server_store = self.dhcp_v4_server_store();
             dhcp_v4_server_store.truncate_table().await.unwrap();
-            for each_config in config.dhcpv4_services {
+            for each_config in dhcpv4_services {
                 dhcp_v4_server_store.set_model(each_config).await.unwrap();
+            }
+
+            let wifi_config_store = self.wifi_service_store();
+            for each_config in wifi_configs {
+                wifi_config_store.set_model(each_config).await.unwrap();
+            }
+
+            let firewall_service_store = self.firewall_service_store();
+            for each_config in firewalls {
+                firewall_service_store.set_model(each_config).await.unwrap();
+            }
+
+            let firewall_rules_store = self.firewall_rule_store();
+            for each_config in firewall_rules {
+                firewall_rules_store.set_model(each_config).await.unwrap();
+            }
+
+            let iface_ipconfig_store = self.iface_ip_service_store();
+            iface_ipconfig_store.truncate_table().await.unwrap();
+            for each_config in ipconfigs {
+                iface_ipconfig_store.set_model(each_config).await.unwrap();
+            }
+
+            let iface_nat_store = self.nat_service_store();
+            iface_nat_store.truncate_table().await.unwrap();
+            for each_config in nats {
+                iface_nat_store.set_model(each_config).await.unwrap();
+            }
+
+            let flow_store = self.flow_rule_store();
+            flow_store.truncate_table().await.unwrap();
+            for each_config in flow_rules {
+                flow_store.set_model(each_config).await.unwrap();
+            }
+
+            let iface_mark_store = self.flow_wan_service_store();
+            iface_mark_store.truncate_table().await.unwrap();
+            for each_config in marks {
+                iface_mark_store.set_model(each_config).await.unwrap();
+            }
+
+            let dst_ip_rule_store = self.dst_ip_rule_store();
+            iface_mark_store.truncate_table().await.unwrap();
+            for each_config in dst_ip_mark {
+                dst_ip_rule_store.set_model(each_config).await.unwrap();
+            }
+
+            let iface_pppd_store = self.pppd_service_store();
+            iface_pppd_store.truncate_table().await.unwrap();
+            for each_config in pppds {
+                iface_pppd_store.set_model(each_config).await.unwrap();
+            }
+
+            let dns_store = self.dns_rule_store();
+            dns_store.truncate_table().await.unwrap();
+            for each_config in dns_rules {
+                dns_store.set_model(each_config).await.unwrap();
+            }
+
+            let ipv6pd_store = self.dhcp_v6_client_store();
+            ipv6pd_store.truncate_table().await.unwrap();
+            for each_config in dhcpv6pds {
+                ipv6pd_store.set_model(each_config).await.unwrap();
+            }
+
+            let icmpv6ra_store = self.ra_service_store();
+            icmpv6ra_store.truncate_table().await.unwrap();
+            for each_config in icmpras {
+                icmpv6ra_store.set_model(each_config).await.unwrap();
+            }
+
+            let mss_clamp_store = self.mss_clamp_service_store();
+            mss_clamp_store.truncate_table().await.unwrap();
+            for each_config in mss_clamps {
+                mss_clamp_store.set_model(each_config).await.unwrap();
             }
         }
     }
