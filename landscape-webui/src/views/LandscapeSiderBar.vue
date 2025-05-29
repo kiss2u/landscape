@@ -97,6 +97,16 @@ const menuOptions: MenuOption[] = [
     label: "Geo 管理",
     key: "geo",
     icon: renderIcon(BookGlobe20Regular),
+    children: [
+      {
+        label: "域名",
+        key: "geo-domain",
+      },
+      // {
+      //   label: "IP",
+      //   key: "geo-ip",
+      // },
+    ],
   },
 ];
 </script>

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::{database::repository::LandscapeDBStore, store::storev2::LandscapeStore};
+use crate::{database::repository::LandscapeDBStore, store::storev3::LandscapeStoreTrait};
 
 use super::dns::DomainConfig;
 
@@ -39,8 +39,29 @@ pub struct GeoDomainConfig {
     pub values: Vec<DomainConfig>,
 }
 
-impl LandscapeStore for GeoDomainConfig {
-    fn get_store_key(&self) -> String {
-        format!("{}-{}", self.name, self.key)
+impl LandscapeStoreTrait for GeoDomainConfig {
+    type K = GeoDomainConfigKey;
+    fn get_store_key(&self) -> GeoDomainConfigKey {
+        GeoDomainConfigKey { name: self.name.clone(), key: self.key.clone() }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
+#[ts(export, export_to = "common/geo_site.ts")]
+pub struct GeoDomainConfigKey {
+    pub name: String,
+    pub key: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
+#[ts(export, export_to = "common/geo_site.ts")]
+pub struct QueryGeoDomain {
+    pub name: Option<String>,
+    pub key: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
+#[ts(export, export_to = "common/geo_site.ts")]
+pub struct QueryGeoDomainConfig {
+    pub name: Option<String>,
 }

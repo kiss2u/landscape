@@ -1,10 +1,12 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::get,
     Json, Router,
 };
 use landscape_common::config::{
-    geo::{GeoDomainConfig, GeoSiteConfig},
+    geo::{
+        GeoDomainConfig, GeoDomainConfigKey, GeoSiteConfig, QueryGeoDomain, QueryGeoDomainConfig,
+    },
     ConfigId,
 };
 use landscape_common::service::controller_service::ConfigController;
@@ -19,11 +21,46 @@ pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
         .route("/geo_sites", get(get_geo_sites).post(add_geo_site))
         .route("/geo_sites/:id", get(get_geo_rule).delete(del_geo_site))
         .route("/geo_sites/cache", get(get_geo_site_cache).post(refresh_geo_site_cache))
+        .route("/geo_sites/cache/search", get(search_geo_site_cache))
+        .route("/geo_sites/cache/detail", get(get_geo_site_cache_detail))
 }
 
-async fn get_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoDomainConfig>> {
-    let result = state.geo_site_service.list_all_keys().await;
+async fn get_geo_site_cache_detail(
+    State(state): State<LandscapeApp>,
+    Query(key): Query<GeoDomainConfigKey>,
+) -> LandscapeResult<Json<GeoDomainConfig>> {
+    let result = state.geo_site_service.get_cache_value_by_key(&key).await;
+    if let Some(result) = result {
+        Ok(Json(result))
+    } else {
+        Err(LandscapeApiError::NotFound(format!("{key:?}")))
+    }
+}
+
+async fn search_geo_site_cache(
+    State(state): State<LandscapeApp>,
+    Query(query): Query<QueryGeoDomain>,
+) -> Json<Vec<GeoDomainConfigKey>> {
+    tracing::debug!("query: {:?}", query);
+    let key = query.key.map(|k| k.to_ascii_uppercase());
+    let name = query.name;
+    tracing::debug!("name: {name:?}");
+    tracing::debug!("key: {key:?}");
+    let result: Vec<GeoDomainConfigKey> = state
+        .geo_site_service
+        .list_all_keys()
+        .await
+        .into_iter()
+        .filter(|e| key.as_ref().map_or(true, |key| e.key.contains(key)))
+        .filter(|e| name.as_ref().map_or(true, |name| e.name.contains(name)))
+        .collect();
+
     tracing::debug!("keys len: {}", result.len());
+    Json(result)
+}
+
+async fn get_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoDomainConfigKey>> {
+    let result = state.geo_site_service.list_all_keys().await;
     Json(result)
 }
 
@@ -32,8 +69,11 @@ async fn refresh_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Simpl
     Json(SimpleResult { success: true })
 }
 
-async fn get_geo_sites(State(state): State<LandscapeApp>) -> Json<Vec<GeoSiteConfig>> {
-    let result = state.geo_site_service.list().await;
+async fn get_geo_sites(
+    State(state): State<LandscapeApp>,
+    Query(q): Query<QueryGeoDomainConfig>,
+) -> Json<Vec<GeoSiteConfig>> {
+    let result = state.geo_site_service.query_geo_by_name(q.name).await;
     Json(result)
 }
 

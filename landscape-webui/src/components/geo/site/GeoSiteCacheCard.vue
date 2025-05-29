@@ -13,17 +13,10 @@ interface Prop {
 }
 const props = defineProps<Prop>();
 const show_detail_modal = ref(false);
-
-async function del() {
-  if (props.geo_site) {
-    await delete_geo_site_config(props.geo_site.name);
-    emit("refresh");
-  }
-}
 </script>
 <template>
   <n-card :title="geo_site.key" size="small" style="flex: 1">
-    <n-tag>
+    <n-tag :bordered="false">
       {{ geo_site.name }}
     </n-tag>
     <template #header-extra>
@@ -32,6 +25,8 @@ async function del() {
           详情
         </n-button>
       </n-flex>
+      <GeoSiteDetailDrawer :geo_key="geo_site" v-model:show="show_detail_modal">
+      </GeoSiteDetailDrawer>
     </template>
   </n-card>
 </template>

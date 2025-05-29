@@ -1,5 +1,5 @@
 use landscape_common::{
-    config::geo::GeoDomainConfig,
+    config::geo::{GeoDomainConfig, GeoDomainConfigKey},
     database::LandscapeDBTrait,
     service::controller_service::ConfigController,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
@@ -16,7 +16,7 @@ use landscape_common::{
     args::LAND_HOME_PATH,
     config::{dns::DomainConfig, geo::GeoSiteConfig},
     event::dns::DnsEvent,
-    store::storev2::StoreFileManager,
+    store::storev3::StoreFileManager,
     LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
@@ -30,7 +30,7 @@ const A_DAY: u64 = 60 * 60 * 24;
 #[derive(Clone)]
 pub struct GeoSiteService {
     store: GeoSiteConfigRepository,
-    file_cache: Arc<Mutex<StoreFileManager<GeoDomainConfig>>>,
+    file_cache: Arc<Mutex<StoreFileManager<GeoDomainConfigKey, GeoDomainConfig>>>,
     dns_events_tx: mpsc::Sender<DnsEvent>,
 }
 
@@ -89,7 +89,7 @@ impl GeoSiteService {
                         for (key, values) in result {
                             file_cache_lock.set(GeoDomainConfig {
                                 name: config.name.clone(),
-                                key,
+                                key: key.to_ascii_uppercase(),
                                 values,
                             });
                         }
@@ -119,9 +119,21 @@ impl GeoSiteService {
 }
 
 impl GeoSiteService {
-    pub async fn list_all_keys(&self) -> Vec<GeoDomainConfig> {
+    pub async fn list_all_keys(&self) -> Vec<GeoDomainConfigKey> {
+        let lock = self.file_cache.lock().await;
+        lock.keys()
+    }
+
+    pub async fn get_cache_value_by_key(
+        &self,
+        key: &GeoDomainConfigKey,
+    ) -> Option<GeoDomainConfig> {
         let mut lock = self.file_cache.lock().await;
-        lock.list()
+        lock.get(key)
+    }
+
+    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteConfig> {
+        self.store.query_by_name(name).await.unwrap()
     }
 }
 

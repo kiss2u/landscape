@@ -110,6 +110,7 @@ mod tests {
     async fn test() {
         test_memory_usage();
         let result = read_geo_sites("/root/.landscape-router/geosite.dat1").await;
+        test_memory_usage();
         for (domain, domain_configs) in result {
             if domain == "test" {
                 for domain_config in domain_configs {
@@ -128,16 +129,17 @@ mod tests {
 
         let data = tokio::fs::read(geo_file_path).await.unwrap();
         let list = GeoIPListOwned::try_from(data).unwrap();
+        test_memory_usage();
 
         let mut sum = 0;
         for entry in list.proto().entry.iter() {
-            println!("{:?}", entry.country_code);
+            // println!("{:?}", entry.country_code);
             if entry.country_code == "cn".to_uppercase() {
                 println!("{:?}", entry.cidr.len());
             } else {
                 sum += entry.cidr.len()
             }
-            println!("reverse_match : {:?}", entry.reverse_match);
+            // println!("reverse_match : {:?}", entry.reverse_match);
             // if entry.reverse_match {
             //     println!("reverse_match : {:?}", entry.cidr);
             // }

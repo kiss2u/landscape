@@ -1,12 +1,13 @@
 use landscape_common::{
     config::geo::GeoSiteConfig,
     database::{repository::Repository, LandscapeDBTrait},
+    error::LdError,
 };
-use sea_orm::DatabaseConnection;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::DBId;
 
-use super::entity::{GeoSiteConfigActiveModel, GeoSiteConfigEntity, GeoSiteConfigModel};
+use super::entity::{Column, GeoSiteConfigActiveModel, GeoSiteConfigEntity, GeoSiteConfigModel};
 
 #[derive(Clone)]
 pub struct GeoSiteConfigRepository {
@@ -16,6 +17,15 @@ pub struct GeoSiteConfigRepository {
 impl GeoSiteConfigRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    pub async fn query_by_name(&self, name: Option<String>) -> Result<Vec<GeoSiteConfig>, LdError> {
+        let result = GeoSiteConfigEntity::find()
+            .filter(Column::Name.contains(name.unwrap_or("".to_string())))
+            .order_by_desc(Column::UpdateAt)
+            .all(&self.db)
+            .await?;
+        Ok(result.into_iter().map(From::from).collect())
     }
 }
 

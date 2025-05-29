@@ -7,6 +7,8 @@ export type GeoDomainConfig = {
   values: Array<DomainConfig>;
 };
 
+export type GeoDomainConfigKey = { name: string; key: string };
+
 export type GeoSiteConfig = {
   /**
    * 用这个 ID 作为文件名称
@@ -37,3 +39,5 @@ export type GeoSiteConfig = {
    */
   geo_keys: Array<string>;
 };
+
+export type QueryGeoDomain = { name: string | null; key: string | null };
