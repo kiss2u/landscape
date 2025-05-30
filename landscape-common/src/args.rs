@@ -84,16 +84,16 @@ pub static DATABASE_ARGS: Lazy<String> = Lazy::new(|| {
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
-    /// Static html location [default: /root/.landscape-router/static]
-    #[arg(short, long)]
+    /// Static HTML location [default: ~/.landscape-router/static]
+    #[arg(short, long, env = "LANDSCAPE_WEB_ROOT")]
     pub web: Option<PathBuf>,
 
     /// Listen port
-    #[arg(short, long, default_value = "6300")]
+    #[arg(short, long, env = "LANDSCAPE_WEB_PORT", default_value = "6300")]
     pub port: u16,
 
     /// Listen address
-    #[arg(short, long, default_value = "0.0.0.0")]
+    #[arg(short, long, env = "LANDSCAPE_WEB_ADDR", default_value = "0.0.0.0")]
     pub address: IpAddr,
 
     /// Controls whether the WAN IP can be used to access the management interface
@@ -101,7 +101,7 @@ pub struct WebCommArgs {
     pub export_manager: bool,
 
     /// All Config DIR, Not file Path [default: /root/.landscape-router]
-    #[clap(short, long)]
+    #[clap(short, long, env = "LANDSCAPE_CONF_PATH")]
     pub config_dir: Option<PathBuf>,
 
     /// Database URL, SQLite Connect Like  
@@ -121,16 +121,16 @@ pub struct WebCommArgs {
     #[clap(long = "pass", env = "LANDSCAPE_ADMIN_PASS", default_value = "root")]
     pub admin_pass: String,
 
-    /// Debug mode
-    #[arg(long, default_value_t = debug_default())]
+    /// Debug mode [default: false]
+    #[arg(long, env = "LANDSCAPE_DEBUG", default_value_t = debug_default())]
     pub debug: bool,
 
-    /// Log output location
-    #[arg(long, default_value_t = debug_default())]
+    /// Log output location [default: false]
+    #[arg(long, env = "LANDSCAPE_LOG_PATH", default_value_t = debug_default())]
     pub log_output_in_terminal: bool,
 
     /// Max log files number
-    #[arg(long, default_value = "7")]
+    #[arg(long, env = "LANDSCAPE_LOG_FILE_LIMIT", default_value = "7")]
     pub max_log_files: usize,
 }
 
