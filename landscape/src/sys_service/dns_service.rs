@@ -25,14 +25,17 @@ impl LandscapeDnsService {
         geo_site_service: GeoSiteService,
     ) -> Self {
         let dns_service = LandscapeFiffFlowDnsService::new().await;
+        let dns_rules = dns_rule_service.list().await;
+        let dns_rules = geo_site_service.convert_config_to_runtime_rule(dns_rules).await;
 
         dns_service.restart(53).await;
-        dns_service.init_handle(dns_rule_service.list().await).await;
+        dns_service.init_handle(dns_rules).await;
         dns_service.update_flow_map(&flow_rule_service.list().await).await;
 
         let dns_rule_service_clone = dns_rule_service.clone();
         let flow_rule_service_clone = flow_rule_service.clone();
         let dns_service_clone = dns_service.clone();
+        let geo_site_service_clone = geo_site_service.clone();
         tokio::spawn(async move {
             while let Some(event) = receiver.recv().await {
                 match event {
@@ -40,6 +43,9 @@ impl LandscapeDnsService {
                         tracing::info!("refresh dns rule");
                         let dns_rules = dns_rule_service_clone.list().await;
                         let flow_rules = flow_rule_service_clone.list().await;
+
+                        let dns_rules =
+                            geo_site_service_clone.convert_config_to_runtime_rule(dns_rules).await;
                         dns_service_clone.init_handle(dns_rules).await;
                         dns_service_clone.update_flow_map(&flow_rules).await;
                         // dns_service_clone.restart(53).await;
@@ -55,10 +61,6 @@ impl LandscapeDnsService {
         }
     }
 
-    // pub async fn get_event_sender(&self) -> mpsc::Sender<DnsEvent> {
-    //     self.dns_events_tx.clone()
-    // }
-
     pub async fn get_status(&self) -> DefaultWatchServiceStatus {
         self.dns_service.status.clone()
     }
@@ -66,9 +68,8 @@ impl LandscapeDnsService {
     pub async fn start_dns_service(&self) {
         let dns_rules = self.dns_rule_service.list().await;
         let flow_rules = self.flow_rule_service.list().await;
-        let _ = self.geo_site_service.get_geo_site_config();
+        let dns_rules = self.geo_site_service.convert_config_to_runtime_rule(dns_rules).await;
         // TODO 重置 Flow 相关 map 信息
-
         self.dns_service.init_handle(dns_rules).await;
         self.dns_service.update_flow_map(&flow_rules).await;
         self.dns_service.restart(53).await;

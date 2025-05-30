@@ -8,6 +8,8 @@ use crate::database::repository::LandscapeDBStore;
 use crate::utils::time::get_f64_timestamp;
 use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 
+use super::geo::GeoDomainConfigKey;
+
 /// DNS 配置
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "common/dns.d.ts")]
@@ -36,6 +38,26 @@ pub struct DNSRuleConfig {
 
     #[serde(default = "get_f64_timestamp")]
     pub update_at: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct DNSRuntimeRule {
+    pub id: Option<Uuid>,
+    pub name: String,
+    /// 优先级
+    pub index: u32,
+    /// 是否启用
+    pub enable: bool,
+    /// 过滤模式
+    pub filter: FilterResult,
+    /// 解析模式
+    pub resolve_mode: DNSResolveMode,
+    /// 流量标记
+    pub mark: FlowDnsMark,
+    /// 匹配规则列表
+    pub source: Vec<DomainConfig>,
+
+    pub flow_id: u32,
 }
 
 fn default_flow_id() -> u32 {
@@ -76,7 +98,7 @@ impl Default for DNSRuleConfig {
 #[serde(tag = "t")]
 #[serde(rename_all = "snake_case")]
 pub enum RuleSource {
-    GeoKey { key: String },
+    GeoKey(GeoDomainConfigKey),
     Config(DomainConfig),
 }
 

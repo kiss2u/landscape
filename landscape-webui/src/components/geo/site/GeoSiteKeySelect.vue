@@ -37,7 +37,7 @@ const geo_key_options = computed(() => {
   if (keys.value) {
     for (const each_key of keys.value) {
       result.push({
-        label: each_key.key,
+        label: `${each_key.name}-${each_key.key}`,
         value: each_key.key,
         data: each_key,
       });
@@ -47,8 +47,6 @@ const geo_key_options = computed(() => {
 });
 
 function select_key(value: string, option: any) {
-  console.log(option);
-  console.log(value);
   geo_key.value = value;
   name.value = option.data.name;
   emit("refresh");

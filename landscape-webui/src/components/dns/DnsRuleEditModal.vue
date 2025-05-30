@@ -54,6 +54,7 @@ function onCreate(): RuleSource {
   return {
     t: RuleSourceEnum.GeoKey,
     key: "",
+    name: "",
   };
 }
 
@@ -251,12 +252,17 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
                   <ChangeCatalog />
                 </n-icon>
               </n-button>
-              <n-input
-                v-if="value.t === RuleSourceEnum.GeoKey"
+              <!-- <n-input
+               
                 v-model:value="value.key"
                 placeholder="geo key"
                 type="text"
-              />
+              /> -->
+              <DnsGeoSelect
+                v-model:geo_key="value.key"
+                v-model:geo_name="value.name"
+                v-if="value.t === RuleSourceEnum.GeoKey"
+              ></DnsGeoSelect>
               <n-flex v-else style="flex: 1">
                 <n-input-group>
                   <n-select

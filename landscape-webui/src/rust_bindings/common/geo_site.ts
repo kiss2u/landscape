@@ -41,3 +41,5 @@ export type GeoSiteConfig = {
 };
 
 export type QueryGeoDomain = { name: string | null; key: string | null };
+
+export type QueryGeoDomainConfig = { name: string | null };

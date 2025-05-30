@@ -1,5 +1,8 @@
 use landscape_common::{
-    config::geo::{GeoDomainConfig, GeoDomainConfigKey},
+    config::{
+        dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
+        geo::{GeoDomainConfig, GeoDomainConfigKey},
+    },
     database::LandscapeDBTrait,
     service::controller_service::ConfigController,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
@@ -7,17 +10,13 @@ use landscape_common::{
 use uuid::Uuid;
 
 use std::{
-    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use landscape_common::{
-    args::LAND_HOME_PATH,
-    config::{dns::DomainConfig, geo::GeoSiteConfig},
-    event::dns::DnsEvent,
-    store::storev3::StoreFileManager,
-    LANDSCAPE_GEO_CACHE_TMP_DIR,
+    args::LAND_HOME_PATH, config::geo::GeoSiteConfig, event::dns::DnsEvent,
+    store::storev3::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
     geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,
@@ -27,10 +26,12 @@ use tokio::sync::{mpsc, Mutex};
 
 const A_DAY: u64 = 60 * 60 * 24;
 
+pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoDomainConfigKey, GeoDomainConfig>>>;
+
 #[derive(Clone)]
 pub struct GeoSiteService {
     store: GeoSiteConfigRepository,
-    file_cache: Arc<Mutex<StoreFileManager<GeoDomainConfigKey, GeoDomainConfig>>>,
+    file_cache: GeoDomainCacheStore,
     dns_events_tx: mpsc::Sender<DnsEvent>,
 }
 
@@ -60,18 +61,47 @@ impl GeoSiteService {
         service
     }
 
-    pub fn get_geo_site_config(&self) -> HashMap<String, Vec<DomainConfig>> {
-        HashMap::new()
+    pub async fn convert_config_to_runtime_rule(
+        &self,
+        configs: Vec<DNSRuleConfig>,
+    ) -> Vec<DNSRuntimeRule> {
+        let mut lock = self.file_cache.lock().await;
+        let mut result = vec![];
+        for config in configs.into_iter() {
+            let mut source = vec![];
+            for each in config.source.iter() {
+                match each {
+                    RuleSource::GeoKey(config_key) => {
+                        if let Some(domains) = lock.get(config_key) {
+                            source.extend(domains.values.iter().cloned());
+                        }
+                    }
+                    RuleSource::Config(c) => {
+                        // all_domain_rules.extend(vec.iter().cloned());
+                        source.push(c.clone());
+                    }
+                }
+            }
+
+            result.push(DNSRuntimeRule {
+                source,
+                id: config.id,
+                name: config.name,
+                index: config.index,
+                enable: config.enable,
+                filter: config.filter,
+                resolve_mode: config.resolve_mode,
+                mark: config.mark,
+                flow_id: config.flow_id,
+            });
+        }
+        result
     }
 
     pub async fn refresh(&self) {
         // 读取当前规则
         let configs: Vec<GeoSiteConfig> = self.store.list().await.unwrap();
 
-        // let mut file_cache_lock = self.file_cache.lock().await;
-
-        // file_cache_lock.truncate();
-        // drop(file_cache_lock);
         let client = Client::new();
         for mut config in configs {
             let url = config.url.clone();
