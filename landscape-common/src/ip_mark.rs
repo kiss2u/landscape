@@ -1,5 +1,6 @@
 use std::net::IpAddr;
 
+use crate::config::geo::GeoConfigKey;
 use crate::utils::time::get_f64_timestamp;
 use crate::{database::repository::LandscapeDBStore, flow::mark::FlowDnsMark};
 use serde::{Deserialize, Serialize};
@@ -49,7 +50,7 @@ impl LandscapeDBStore<Uuid> for WanIpRuleConfig {
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum WanIPRuleSource {
-    GeoKey { country_code: String },
+    GeoKey(GeoConfigKey),
     Config(IpConfig),
 }
 

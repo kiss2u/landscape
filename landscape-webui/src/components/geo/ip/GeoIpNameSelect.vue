@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { get_geo_site_configs } from "@/api/geo/site";
-import { GeoSiteConfig } from "@/rust_bindings/common/geo_site";
+import { get_geo_ip_configs } from "@/api/geo/ip";
+import { GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
 import { computed, onMounted, ref } from "vue";
 
 const name = defineModel<string | null>("name", { required: true });
 
 const loading = ref(false);
 
-const configs = ref<GeoSiteConfig[]>();
+const configs = ref<GeoIpSourceConfig[]>();
 
 onMounted(async () => {
   await typing_key();
@@ -16,7 +16,7 @@ onMounted(async () => {
 async function typing_key(query?: string) {
   try {
     loading.value = true;
-    configs.value = await get_geo_site_configs(query);
+    configs.value = await get_geo_ip_configs(query);
   } finally {
     loading.value = false;
   }
@@ -41,7 +41,7 @@ const geo_name_options = computed(() => {
   <n-select
     v-model:value="name"
     filterable
-    placeholder="选择 geo 名称"
+    placeholder="选择 geo ip 名称"
     :options="geo_name_options"
     :loading="loading"
     clearable

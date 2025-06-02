@@ -1,9 +1,8 @@
 import api from "@/api";
+import { GeoConfigKey, QueryGeoKey } from "@/rust_bindings/common/geo";
 import {
   GeoDomainConfig,
   GeoSiteConfig,
-  GeoDomainConfigKey,
-  QueryGeoDomain,
 } from "@/rust_bindings/common/geo_site";
 
 export async function get_geo_site_configs(
@@ -33,8 +32,8 @@ export async function delete_geo_site_config(id: string): Promise<void> {
 }
 
 export async function get_geo_cache_key(
-  filter: QueryGeoDomain
-): Promise<GeoDomainConfigKey[]> {
+  filter: QueryGeoKey
+): Promise<GeoConfigKey[]> {
   let data = await api.api.get(`config/geo_sites/cache`, {
     params: { ...filter },
   });
@@ -46,8 +45,8 @@ export async function refresh_geo_cache_key(): Promise<void> {
 }
 
 export async function search_geo_site_cache(
-  query: QueryGeoDomain
-): Promise<GeoDomainConfigKey[]> {
+  query: QueryGeoKey
+): Promise<GeoConfigKey[]> {
   let data = await api.api.get(`config/geo_sites/cache/search`, {
     params: {
       ...query,
@@ -57,7 +56,7 @@ export async function search_geo_site_cache(
 }
 
 export async function get_geo_site_cache_detail(
-  key: GeoDomainConfigKey
+  key: GeoConfigKey
 ): Promise<GeoDomainConfig> {
   let data = await api.api.get(`config/geo_sites/cache/detail`, {
     params: {

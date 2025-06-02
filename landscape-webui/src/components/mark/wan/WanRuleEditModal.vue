@@ -58,7 +58,7 @@ function onCreate(): WanIPRuleSource {
 function changeCurrentRuleType(value: WanIPRuleSource, index: number) {
   if (rule.value) {
     if (value.t == "config") {
-      rule.value.source[index] = { t: "geokey", country_code: "" };
+      rule.value.source[index] = { t: "geokey", name: "", key: "" };
     } else {
       rule.value.source[index] = new_wan_rules({
         t: "config",
@@ -132,7 +132,7 @@ async function saveRule() {
       </n-form-item>
       <n-form-item label="匹配的 IP">
         <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
-          <template #create-button-default> 增加一条 Lan 规则 </template>
+          <template #create-button-default> 增加一条 Wan 规则 </template>
           <template #default="{ value, index }">
             <n-flex style="flex: 1" :wrap="false">
               <n-button @click="changeCurrentRuleType(value, index)">
@@ -140,12 +140,17 @@ async function saveRule() {
                   <ChangeCatalog />
                 </n-icon>
               </n-button>
-              <n-input
+              <WanIpGeoSelect
+                v-model:geo_key="value.key"
+                v-model:geo_name="value.name"
                 v-if="value.t === 'geokey'"
+              >
+              </WanIpGeoSelect>
+              <!-- <n-input
                 v-model:value="value.key"
                 placeholder="geo key"
                 type="text"
-              />
+              /> -->
               <n-flex v-else style="flex: 1">
                 <NewIpEdit
                   v-model:ip="value.ip"

@@ -8,7 +8,7 @@ use crate::database::repository::LandscapeDBStore;
 use crate::utils::time::get_f64_timestamp;
 use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
 
-use super::geo::GeoDomainConfigKey;
+use super::geo::GeoConfigKey;
 
 /// DNS 配置
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
@@ -98,7 +98,7 @@ impl Default for DNSRuleConfig {
 #[serde(tag = "t")]
 #[serde(rename_all = "snake_case")]
 pub enum RuleSource {
-    GeoKey(GeoDomainConfigKey),
+    GeoKey(GeoConfigKey),
     Config(DomainConfig),
 }
 

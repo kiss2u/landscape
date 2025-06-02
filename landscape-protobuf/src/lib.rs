@@ -55,6 +55,19 @@ pub fn convert_domain_from_proto(value: &Domain) -> DomainConfig {
     }
 }
 
+pub async fn read_geo_ips_from_bytes(
+    contents: impl Into<Vec<u8>>,
+) -> HashMap<String, Vec<IpConfig>> {
+    let mut result = HashMap::new();
+    let list = GeoIPListOwned::try_from(contents.into()).unwrap();
+
+    for entry in list.proto().entry.iter() {
+        let domains = entry.cidr.iter().filter_map(convert_ipconfig_from_proto).collect();
+        result.insert(entry.country_code.to_string(), domains);
+    }
+    result
+}
+
 pub async fn read_geo_ips<T: AsRef<Path>>(geo_file_path: T) -> HashMap<String, Vec<IpConfig>> {
     let mut result = HashMap::new();
     let data = tokio::fs::read(geo_file_path).await.unwrap();

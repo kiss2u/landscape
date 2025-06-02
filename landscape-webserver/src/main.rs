@@ -11,14 +11,14 @@ use colored::Colorize;
 use config_service::{
     dns_rule::get_dns_rule_config_paths, dst_ip_rule::get_dst_ip_rule_config_paths,
     firewall_rule::get_firewall_rule_config_paths, flow_rule::get_flow_rule_config_paths,
-    geo_site::get_geo_site_config_paths,
+    geo_ip::get_geo_ip_config_paths, geo_site::get_geo_site_config_paths,
 };
 use landscape::{
     boot::{boot_check, log::init_logger},
     config_service::{
         dns_rule::DNSRuleService, dst_ip_rule::DstIpRuleService,
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
-        geo_site_service::GeoSiteService,
+        geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
     sys_service::dns_service::LandscapeDnsService,
 };
@@ -53,6 +53,7 @@ use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::{error, info};
 
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;
+const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
 
 #[derive(Clone)]
 pub struct LandscapeApp {
@@ -62,6 +63,7 @@ pub struct LandscapeApp {
     pub geo_site_service: GeoSiteService,
     pub fire_wall_rule_service: FirewallRuleService,
     pub dst_ip_rule_service: DstIpRuleService,
+    pub geo_ip_service: GeoIpService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -99,7 +101,14 @@ async fn main() -> LdResult<()> {
     )
     .await;
     let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
-    let dst_ip_rule_service = DstIpRuleService::new(db_store_provider.clone()).await;
+
+    let (dst_ip_service_tx, dst_ip_service_rx) = mpsc::channel(DST_IP_EVENT_CHANNEL_SIZE);
+
+    let geo_ip_service =
+        GeoIpService::new(db_store_provider.clone(), dst_ip_service_tx.clone()).await;
+    let dst_ip_rule_service =
+        DstIpRuleService::new(db_store_provider.clone(), geo_ip_service.clone(), dst_ip_service_rx)
+            .await;
 
     let landscape_app_status = LandscapeApp {
         dns_service,
@@ -108,6 +117,7 @@ async fn main() -> LdResult<()> {
         geo_site_service,
         fire_wall_rule_service,
         dst_ip_rule_service,
+        geo_ip_service,
     };
     // 初始化结束
 
@@ -184,6 +194,7 @@ async fn main() -> LdResult<()> {
                 .merge(get_firewall_rule_config_paths().await)
                 .merge(get_flow_rule_config_paths().await)
                 .merge(get_geo_site_config_paths().await)
+                .merge(get_geo_ip_config_paths().await)
                 .merge(get_dst_ip_rule_config_paths().await)
                 .with_state(landscape_app_status.clone()),
         )

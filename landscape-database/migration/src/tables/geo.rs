@@ -12,3 +12,15 @@ pub enum GeoSiteConfigs {
     NextUpdateAt,
     GeoKeys,
 }
+
+#[derive(DeriveIden)]
+pub enum GeoIpConfigs {
+    #[sea_orm(iden = "geo_ip_configs")]
+    Table,
+    Id,
+    UpdateAt,
+    Url,
+    Name,
+    Enable,
+    NextUpdateAt,
+}

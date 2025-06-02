@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import {
-  delete_geo_site_config,
-  get_geo_site_configs,
-  search_geo_site_cache,
-} from "@/api/geo/site";
+import { get_geo_ip_configs, search_geo_ip_cache } from "@/api/geo/ip";
 import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import {
-  GeoDomainConfig,
-  GeoSiteConfig,
-} from "@/rust_bindings/common/geo_site";
+import { GeoIpConfig, GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
 import { computed, onMounted, ref } from "vue";
 
 const key = defineModel<string>("geo_key", {
@@ -20,7 +13,7 @@ const name = defineModel<string>("geo_name", {
 const emit = defineEmits(["refresh"]);
 
 interface Prop {
-  geo_site: GeoDomainConfig;
+  geo_ip: GeoIpConfig;
 }
 const props = defineProps<Prop>();
 const loading_name = ref(false);
@@ -31,11 +24,11 @@ onMounted(async () => {
   await typing_key("");
 });
 
-const configs = ref<GeoSiteConfig[]>();
+const configs = ref<GeoIpSourceConfig[]>();
 async function typing_name_key(query?: string) {
   try {
     loading_name.value = true;
-    configs.value = await get_geo_site_configs(query);
+    configs.value = await get_geo_ip_configs(query);
   } finally {
     loading_name.value = false;
   }
@@ -56,7 +49,7 @@ const geo_name_options = computed(() => {
 async function typing_key(query: string) {
   try {
     loading_key.value = true;
-    keys.value = await search_geo_site_cache({
+    keys.value = await search_geo_ip_cache({
       name: name.value,
       key: query,
     });

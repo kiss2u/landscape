@@ -102,10 +102,10 @@ const menuOptions: MenuOption[] = [
         label: "域名",
         key: "geo-domain",
       },
-      // {
-      //   label: "IP",
-      //   key: "geo-ip",
-      // },
+      {
+        label: "IP",
+        key: "geo-ip",
+      },
     ],
   },
 ];

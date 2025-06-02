@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { delete_geo_site_config, search_geo_site_cache } from "@/api/geo/site";
+import { search_geo_ip_cache } from "@/api/geo/ip";
 import { GeoConfigKey } from "@/rust_bindings/common/geo";
 import { computed, onMounted, ref } from "vue";
 
@@ -16,7 +16,7 @@ onMounted(async () => {
 async function typing_key(query: string) {
   try {
     loading.value = true;
-    keys.value = await search_geo_site_cache({
+    keys.value = await search_geo_ip_cache({
       name: name.value,
       key: query,
     });

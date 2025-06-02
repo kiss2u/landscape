@@ -1,9 +1,7 @@
 use landscape_common::{
-    config::{
-        dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
-        geo::{GeoConfigKey, GeoDomainConfig},
-    },
+    config::geo::{GeoConfigKey, GeoIpConfig, GeoIpSourceConfig},
     database::LandscapeDBTrait,
+    ip_mark::{IpMarkInfo, WanIPRuleSource, WanIpRuleConfig},
     service::controller_service::ConfigController,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
 };
@@ -15,39 +13,39 @@ use std::{
 };
 
 use landscape_common::{
-    args::LAND_HOME_PATH, config::geo::GeoSiteConfig, event::dns::DnsEvent,
-    store::storev3::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
+    args::LAND_HOME_PATH, event::dns::DstIpEvent, store::storev3::StoreFileManager,
+    LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
-    geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,
+    geo_ip::repository::GeoIpSourceConfigRepository, provider::LandscapeDBServiceProvider,
 };
 use reqwest::Client;
 use tokio::sync::{mpsc, Mutex};
 
 const A_DAY: u64 = 60 * 60 * 24;
 
-pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoConfigKey, GeoDomainConfig>>>;
+pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoConfigKey, GeoIpConfig>>>;
 
 #[derive(Clone)]
-pub struct GeoSiteService {
-    store: GeoSiteConfigRepository,
+pub struct GeoIpService {
+    store: GeoIpSourceConfigRepository,
     file_cache: GeoDomainCacheStore,
-    dns_events_tx: mpsc::Sender<DnsEvent>,
+    dst_ip_events_tx: mpsc::Sender<DstIpEvent>,
 }
 
-impl GeoSiteService {
+impl GeoIpService {
     pub async fn new(
         store: LandscapeDBServiceProvider,
-        dns_events_tx: mpsc::Sender<DnsEvent>,
+        dst_ip_events_tx: mpsc::Sender<DstIpEvent>,
     ) -> Self {
-        let store = store.geo_site_rule_store();
+        let store = store.geo_ip_rule_store();
 
         let file_cache = Arc::new(Mutex::new(StoreFileManager::new(
             LAND_HOME_PATH.join(LANDSCAPE_GEO_CACHE_TMP_DIR),
-            "site".to_string(),
+            "ip".to_string(),
         )));
 
-        let service = Self { store, file_cache, dns_events_tx };
+        let service = Self { store, file_cache, dst_ip_events_tx };
         let service_clone = service.clone();
         tokio::spawn(async move {
             //
@@ -63,44 +61,38 @@ impl GeoSiteService {
 
     pub async fn convert_config_to_runtime_rule(
         &self,
-        configs: Vec<DNSRuleConfig>,
-    ) -> Vec<DNSRuntimeRule> {
+        configs: Vec<WanIpRuleConfig>,
+    ) -> Vec<IpMarkInfo> {
         let mut lock = self.file_cache.lock().await;
         let mut result = vec![];
         for config in configs.into_iter() {
             let mut source = vec![];
             for each in config.source.iter() {
                 match each {
-                    RuleSource::GeoKey(config_key) => {
-                        if let Some(domains) = lock.get(config_key) {
-                            source.extend(domains.values.iter().cloned());
+                    WanIPRuleSource::GeoKey(config_key) => {
+                        if let Some(ips) = lock.get(config_key) {
+                            source.extend(ips.values.iter().cloned());
                         }
                     }
-                    RuleSource::Config(c) => {
-                        // all_domain_rules.extend(vec.iter().cloned());
+                    WanIPRuleSource::Config(c) => {
                         source.push(c.clone());
                     }
                 }
             }
 
-            result.push(DNSRuntimeRule {
-                source,
-                id: config.id,
-                name: config.name,
-                index: config.index,
-                enable: config.enable,
-                filter: config.filter,
-                resolve_mode: config.resolve_mode,
+            let ip_marks = source.into_iter().map(|cidr| IpMarkInfo {
                 mark: config.mark,
-                flow_id: config.flow_id,
+                cidr,
+                override_dns: config.override_dns,
             });
+            result.extend(ip_marks);
         }
         result
     }
 
     pub async fn refresh(&self) {
         // 读取当前规则
-        let configs: Vec<GeoSiteConfig> = self.store.list().await.unwrap();
+        let configs: Vec<GeoIpSourceConfig> = self.store.list().await.unwrap();
 
         let client = Client::new();
         for mut config in configs {
@@ -112,12 +104,12 @@ impl GeoSiteService {
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => match resp.bytes().await {
                     Ok(bytes) => {
-                        let result = landscape_protobuf::read_geo_sites_from_bytes(bytes).await;
+                        let result = landscape_protobuf::read_geo_ips_from_bytes(bytes).await;
                         // tracing::debug!("get response file: {:?}", result);
 
                         let mut file_cache_lock = self.file_cache.lock().await;
                         for (key, values) in result {
-                            file_cache_lock.set(GeoDomainConfig {
+                            file_cache_lock.set(GeoIpConfig {
                                 name: config.name.clone(),
                                 key: key.to_ascii_uppercase(),
                                 values,
@@ -144,33 +136,33 @@ impl GeoSiteService {
                 }
             }
         }
-        let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+        let _ = self.dst_ip_events_tx.send(DstIpEvent::GeoIpUpdated).await;
     }
 }
 
-impl GeoSiteService {
+impl GeoIpService {
     pub async fn list_all_keys(&self) -> Vec<GeoConfigKey> {
         let lock = self.file_cache.lock().await;
         lock.keys()
     }
 
-    pub async fn get_cache_value_by_key(&self, key: &GeoConfigKey) -> Option<GeoDomainConfig> {
+    pub async fn get_cache_value_by_key(&self, key: &GeoConfigKey) -> Option<GeoIpConfig> {
         let mut lock = self.file_cache.lock().await;
         lock.get(key)
     }
 
-    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteConfig> {
+    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoIpSourceConfig> {
         self.store.query_by_name(name).await.unwrap()
     }
 }
 
 #[async_trait::async_trait]
-impl ConfigController for GeoSiteService {
+impl ConfigController for GeoIpService {
     type Id = Uuid;
 
-    type Config = GeoSiteConfig;
+    type Config = GeoIpSourceConfig;
 
-    type DatabseAction = GeoSiteConfigRepository;
+    type DatabseAction = GeoIpSourceConfigRepository;
 
     fn get_repository(&self) -> &Self::DatabseAction {
         &self.store

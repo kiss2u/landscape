@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { get_geo_site_cache_detail } from "@/api/geo/site";
+import { get_geo_ip_cache_detail } from "@/api/geo/ip";
 import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import { GeoDomainConfig } from "@/rust_bindings/common/geo_site";
+import { GeoIpConfig } from "@/rust_bindings/common/geo_ip";
 import { onMounted, ref } from "vue";
 
 const key = defineModel<GeoConfigKey>("geo_key", {
@@ -9,13 +9,13 @@ const key = defineModel<GeoConfigKey>("geo_key", {
 });
 const show = defineModel<boolean>("show", { required: true });
 
-const config = ref<GeoDomainConfig>();
+const config = ref<GeoIpConfig>();
 onMounted(async () => {
   await refresh();
 });
 
 async function refresh() {
-  config.value = await get_geo_site_cache_detail(key.value);
+  config.value = await get_geo_ip_cache_detail(key.value);
 }
 </script>
 <template>
@@ -31,12 +31,9 @@ async function refresh() {
           <n-card
             v-for="(rule, index) in config.values"
             :key="index"
-            :title="rule.value"
+            :title="`${rule.ip}/${rule.prefix}`"
             size="small"
           >
-            <n-tag :bordered="false" type="info">
-              {{ rule.match_type }}
-            </n-tag>
           </n-card>
         </n-flex>
       </n-scrollbar>

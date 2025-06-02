@@ -16,6 +16,7 @@ mod m20250521_095934_firewall_rule;
 mod m20250521_130018_flow_rule;
 mod m20250521_150250_dst_ip_rule;
 mod m20250525_030646_geo_site;
+mod m20250530_142817_geo_ip;
 mod tables;
 
 pub struct Migrator;
@@ -40,6 +41,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250521_130018_flow_rule::Migration),
             Box::new(m20250521_150250_dst_ip_rule::Migration),
             Box::new(m20250525_030646_geo_site::Migration),
+            Box::new(m20250530_142817_geo_ip::Migration),
         ]
     }
 }

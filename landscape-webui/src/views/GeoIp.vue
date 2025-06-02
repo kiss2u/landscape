@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { refresh_geo_cache_key, search_geo_site_cache } from "@/api/geo/site";
+import { refresh_geo_cache_key, search_geo_ip_cache } from "@/api/geo/ip";
 import { QueryGeoKey } from "@/rust_bindings/common/geo";
 import { onMounted, ref } from "vue";
 
@@ -15,7 +15,7 @@ const filter = ref<QueryGeoKey>({
 });
 
 async function refresh() {
-  rules.value = await search_geo_site_cache(filter.value);
+  rules.value = await search_geo_ip_cache(filter.value);
 }
 
 async function refresh_cache() {
@@ -30,17 +30,17 @@ const show_geo_drawer_modal = ref(false);
     <n-flex vertical>
       <n-flex :wrap="false">
         <!-- {{ filter }} -->
-        <n-button @click="show_geo_drawer_modal = true">Geo 配置</n-button>
+        <n-button @click="show_geo_drawer_modal = true">Geo IP 配置</n-button>
         <n-button @click="refresh_cache">手动触发更新</n-button>
-        <GeoSiteNameSelect
+        <GeoIpNameSelect
           v-model:name="filter.name"
           @refresh="refresh"
-        ></GeoSiteNameSelect>
-        <GeoSiteKeySelect
+        ></GeoIpNameSelect>
+        <GeoIpKeySelect
           v-model:geo_key="filter.key"
           v-model:name="filter.name"
           @refresh="refresh"
-        ></GeoSiteKeySelect>
+        ></GeoIpKeySelect>
       </n-flex>
 
       <!-- {{ rules }} -->
@@ -50,11 +50,11 @@ const show_geo_drawer_modal = ref(false);
           :key="rule.index"
           style="display: flex"
         >
-          <GeoSiteCacheCard :geo_site="rule"></GeoSiteCacheCard>
+          <GeoIpCacheCard :geo_site="rule"></GeoIpCacheCard>
         </n-grid-item>
       </n-grid>
     </n-flex>
 
-    <GeoSiteDrawer v-model:show="show_geo_drawer_modal"></GeoSiteDrawer>
+    <GeoIpDrawer v-model:show="show_geo_drawer_modal"></GeoIpDrawer>
   </n-layout>
 </template>

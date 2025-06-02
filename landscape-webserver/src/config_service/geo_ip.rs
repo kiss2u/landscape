@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::config::{
-    geo::{GeoConfigKey, GeoDomainConfig, GeoSiteConfig, QueryGeoDomainConfig, QueryGeoKey},
+    geo::{GeoConfigKey, GeoIpConfig, GeoIpSourceConfig, QueryGeoIpConfig, QueryGeoKey},
     ConfigId,
 };
 use landscape_common::service::controller_service::ConfigController;
@@ -14,20 +14,20 @@ use crate::{
     LandscapeApp, SimpleResult,
 };
 
-pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
+pub async fn get_geo_ip_config_paths() -> Router<LandscapeApp> {
     Router::new()
-        .route("/geo_sites", get(get_geo_sites).post(add_geo_site))
-        .route("/geo_sites/:id", get(get_geo_rule).delete(del_geo_site))
-        .route("/geo_sites/cache", get(get_geo_site_cache).post(refresh_geo_site_cache))
-        .route("/geo_sites/cache/search", get(search_geo_site_cache))
-        .route("/geo_sites/cache/detail", get(get_geo_site_cache_detail))
+        .route("/geo_ips", get(get_geo_ips).post(add_geo_ip))
+        .route("/geo_ips/:id", get(get_geo_rule).delete(del_geo_ip))
+        .route("/geo_ips/cache", get(get_geo_ip_cache).post(refresh_geo_ip_cache))
+        .route("/geo_ips/cache/search", get(search_geo_ip_cache))
+        .route("/geo_ips/cache/detail", get(get_geo_ip_cache_detail))
 }
 
-async fn get_geo_site_cache_detail(
+async fn get_geo_ip_cache_detail(
     State(state): State<LandscapeApp>,
     Query(key): Query<GeoConfigKey>,
-) -> LandscapeResult<Json<GeoDomainConfig>> {
-    let result = state.geo_site_service.get_cache_value_by_key(&key).await;
+) -> LandscapeResult<Json<GeoIpConfig>> {
+    let result = state.geo_ip_service.get_cache_value_by_key(&key).await;
     if let Some(result) = result {
         Ok(Json(result))
     } else {
@@ -35,7 +35,7 @@ async fn get_geo_site_cache_detail(
     }
 }
 
-async fn search_geo_site_cache(
+async fn search_geo_ip_cache(
     State(state): State<LandscapeApp>,
     Query(query): Query<QueryGeoKey>,
 ) -> Json<Vec<GeoConfigKey>> {
@@ -45,7 +45,7 @@ async fn search_geo_site_cache(
     tracing::debug!("name: {name:?}");
     tracing::debug!("key: {key:?}");
     let result: Vec<GeoConfigKey> = state
-        .geo_site_service
+        .geo_ip_service
         .list_all_keys()
         .await
         .into_iter()
@@ -57,48 +57,48 @@ async fn search_geo_site_cache(
     Json(result)
 }
 
-async fn get_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoConfigKey>> {
-    let result = state.geo_site_service.list_all_keys().await;
+async fn get_geo_ip_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoConfigKey>> {
+    let result = state.geo_ip_service.list_all_keys().await;
     Json(result)
 }
 
-async fn refresh_geo_site_cache(State(state): State<LandscapeApp>) -> Json<SimpleResult> {
-    state.geo_site_service.refresh().await;
+async fn refresh_geo_ip_cache(State(state): State<LandscapeApp>) -> Json<SimpleResult> {
+    state.geo_ip_service.refresh().await;
     Json(SimpleResult { success: true })
 }
 
-async fn get_geo_sites(
+async fn get_geo_ips(
     State(state): State<LandscapeApp>,
-    Query(q): Query<QueryGeoDomainConfig>,
-) -> Json<Vec<GeoSiteConfig>> {
-    let result = state.geo_site_service.query_geo_by_name(q.name).await;
+    Query(q): Query<QueryGeoIpConfig>,
+) -> Json<Vec<GeoIpSourceConfig>> {
+    let result = state.geo_ip_service.query_geo_by_name(q.name).await;
     Json(result)
 }
 
 async fn get_geo_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> LandscapeResult<Json<GeoSiteConfig>> {
-    let result = state.geo_site_service.find_by_id(id).await;
+) -> LandscapeResult<Json<GeoIpSourceConfig>> {
+    let result = state.geo_ip_service.find_by_id(id).await;
     if let Some(config) = result {
         Ok(Json(config))
     } else {
-        Err(LandscapeApiError::NotFound(format!("Dns Rule id: {:?}", id)))
+        Err(LandscapeApiError::NotFound(format!("Geo id: {:?}", id)))
     }
 }
 
-async fn add_geo_site(
+async fn add_geo_ip(
     State(state): State<LandscapeApp>,
-    Json(dns_rule): Json<GeoSiteConfig>,
-) -> Json<GeoSiteConfig> {
-    let result = state.geo_site_service.set(dns_rule).await;
+    Json(dns_rule): Json<GeoIpSourceConfig>,
+) -> Json<GeoIpSourceConfig> {
+    let result = state.geo_ip_service.set(dns_rule).await;
     Json(result)
 }
 
-async fn del_geo_site(
+async fn del_geo_ip(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
 ) -> Json<SimpleResult> {
-    state.geo_site_service.delete(id).await;
+    state.geo_ip_service.delete(id).await;
     Json(SimpleResult { success: true })
 }

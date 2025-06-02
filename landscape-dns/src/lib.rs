@@ -8,7 +8,6 @@ use std::{collections::HashSet, time::Instant};
 
 pub mod connection;
 pub mod diff_server;
-pub mod ip_rule;
 pub mod rule;
 pub mod server;
 pub mod socket;
