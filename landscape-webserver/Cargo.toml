@@ -9,6 +9,12 @@ landscape-dns = { path = "../landscape-dns" }
 landscape-common = { path = "../landscape-common" }
 landscape-database = { path = "../landscape-database" }
 
+
+rustls = { workspace = true }
+rcgen = { workspace = true }
+rustls-pemfile = { workspace = true }
+tokio-rustls = { workspace = true }
+
 colored = { workspace = true }
 jsonwebtoken = "9"
 once_cell = { workspace = true }
@@ -18,6 +24,7 @@ clap = { workspace = true }
 
 axum = { workspace = true }
 axum-extra = { workspace = true }
+axum-server = { workspace = true, features = ["tls-rustls"] }
 
 homedir = { workspace = true }
 

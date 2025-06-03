@@ -7,6 +7,7 @@ use axum::{
     Router,
 };
 
+use axum_server::tls_rustls::RustlsConfig;
 use colored::Colorize;
 use config_service::{
     dns_rule::get_dns_rule_config_paths, dst_ip_rule::get_dst_ip_rule_config_paths,
@@ -15,6 +16,7 @@ use config_service::{
 };
 use landscape::{
     boot::{boot_check, log::init_logger},
+    cert::load_or_generate_cert,
     config_service::{
         dns_rule::DNSRuleService, dst_ip_rule::DstIpRuleService,
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
@@ -78,6 +80,9 @@ async fn main() -> LdResult<()> {
     }
     banner();
 
+    let crypto_provider = rustls::crypto::ring::default_provider();
+    crypto_provider.install_default().unwrap();
+
     let home_path = LAND_HOME_PATH.clone();
 
     let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
@@ -132,6 +137,10 @@ async fn main() -> LdResult<()> {
     info!("config path: {home_log_str}");
     info!("init config: {need_init_config:#?}");
 
+    let tls_config = load_or_generate_cert(home_path.clone()).await;
+    // let tls_config = Arc::new(tls_config);
+    // let acceptor = TlsAcceptor::from(tls_config);
+
     // need iproute2
     if let Err(e) =
         std::process::Command::new("iptables").args(["-A", "FORWARD", "-j", "ACCEPT"]).output()
@@ -160,7 +169,7 @@ async fn main() -> LdResult<()> {
     }
 
     let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    // let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     // let _ = landscape_dns::connection::set_socket_mark(
     //     std::os::fd::AsFd::as_fd(&listener).as_raw_fd(),
@@ -243,9 +252,15 @@ async fn main() -> LdResult<()> {
         .nest("/api", api_route)
         .nest("/sock", dump::get_tump_router())
         .route("/foo", get(|| async { "Hi from /foo" }))
-        .fallback_service(serve_dir);
+        .fallback_service(serve_dir)
+        .layer(TraceLayer::new_for_http());
 
-    axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
+    axum_server::bind_rustls(addr, RustlsConfig::from_config(tls_config.into()))
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+
+    // axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
     Ok(())
 }
 

@@ -37,6 +37,15 @@ paste = "*"
 colored = "2"
 dotenvy = "*"
 reqwest = "*"
+rustls = { version = "0.23.27", default-features = false, features = [
+    "ring",
+    "logging",
+    "std",
+    "tls12",
+] }
+rcgen = "0.13.2"
+rustls-pemfile = "2.2.0"
+tokio-rustls = "0.26.2"
 
 dhcproto = "0.12.0"
 
@@ -48,6 +57,7 @@ libbpf-sys = { version = "*" }
 # web
 axum = { version = "0.7.7", features = ["ws"] }
 axum-extra = { version = "0.9.4", features = ["typed-header"] }
+axum-server = "0.7.2"
 
 # serde
 serde = { version = "*", features = ["derive"] }

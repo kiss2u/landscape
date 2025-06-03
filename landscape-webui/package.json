@@ -33,6 +33,7 @@
     "@vicons/ionicons5": "^0.13.0",
     "@vicons/material": "^0.13.0",
     "@vicons/tabler": "^0.13.0",
+    "@vitejs/plugin-basic-ssl": "^2.0.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "naive-ui": "^2.41.0",
     "seemly": "^0.3.8",

@@ -18,3 +18,7 @@ export async function push_dns_rule(rule: DnsRule): Promise<void> {
 export async function delete_dns_rule(id: string): Promise<void> {
   let data = await api.api.delete(`config/dns_rules/${id}`);
 }
+
+export async function push_many_dns_rule(rule: DnsRule[]): Promise<void> {
+  let data = await api.api.post(`config/dns_rules/set_many`, rule);
+}

@@ -70,6 +70,15 @@ pub trait ConfigController {
         add_result
     }
 
+    async fn set_list(&self, configs: Vec<Self::Config>) {
+        let old_configs = self.list().await;
+        for config in configs {
+            let _ = self.get_repository().set(config).await.unwrap();
+        }
+        let new_configs = self.list().await;
+        self.after_update_config(old_configs, new_configs).await;
+    }
+
     async fn list(&self) -> Vec<Self::Config> {
         self.get_repository().list().await.unwrap()
     }

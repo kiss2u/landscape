@@ -19,6 +19,10 @@ import { ref } from "vue";
 import UpstreamEdit from "@/components/dns/upstream/UpstreamEdit.vue";
 import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
 import { RuleSource } from "@/rust_bindings/common/dns";
+import {
+  copy_context_to_clipboard,
+  read_context_from_clipboard,
+} from "@/lib/common";
 
 type Props = {
   data:
@@ -132,6 +136,18 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
     }
   }
 }
+
+async function export_config() {
+  let configs = rule.value.source;
+  await copy_context_to_clipboard(message, JSON.stringify(configs, null, 2));
+}
+
+async function import_rules() {
+  try {
+    let rules = JSON.parse(await read_context_from_clipboard());
+    rule.value.source = rules;
+  } catch (e) {}
+}
 </script>
 
 <template>
@@ -242,7 +258,36 @@ function update_resolve_mode(t: DNSResolveModeEnum) {
         v-model:value="rule.resolve_mode"
       >
       </UpstreamEdit>
-      <n-form-item label="处理域名匹配规则 (为空则全部匹配, 规则不分先后)">
+      <n-form-item>
+        <template #label>
+          <n-flex
+            align="center"
+            justify="space-between"
+            :wrap="false"
+            @click.stop
+          >
+            <n-flex> 处理域名匹配规则 (为空则全部匹配, 规则不分先后) </n-flex>
+            <n-flex>
+              <!-- 不确定为什么点击 label 会触发第一个按钮, 所以放置一个不可见的按钮 -->
+              <button
+                style="
+                  width: 0;
+                  height: 0;
+                  overflow: hidden;
+                  opacity: 0;
+                  position: absolute;
+                "
+              ></button>
+
+              <n-button :focusable="false" size="tiny" @click="export_config">
+                复制
+              </n-button>
+              <n-button :focusable="false" size="tiny" @click="import_rules">
+                粘贴
+              </n-button>
+            </n-flex>
+          </n-flex>
+        </template>
         <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
           <template #create-button-default> 增加一条规则来源 </template>
           <template #default="{ value, index }">
