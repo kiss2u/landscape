@@ -4,17 +4,15 @@ import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { ChangeCatalog } from "@vicons/carbon";
 
-import { post_firewall_rules } from "@/api/mark";
-import PacketMark from "@/components/mark/PacketMark.vue";
-import NewIpEdit from "@/components/NewIpEdit.vue";
 import {
   IPProtocol,
   icmp6_options,
   icmp_options,
   protocol_options,
-  FirewallRuleConfig,
-  FirewallRuleItem,
+  FirewallRule,
+  FirewallRuleItemClass,
 } from "@/lib/mark";
+import { push_firewall_rule } from "@/api/firewall_rule";
 
 const message = useMessage();
 
@@ -22,18 +20,23 @@ const emit = defineEmits(["refresh"]);
 
 const show = defineModel<boolean>("show", { required: true });
 
-const origin_rule = defineModel<FirewallRuleConfig>("rule", {
-  default: new FirewallRuleConfig(),
+const origin_rule = defineModel<FirewallRule>("rule", {
+  default: new FirewallRule(),
 });
-const rule = ref<FirewallRuleConfig>(new FirewallRuleConfig(origin_rule.value));
+const rule = ref<FirewallRule>(new FirewallRule(origin_rule.value));
 
 const commit_spin = ref(false);
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== JSON.stringify(origin_rule.value);
 });
 
-function onCreate(): FirewallRuleItem {
-  return new FirewallRuleItem({});
+function enter() {
+  origin_rule.value = new FirewallRule(origin_rule.value);
+  rule.value = new FirewallRule(origin_rule.value);
+}
+
+function onCreate(): FirewallRuleItemClass {
+  return new FirewallRuleItemClass({});
 }
 
 async function saveRule() {
@@ -43,7 +46,7 @@ async function saveRule() {
   }
   try {
     commit_spin.value = true;
-    await post_firewall_rules(rule.value);
+    await push_firewall_rule(rule.value);
     console.log("submit success");
     origin_rule.value = rule.value;
     show.value = false;
@@ -63,6 +66,7 @@ async function saveRule() {
     class="custom-card"
     preset="card"
     title="防火墙白名单编辑"
+    @after-enter="enter"
     :bordered="false"
   >
     <!-- {{ isModified }} -->

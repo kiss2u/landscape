@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PacketMatchMark } from "@/rust_bindings/flow";
+import { PacketMatchMark } from "@/rust_bindings/common/flow";
 
 const match_rules = defineModel<PacketMatchMark[]>("match_rules", {
   required: true,

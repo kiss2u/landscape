@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import WanRuleEditModal from "./WanRuleEditModal.vue";
 import WanRuleCard from "./WanRuleCard.vue";
-import { get_wan_ip_rules } from "@/api/flow/wanip";
+import { get_flow_dst_ip_rules } from "@/api/dst_ip_rule";
 
 interface Props {
   flow_id?: number;
@@ -16,7 +16,9 @@ const show = defineModel<boolean>("show", { required: true });
 
 const rules = ref<any>([]);
 async function read_rules() {
-  rules.value = await get_wan_ip_rules(props.flow_id);
+  if (props.flow_id) {
+    rules.value = await get_flow_dst_ip_rules(props.flow_id);
+  }
 }
 
 const show_create_modal = ref(false);
@@ -47,6 +49,7 @@ const show_create_modal = ref(false);
       </n-flex>
 
       <WanRuleEditModal
+        :id="null"
         :flow_id="flow_id"
         v-model:show="show_create_modal"
         @refresh="read_rules()"

@@ -51,13 +51,15 @@ export class LanIPRuleConfig {
   }
 }
 
-import type {
-  FlowDnsMark,
-  WanIPRuleConfig,
-  WanIPRuleSource,
-} from "@/rust_bindings/flow";
-export class WanIPRuleConfigClass implements WanIPRuleConfig {
-  id: string;
+import type { FlowDnsMark, WanIPRuleSource } from "@/rust_bindings/flow";
+import {
+  FirewallRuleConfig,
+  FirewallRuleConfigItem,
+  LandscapeIpProtocolCode,
+} from "@/rust_bindings/common/firewall";
+import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+export class WanIpRuleConfigClass implements WanIpRuleConfig {
+  id: string | null;
   index: number;
   enable: boolean;
   mark: FlowDnsMark;
@@ -65,9 +67,10 @@ export class WanIPRuleConfigClass implements WanIPRuleConfig {
   remark: string;
   flow_id: number;
   override_dns: boolean;
+  update_at: number;
 
-  constructor(obj: Partial<WanIPRuleConfig> = {}) {
-    this.id = obj?.id ?? "";
+  constructor(obj: Partial<WanIpRuleConfig> = {}) {
+    this.id = obj?.id ?? null;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
     this.mark = obj?.mark ? { ...obj.mark } : { t: FlowMarkType.KEEP_GOING };
@@ -75,6 +78,7 @@ export class WanIPRuleConfigClass implements WanIPRuleConfig {
     this.remark = obj?.remark ?? "";
     this.flow_id = obj?.flow_id ?? 0;
     this.override_dns = obj?.override_dns ?? false;
+    this.update_at = obj?.update_at ?? new Date().getTime();
   }
 }
 
@@ -82,7 +86,7 @@ export function new_wan_rules(e: any): WanIPRuleSource {
   if (e.t == "config") {
     return { t: "config", ip: e.ip, prefix: e.prefix };
   } else {
-    return { t: "geokey", country_code: e.key };
+    return { t: "geokey", key: e.key, name: e.name };
   }
 }
 
@@ -93,42 +97,35 @@ export enum IPProtocol {
   UDP = "udp",
 }
 
-export class FirewallRuleConfig {
+export class FirewallRule implements FirewallRuleConfig {
+  id: string | null;
   index: number;
   enable: boolean;
   mark: PacketMark;
-  items: FirewallRuleItem[];
+  items: FirewallRuleItemClass[];
   remark: string;
+  update_at: number;
 
-  constructor(obj?: {
-    index?: number;
-    enable?: boolean;
-    mark?: PacketMark;
-    items?: FirewallRuleItem[];
-    remark?: string;
-  }) {
+  constructor(obj: Partial<FirewallRuleConfig> = {}) {
+    this.id = obj?.id ?? null;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
     this.mark = obj?.mark ? { ...obj.mark } : { t: MarkType.NoMark };
     this.items = obj?.items
-      ? obj?.items.map((e) => new FirewallRuleItem(e))
+      ? obj?.items.map((e) => new FirewallRuleItemClass(e))
       : [];
     this.remark = obj?.remark ?? "";
+    this.update_at = obj?.update_at ?? new Date().getTime();
   }
 }
 
-export class FirewallRuleItem {
-  ip_protocol: IPProtocol;
-  local_port: string | undefined;
-  address: string | undefined;
+export class FirewallRuleItemClass implements FirewallRuleConfigItem {
+  ip_protocol: LandscapeIpProtocolCode | null;
+  local_port: string | null;
+  address: string;
   ip_prefixlen: number;
 
-  constructor(obj?: {
-    ip_protocol?: IPProtocol;
-    local_port?: string | undefined;
-    address?: string | undefined;
-    ip_prefixlen?: number;
-  }) {
+  constructor(obj: Partial<FirewallRuleConfigItem> = {}) {
     this.ip_protocol = obj?.ip_protocol ?? IPProtocol.TCP;
     this.local_port = obj?.local_port ?? "80";
     this.address = obj?.address ?? "0.0.0.0";

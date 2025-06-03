@@ -5,7 +5,6 @@ import { DotMark } from "@vicons/carbon";
 import { useThemeVars } from "naive-ui";
 
 import {
-  get_dns_rule,
   get_dns_status,
   start_dns_service,
   stop_dns_service,

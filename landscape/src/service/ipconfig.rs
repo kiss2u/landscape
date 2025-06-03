@@ -1,12 +1,19 @@
+use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::{
     args::LAND_HOSTNAME,
-    config::wanip::{IfaceIpModelConfig, IfaceIpServiceConfig},
+    config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
+    observer::IfaceObserverAction,
     service::{
-        service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
-        ServiceStatus,
+        controller_service::ControllerService,
+        service_manager::{ServiceHandler, ServiceManager},
+        DefaultServiceStatus, DefaultWatchServiceStatus, ServiceStatus,
     },
 };
+use landscape_database::{
+    iface_ip::repository::IfaceIpServiceRepository, provider::LandscapeDBServiceProvider,
+};
+use tokio::sync::broadcast;
 
 use crate::{dev::LandscapeInterface, iface::get_iface_by_name};
 
@@ -128,4 +135,59 @@ async fn init_service_from_config(
             }
         }
     };
+}
+
+#[derive(Clone)]
+pub struct IfaceIpServiceManagerService {
+    store: IfaceIpServiceRepository,
+    service: ServiceManager<IPConfigService>,
+}
+
+impl ControllerService for IfaceIpServiceManagerService {
+    type Id = String;
+    type Config = IfaceIpServiceConfig;
+    type DatabseAction = IfaceIpServiceRepository;
+    type H = IPConfigService;
+
+    fn get_service(&self) -> &ServiceManager<Self::H> {
+        &self.service
+    }
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
+}
+
+impl IfaceIpServiceManagerService {
+    pub async fn new(
+        store_service: LandscapeDBServiceProvider,
+        mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+    ) -> Self {
+        let store = store_service.iface_ip_service_store();
+        let service = ServiceManager::init(store.list().await.unwrap()).await;
+
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            while let Ok(msg) = dev_observer.recv().await {
+                match msg {
+                    IfaceObserverAction::Up(iface_name) => {
+                        tracing::info!("restart {iface_name} IfaceIp service");
+                        let service_config = if let Some(service_config) =
+                            store.find_by_iface_name(iface_name.clone()).await.unwrap()
+                        {
+                            service_config
+                        } else {
+                            continue;
+                        };
+
+                        let _ = service_clone.update_service(service_config).await;
+                    }
+                    IfaceObserverAction::Down(_) => {}
+                }
+            }
+        });
+
+        let store = store_service.iface_ip_service_store();
+        Self { service, store }
+    }
 }

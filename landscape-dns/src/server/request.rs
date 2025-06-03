@@ -1,6 +1,6 @@
 use core::panic;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     fs,
     num::NonZeroUsize,
     path::PathBuf,
@@ -22,7 +22,7 @@ use tokio::sync::Mutex;
 
 use crate::{rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
-    dns::{DNSRuleConfig, DomainConfig, FilterResult},
+    config::dns::{DNSRuntimeRule, FilterResult},
     flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
 };
 
@@ -68,16 +68,12 @@ pub struct LandscapeDnsRequestHandle {
 }
 
 impl LandscapeDnsRequestHandle {
-    pub fn new(
-        dns_rules: Vec<DNSRuleConfig>,
-        geo_map: &HashMap<String, Vec<DomainConfig>>,
-        flow_id: u32,
-    ) -> LandscapeDnsRequestHandle {
+    pub fn new(dns_rules: Vec<DNSRuntimeRule>, flow_id: u32) -> LandscapeDnsRequestHandle {
         check_resolver_conf();
         let mut resolves = BTreeMap::new();
         for rule in dns_rules.into_iter() {
             // println!("dns_rules: {:?}", rule);
-            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, geo_map, flow_id)));
+            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, flow_id)));
         }
         let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(2048).unwrap())));
 
@@ -85,17 +81,13 @@ impl LandscapeDnsRequestHandle {
         LandscapeDnsRequestHandle { resolves, cache, flow_id }
     }
 
-    pub fn renew_rules(
-        &mut self,
-        dns_rules: Vec<DNSRuleConfig>,
-        geo_map: &HashMap<String, Vec<DomainConfig>>,
-    ) {
+    pub fn renew_rules(&mut self, dns_rules: Vec<DNSRuntimeRule>) {
         check_resolver_conf();
 
         let mut resolves = BTreeMap::new();
         for rule in dns_rules.into_iter() {
             // println!("dns_rules: {:?}", rule);
-            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, geo_map, self.flow_id)));
+            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, self.flow_id)));
         }
 
         let mut cache = LruCache::new(NonZeroUsize::new(2048).unwrap());

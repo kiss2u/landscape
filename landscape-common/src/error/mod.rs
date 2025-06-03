@@ -1,5 +1,7 @@
+use sea_orm::DbErr;
 use thiserror::Error;
 
+/// 仅定义当前 common 错误
 #[derive(Error, Debug)]
 pub enum LdError {
     #[error("Lnadscape boot error: {0}")]
@@ -13,6 +15,9 @@ pub enum LdError {
 
     #[error("setting cpu balance error: {0}")]
     SettingCpuBalanceError(String),
+
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] DbErr),
 }
 
 pub type LdResult<T> = Result<T, LdError>;

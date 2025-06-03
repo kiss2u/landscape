@@ -1,18 +1,24 @@
+use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::{
     config::mss_clamp::MSSClampServiceConfig,
+    observer::IfaceObserverAction,
     service::{
-        service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
-        ServiceStatus,
+        controller_service::ControllerService,
+        service_manager::{ServiceHandler, ServiceManager},
+        DefaultServiceStatus, DefaultWatchServiceStatus, ServiceStatus,
     },
 };
-use tokio::sync::oneshot;
+use landscape_database::{
+    mss_clamp::repository::MssClampServiceRepository, provider::LandscapeDBServiceProvider,
+};
+use tokio::sync::{broadcast, oneshot};
 
 use crate::iface::get_iface_by_name;
 
 #[derive(Clone)]
-pub struct MSSClampService;
+pub struct MssClampService;
 
-impl ServiceHandler for MSSClampService {
+impl ServiceHandler for MssClampService {
     type Status = DefaultServiceStatus;
 
     type Config = MSSClampServiceConfig;
@@ -68,4 +74,59 @@ pub async fn run_mss_clamp(
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");
     service_status.just_change_status(ServiceStatus::Stop);
+}
+
+#[derive(Clone)]
+pub struct MssClampServiceManagerService {
+    store: MssClampServiceRepository,
+    service: ServiceManager<MssClampService>,
+}
+
+impl ControllerService for MssClampServiceManagerService {
+    type Id = String;
+    type Config = MSSClampServiceConfig;
+    type DatabseAction = MssClampServiceRepository;
+    type H = MssClampService;
+
+    fn get_service(&self) -> &ServiceManager<Self::H> {
+        &self.service
+    }
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
+}
+
+impl MssClampServiceManagerService {
+    pub async fn new(
+        store_service: LandscapeDBServiceProvider,
+        mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+    ) -> Self {
+        let store = store_service.mss_clamp_service_store();
+        let service = ServiceManager::init(store.list().await.unwrap()).await;
+
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            while let Ok(msg) = dev_observer.recv().await {
+                match msg {
+                    IfaceObserverAction::Up(iface_name) => {
+                        tracing::info!("restart {iface_name} Firewall service");
+                        let service_config = if let Some(service_config) =
+                            store.find_by_iface_name(iface_name.clone()).await.unwrap()
+                        {
+                            service_config
+                        } else {
+                            continue;
+                        };
+
+                        let _ = service_clone.update_service(service_config).await;
+                    }
+                    IfaceObserverAction::Down(_) => {}
+                }
+            }
+        });
+
+        let store = store_service.mss_clamp_service_store();
+        Self { service, store }
+    }
 }

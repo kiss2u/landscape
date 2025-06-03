@@ -7,38 +7,66 @@ use axum::{
     Router,
 };
 
+use axum_server::tls_rustls::RustlsConfig;
 use colored::Colorize;
+use config_service::{
+    dns_rule::get_dns_rule_config_paths, dst_ip_rule::get_dst_ip_rule_config_paths,
+    firewall_rule::get_firewall_rule_config_paths, flow_rule::get_flow_rule_config_paths,
+    geo_ip::get_geo_ip_config_paths, geo_site::get_geo_site_config_paths,
+};
 use landscape::{
-    boot::{boot_check, log::init_logger, InitConfig},
-    store::LandscapeStoreServiceProvider,
+    boot::{boot_check, log::init_logger},
+    cert::load_or_generate_cert,
+    config_service::{
+        dns_rule::DNSRuleService, dst_ip_rule::DstIpRuleService,
+        firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
+        geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
+    },
+    sys_service::dns_service::LandscapeDnsService,
 };
 use landscape_common::{
-    args::{LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
+    args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
     error::LdResult,
-    store::storev2::StoreFileManager,
 };
+use landscape_database::provider::LandscapeDBServiceProvider;
 use serde::{Deserialize, Serialize};
+use sys_service::dns_service::get_dns_paths;
+use tokio::sync::mpsc;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 mod auth;
+mod config_service;
 mod docker;
 mod dump;
 mod error;
-mod flow;
-mod global_mark;
 mod iface;
 mod metric;
 mod service;
+mod sys_service;
 mod sysinfo;
 
 use service::{
     dhcp_v4::get_dhcp_v4_service_paths, firewall::get_firewall_service_paths,
-    mss_clamp::get_mss_clamp_service_paths, packet_mark::get_iface_packet_mark_paths,
+    flow_wan::get_iface_flow_wan_paths, mss_clamp::get_mss_clamp_service_paths,
 };
 use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
 use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::{error, info};
+
+const DNS_EVENT_CHANNEL_SIZE: usize = 128;
+const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
+
+#[derive(Clone)]
+pub struct LandscapeApp {
+    pub dns_service: LandscapeDnsService,
+    pub dns_rule_service: DNSRuleService,
+    pub flow_rule_service: FlowRuleService,
+    pub geo_site_service: GeoSiteService,
+    pub fire_wall_rule_service: FirewallRuleService,
+    pub dst_ip_rule_service: DstIpRuleService,
+    pub geo_ip_service: GeoIpService,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 struct SimpleResult {
@@ -52,43 +80,53 @@ async fn main() -> LdResult<()> {
     }
     banner();
 
+    let crypto_provider = rustls::crypto::ring::default_provider();
+    crypto_provider.install_default().unwrap();
+
     let home_path = LAND_HOME_PATH.clone();
 
-    let mut store_provider = LandscapeStoreServiceProvider::new(home_path.clone());
-    let dev_obs = landscape::observer::dev_observer().await;
-    // let mut iface_store = StoreFileManager::new(home_path.clone(), "iface".to_string());
-    let mut iface_ipconfig_store =
-        StoreFileManager::new(home_path.clone(), "iface_ipconfig".to_string());
-    let mut iface_nat_store = StoreFileManager::new(home_path.clone(), "iface_nat".to_string());
-
-    let mut iface_mark_store = StoreFileManager::new(home_path.clone(), "iface_mark".to_string());
-
-    let mut iface_pppd_store = StoreFileManager::new(home_path.clone(), "iface_pppd".to_string());
-
-    let mut flow_store = StoreFileManager::new(home_path.clone(), "flow_rule".to_string());
-    let mut dns_store = StoreFileManager::new(home_path.clone(), "dns_rule".to_string());
-
-    let mut wan_ip_mark_store = StoreFileManager::new(home_path.clone(), "wan_ip_mark".to_string());
-
-    let mut ipv6pd_store = StoreFileManager::new(home_path.clone(), "ipv6pd_service".to_string());
-    let mut dhcpv4_service_store =
-        StoreFileManager::new(home_path.clone(), "dhcpv4_service".to_string());
-    let mut icmpv6ra_store =
-        StoreFileManager::new(home_path.clone(), "icmpv6ra_service".to_string());
-
-    let mut firewall_store =
-        StoreFileManager::new(home_path.clone(), "firewall_service".to_string());
-
-    let mut firewall_rules_store =
-        StoreFileManager::new(home_path.clone(), "firewall_rules".to_string());
-
-    let mut wifi_config_store = StoreFileManager::new(home_path.clone(), "iface_wifi".to_string());
-
-    let mut mss_clamp_store = StoreFileManager::new(home_path.clone(), "mss_clamp".to_string());
+    let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
 
     let need_init_config = boot_check(&home_path)?;
+    db_store_provider.truncate_and_fit_from(need_init_config.clone()).await;
 
-    store_provider.truncate_and_fit_from(need_init_config.clone()).await;
+    // 初始化 App
+
+    let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
+    let geo_site_service =
+        GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let dns_rule_service =
+        DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let flow_rule_service = FlowRuleService::new(db_store_provider.clone()).await;
+    let dns_service = LandscapeDnsService::new(
+        dns_service_rx,
+        dns_rule_service.clone(),
+        flow_rule_service.clone(),
+        geo_site_service.clone(),
+    )
+    .await;
+    let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
+
+    let (dst_ip_service_tx, dst_ip_service_rx) = mpsc::channel(DST_IP_EVENT_CHANNEL_SIZE);
+
+    let geo_ip_service =
+        GeoIpService::new(db_store_provider.clone(), dst_ip_service_tx.clone()).await;
+    let dst_ip_rule_service =
+        DstIpRuleService::new(db_store_provider.clone(), geo_ip_service.clone(), dst_ip_service_rx)
+            .await;
+
+    let landscape_app_status = LandscapeApp {
+        dns_service,
+        dns_rule_service,
+        flow_rule_service,
+        geo_site_service,
+        fire_wall_rule_service,
+        dst_ip_rule_service,
+        geo_ip_service,
+    };
+    // 初始化结束
+
+    let dev_obs = landscape::observer::dev_observer().await;
 
     let home_log_str = format!("{}", home_path.display()).bright_green();
     if !LAND_ARGS.log_output_in_terminal {
@@ -99,93 +137,9 @@ async fn main() -> LdResult<()> {
     info!("config path: {home_log_str}");
     info!("init config: {need_init_config:#?}");
 
-    // TDDO: 使用宏进行初始化
-    if let Some(InitConfig {
-        ipconfigs,
-        nats,
-        marks,
-        pppds,
-        flow_rules,
-        dns_rules,
-        wan_ip_mark,
-        dhcpv6pds,
-        icmpras,
-        firewalls,
-        firewall_rules,
-        wifi_configs,
-        dhcpv4_services,
-        mss_clamps,
-        ..
-    }) = need_init_config
-    {
-        iface_ipconfig_store.truncate();
-        iface_nat_store.truncate();
-        iface_mark_store.truncate();
-        iface_pppd_store.truncate();
-        flow_store.truncate();
-        dns_store.truncate();
-        wan_ip_mark_store.truncate();
-        ipv6pd_store.truncate();
-        icmpv6ra_store.truncate();
-        firewall_store.truncate();
-        firewall_rules_store.truncate();
-        wifi_config_store.truncate();
-        dhcpv4_service_store.truncate();
-        mss_clamp_store.truncate();
-
-        for each_config in mss_clamps {
-            mss_clamp_store.set(each_config);
-        }
-
-        for each_config in ipconfigs {
-            iface_ipconfig_store.set(each_config);
-        }
-
-        for each_config in nats {
-            iface_nat_store.set(each_config);
-        }
-
-        for each_config in marks {
-            iface_mark_store.set(each_config);
-        }
-
-        for each_config in pppds {
-            iface_pppd_store.set(each_config);
-        }
-
-        for each_config in flow_rules {
-            flow_store.set(each_config);
-        }
-        for each_config in dns_rules {
-            dns_store.set(each_config);
-        }
-
-        for each_config in wan_ip_mark {
-            wan_ip_mark_store.set(each_config);
-        }
-
-        for each_config in dhcpv6pds {
-            ipv6pd_store.set(each_config);
-        }
-
-        for each_config in icmpras {
-            icmpv6ra_store.set(each_config);
-        }
-
-        for each_config in firewalls {
-            firewall_store.set(each_config);
-        }
-        for each_config in firewall_rules {
-            firewall_rules_store.set(each_config);
-        }
-
-        for each_config in wifi_configs {
-            wifi_config_store.set(each_config);
-        }
-        for each_config in dhcpv4_services {
-            dhcpv4_service_store.set(each_config);
-        }
-    }
+    let tls_config = load_or_generate_cert(home_path.clone()).await;
+    // let tls_config = Arc::new(tls_config);
+    // let acceptor = TlsAcceptor::from(tls_config);
 
     // need iproute2
     if let Err(e) =
@@ -215,7 +169,7 @@ async fn main() -> LdResult<()> {
     }
 
     let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    // let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     // let _ = landscape_dns::connection::set_socket_mark(
     //     std::os::fd::AsFd::as_fd(&listener).as_raw_fd(),
@@ -239,23 +193,51 @@ async fn main() -> LdResult<()> {
     auth::output_sys_token().await;
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
-        .nest("/iface", iface::get_network_paths(store_provider.clone()).await)
-        .nest("/global_mark", global_mark::get_global_mark_paths(firewall_rules_store).await)
+        .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest("/metric", metric::get_metric_service_paths().await)
-        .nest("/flow", flow::get_flow_paths(flow_store, dns_store, wan_ip_mark_store).await)
+        .nest("/sys_service", get_dns_paths().await.with_state(landscape_app_status.clone()))
+        .nest(
+            "/config",
+            Router::new()
+                .merge(get_dns_rule_config_paths().await)
+                .merge(get_firewall_rule_config_paths().await)
+                .merge(get_flow_rule_config_paths().await)
+                .merge(get_geo_site_config_paths().await)
+                .merge(get_geo_ip_config_paths().await)
+                .merge(get_dst_ip_rule_config_paths().await)
+                .with_state(landscape_app_status.clone()),
+        )
         .nest(
             "/services",
             Router::new()
-                .merge(get_mss_clamp_service_paths(mss_clamp_store, dev_obs.resubscribe()).await)
-                .merge(get_firewall_service_paths(firewall_store, dev_obs.resubscribe()).await)
-                .merge(get_iface_ipconfig_paths(iface_ipconfig_store, dev_obs.resubscribe()).await)
-                .merge(get_dhcp_v4_service_paths(dhcpv4_service_store, dev_obs.resubscribe()).await)
-                .merge(get_wifi_service_paths(wifi_config_store, dev_obs.resubscribe()).await)
-                .merge(get_iface_pppd_paths(iface_pppd_store).await)
-                .merge(get_iface_pdclient_paths(ipv6pd_store, dev_obs.resubscribe()).await)
-                .merge(get_iface_icmpv6ra_paths(icmpv6ra_store).await)
-                .merge(get_iface_nat_paths(iface_nat_store, dev_obs.resubscribe()).await)
-                .merge(get_iface_packet_mark_paths(iface_mark_store, dev_obs).await),
+                .merge(
+                    get_mss_clamp_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
+                .merge(
+                    get_firewall_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
+                .merge(
+                    get_iface_ipconfig_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
+                .merge(
+                    get_dhcp_v4_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
+                .merge(get_wifi_service_paths(db_store_provider.clone()).await)
+                .merge(get_iface_pppd_paths(db_store_provider.clone()).await)
+                .merge(
+                    get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
+                .merge(
+                    get_iface_icmpv6ra_paths(db_store_provider.clone(), dev_obs.resubscribe())
+                        .await,
+                )
+                .merge(get_iface_nat_paths(db_store_provider.clone(), dev_obs.resubscribe()).await)
+                .merge(get_iface_flow_wan_paths(db_store_provider.clone(), dev_obs).await),
         )
         .nest("/sysinfo", sysinfo::get_sys_info_route())
         .route_layer(axum::middleware::from_fn(auth::auth_middleware));
@@ -270,9 +252,15 @@ async fn main() -> LdResult<()> {
         .nest("/api", api_route)
         .nest("/sock", dump::get_tump_router())
         .route("/foo", get(|| async { "Hi from /foo" }))
-        .fallback_service(serve_dir);
+        .fallback_service(serve_dir)
+        .layer(TraceLayer::new_for_http());
 
-    axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
+    axum_server::bind_rustls(addr, RustlsConfig::from_config(tls_config.into()))
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+
+    // axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
     Ok(())
 }
 

@@ -248,11 +248,11 @@ async fn update_current_info(
     iface_name: &str,
     ia_prefix: LDIAPrefix,
     subnet_prefix: u8,
-    subnet_index: u128,
+    subnet_index: u32,
     mut expire_time: Pin<&mut tokio::time::Sleep>,
 ) -> ICMPv6ConfigInfo {
     expire_time.set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
-    let (subnet, route) = allocate_subnet(&ia_prefix, subnet_prefix, subnet_index);
+    let (subnet, route) = allocate_subnet(&ia_prefix, subnet_prefix, subnet_index as u128);
 
     add_route(subnet, subnet_prefix, iface_name, ia_prefix.valid_lifetime);
     set_iface_ip(

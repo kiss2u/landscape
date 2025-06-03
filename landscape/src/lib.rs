@@ -13,6 +13,9 @@ use rtnetlink::new_connection;
 pub use routerstatus::*;
 
 pub mod boot;
+
+pub mod cert;
+pub mod config_service;
 pub mod dev;
 pub mod dhcp_client;
 pub mod dhcp_server;
@@ -27,7 +30,7 @@ pub mod observer;
 pub mod pppoe_client;
 pub mod routerstatus;
 pub mod service;
-pub mod store;
+pub mod sys_service;
 pub mod wifi;
 
 // fn gen_default_config(

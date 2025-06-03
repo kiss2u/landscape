@@ -1,14 +1,17 @@
 use std::net::IpAddr;
 
-use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
+use crate::config::geo::GeoConfigKey;
+use crate::utils::time::get_f64_timestamp;
+use crate::{database::repository::LandscapeDBStore, flow::mark::FlowDnsMark};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "flow.ts")]
+#[ts(export, export_to = "common/flow.ts")]
 /// 对于外部 IP 规则
-pub struct WanIPRuleConfig {
-    pub id: String,
+pub struct WanIpRuleConfig {
+    pub id: Option<Uuid>,
     // 优先级 用作存储主键
     pub index: u32,
     // 是否启用
@@ -27,15 +30,18 @@ pub struct WanIPRuleConfig {
 
     #[serde(default)]
     pub override_dns: bool,
+
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 fn default_flow_id() -> u32 {
     0_u32
 }
 
-impl LandscapeStore for WanIPRuleConfig {
-    fn get_store_key(&self) -> String {
-        self.id.clone()
+impl LandscapeDBStore<Uuid> for WanIpRuleConfig {
+    fn get_id(&self) -> Uuid {
+        self.id.unwrap_or(Uuid::new_v4())
     }
 }
 
@@ -44,7 +50,7 @@ impl LandscapeStore for WanIPRuleConfig {
 #[serde(tag = "t")]
 #[serde(rename_all = "lowercase")]
 pub enum WanIPRuleSource {
-    GeoKey { country_code: String },
+    GeoKey(GeoConfigKey),
     Config(IpConfig),
 }
 

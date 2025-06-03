@@ -19,6 +19,7 @@ const service_config = ref<MSSClampServiceConfig>({
   iface_name: iface_info.iface_name,
   enable: false,
   clamp_size: 1492,
+  update_at: new Date().getTime(),
 });
 
 async function on_modal_enter() {
@@ -32,6 +33,7 @@ async function on_modal_enter() {
       iface_name: iface_info.iface_name,
       enable: false,
       clamp_size: 1492,
+      update_at: new Date().getTime(),
     };
   }
 }

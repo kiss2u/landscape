@@ -1,7 +1,9 @@
 use std::mem;
 
 use libc::{clock_gettime, timespec, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_REALTIME};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{Duration, Instant};
+
 pub struct LdCountdown {
     start: Instant,
     duration: Duration,
@@ -74,6 +76,15 @@ pub fn get_relative_time_ns() -> Result<u64, i32> {
         let ns = (tv_sec as u64) * 1_000_000_000 + (tv_nsec as u64);
         Ok(ns)
     }
+}
+
+pub const MILL_A_DAY: u32 = 1000 * 60 * 60 * 24;
+///
+pub fn get_f64_timestamp() -> f64 {
+    const MILLIS_PER_SEC: u64 = 1_000;
+    let time = SystemTime::now().duration_since(UNIX_EPOCH).expect("系统时间早于 UNIX");
+
+    (time.as_secs() as f64) * (MILLIS_PER_SEC as f64) + (time.subsec_millis() as f64)
 }
 
 #[cfg(test)]

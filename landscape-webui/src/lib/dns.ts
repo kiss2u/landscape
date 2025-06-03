@@ -5,7 +5,7 @@ import {
   DNSRuleConfig,
   FilterResult,
   RuleSource,
-} from "@/rust_bindings/dns";
+} from "@/rust_bindings/common/dns";
 
 export class DnsRule implements DNSRuleConfig {
   id: string | null;
@@ -17,6 +17,7 @@ export class DnsRule implements DNSRuleConfig {
   resolve_mode: DNSResolveMode;
   flow_id: number;
   filter: FilterResult;
+  update_at: number;
 
   constructor(obj?: Partial<DNSRuleConfig>) {
     this.id = obj?.id ?? null;
@@ -33,6 +34,7 @@ export class DnsRule implements DNSRuleConfig {
         };
     this.flow_id = obj?.flow_id ?? 0;
     this.filter = obj?.filter ?? "unfilter";
+    this.update_at = obj?.update_at ?? new Date().getTime();
   }
 }
 

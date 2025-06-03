@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     routing::{delete, get},
     Json, Router,
 };
 use landscape_common::{
-    args::LAND_HOME_PATH, dns::DNSRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig,
+    args::LAND_HOME_PATH, config::dns::DNSRuleConfig, flow::FlowConfig, ip_mark::WanIPRuleConfig,
     store::storev2::StoreFileManager, GEO_IP_FILE_NAME,
 };
 use landscape_dns::{diff_server::LandscapeFiffFlowDnsService, ip_rule::update_wan_rules};
@@ -60,8 +60,6 @@ pub async fn get_flow_paths(
         .route("/", get(get_flow_configs).post(new_flow_config))
         .route("/:index", delete(del_flow_config))
         .route("/dns", get(get_dns_service_status).post(start_dns_service).delete(stop_dns_service))
-        .route("/dns/rules", get(get_dns_rules).post(add_dns_rules))
-        .route("/dns/rules/:index", delete(del_dns_rules))
         .route("/:flow_id/wans", get(list_wan_ip_rules).post(add_wan_ip_rule))
         .route("/:flow_id/wans/:rule_id", get(get_wan_ip_rule).put(update_wan_ip_rule))
         // .route("/:flow_id/wans/:wans_id",delete() )
@@ -132,51 +130,6 @@ async fn del_flow_config(
 
     state.dns_service.update_flow_map(&new_records).await;
     landscape::flow::update_flow_matchs(new_records, old_records).await;
-
-    let result = serde_json::to_value(SimpleResult { success: true });
-    Json(result.unwrap())
-}
-
-async fn get_dns_rules(
-    State(state): State<LandscapeFlowServices>,
-    Query(DnsRuleQuery { flow_id }): Query<DnsRuleQuery>,
-) -> Json<Value> {
-    let mut get_store = state.dns_store.lock().await;
-    let mut dns_rules = get_store.list();
-    dns_rules.sort_by(|a, b| a.index.cmp(&b.index));
-    if let Some(flow_id) = flow_id {
-        dns_rules.retain(|rule| rule.flow_id == flow_id);
-    }
-    let result = serde_json::to_value(dns_rules);
-    Json(result.unwrap())
-}
-
-async fn add_dns_rules(
-    State(state): State<LandscapeFlowServices>,
-    Json(dns_rule): Json<DNSRuleConfig>,
-) -> Json<Value> {
-    let flow_id = dns_rule.flow_id;
-    let mut get_store = state.dns_store.lock().await;
-    get_store.set(dns_rule);
-    let dns_rules = get_store.list();
-    drop(get_store);
-    state.dns_service.flush_specific_flow_dns_rule(flow_id, dns_rules).await;
-
-    let result = serde_json::to_value(SimpleResult { success: true });
-    Json(result.unwrap())
-}
-
-async fn del_dns_rules(
-    State(state): State<LandscapeFlowServices>,
-    Path(index): Path<String>,
-) -> Json<Value> {
-    let mut get_store = state.dns_store.lock().await;
-    if let Some(flow_config) = get_store.get(&index) {
-        get_store.del(&index);
-        let dns_rules = get_store.list();
-        drop(get_store);
-        state.dns_service.flush_specific_flow_dns_rule(flow_config.flow_id, dns_rules).await;
-    }
 
     let result = serde_json::to_value(SimpleResult { success: true });
     Json(result.unwrap())
@@ -261,12 +214,12 @@ async fn update_wan_ip_rule(
     Json(result.unwrap())
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-struct DNSStartRequest {
-    udp_port: u16,
+#[derive(Deserialize, Serialize)]
+pub struct DnsRuleQuery {
+    pub flow_id: Option<u32>,
 }
 
-#[derive(Deserialize)]
-struct DnsRuleQuery {
-    flow_id: Option<u32>,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DNSStartRequest {
+    udp_port: u16,
 }

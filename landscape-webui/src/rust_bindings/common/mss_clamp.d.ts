@@ -3,9 +3,6 @@
 export type MSSClampServiceConfig = {
   iface_name: string;
   enable: boolean;
-  /**
-   * clamp size
-   * PPPoE: 1500 - 8 = 1492
-   */
   clamp_size: number;
+  update_at: number;
 };

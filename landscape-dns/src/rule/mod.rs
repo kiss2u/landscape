@@ -10,14 +10,12 @@ use hickory_resolver::{
     Resolver,
 };
 use landscape_common::{
-    dns::{
-        DNSResolveMode, DNSRuleConfig, DnsUpstreamType, DomainConfig, DomainMatchType, RuleSource,
-    },
+    config::dns::{DNSResolveMode, DNSRuntimeRule, DnsUpstreamType, DomainConfig, DomainMatchType},
     flow::mark::FlowDnsMark,
 };
 use matcher::DomainMatcher;
+use std::net::IpAddr;
 use std::str::FromStr;
-use std::{collections::HashMap, net::IpAddr};
 
 use crate::connection::{MarkConnectionProvider, MarkRuntimeProvider};
 
@@ -54,7 +52,7 @@ pub enum ResolverType {
     CacheResolver(CacheResolver),
 }
 impl ResolverType {
-    pub fn new(config: &DNSRuleConfig, flow_id: u32) -> Self {
+    pub fn new(config: &DNSRuntimeRule, flow_id: u32) -> Self {
         match &config.resolve_mode {
             DNSResolveMode::Redirect { ips } => ResolverType::RedirectResolver(ips.clone()),
             DNSResolveMode::Upstream { upstream, ips, port } => {
@@ -82,13 +80,13 @@ impl ResolverType {
             }
             DNSResolveMode::Cloudflare { mode } => {
                 let server = match mode {
-                    landscape_common::dns::CloudflareMode::Plaintext => {
+                    landscape_common::config::dns::CloudflareMode::Plaintext => {
                         NameServerConfigGroup::cloudflare()
                     }
-                    landscape_common::dns::CloudflareMode::Tls => {
+                    landscape_common::config::dns::CloudflareMode::Tls => {
                         NameServerConfigGroup::cloudflare_tls()
                     }
-                    landscape_common::dns::CloudflareMode::Https => {
+                    landscape_common::config::dns::CloudflareMode::Https => {
                         NameServerConfigGroup::cloudflare_https()
                     }
                 };
@@ -148,18 +146,14 @@ pub struct ResolutionRule {
     // 启动之后配置的 matcher
     matcher: DomainMatcher,
     //
-    pub config: DNSRuleConfig,
+    pub config: DNSRuntimeRule,
 
     resolver: ResolverType,
 }
 
 impl ResolutionRule {
-    pub fn new(
-        config: DNSRuleConfig,
-        geo_file: &HashMap<String, Vec<DomainConfig>>,
-        flow_id: u32,
-    ) -> Self {
-        let matcher = DomainMatcher::new(convert_config_to_runtime_rule(&config, geo_file));
+    pub fn new(config: DNSRuntimeRule, flow_id: u32) -> Self {
+        let matcher = DomainMatcher::new(config.source.clone());
 
         let resolver = ResolverType::new(&config, flow_id);
 
@@ -192,26 +186,23 @@ impl ResolutionRule {
     }
 }
 
-pub fn convert_config_to_runtime_rule(
-    config: &DNSRuleConfig,
-    geo_file: &HashMap<String, Vec<DomainConfig>>,
-) -> Vec<DomainConfig> {
-    let mut all_domain_rules = vec![];
-    for each in config.source.iter() {
-        match each {
-            RuleSource::GeoKey { key } => {
-                if let Some(domains) = geo_file.get(&key.to_uppercase()) {
-                    // for each_d in domains.iter() {
-                    //     all_domain_rules.push(DomainConfig::from(each_d));
-                    // }
-                    all_domain_rules.extend(domains.iter().cloned());
-                }
-            }
-            RuleSource::Config(c) => {
-                // all_domain_rules.extend(vec.iter().cloned());
-                all_domain_rules.push(c.clone());
-            }
-        }
-    }
-    all_domain_rules
-}
+// pub fn convert_config_to_runtime_rule(
+//     config: &DNSRuleConfig,
+//     geo_file: &HashMap<String, Vec<DomainConfig>>,
+// ) -> Vec<DomainConfig> {
+//     let mut all_domain_rules = vec![];
+//     for each in config.source.iter() {
+//         match each {
+//             RuleSource::GeoKey(config_key) => {
+//                 if let Some(domains) = geo_file.get(&key.to_uppercase()) {
+//                     all_domain_rules.extend(domains.iter().cloned());
+//                 }
+//             }
+//             RuleSource::Config(c) => {
+//                 // all_domain_rules.extend(vec.iter().cloned());
+//                 all_domain_rules.push(c.clone());
+//             }
+//         }
+//     }
+//     all_domain_rules
+// }

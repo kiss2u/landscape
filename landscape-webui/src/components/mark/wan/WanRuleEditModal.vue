@@ -4,20 +4,21 @@ import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { ChangeCatalog } from "@vicons/carbon";
 
-import {
-  post_wan_ip_rules,
-  get_wan_ip_rule,
-  update_wan_ip_rules,
-} from "@/api/flow/wanip";
 import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
 import NewIpEdit from "@/components/NewIpEdit.vue";
-import { WanIPRuleSource, WanIPRuleConfig } from "@/rust_bindings/flow";
+import { WanIPRuleSource } from "@/rust_bindings/flow";
 
-import { new_wan_rules, WanIPRuleConfigClass } from "@/lib/mark";
+import { new_wan_rules, WanIpRuleConfigClass } from "@/lib/mark";
+import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+import {
+  get_dst_ip_rules_rule,
+  push_dst_ip_rules_rule,
+  update_dst_ip_rules_rule,
+} from "@/api/dst_ip_rule";
 
 interface Props {
   flow_id: number;
-  id?: string;
+  id: string | null;
 }
 
 const props = defineProps<Props>();
@@ -27,10 +28,10 @@ const emit = defineEmits(["refresh"]);
 const show = defineModel<boolean>("show", { required: true });
 
 async function enter() {
-  if (props.id) {
-    rule.value = await get_wan_ip_rule(props.flow_id, props.id);
+  if (props.id !== null) {
+    rule.value = await get_dst_ip_rules_rule(props.id);
   } else {
-    rule.value = new WanIPRuleConfigClass({
+    rule.value = new WanIpRuleConfigClass({
       flow_id: props.flow_id,
     });
   }
@@ -43,7 +44,7 @@ const origin_rule_json = ref("");
 //     flow_id: props.flow_id,
 //   }),
 // });
-const rule = ref<WanIPRuleConfig>();
+const rule = ref<WanIpRuleConfig>();
 
 const commit_spin = ref(false);
 const isModified = computed(() => {
@@ -57,7 +58,7 @@ function onCreate(): WanIPRuleSource {
 function changeCurrentRuleType(value: WanIPRuleSource, index: number) {
   if (rule.value) {
     if (value.t == "config") {
-      rule.value.source[index] = { t: "geokey", country_code: "" };
+      rule.value.source[index] = { t: "geokey", name: "", key: "" };
     } else {
       rule.value.source[index] = new_wan_rules({
         t: "config",
@@ -77,9 +78,9 @@ async function saveRule() {
     try {
       commit_spin.value = true;
       if (props.id) {
-        await update_wan_ip_rules(props.flow_id, props.id, rule.value);
+        await update_dst_ip_rules_rule(props.id, rule.value);
       } else {
-        await post_wan_ip_rules(props.flow_id, rule.value);
+        await push_dst_ip_rules_rule(rule.value);
       }
       console.log("submit success");
       show.value = false;
@@ -131,7 +132,7 @@ async function saveRule() {
       </n-form-item>
       <n-form-item label="匹配的 IP">
         <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
-          <template #create-button-default> 增加一条 Lan 规则 </template>
+          <template #create-button-default> 增加一条 Wan 规则 </template>
           <template #default="{ value, index }">
             <n-flex style="flex: 1" :wrap="false">
               <n-button @click="changeCurrentRuleType(value, index)">
@@ -139,12 +140,17 @@ async function saveRule() {
                   <ChangeCatalog />
                 </n-icon>
               </n-button>
-              <n-input
+              <WanIpGeoSelect
+                v-model:geo_key="value.key"
+                v-model:geo_name="value.name"
                 v-if="value.t === 'geokey'"
+              >
+              </WanIpGeoSelect>
+              <!-- <n-input
                 v-model:value="value.key"
                 placeholder="geo key"
                 type="text"
-              />
+              /> -->
               <n-flex v-else style="flex: 1">
                 <NewIpEdit
                   v-model:ip="value.ip"

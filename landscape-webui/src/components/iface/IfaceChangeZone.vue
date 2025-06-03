@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { change_zone } from "@/api/network";
+import { stop_and_del_iface_dhcp_v4 } from "@/api/service_dhcp_v4";
 import { stop_and_del_iface_firewall } from "@/api/service_firewall";
+import { stop_and_del_iface_icmpv6ra } from "@/api/service_icmpv6ra";
 import { stop_and_del_iface_config } from "@/api/service_ipconfig";
 import { stop_and_del_iface_ipv6pd } from "@/api/service_ipv6pd";
 import { stop_and_del_iface_mark } from "@/api/service_mark";
@@ -24,14 +26,16 @@ const temp_zone = ref(iface_info.zone);
 async function chageIfaceZone() {
   spin.value = true;
   try {
-    await stop_and_del_iface_config(iface_info.iface_name);
+    await stop_and_del_iface_dhcp_v4(iface_info.iface_name);
     await stop_and_del_iface_nat(iface_info.iface_name);
     await delete_and_stop_iface_pppd_by_attach_iface_name(
       iface_info.iface_name
     );
+    await stop_and_del_iface_icmpv6ra(iface_info.iface_name);
     await stop_and_del_iface_ipv6pd(iface_info.iface_name);
     await stop_and_del_iface_firewall(iface_info.iface_name);
     await stop_and_del_iface_mark(iface_info.iface_name);
+    await stop_and_del_iface_config(iface_info.iface_name);
     await change_zone({
       iface_name: iface_info.iface_name,
       zone: temp_zone.value,

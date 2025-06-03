@@ -6,14 +6,20 @@ use std::{
 use clap::{arg, Parser};
 use once_cell::sync::Lazy;
 
-use crate::{LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_LOG_DIR_NAME, LANDSCAPE_WEBROOT_DIR_NAME};
+use crate::{
+    LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_DB_SQLITE_NAME, LANDSCAPE_LOG_DIR_NAME,
+    LANDSCAPE_WEBROOT_DIR_NAME,
+};
 
 pub static LAND_HOSTNAME: Lazy<String> = Lazy::new(|| {
     let hostname = hostname::get().expect("无法获取主机名");
     hostname.to_string_lossy().to_string()
 });
 
-pub static LAND_ARGS: Lazy<WebCommArgs> = Lazy::new(WebCommArgs::parse);
+pub static LAND_ARGS: Lazy<WebCommArgs> = Lazy::new(|| {
+    dotenvy::dotenv().ok();
+    WebCommArgs::parse()
+});
 
 pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
     if let Some(path) = &LAND_ARGS.config_dir {
@@ -53,23 +59,41 @@ pub static DATABASE_ARGS: Lazy<String> = Lazy::new(|| {
     if let Some(database_path) = &LAND_ARGS.database_path {
         database_path.clone()
     } else {
-        format!("sqlite://{}?mode=rwc", LAND_HOME_PATH.join(LANDSCAPE_LOG_DIR_NAME).display())
+        let path = LAND_HOME_PATH.join(LANDSCAPE_DB_SQLITE_NAME);
+        // 检查路径是否存在
+        if path.exists() {
+            if path.is_dir() {
+                panic!(
+                    "Expected a file path for database, but found a directory: {}",
+                    path.display()
+                );
+            }
+        } else {
+            // 确保目录存在
+            if let Some(parent) = path.parent() {
+                if !parent.exists() {
+                    std::fs::create_dir_all(parent).expect("Failed to create database directory");
+                }
+            }
+            std::fs::File::create(&path).expect("Failed to create database file");
+        }
+        format!("sqlite://{}?mode=rwc", path.display())
     }
 });
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
-    /// Static html location [default: /root/.landscape-router/static]
-    #[arg(short, long)]
+    /// Static HTML location [default: ~/.landscape-router/static]
+    #[arg(short, long, env = "LANDSCAPE_WEB_ROOT")]
     pub web: Option<PathBuf>,
 
     /// Listen port
-    #[arg(short, long, default_value = "6300")]
+    #[arg(short, long, env = "LANDSCAPE_WEB_PORT", default_value = "6300")]
     pub port: u16,
 
     /// Listen address
-    #[arg(short, long, default_value = "0.0.0.0")]
+    #[arg(short, long, env = "LANDSCAPE_WEB_ADDR", default_value = "0.0.0.0")]
     pub address: IpAddr,
 
     /// Controls whether the WAN IP can be used to access the management interface
@@ -77,7 +101,7 @@ pub struct WebCommArgs {
     pub export_manager: bool,
 
     /// All Config DIR, Not file Path [default: /root/.landscape-router]
-    #[clap(short, long)]
+    #[clap(short, long, env = "LANDSCAPE_CONF_PATH")]
     pub config_dir: Option<PathBuf>,
 
     /// Database URL, SQLite Connect Like  
@@ -97,16 +121,16 @@ pub struct WebCommArgs {
     #[clap(long = "pass", env = "LANDSCAPE_ADMIN_PASS", default_value = "root")]
     pub admin_pass: String,
 
-    /// Debug mode
-    #[arg(long, default_value_t = debug_default())]
+    /// Debug mode [default: false]
+    #[arg(long, env = "LANDSCAPE_DEBUG", default_value_t = debug_default())]
     pub debug: bool,
 
-    /// Log output location
-    #[arg(long, default_value_t = debug_default())]
+    /// Log output location [default: false]
+    #[arg(long, env = "LANDSCAPE_LOG_PATH", default_value_t = debug_default())]
     pub log_output_in_terminal: bool,
 
     /// Max log files number
-    #[arg(long, default_value = "7")]
+    #[arg(long, env = "LANDSCAPE_LOG_FILE_LIMIT", default_value = "7")]
     pub max_log_files: usize,
 }
 

@@ -87,6 +87,7 @@ export type IfaceTopology = {
    * NIC XPS / RPS Config
    */
   xps_rps: IfaceCpuSoftBalance | null;
+  update_at: number;
   name: string;
   index: number;
   mac: MacAddr | null;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { get_firewall_rules } from "@/api/firewall_rule";
 import { onMounted, ref } from "vue";
-import { get_firewall_rules } from "@/api/mark";
 
 const rules = ref<any>([]);
 

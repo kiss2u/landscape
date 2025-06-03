@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use service_code::{WatchService, Watchable};
 
+pub mod controller_service;
 pub mod dhcp;
 pub mod service_code;
 pub mod service_manager;

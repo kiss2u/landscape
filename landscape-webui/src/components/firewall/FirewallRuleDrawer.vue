@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import FirewallRuleEditModal from "./FirewallRuleEditModal.vue";
 import FirewallRuleCard from "./FirewallRuleCard.vue";
-import { get_firewall_rules } from "@/api/mark";
+import { get_firewall_rules } from "@/api/firewall_rule";
 
 const show = defineModel<boolean>("show", { required: true });
 

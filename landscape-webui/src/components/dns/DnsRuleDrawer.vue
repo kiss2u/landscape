@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import DnsRuleCard from "@/components/dns/DnsRuleCard.vue";
-import { get_dns_rule } from "@/api/dns_service";
-
+import { get_flow_dns_rules, push_many_dns_rule } from "@/api/dns_rule";
+import {
+  copy_context_to_clipboard,
+  read_context_from_clipboard,
+} from "@/lib/common";
+import { useMessage } from "naive-ui";
+const message = useMessage();
 interface Props {
   flow_id?: number;
 }
@@ -15,10 +20,42 @@ const show = defineModel<boolean>("show", { required: true });
 const rules = ref<any>([]);
 
 async function read_rules() {
-  rules.value = await get_dns_rule(props.flow_id);
+  rules.value = await get_flow_dns_rules(props.flow_id);
 }
 
 const show_create_modal = ref(false);
+
+async function export_config() {
+  let configs = await get_flow_dns_rules(props.flow_id);
+  await copy_context_to_clipboard(
+    message,
+    JSON.stringify(
+      configs,
+      (key, value) => {
+        if (key === "id") {
+          return undefined;
+        }
+        if (key === "flow_id") {
+          return undefined;
+        }
+        return value;
+      },
+      2
+    )
+  );
+}
+
+async function import_rules() {
+  try {
+    let rules = JSON.parse(await read_context_from_clipboard());
+    for (const rule of rules) {
+      rule.flow_id = props.flow_id;
+    }
+    await push_many_dns_rule(rules);
+    message.success("Import Success");
+    await read_rules();
+  } catch (e) {}
+}
 </script>
 <template>
   <n-drawer
@@ -29,7 +66,20 @@ const show_create_modal = ref(false);
   >
     <n-drawer-content title="编辑 DNS 所使用规则" closable>
       <n-flex style="height: 100%" vertical>
-        <n-button @click="show_create_modal = true">增加规则</n-button>
+        <n-flex>
+          <n-button style="flex: 1" @click="show_create_modal = true">
+            增加规则
+          </n-button>
+          <n-button style="flex: 1" @click="export_config">
+            导出规则至剪贴板
+          </n-button>
+          <n-popconfirm @positive-click="import_rules">
+            <template #trigger>
+              <n-button style="flex: 1" @click=""> 从剪贴板导入规则 </n-button>
+            </template>
+            确定从剪贴板导入吗?
+          </n-popconfirm>
+        </n-flex>
 
         <n-scrollbar>
           <n-flex vertical>

@@ -1,7 +1,7 @@
 use crate::dev::{DeviceKind, DeviceType, LandscapeInterface};
 use landscape_common::{
-    config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode},
-    iface::IfaceZoneType,
+    config::iface::{CreateDevType, IfaceZoneType, NetworkIfaceConfig, WifiMode},
+    utils::time::get_f64_timestamp,
 };
 
 use super::dev_wifi::LandscapeWifiInterface;
@@ -35,6 +35,7 @@ pub fn from_phy_dev_with_wifi_info(
         zone_type,
         wifi_mode,
         xps_rps: None,
+        update_at: get_f64_timestamp(),
     }
 }
 

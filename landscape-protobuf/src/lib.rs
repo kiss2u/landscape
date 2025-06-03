@@ -5,12 +5,25 @@ use std::{
 };
 
 use landscape_common::{
-    dns::{DomainConfig, DomainMatchType},
+    config::dns::{DomainConfig, DomainMatchType},
     ip_mark::IpConfig,
 };
 use protos::geo::{mod_Domain::Type, Domain, GeoIPListOwned, GeoSiteListOwned};
 
 mod protos;
+
+pub async fn read_geo_sites_from_bytes(
+    contents: impl Into<Vec<u8>>,
+) -> HashMap<String, Vec<DomainConfig>> {
+    let mut result = HashMap::new();
+    let list = GeoSiteListOwned::try_from(contents.into()).unwrap();
+
+    for entry in list.proto().entry.iter() {
+        let domains = entry.domain.iter().map(convert_domain_from_proto).collect();
+        result.insert(entry.country_code.to_string(), domains);
+    }
+    result
+}
 
 pub async fn read_geo_sites<T: AsRef<Path>>(
     geo_file_path: T,
@@ -40,6 +53,19 @@ pub fn convert_domain_from_proto(value: &Domain) -> DomainConfig {
         match_type: convert_match_type_from_proto(value.type_pb),
         value: value.value.to_lowercase(),
     }
+}
+
+pub async fn read_geo_ips_from_bytes(
+    contents: impl Into<Vec<u8>>,
+) -> HashMap<String, Vec<IpConfig>> {
+    let mut result = HashMap::new();
+    let list = GeoIPListOwned::try_from(contents.into()).unwrap();
+
+    for entry in list.proto().entry.iter() {
+        let domains = entry.cidr.iter().filter_map(convert_ipconfig_from_proto).collect();
+        result.insert(entry.country_code.to_string(), domains);
+    }
+    result
 }
 
 pub async fn read_geo_ips<T: AsRef<Path>>(geo_file_path: T) -> HashMap<String, Vec<IpConfig>> {
@@ -97,9 +123,12 @@ mod tests {
     async fn test() {
         test_memory_usage();
         let result = read_geo_sites("/root/.landscape-router/geosite.dat1").await;
+        test_memory_usage();
         for (domain, domain_configs) in result {
-            for domain_config in domain_configs {
-                println!("{domain:?}: {:?}", domain_config);
+            if domain == "test" {
+                for domain_config in domain_configs {
+                    println!("{domain:?}: {:?}", domain_config);
+                }
             }
         }
         test_memory_usage();
@@ -107,25 +136,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_read() {
+        test_memory_usage();
         let home_path = homedir::my_home().unwrap().unwrap().join(".landscape-router");
         let geo_file_path = home_path.join("geoip.dat");
 
         let data = tokio::fs::read(geo_file_path).await.unwrap();
         let list = GeoIPListOwned::try_from(data).unwrap();
+        test_memory_usage();
 
         let mut sum = 0;
         for entry in list.proto().entry.iter() {
-            println!("{:?}", entry.country_code);
+            // println!("{:?}", entry.country_code);
             if entry.country_code == "cn".to_uppercase() {
                 println!("{:?}", entry.cidr.len());
             } else {
                 sum += entry.cidr.len()
             }
-            println!("reverse_match : {:?}", entry.reverse_match);
+            // println!("reverse_match : {:?}", entry.reverse_match);
             // if entry.reverse_match {
             //     println!("reverse_match : {:?}", entry.cidr);
             // }
         }
         println!("other count: {sum:?}");
+        test_memory_usage();
     }
 }

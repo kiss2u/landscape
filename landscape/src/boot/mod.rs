@@ -1,19 +1,8 @@
 use std::{fs::OpenOptions, io::Write, path::Path};
 
-use serde::{Deserialize, Serialize};
-
 use landscape_common::{
-    config::{
-        dhcp_v4_server::DHCPv4ServiceConfig, dhcp_v6_client::IPV6PDServiceConfig,
-        firewall::FirewallServiceConfig, flow::PacketMarkServiceConfig, iface::NetworkIfaceConfig,
-        mss_clamp::MSSClampServiceConfig, nat::NatServiceConfig, ppp::PPPDServiceConfig,
-        ra::IPV6RAServiceConfig, wanip::IfaceIpServiceConfig, wifi::WifiServiceConfig,
-    },
-    dns::DNSRuleConfig,
+    config::InitConfig,
     error::{LdError, LdResult},
-    firewall::FirewallRuleConfig,
-    flow::FlowConfig,
-    ip_mark::WanIPRuleConfig,
     INIT_FILE_NAME, INIT_LOCK_FILE_NAME,
 };
 
@@ -40,6 +29,7 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     let lock_path = home_path.as_ref().join(INIT_LOCK_FILE_NAME);
 
     if !lock_path.exists() {
+        tracing::info!("init lock file not exist, do init");
         let mut file =
             OpenOptions::new().write(true).truncate(true).create(true).open(&lock_path)?;
         file.write_all(INIT_LOCK_FILE_CONTENT.as_bytes())?;
@@ -56,34 +46,9 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     }
 
     if lock_path.is_file() {
+        tracing::info!("init lock file is exist, skip init");
         return Ok(None);
     }
 
     Err(LdError::Boot("check boot lock file faile: is not a file".to_string()))
-}
-
-/// 初始化配置结构体
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(default)]
-pub struct InitConfig {
-    pub ifaces: Vec<NetworkIfaceConfig>,
-    pub ipconfigs: Vec<IfaceIpServiceConfig>,
-    pub nats: Vec<NatServiceConfig>,
-    pub marks: Vec<PacketMarkServiceConfig>,
-    pub pppds: Vec<PPPDServiceConfig>,
-
-    pub flow_rules: Vec<FlowConfig>,
-    pub dns_rules: Vec<DNSRuleConfig>,
-    pub wan_ip_mark: Vec<WanIPRuleConfig>,
-
-    pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
-    pub icmpras: Vec<IPV6RAServiceConfig>,
-
-    pub firewalls: Vec<FirewallServiceConfig>,
-    pub firewall_rules: Vec<FirewallRuleConfig>,
-
-    pub wifi_configs: Vec<WifiServiceConfig>,
-    pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
-
-    pub mss_clamps: Vec<MSSClampServiceConfig>,
 }

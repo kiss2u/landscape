@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import FirewallRuleEditModal from "./FirewallRuleEditModal.vue";
-import { del_firewall_rules } from "@/api/mark";
-import { FirewallRuleConfig } from "@/lib/mark";
-const rule = defineModel<FirewallRuleConfig>("rule", { required: true });
+import { FirewallRule } from "@/lib/mark";
+import { delete_firewall_rule } from "@/api/firewall_rule";
+const rule = defineModel<FirewallRule>("rule", { required: true });
 
 const show_edit_modal = ref(false);
 
 const emit = defineEmits(["refresh"]);
 
 async function del() {
-  await del_firewall_rules(rule.value.index);
-  emit("refresh");
+  if (rule.value.id !== null) {
+    await delete_firewall_rule(rule.value.id);
+    emit("refresh");
+  }
 }
 </script>
 <template>

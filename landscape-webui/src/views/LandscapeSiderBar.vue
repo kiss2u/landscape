@@ -14,6 +14,7 @@ import {
 import { ImportExportRound } from "@vicons/material";
 import { Wall } from "@vicons/tabler";
 import { Docker } from "@vicons/fa";
+import { BookGlobe20Regular } from "@vicons/fluent";
 
 import CopyRight from "@/components/CopyRight.vue";
 
@@ -91,6 +92,21 @@ const menuOptions: MenuOption[] = [
     label: "连接信息",
     key: "metric",
     icon: renderIcon(ChartCombo),
+  },
+  {
+    label: "Geo 管理",
+    key: "geo",
+    icon: renderIcon(BookGlobe20Regular),
+    children: [
+      {
+        label: "域名",
+        key: "geo-domain",
+      },
+      {
+        label: "IP",
+        key: "geo-ip",
+      },
+    ],
   },
 ];
 </script>

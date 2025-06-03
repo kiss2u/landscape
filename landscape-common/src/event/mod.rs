@@ -2,6 +2,7 @@ use firewall::FirewallMessage;
 use nat::NatEvent;
 use serde::{Deserialize, Serialize};
 
+pub mod dns;
 pub mod firewall;
 pub mod nat;
 

@@ -2,8 +2,8 @@ use std::net::Ipv4Addr;
 
 pub mod args;
 pub mod config;
+pub mod database;
 pub mod dhcp;
-pub mod dns;
 pub mod docker;
 pub mod error;
 pub mod event;
@@ -25,25 +25,32 @@ pub mod sys_config;
 pub mod test;
 pub mod utils;
 
-/// Config file
-pub const LAND_CONFIG: &str = "landscape.toml";
-
 /// Home Path
 pub const LANDSCAPE_CONFIG_DIR_NAME: &str = ".landscape-router";
+
+/// sys token
+pub const LANDSCAPE_SYS_TOKEN_FILE_ANME: &str = "landscape_api_token";
+
+/// Config file
+pub const LAND_CONFIG: &str = "landscape.toml";
+/// init lock file name
+pub const INIT_LOCK_FILE_NAME: &str = "landscape_init.lock";
+/// init file name
+pub const INIT_FILE_NAME: &str = "landscape_init.toml";
+
+pub const TLS_DEFAULT_CERT: &str = "cert.pem";
+pub const TLS_DEFAULT_KEY: &str = "key.pem";
+
 /// LOG Path
 pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 /// web resource
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
 /// default sqlite path
 pub const LANDSCAPE_DB_SQLITE_NAME: &str = "landscape_db.sqlite";
-/// init file name
-pub const INIT_FILE_NAME: &str = "landscape_init.toml";
 /// LOG Path
 pub const LANDSCAPE_HOSTAPD_TMP_DIR: &str = "hostapd_tmp";
-/// init lock file name
-pub const INIT_LOCK_FILE_NAME: &str = "landscape_init.lock";
-/// sys token
-pub const LANDSCAPE_SYS_TOKEN_FILE_ANME: &str = "landscape_api_token";
+/// GEO_CACHE Path
+pub const LANDSCAPE_GEO_CACHE_TMP_DIR: &str = "geo_tmp";
 
 pub const GEO_SITE_FILE_NAME: &str = "geosite.dat";
 pub const GEO_IP_FILE_NAME: &str = "geoip.dat";

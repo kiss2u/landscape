@@ -1,10 +1,17 @@
+use landscape_common::database::LandscapeDBTrait;
+use landscape_common::database::LandscapeServiceDBTrait;
+use landscape_common::service::controller_service::ControllerService;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig,
+    observer::IfaceObserverAction,
     service::{
         dhcp::{DHCPv4ServiceStatus, DHCPv4ServiceWatchStatus},
-        service_manager::ServiceHandler,
+        service_manager::{ServiceHandler, ServiceManager},
     },
 };
+use landscape_database::dhcp_v4_server::repository::DHCPv4ServerRepository;
+use landscape_database::provider::LandscapeDBServiceProvider;
+use tokio::sync::broadcast;
 
 use crate::iface::get_iface_by_name;
 
@@ -36,4 +43,85 @@ impl ServiceHandler for DHCPv4Service {
 
         service_status
     }
+}
+
+#[derive(Clone)]
+pub struct DHCPv4ServerManagerService {
+    // store_service: LandscapeDBServiceProvider,
+    service: ServiceManager<DHCPv4Service>,
+    store: DHCPv4ServerRepository,
+}
+
+impl ControllerService for DHCPv4ServerManagerService {
+    type Id = String;
+
+    type Config = DHCPv4ServiceConfig;
+
+    type DatabseAction = DHCPv4ServerRepository;
+
+    type H = DHCPv4Service;
+
+    fn get_service(&self) -> &ServiceManager<Self::H> {
+        &self.service
+    }
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
+}
+
+impl DHCPv4ServerManagerService {
+    pub async fn new(
+        store_service: LandscapeDBServiceProvider,
+        mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+    ) -> Self {
+        let store = store_service.dhcp_v4_server_store();
+        let service = ServiceManager::init(store.list().await.unwrap()).await;
+
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            while let Ok(msg) = dev_observer.recv().await {
+                match msg {
+                    IfaceObserverAction::Up(iface_name) => {
+                        tracing::info!("restart {iface_name} Firewall service");
+                        let service_config = if let Some(service_config) =
+                            store.find_by_iface_name(iface_name.clone()).await.unwrap()
+                        {
+                            service_config
+                        } else {
+                            continue;
+                        };
+
+                        let _ = service_clone.update_service(service_config).await;
+                    }
+                    IfaceObserverAction::Down(_) => {}
+                }
+            }
+        });
+
+        let store = store_service.dhcp_v4_server_store();
+        Self { service, store }
+    }
+
+    // pub async fn get_all_status(&self) -> HashMap<String, DHCPv4ServiceWatchStatus> {
+    //     self.service.get_all_status().await
+    // }
+
+    // pub async fn get_config_by_name(&self, iface_name: String) -> Option<DHCPv4ServiceConfig> {
+    //     self.store_service.dhcp_v4_server_store().find_by_iface_name(iface_name).await.unwrap()
+    // }
+
+    // pub async fn handle_service_config(&self, config: DHCPv4ServiceConfig) {
+    //     if let Ok(()) = self.service.update_service(config.clone()).await {
+    //         self.store_service.dhcp_v4_server_store().set(config).await.unwrap();
+    //     }
+    // }
+
+    // pub async fn delete_and_stop_iface_service(
+    //     &self,
+    //     iface_name: String,
+    // ) -> Option<DHCPv4ServiceWatchStatus> {
+    //     self.store_service.dhcp_v4_server_store().delete(iface_name.clone()).await.unwrap();
+    //     self.service.stop_service(iface_name).await
+    // }
 }

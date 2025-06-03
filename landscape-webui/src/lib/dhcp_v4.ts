@@ -1,4 +1,4 @@
-import { Netmask } from "netmask";
+import { IPv4, IPv4CidrRange } from "ip-num";
 import { ServiceStatus } from "./services";
 
 export class DHCPv4ServiceConfig {
@@ -53,14 +53,19 @@ export class DHCPv4ServerConfig {
 }
 
 export function get_dhcp_range(cidr: string): [string, string] {
-  let block = new Netmask(cidr);
-  let sec_ip = "";
-  block.forEach((ip, _, index) => {
-    if (index == 1) {
-      sec_ip = ip;
-    }
-  });
-  return [sec_ip, block.broadcast];
+  let range = IPv4CidrRange.fromCidr(cidr);
+
+  // 起始 IP 的数值（bigint）
+  const firstIpValue = range.getFirst().getValue();
+
+  // 想取第 2 个 IP（从 0 开始偏移）
+  const nth = 2n;
+  const nthIpValue = firstIpValue + nth;
+
+  // 构造 IP 对象
+  const nthIp = IPv4.fromNumber(nthIpValue);
+
+  return [nthIp.toString(), range.getLast().toString()];
 }
 
 export class DHCPv4ServiceStatus {

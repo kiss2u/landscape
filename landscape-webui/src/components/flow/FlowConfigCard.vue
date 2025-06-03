@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { FlowConfig } from "@/rust_bindings/flow";
+import { FlowConfig } from "@/rust_bindings/common/flow";
 import { FlowTargetTypes } from "@/lib/default_value";
 import FlowEditModal from "@/components/flow/FlowEditModal.vue";
 import DnsRuleDrawer from "@/components/dns/DnsRuleDrawer.vue";
@@ -11,9 +11,15 @@ interface Props {
 
 const props = defineProps<Props>();
 
+const emit = defineEmits(["refresh"]);
+
 const show_edit = ref(false);
 const show_dns_rule = ref(false);
 const show_ip_rule = ref(false);
+
+async function refresh() {
+  emit("refresh");
+}
 </script>
 
 <template>
@@ -58,7 +64,11 @@ const show_ip_rule = ref(false);
       </n-descriptions-item>
     </n-descriptions>
     <!-- {{ config }} -->
-    <FlowEditModal v-model:show="show_edit" :rule="props.config">
+    <FlowEditModal
+      @refresh="refresh"
+      v-model:show="show_edit"
+      :rule="props.config"
+    >
     </FlowEditModal>
     <DnsRuleDrawer v-model:show="show_dns_rule" :flow_id="props.config.flow_id">
     </DnsRuleDrawer>

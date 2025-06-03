@@ -1,21 +1,29 @@
 use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
+use crate::database::repository::LandscapeDBStore;
 use crate::net::MacAddr;
-use crate::{store::storev2::LandscapeStore, LANDSCAPE_DEFAULT_LAN_NAME};
+use crate::store::storev2::LandscapeStore;
+use crate::utils::time::get_f64_timestamp;
+use crate::LANDSCAPE_DEFAULT_LAN_NAME;
 
 use crate::{
     LANDSCAPE_DEFAULE_LAN_DHCP_RANGE_START, LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP,
     LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK, LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/dhcp_v4_server.d.ts")]
 pub struct DHCPv4ServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     #[serde(default)]
     pub config: DHCPv4ServerConfig,
+    /// 最近一次编译时间
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl Default for DHCPv4ServiceConfig {
@@ -24,6 +32,7 @@ impl Default for DHCPv4ServiceConfig {
             iface_name: LANDSCAPE_DEFAULT_LAN_NAME.into(),
             enable: true,
             config: DHCPv4ServerConfig::default(),
+            update_at: get_f64_timestamp(),
         }
     }
 }
@@ -34,8 +43,15 @@ impl LandscapeStore for DHCPv4ServiceConfig {
     }
 }
 
+impl LandscapeDBStore<String> for DHCPv4ServiceConfig {
+    fn get_id(&self) -> String {
+        self.iface_name.clone()
+    }
+}
+
 /// DHCP Server IPv4 Config
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/dhcp_v4_server.d.ts")]
 pub struct DHCPv4ServerConfig {
     /// dhcp options
     // #[serde(default)]
@@ -72,7 +88,8 @@ impl Default for DHCPv4ServerConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/dhcp_v4_server.d.ts")]
 pub struct MacBindingRecord {
     pub mac: MacAddr,
     pub ip: Ipv4Addr,

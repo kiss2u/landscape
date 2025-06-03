@@ -3,17 +3,22 @@ use std::net::Ipv4Addr;
 use std::process::Command;
 use std::process::Stdio;
 
-use landscape_common::config::ppp::PPPDConfig;
-use landscape_common::service::ServiceStatus;
 use tokio::sync::{oneshot, watch};
 
+use landscape_common::config::ppp::PPPDConfig;
+use landscape_common::database::LandscapeDBTrait;
 use landscape_common::global_const::default_router::RouteInfo;
 use landscape_common::global_const::default_router::RouteType;
 use landscape_common::global_const::default_router::LD_ALL_ROUTERS;
+use landscape_common::service::controller_service::ControllerService;
+use landscape_common::service::service_manager::ServiceManager;
+use landscape_common::service::ServiceStatus;
 use landscape_common::{
     config::ppp::PPPDServiceConfig,
     service::{service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus},
 };
+use landscape_database::pppd::repository::PPPDServiceRepository;
+use landscape_database::provider::LandscapeDBServiceProvider;
 
 use crate::iface::get_iface_by_name;
 
@@ -167,4 +172,49 @@ pub async fn create_pppd_thread(
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
     service_status.just_change_status(ServiceStatus::Stop);
+}
+
+#[derive(Clone)]
+pub struct PPPDServiceConfigManagerService {
+    store: PPPDServiceRepository,
+    service: ServiceManager<PPPDService>,
+}
+
+impl ControllerService for PPPDServiceConfigManagerService {
+    type Id = String;
+    type Config = PPPDServiceConfig;
+    type DatabseAction = PPPDServiceRepository;
+    type H = PPPDService;
+
+    fn get_service(&self) -> &ServiceManager<Self::H> {
+        &self.service
+    }
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
+    }
+}
+
+impl PPPDServiceConfigManagerService {
+    pub async fn new(store_service: LandscapeDBServiceProvider) -> Self {
+        let store = store_service.pppd_service_store();
+        let service = ServiceManager::init(store.list().await.unwrap()).await;
+
+        Self { service, store }
+    }
+
+    pub async fn get_pppd_configs_by_attach_iface_name(
+        &self,
+        attach_name: String,
+    ) -> Vec<PPPDServiceConfig> {
+        self.store.get_pppd_configs_by_attach_iface_name(attach_name).await.unwrap()
+    }
+
+    pub async fn stop_pppds_by_attach_iface_name(&self, attach_name: String) {
+        let configs = self.get_pppd_configs_by_attach_iface_name(attach_name).await;
+        for each in configs {
+            self.service.stop_service(each.iface_name.clone()).await;
+            self.get_repository().delete(each.iface_name).await.unwrap();
+        }
+    }
 }

@@ -1,12 +1,14 @@
-import { FlowConfig } from "@/rust_bindings/flow";
+import { FlowConfig } from "@/rust_bindings/common/flow";
 
 export function flow_config_default(): FlowConfig {
   return {
+    id: null,
     enable: true,
     flow_id: -1,
     flow_match_rules: [],
     packet_handle_iface_name: [],
     remark: "",
+    update_at: new Date().getTime(),
   };
 }
 

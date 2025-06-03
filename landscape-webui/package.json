@@ -1,7 +1,7 @@
 {
   "name": "landscape-webui",
   "private": true,
-  "version": "0.4.12",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "@vue-flow/node-toolbar": "^1.1.0",
     "apexcharts": "^4.7.0",
     "axios": "^1.6.8",
+    "ip-num": "^1.5.1",
     "pinia": "^2.2.6",
     "vue": "^3.4.21",
     "vue-i18n": "10",
@@ -32,9 +33,9 @@
     "@vicons/ionicons5": "^0.13.0",
     "@vicons/material": "^0.13.0",
     "@vicons/tabler": "^0.13.0",
+    "@vitejs/plugin-basic-ssl": "^2.0.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "naive-ui": "^2.41.0",
-    "netmask": "^2.0.2",
     "seemly": "^0.3.8",
     "typescript": "^5.2.2",
     "unplugin-auto-import": "^0.18.3",

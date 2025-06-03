@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import WanRuleEditModal from "./WanRuleEditModal.vue";
-import { del_wan_ip_rules } from "@/api/flow/wanip";
-import { WanIPRuleConfig } from "@/rust_bindings/flow";
-const rule = defineModel<WanIPRuleConfig>("rule", { required: true });
+import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+import { delete_dst_ip_rules_rule } from "@/api/dst_ip_rule";
+const rule = defineModel<WanIpRuleConfig>("rule", { required: true });
 
 const show_edit_modal = ref(false);
 
 const emit = defineEmits(["refresh"]);
 
 async function del() {
-  await del_wan_ip_rules(rule.value.index);
-  emit("refresh");
+  if (rule.value.id !== null) {
+    await delete_dst_ip_rules_rule(rule.value.id);
+    emit("refresh");
+  }
 }
 </script>
 <template>

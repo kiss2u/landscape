@@ -1,14 +1,21 @@
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use ts_rs::TS;
+use uuid::Uuid;
 
 use crate::{
     args::LAND_ARGS, mark::PacketMark, network::LandscapeIpProtocolCode,
     store::storev2::LandscapeStore, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+use crate::database::repository::LandscapeDBStore;
+use crate::utils::time::get_f64_timestamp;
+
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "common/firewall.d.ts")]
 pub struct FirewallRuleConfig {
-    // 优先级 用作存储主键
+    pub id: Option<Uuid>,
+    // 优先级
     pub index: u32,
     pub enable: bool,
 
@@ -17,6 +24,8 @@ pub struct FirewallRuleConfig {
     /// 流量标记
     #[serde(default)]
     pub mark: PacketMark,
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
 }
 
 impl LandscapeStore for FirewallRuleConfig {
@@ -25,9 +34,15 @@ impl LandscapeStore for FirewallRuleConfig {
     }
 }
 
+impl LandscapeDBStore<Uuid> for FirewallRuleConfig {
+    fn get_id(&self) -> Uuid {
+        self.id.unwrap_or(Uuid::new_v4())
+    }
+}
+
 /// 配置的小项
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export, export_to = "common/firewall.d.ts")]
 pub struct FirewallRuleConfigItem {
     // IP 承载的协议
     pub ip_protocol: Option<LandscapeIpProtocolCode>,
@@ -38,7 +53,6 @@ pub struct FirewallRuleConfigItem {
 
 /// 存入 bpf map 中的遍历项
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
 pub struct FirewallRuleItem {
     pub ip_protocol: Option<LandscapeIpProtocolCode>,
     pub local_port: Option<u16>,
@@ -140,11 +154,13 @@ pub fn insert_default_firewall_rule() -> Option<FirewallRuleConfig> {
         None
     } else {
         Some(FirewallRuleConfig {
+            id: None,
             index: 1,
             enable: true,
             remark: "Landscape Router Default Firewall Rule".to_string(),
             items,
             mark: PacketMark::default(),
+            update_at: get_f64_timestamp(),
         })
     }
 }
