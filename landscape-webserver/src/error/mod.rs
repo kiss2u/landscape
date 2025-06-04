@@ -14,6 +14,9 @@ pub enum LandscapeApiError {
 
     #[error("Landscape Error: {0}")]
     LdError(#[from] LdError),
+
+    #[error("DHCPConflict Error: {0}")]
+    DHCPConflict(String),
 }
 
 impl IntoResponse for LandscapeApiError {
@@ -25,6 +28,7 @@ impl IntoResponse for LandscapeApiError {
             LandscapeApiError::JsonParseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LandscapeApiError::IoError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             LandscapeApiError::LdError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            LandscapeApiError::DHCPConflict(_) => StatusCode::BAD_REQUEST,
         };
 
         let body = axum::Json(serde_json::json!(ErrorMsg { msg }));

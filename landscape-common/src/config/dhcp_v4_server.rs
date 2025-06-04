@@ -75,6 +75,34 @@ pub struct DHCPv4ServerConfig {
     pub mac_binding_records: Vec<MacBindingRecord>,
 }
 
+impl DHCPv4ServerConfig {
+    /// 获取IP范围的起始和结束地址
+    pub fn get_ip_range(&self) -> (Ipv4Addr, Ipv4Addr) {
+        let start = self.ip_range_start;
+        let end = self.ip_range_end.unwrap_or_else(|| {
+            // 如果没有指定结束地址，根据网络掩码计算
+            let network = u32::from(start) & (0xFFFFFFFFu32 << (32 - self.network_mask));
+            let broadcast = network | (0xFFFFFFFFu32 >> self.network_mask);
+            Ipv4Addr::from(broadcast - 1) // 广播地址前一个
+        });
+        (start, end)
+    }
+
+    /// 检查两个IP范围是否有重叠
+    pub fn has_ip_range_overlap(&self, other: &DHCPv4ServerConfig) -> bool {
+        let (start1, end1) = self.get_ip_range();
+        let (start2, end2) = other.get_ip_range();
+
+        let start1_u32 = u32::from(start1);
+        let end1_u32 = u32::from(end1);
+        let start2_u32 = u32::from(start2);
+        let end2_u32 = u32::from(end2);
+
+        // 检查是否有重叠：A的开始 <= B的结束 && B的开始 <= A的结束
+        start1_u32 <= end2_u32 && start2_u32 <= end1_u32
+    }
+}
+
 impl Default for DHCPv4ServerConfig {
     fn default() -> Self {
         Self {
