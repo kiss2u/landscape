@@ -16,7 +16,6 @@ import CopyRight from "@/components/CopyRight.vue";
 import NetTopology from "@/components/topology_v2/LandscapeTopology.vue";
 
 import { ref } from "vue";
-import MarkRuleCard from "@/components/mark/MarkRuleCard.vue";
 
 const show_dump = ref(false);
 
@@ -65,9 +64,6 @@ const { t } = useI18n({ useScope: "global" });
           </n-gi>
           <n-gi style="display: flex; height: 320px" :span="1">
             <DockerStatusCard></DockerStatusCard>
-          </n-gi>
-          <n-gi style="display: flex; height: 320px" :span="1">
-            <MarkRuleCard></MarkRuleCard>
           </n-gi>
           <n-gi style="display: flex; height: 320px" :span="1">
             <FirewallCard></FirewallCard>

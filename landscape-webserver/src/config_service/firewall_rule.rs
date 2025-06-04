@@ -18,7 +18,8 @@ pub async fn get_firewall_rule_config_paths() -> Router<LandscapeApp> {
 }
 
 async fn get_firewall_rules(State(state): State<LandscapeApp>) -> Json<Vec<FirewallRuleConfig>> {
-    let result = state.fire_wall_rule_service.list().await;
+    let mut result = state.fire_wall_rule_service.list().await;
+    result.sort_by(|a, b| a.index.cmp(&b.index));
     Json(result)
 }
 

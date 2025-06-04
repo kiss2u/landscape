@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use landscape_common::config::{
@@ -17,6 +17,7 @@ use crate::{
 pub async fn get_geo_ip_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/geo_ips", get(get_geo_ips).post(add_geo_ip))
+        .route("/geo_ips/set_many", post(add_many_geo_ips))
         .route("/geo_ips/:id", get(get_geo_rule).delete(del_geo_ip))
         .route("/geo_ips/cache", get(get_geo_ip_cache).post(refresh_geo_ip_cache))
         .route("/geo_ips/cache/search", get(search_geo_ip_cache))
@@ -93,6 +94,14 @@ async fn add_geo_ip(
 ) -> Json<GeoIpSourceConfig> {
     let result = state.geo_ip_service.set(dns_rule).await;
     Json(result)
+}
+
+async fn add_many_geo_ips(
+    State(state): State<LandscapeApp>,
+    Json(rules): Json<Vec<GeoIpSourceConfig>>,
+) -> Json<SimpleResult> {
+    state.geo_ip_service.set_list(rules).await;
+    Json(SimpleResult { success: true })
 }
 
 async fn del_geo_ip(

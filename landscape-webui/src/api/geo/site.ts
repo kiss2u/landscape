@@ -27,6 +27,12 @@ export async function push_geo_site_config(
   let data = await api.api.post(`config/geo_sites`, config);
 }
 
+export async function push_many_geo_site_rule(
+  rules: GeoSiteConfig[]
+): Promise<void> {
+  let data = await api.api.post(`config/geo_sites/set_many`, rules);
+}
+
 export async function delete_geo_site_config(id: string): Promise<void> {
   let data = await api.api.delete(`config/geo_sites/${id}`);
 }

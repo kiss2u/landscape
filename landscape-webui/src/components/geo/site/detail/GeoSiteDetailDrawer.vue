@@ -10,9 +10,6 @@ const key = defineModel<GeoConfigKey>("geo_key", {
 const show = defineModel<boolean>("show", { required: true });
 
 const config = ref<GeoDomainConfig>();
-onMounted(async () => {
-  await refresh();
-});
 
 async function refresh() {
   config.value = await get_geo_site_cache_detail(key.value);

@@ -125,6 +125,7 @@ impl GeoIpService {
                             url,
                             time.elapsed().as_secs()
                         );
+                        let _ = self.dst_ip_events_tx.send(DstIpEvent::GeoIpUpdated).await;
                     }
                     Err(e) => tracing::error!("read {} response error: {}", url, e),
                 },
@@ -136,7 +137,6 @@ impl GeoIpService {
                 }
             }
         }
-        let _ = self.dst_ip_events_tx.send(DstIpEvent::GeoIpUpdated).await;
     }
 }
 
