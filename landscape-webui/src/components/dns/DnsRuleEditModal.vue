@@ -40,18 +40,18 @@ const emit = defineEmits(["refresh"]);
 
 const show = defineModel<boolean>("show", { required: true });
 
-const origin_rule = ref<DnsRule>(new DnsRule(props.data));
+const origin_rule_json = ref<string>("");
 
 const rule = ref<any>(new DnsRule());
 
 const commit_spin = ref(false);
 const isModified = computed(() => {
-  return JSON.stringify(rule.value) !== JSON.stringify(origin_rule.value);
+  return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
 function enter() {
-  origin_rule.value = new DnsRule(props.data);
-  rule.value = new DnsRule(origin_rule.value);
+  rule.value = new DnsRule(props.data);
+  origin_rule_json.value = JSON.stringify(rule.value);
 }
 
 function onCreate(): RuleSource {
@@ -83,7 +83,6 @@ async function saveRule() {
     commit_spin.value = true;
     await push_dns_rule(rule.value);
     console.log("submit success");
-    origin_rule.value = rule.value;
     show.value = false;
   } catch (e: any) {
     message.error(`${e.response.data}`);

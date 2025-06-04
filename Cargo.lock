@@ -2788,6 +2788,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "trie-rs",
+ "ts-rs",
 ]
 
 [[package]]

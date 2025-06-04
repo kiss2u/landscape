@@ -2,7 +2,7 @@ use landscape_common::{
     event::dns::DnsEvent,
     service::{controller_service::ConfigController, DefaultWatchServiceStatus},
 };
-use landscape_dns::diff_server::LandscapeFiffFlowDnsService;
+use landscape_dns::diff_server::{CheckDnsReq, CheckDnsResult, LandscapeFiffFlowDnsService};
 use tokio::sync::mpsc;
 
 use crate::config_service::{
@@ -77,5 +77,9 @@ impl LandscapeDnsService {
 
     pub async fn stop(&self) {
         self.dns_service.stop();
+    }
+
+    pub async fn check_domain(&self, req: CheckDnsReq) -> CheckDnsResult {
+        self.dns_service.check_domain(req).await
     }
 }

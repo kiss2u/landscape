@@ -175,6 +175,14 @@ pub enum FilterResult {
     OnlyIPv6,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "common/dns_record_type.d.ts")]
+#[serde(rename_all = "UPPERCASE")]
+pub enum LandscapeDnsRecordType {
+    A,
+    AAAA,
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
