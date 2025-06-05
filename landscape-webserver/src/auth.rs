@@ -28,8 +28,9 @@ const DEFAULT_EXPIRE_TIME: usize = 60 * 60 * 1;
 const SYS_TOKEN_EXPIRE_TIME: usize = 60 * 60 * 24 * 365 * 30;
 
 pub static SECRET_KEY: Lazy<String> = Lazy::new(|| {
-    rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
+    //
+    rand::rng()
+        .sample_iter(rand::distr::Alphanumeric)
         .take(SECRET_KEY_LENGTH)
         .map(char::from)
         .collect()
