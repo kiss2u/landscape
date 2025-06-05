@@ -26,6 +26,12 @@ export async function push_geo_ip_config(
   let data = await api.api.post(`config/geo_ips`, config);
 }
 
+export async function push_many_geo_ip_rule(
+  rules: GeoIpSourceConfig[]
+): Promise<void> {
+  let data = await api.api.post(`config/geo_ips/set_many`, rules);
+}
+
 export async function delete_geo_ip_config(id: string): Promise<void> {
   let data = await api.api.delete(`config/geo_ips/${id}`);
 }

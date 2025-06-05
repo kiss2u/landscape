@@ -47,9 +47,11 @@ impl ConfigController for FirewallRuleService {
 
     async fn after_update_config(
         &self,
-        firewall_rules: Vec<Self::Config>,
-        old_configs: Vec<Self::Config>,
+        mut firewall_rules: Vec<Self::Config>,
+        mut old_configs: Vec<Self::Config>,
     ) {
+        firewall_rules.sort_by(|a, b| a.index.cmp(&b.index));
+        old_configs.sort_by(|a, b| a.index.cmp(&b.index));
         update_firewall_rules(firewall_rules, old_configs);
     }
 }

@@ -55,10 +55,17 @@ async fn get_iface_service_conifg(
 async fn handle_service_config(
     State(state): State<DHCPv4ServerManagerService>,
     Json(config): Json<DHCPv4ServiceConfig>,
-) -> Json<SimpleResult> {
-    let result = SimpleResult { success: true };
+) -> Result<Json<SimpleResult>, LandscapeApiError> {
+    if config.enable {
+        if let Err(conflict_msg) = state.check_ip_range_conflict(&config).await {
+            return Err(LandscapeApiError::DHCPConflict(conflict_msg));
+        }
+    }
+
     state.handle_service_config(config).await;
-    Json(result)
+
+    let result = SimpleResult { success: true };
+    Ok(Json(result))
 }
 
 async fn delete_and_stop_iface_service(

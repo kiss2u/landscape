@@ -29,7 +29,8 @@ async fn get_flow_dns_rules(
     State(state): State<LandscapeApp>,
     Path(id): Path<FlowId>,
 ) -> Json<Vec<DNSRuleConfig>> {
-    let result = state.dns_rule_service.list_flow_configs(id).await;
+    let mut result = state.dns_rule_service.list_flow_configs(id).await;
+    result.sort_by(|a, b| a.index.cmp(&b.index));
     Json(result)
 }
 
@@ -52,6 +53,7 @@ async fn add_many_dns_rules(
     state.dns_rule_service.set_list(dns_rules).await;
     Json(SimpleResult { success: true })
 }
+
 async fn add_dns_rules(
     State(state): State<LandscapeApp>,
     Json(dns_rule): Json<DNSRuleConfig>,

@@ -103,6 +103,42 @@ impl DHCPv4ServerManagerService {
         Self { service, store }
     }
 
+    pub async fn check_ip_range_conflict(
+        &self,
+        new_config: &DHCPv4ServiceConfig,
+    ) -> Result<(), String> {
+        // 获取所有现有配置
+        let Ok(all_configs) = self.get_repository().list().await else {
+            return Err("read all config error".to_string());
+        };
+
+        for existing_config in all_configs {
+            // 跳过同一个接口的配置
+            if existing_config.iface_name == new_config.iface_name {
+                continue;
+            }
+
+            // 只检查启用的配置
+            if !existing_config.enable {
+                continue;
+            }
+
+            // 检查IP范围是否重叠
+            if new_config.config.has_ip_range_overlap(&existing_config.config) {
+                return Err(format!(
+                    "IP range conflict detected with interface '{}'. New range: {}-{}, Existing range: {}-{}",
+                    existing_config.iface_name,
+                    new_config.config.ip_range_start,
+                    new_config.config.get_ip_range().1,
+                    existing_config.config.ip_range_start,
+                    existing_config.config.get_ip_range().1
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     // pub async fn get_all_status(&self) -> HashMap<String, DHCPv4ServiceWatchStatus> {
     //     self.service.get_all_status().await
     // }

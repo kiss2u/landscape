@@ -7,6 +7,7 @@ import {
   read_context_from_clipboard,
 } from "@/lib/common";
 import { useMessage } from "naive-ui";
+import { SearchLocate } from "@vicons/carbon";
 const message = useMessage();
 interface Props {
   flow_id?: number;
@@ -24,6 +25,7 @@ async function read_rules() {
 }
 
 const show_create_modal = ref(false);
+const show_query_modal = ref(false);
 
 async function export_config() {
   let configs = await get_flow_dns_rules(props.flow_id);
@@ -79,6 +81,13 @@ async function import_rules() {
             </template>
             确定从剪贴板导入吗?
           </n-popconfirm>
+          <n-button @click="show_query_modal = true">
+            <template #icon>
+              <n-icon>
+                <SearchLocate />
+              </n-icon>
+            </template>
+          </n-button>
         </n-flex>
 
         <n-scrollbar>
@@ -99,6 +108,10 @@ async function import_rules() {
         :data="{ flow_id: props.flow_id }"
         @refresh="read_rules()"
       ></DnsRuleEditModal>
+      <CheckDomainDrawer
+        v-model:show="show_query_modal"
+        :flow_id="flow_id"
+      ></CheckDomainDrawer>
     </n-drawer-content>
   </n-drawer>
 </template>

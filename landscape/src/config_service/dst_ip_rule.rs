@@ -62,9 +62,10 @@ impl ConfigController for DstIpRuleService {
 
     async fn after_update_config(
         &self,
-        new_configs: Vec<Self::Config>,
+        mut new_configs: Vec<Self::Config>,
         _old_configs: Vec<Self::Config>,
     ) {
+        new_configs.sort_by(|a, b| a.index.cmp(&b.index));
         let mut flow_ids = HashSet::new();
         let mut rule_map: HashMap<u32, Vec<WanIpRuleConfig>> = HashMap::new();
 

@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use landscape_common::config::{
@@ -17,6 +17,7 @@ use crate::{
 pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/geo_sites", get(get_geo_sites).post(add_geo_site))
+        .route("/geo_sites/set_many", post(add_many_geo_sites))
         .route("/geo_sites/:id", get(get_geo_rule).delete(del_geo_site))
         .route("/geo_sites/cache", get(get_geo_site_cache).post(refresh_geo_site_cache))
         .route("/geo_sites/cache/search", get(search_geo_site_cache))
@@ -93,6 +94,14 @@ async fn add_geo_site(
 ) -> Json<GeoSiteConfig> {
     let result = state.geo_site_service.set(dns_rule).await;
     Json(result)
+}
+
+async fn add_many_geo_sites(
+    State(state): State<LandscapeApp>,
+    Json(rules): Json<Vec<GeoSiteConfig>>,
+) -> Json<SimpleResult> {
+    state.geo_site_service.set_list(rules).await;
+    Json(SimpleResult { success: true })
 }
 
 async fn del_geo_site(

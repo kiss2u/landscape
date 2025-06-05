@@ -32,3 +32,9 @@ export async function update_dst_ip_rules_rule(
 export async function delete_dst_ip_rules_rule(id: string): Promise<void> {
   let data = await api.api.delete(`config/dst_ip_rules/${id}`);
 }
+
+export async function push_many_dst_ip_rule(
+  rules: WanIpRuleConfig[]
+): Promise<void> {
+  let data = await api.api.post(`config/dst_ip_rules/set_many`, rules);
+}

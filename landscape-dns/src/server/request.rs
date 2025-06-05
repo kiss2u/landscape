@@ -20,7 +20,7 @@ use hickory_server::{
 use lru::LruCache;
 use tokio::sync::Mutex;
 
-use crate::{rule::ResolutionRule, CacheDNSItem, DNSCache};
+use crate::{diff_server::CheckDnsResult, rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
     config::dns::{DNSRuntimeRule, FilterResult},
     flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
@@ -163,6 +163,29 @@ impl LandscapeDnsRequestHandle {
 
         self.resolves = resolves;
         self.cache = cache;
+    }
+
+    pub async fn check_domain(&self, domain: &str, query_type: RecordType) -> CheckDnsResult {
+        let mut result = CheckDnsResult::default();
+
+        for (_index, resolver) in self.resolves.iter() {
+            if resolver.is_match(&domain) {
+                result.config = Some(resolver.config.clone());
+                match resolver.lookup(&domain, query_type).await {
+                    Ok(rdata_vec) => {
+                        result.records = Some(rdata_vec);
+                    }
+                    Err(_) => {}
+                };
+                break;
+            }
+        }
+
+        if let Some((records, _)) = self.lookup_cache(domain, query_type).await {
+            result.cache_records = Some(records);
+        }
+
+        result
     }
 
     // 检查缓存并根据 TTL 判断是否过期

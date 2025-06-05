@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useMessage } from "naive-ui";
 import NewIpEdit from "../NewIpEdit.vue";
 import { ZoneType } from "@/lib/service_ipconfig";
 import {
@@ -13,12 +14,14 @@ import {
   update_dhcp_v4_config,
 } from "@/api/service_dhcp_v4";
 import { IfaceZoneType } from "@/rust_bindings/common/iface";
+const message = useMessage();
 
 const dhcpv4ConfigStore = useDHCPv4ConfigStore();
 
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
 
+const commit_loading = ref(false);
 const iface_info = defineProps<{
   iface_name: string;
   zone: IfaceZoneType;
@@ -44,9 +47,17 @@ async function on_modal_enter() {
 }
 
 async function save_config() {
-  let config = await update_dhcp_v4_config(service_config.value);
-  await dhcpv4ConfigStore.UPDATE_INFO();
-  show_model.value = false;
+  commit_loading.value = true;
+  try {
+    let config = await update_dhcp_v4_config(service_config.value);
+    await dhcpv4ConfigStore.UPDATE_INFO();
+    show_model.value = false;
+  } catch (e: any) {
+    console.log(e);
+    message.error(e.response.data.msg);
+  } finally {
+    commit_loading.value = false;
+  }
 }
 
 const server_ip_addr = computed({
@@ -91,6 +102,7 @@ function onCreateBinding(): MacBindingRecord {
     :auto-focus="false"
     v-model:show="show_model"
     @after-enter="on_modal_enter"
+    :mask-closable="false"
   >
     <n-card
       style="width: 600px"
@@ -160,8 +172,16 @@ function onCreateBinding(): MacBindingRecord {
       </n-form>
 
       <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+        <n-flex justify="space-between" align="center">
+          <n-button round @click="show_model = false"> 取消 </n-button>
+          <n-button
+            :loading="commit_loading"
+            round
+            type="primary"
+            @click="save_config"
+          >
+            更新
+          </n-button>
         </n-flex>
       </template>
     </n-card>

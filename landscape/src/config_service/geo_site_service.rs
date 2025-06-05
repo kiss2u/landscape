@@ -133,6 +133,8 @@ impl GeoSiteService {
                             url,
                             time.elapsed().as_secs()
                         );
+
+                        let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
                     }
                     Err(e) => tracing::error!("read {} response error: {}", url, e),
                 },
@@ -144,7 +146,6 @@ impl GeoSiteService {
                 }
             }
         }
-        let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
     }
 }
 

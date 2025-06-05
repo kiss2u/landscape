@@ -1,14 +1,50 @@
-use landscape_common::config::dns::DNSRuntimeRule;
+use hickory_proto::rr::{Record, RecordType};
+use landscape_common::config::dns::{DNSRuntimeRule, LandscapeDnsRecordType};
+use landscape_common::config::FlowId;
 use landscape_common::flow::{FlowConfig, PacketMatchMark};
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
-use serde::Serialize;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
 use crate::server::request::LandscapeDnsRequestHandle;
 use crate::server::server::DiffFlowServer;
+
+#[derive(Serialize, Deserialize, Debug, Default, TS)]
+#[ts(export, export_to = "dns.d.ts")]
+pub struct CheckDnsResult {
+    #[ts(type = "any | null")]
+    pub config: Option<DNSRuntimeRule>,
+    #[ts(type = "Array<any>|null")]
+    pub records: Option<Vec<Record>>,
+    #[ts(type = "Array<any>|null")]
+    pub cache_records: Option<Vec<Record>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = "dns.d.ts")]
+pub struct CheckDnsReq {
+    flow_id: FlowId,
+    domain: String,
+    record_type: LandscapeDnsRecordType,
+}
+
+impl CheckDnsReq {
+    pub fn get_domain(&self) -> String {
+        format!("{}.", self.domain)
+    }
+}
+
+fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
+    match record_type {
+        LandscapeDnsRecordType::A => RecordType::A,
+        LandscapeDnsRecordType::AAAA => RecordType::AAAA,
+    }
+}
 
 #[derive(Serialize, Debug, Clone)]
 pub struct LandscapeFiffFlowDnsService {
@@ -70,17 +106,6 @@ impl LandscapeFiffFlowDnsService {
             }
         });
     }
-
-    // pub async fn read_geo_site_file(&self) -> HashMap<String, Vec<DomainConfig>> {
-    //     let geo_file_path = LAND_HOME_PATH.join(GEO_SITE_FILE_NAME);
-
-    //     if geo_file_path.exists() && geo_file_path.is_file() {
-    //         landscape_protobuf::read_geo_sites(geo_file_path).await
-    //     } else {
-    //         tracing::error!("geo file don't exists or not a file, return empty map");
-    //         HashMap::new()
-    //     }
-    // }
 
     pub async fn init_handle(&self, dns_rules: Vec<DNSRuntimeRule>) {
         let dns_rules: Vec<DNSRuntimeRule> =
@@ -144,5 +169,22 @@ impl LandscapeFiffFlowDnsService {
 
     pub fn stop(&self) {
         self.status.just_change_status(ServiceStatus::Stopping);
+    }
+
+    pub async fn check_domain(&self, req: CheckDnsReq) -> CheckDnsResult {
+        let handler = {
+            let reader = self.handlers.read().await;
+            if let Some(handler) = reader.get(&req.flow_id) {
+                Some(handler.clone())
+            } else {
+                None
+            }
+        };
+
+        if let Some(handler) = handler {
+            handler.check_domain(&req.get_domain(), convert_record_type(req.record_type)).await
+        } else {
+            CheckDnsResult::default()
+        }
     }
 }
