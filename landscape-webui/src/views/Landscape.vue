@@ -5,14 +5,12 @@ import PacketDump from "@/components/PacketDump.vue";
 import CPUUsage from "@/components/sysinfo/CPUUsage.vue";
 import MemUsage from "@/components/sysinfo/MemUsage.vue";
 import DnsStatusCard from "@/components/dns/DnsStatusCard.vue";
-import FirewallCard from "@/components/firewall/FirewallCard.vue";
 import SystemInfo from "@/components/sysinfo/SystemInfo.vue";
 import NetFlow from "@/components/topology/NetFlow.vue";
 
 import NetTopology from "@/components/topology_v2/LandscapeTopology.vue";
 
 import { ref } from "vue";
-import MarkRuleCard from "@/components/mark/MarkRuleCard.vue";
 
 const show_dump = ref(false);
 
@@ -34,12 +32,6 @@ const { t } = useI18n({ useScope: "global" });
       <n-gi style="display: flex; height: 280px" :span="1">
         <DnsStatusCard></DnsStatusCard>
       </n-gi>
-      <!-- <n-gi style="display: flex; height: 330px" :span="1">
-          <n-flex
-            ><MarkRuleCard></MarkRuleCard>
-            <FirewallCard></FirewallCard>
-          </n-flex>
-        </n-gi> -->
     </n-grid>
     <n-divider style="margin: 0px 0" title-placement="left">
       {{ t("topology_divider") }}

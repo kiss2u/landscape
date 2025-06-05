@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 
 
@@ -20,26 +20,27 @@ default-members = ["landscape-webserver"]
 
 
 [workspace.dependencies]
-const_format = "0.2.34"
-sysinfo = "0.34.2"
+# const_format = "0.2.34"
+sysinfo = "0.35.2"
 
 # base
-once_cell = "*"
-ctrlc = "3.2"
-libc = "0.2.171"
+once_cell = "1.21.3"
+ctrlc = "3.4.7"
+libc = "0.2.172"
 homedir = "0.3.4"
-thiserror = "2"
-rand = "0.8.5"
-regex = "*"
+thiserror = "2.0.12"
+rand = "0.9.1"
+regex = "1.11.1"
 socket2 = "0.5.8"
-paste = "*"
+paste = "1.0.15"
 # self_cell = "*"
-colored = "2"
-dotenvy = "*"
+colored = "3.0.0"
+dotenvy = "0.15.7"
 reqwest = { version = "0.12.19", default-features = false, features = [
     "rustls-tls",
 ] }
 
+# cert
 rustls = { version = "0.23.27", default-features = false, features = [
     "ring",
     "logging",
@@ -48,7 +49,6 @@ rustls = { version = "0.23.27", default-features = false, features = [
 ] }
 rcgen = "0.13.2"
 rustls-pemfile = "2.2.0"
-tokio-rustls = "0.26.2"
 
 dhcproto = "0.12.0"
 
@@ -63,10 +63,10 @@ axum-extra = { version = "0.9.4", features = ["typed-header"] }
 axum-server = "0.7.2"
 
 # serde
-serde = { version = "*", features = ["derive"] }
-serde_json = { version = "1.0.117" }
-toml = "0.8.19"
-toml_edit = "0.22.22"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140" }
+toml = "0.8.22"
+toml_edit = "0.22.26"
 
 rtnetlink = { version = "0.14.1" }
 netlink-packet-route = { version = "0.19.0" }
@@ -78,31 +78,37 @@ wl-nl80211 = { version = "0.2.0" }
 bollard = "0.18.1"
 
 # logs
-log = "0.4.22"
+# log = "0.4.22"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
 # export to ts
-ts-rs = { version = "10.1", features = ["format", "serde-compat", "uuid-impl"] }
+ts-rs = { version = "11.0.1", features = [
+    "format",
+    "serde-compat",
+    "uuid-impl",
+] }
 
-tokio-util = { version = "0.7.0", features = ["codec", "net"] }
-
+# async
 async-trait = "0.1.88"
-sea-orm = { version = "1.1.10" }
-sea-orm-migration = { version = "1.1.0" }
+tokio-rustls = "0.26.2"
+tokio-util = { version = "0.7.15", features = ["codec", "net"] }
+
+sea-orm = { version = "1.1.12" }
+sea-orm-migration = { version = "1.1.12" }
 
 [workspace.dependencies.uuid]
-version = "1.16.0"
+version = "1.17.0"
 features = ["v4", "serde"]
 
 [workspace.dependencies.tokio]
-version = "1.38.0"
+version = "1.45.1"
 
 [workspace.dependencies.pnet]
 version = "0.35.0"
 
 [workspace.dependencies.clap]
-version = "4.5.27"
+version = "4.5.39"
 default-features = false
 features = ["std", "derive", "help", "usage", "env"]
