@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use landscape_common::{config::InitConfig, database::repository::Repository};
+use landscape_common::{
+    config::{InitConfig, StoreRuntimeConfig},
+    database::repository::Repository,
+};
 use sea_orm::{Database, DatabaseConnection};
 
 use migration::{Migrator, MigratorTrait};
@@ -26,8 +29,8 @@ pub struct LandscapeDBServiceProvider {
 }
 
 impl LandscapeDBServiceProvider {
-    pub async fn new(db_url: String) -> Self {
-        let mut opt: migration::sea_orm::ConnectOptions = db_url.into();
+    pub async fn new(config: &StoreRuntimeConfig) -> Self {
+        let mut opt: migration::sea_orm::ConnectOptions = config.database_path.clone().into();
         let (lever, _) = opt.get_sqlx_slow_statements_logging_settings();
         opt.sqlx_slow_statements_logging_settings(lever, Duration::from_secs(10));
 
@@ -38,6 +41,7 @@ impl LandscapeDBServiceProvider {
 
     /// 清空数据并且从配置从初始化
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
+        tracing::info!("init config: {config:?}");
         if let Some(InitConfig {
             ipconfigs,
             nats,
@@ -220,13 +224,17 @@ impl LandscapeDBServiceProvider {
 
 #[cfg(test)]
 mod tests {
+    use landscape_common::config::StoreRuntimeConfig;
+
     use crate::provider::LandscapeDBServiceProvider;
 
     #[tokio::test]
     pub async fn test_run_database() {
         landscape_common::init_tracing!();
 
-        let _provider =
-            LandscapeDBServiceProvider::new("sqlite://../db.sqlite?mode=rwc".to_string()).await;
+        let config = StoreRuntimeConfig {
+            database_path: "sqlite://../db.sqlite?mode=rwc".to_string(),
+        };
+        let _provider = LandscapeDBServiceProvider::new(&config).await;
     }
 }

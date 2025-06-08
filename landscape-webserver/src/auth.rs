@@ -1,10 +1,13 @@
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use axum::http::header::AUTHORIZATION;
+use axum::extract::State;
+use axum::routing::post;
 use axum::Json;
+use axum::Router;
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -12,8 +15,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use jsonwebtoken::TokenData;
-use landscape_common::args::LAND_ARGS;
 use landscape_common::args::LAND_HOME_PATH;
+use landscape_common::config::AuthRuntimeConfig;
 use landscape_common::LANDSCAPE_SYS_TOKEN_FILE_ANME;
 use once_cell::sync::Lazy;
 
@@ -36,11 +39,11 @@ pub static SECRET_KEY: Lazy<String> = Lazy::new(|| {
         .collect()
 });
 
-pub async fn output_sys_token() {
+pub async fn output_sys_token(auth: &AuthRuntimeConfig) {
     let token_path = LAND_HOME_PATH.join(LANDSCAPE_SYS_TOKEN_FILE_ANME);
     // 生成长期有效的系统 token
-    let sys_token = create_jwt(&LAND_ARGS.admin_user, SYS_TOKEN_EXPIRE_TIME)
-        .expect("Failed to create system token");
+    let sys_token =
+        create_jwt(&auth.admin_user, SYS_TOKEN_EXPIRE_TIME).expect("Failed to create system token");
 
     let mut file = OpenOptions::new()
         .write(true)
@@ -75,38 +78,44 @@ fn create_jwt(user_id: &str, expiration: usize) -> Result<String, jsonwebtoken::
     encode(&Header::default(), &claims, &EncodingKey::from_secret(SECRET_KEY.as_bytes()))
 }
 
-pub(crate) async fn auth_middleware(
-    req: Request,
+pub async fn auth_handler(
+    State(auth): State<Arc<AuthRuntimeConfig>>,
+    req: Request<axum::body::Body>,
     next: Next,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<Response, Response> {
     let auth_header = req
         .headers()
-        .get(AUTHORIZATION.as_str())
+        .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response())?;
+        .ok_or_else(|| {
+            (StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response()
+        })?;
 
-    // 期望格式为 "Bearer <token>"
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or((StatusCode::UNAUTHORIZED, "Invalid Authorization header format").into_response())?;
+    let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+        (StatusCode::UNAUTHORIZED, "Invalid Authorization header format").into_response()
+    })?;
 
-    // 验证并解码 token
     let token_data: TokenData<Claims> =
         decode(token, &DecodingKey::from_secret(SECRET_KEY.as_bytes()), &Validation::default())
             .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token").into_response())?;
 
-    if token_data.claims.sub == LAND_ARGS.admin_user {
+    if token_data.claims.sub == auth.admin_user {
         Ok(next.run(req).await)
     } else {
         Err((StatusCode::UNAUTHORIZED, "Invalid token").into_response())
     }
 }
 
-pub async fn login_handler(
+pub fn get_auth_route(auth: Arc<AuthRuntimeConfig>) -> Router {
+    Router::new().route("/login", post(login_handler)).with_state(auth)
+}
+
+async fn login_handler(
+    State(auth): State<Arc<AuthRuntimeConfig>>,
     Json(LoginInfo { username, password }): Json<LoginInfo>,
 ) -> Result<impl IntoResponse, Response> {
     let mut result = LoginResult { success: false, token: "".to_string() };
-    if username == LAND_ARGS.admin_user && password == LAND_ARGS.admin_pass {
+    if username == auth.admin_user && password == auth.admin_pass {
         result.success = true;
         result.token = create_jwt(&username, DEFAULT_EXPIRE_TIME).unwrap();
     } else {

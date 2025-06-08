@@ -1,11 +1,6 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
-use axum::{
-    handler::HandlerWithoutStateExt,
-    http::StatusCode,
-    routing::{get, post},
-    Router,
-};
+use axum::{handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router};
 
 use axum_server::tls_rustls::RustlsConfig;
 use colored::Colorize;
@@ -25,7 +20,8 @@ use landscape::{
     sys_service::dns_service::LandscapeDnsService,
 };
 use landscape_common::{
-    args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
+    args::{LAND_ARGS, LAND_HOME_PATH},
+    config::RuntimeConfig,
     error::LdResult,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -75,20 +71,23 @@ struct SimpleResult {
 
 #[tokio::main]
 async fn main() -> LdResult<()> {
-    if let Err(e) = init_logger() {
+    let config = RuntimeConfig::new((*LAND_ARGS).clone());
+
+    if let Err(e) = init_logger(config.log.clone()) {
         panic!("init log error: {e:?}");
     }
-    banner();
+
+    banner(&config);
 
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
 
     let home_path = LAND_HOME_PATH.clone();
 
-    let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
+    let db_store_provider = LandscapeDBServiceProvider::new(&config.store).await;
 
     let need_init_config = boot_check(&home_path)?;
-    db_store_provider.truncate_and_fit_from(need_init_config.clone()).await;
+    db_store_provider.truncate_and_fit_from(need_init_config).await;
 
     // 初始化 App
 
@@ -128,15 +127,6 @@ async fn main() -> LdResult<()> {
 
     let dev_obs = landscape::observer::dev_observer().await;
 
-    let home_log_str = format!("{}", home_path.display()).bright_green();
-    if !LAND_ARGS.log_output_in_terminal {
-        let log_path = format!("{}", LAND_LOG_ARGS.log_path.display()).green();
-        println!("Log Folder path: {}", log_path);
-        println!("All Config Home path: {home_log_str}");
-    }
-    info!("config path: {home_log_str}");
-    info!("init config: {need_init_config:#?}");
-
     let tls_config = load_or_generate_cert(home_path.clone()).await;
     // let tls_config = Arc::new(tls_config);
     // let acceptor = TlsAcceptor::from(tls_config);
@@ -168,29 +158,14 @@ async fn main() -> LdResult<()> {
         error!("sysctl cmd exec err: {e:#?}");
     }
 
-    let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
-    // let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-
-    // let _ = landscape_dns::connection::set_socket_mark(
-    //     std::os::fd::AsFd::as_fd(&listener).as_raw_fd(),
-    //     landscape_common::mark::PacketMark::LandscapeSys.into(),
-    // )
-    // .unwrap();
+    let addr = SocketAddr::from((config.web.address, config.web.port));
 
     let service = handle_404.into_service();
 
-    let web_root_str = format!("{}", LAND_WEB_ARGS.web_root.display()).green();
-    let listen_at_str = format!("{:?}:{:?}", LAND_ARGS.address, LAND_ARGS.port).green();
-    if !LAND_ARGS.log_output_in_terminal {
-        println!("Web Root path: {}", web_root_str);
-        println!("Listen   on: {}", listen_at_str);
-    }
+    let serve_dir = ServeDir::new(&config.web.web_root).not_found_service(service);
 
-    info!("Web Root path: {}", web_root_str);
-    info!("Listen   on: {}", listen_at_str);
-    let serve_dir = ServeDir::new(&LAND_WEB_ARGS.web_root).not_found_service(service);
-
-    auth::output_sys_token().await;
+    let auth_share = Arc::new(config.auth.clone());
+    auth::output_sys_token(&config.auth).await;
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
@@ -240,14 +215,13 @@ async fn main() -> LdResult<()> {
                 .merge(get_iface_flow_wan_paths(db_store_provider.clone(), dev_obs).await),
         )
         .nest("/sysinfo", sysinfo::get_sys_info_route())
-        .route_layer(axum::middleware::from_fn(auth::auth_middleware));
+        .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler));
 
-    let auth_route = Router::new().route("/login", post(auth::login_handler));
     let api_route = Router::new()
         // 资源路由
         .nest("/src", source_route)
         // 认证路由
-        .nest("/auth", auth_route);
+        .nest("/auth", auth::get_auth_route(auth_share));
     let app = Router::new()
         .nest("/api", api_route)
         .nest("/sock", dump::get_tump_router())
@@ -269,7 +243,7 @@ async fn handle_404() -> (StatusCode, &'static str) {
     (StatusCode::NOT_FOUND, "Not found")
 }
 
-fn banner() {
+fn banner(config: &RuntimeConfig) {
     let banner = r#"
 ██╗      █████╗ ███╗   ██╗██████╗ ███████╗ ██████╗ █████╗ ██████╗ ███████╗
 ██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝
@@ -285,14 +259,13 @@ fn banner() {
 ██║  ██║╚██████╔╝╚██████╔╝   ██║   ███████╗██║  ██║                       
 ╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝                       
     "#;
-    let args = LAND_ARGS.clone();
     let banner = banner.bright_blue().bold();
-    let args_str = format!("{args:#?}").green();
+    let config_str = config.to_string_summary().green();
     info!("{}", banner);
-    info!("Using Args: {}", args_str);
-    if !args.log_output_in_terminal {
+    info!("{}", config_str);
+    if !config.log.log_output_in_terminal {
         // 当日志不在 terminal 直接展示时, 仅输出一些信息
         println!("{}", banner);
-        println!("Using Args: {}", args_str);
+        println!("{}", config_str);
     }
 }

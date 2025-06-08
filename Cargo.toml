@@ -66,7 +66,6 @@ axum-server = "0.7.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140" }
 toml = "0.8.22"
-toml_edit = "0.22.26"
 
 rtnetlink = { version = "0.14.1" }
 netlink-packet-route = { version = "0.19.0" }
@@ -95,6 +94,9 @@ async-trait = "0.1.88"
 tokio-rustls = "0.26.2"
 tokio-util = { version = "0.7.15", features = ["codec", "net"] }
 
+cidr = { version = "0.3.1" }
+
+# databse
 sea-orm = { version = "1.1.12" }
 sea-orm-migration = { version = "1.1.12" }
 
