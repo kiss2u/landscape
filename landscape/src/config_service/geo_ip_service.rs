@@ -51,7 +51,7 @@ impl GeoIpService {
             //
             let mut ticker = tokio::time::interval(Duration::from_secs(A_DAY));
             loop {
-                service_clone.refresh().await;
+                service_clone.refresh(false).await;
                 // 等待下一次 tick
                 ticker.tick().await;
             }
@@ -90,9 +90,14 @@ impl GeoIpService {
         result
     }
 
-    pub async fn refresh(&self) {
+    pub async fn refresh(&self, force: bool) {
         // 读取当前规则
-        let configs: Vec<GeoIpSourceConfig> = self.store.list().await.unwrap();
+        let mut configs: Vec<GeoIpSourceConfig> = self.store.list().await.unwrap();
+
+        if !force {
+            let now = get_f64_timestamp();
+            configs = configs.into_iter().filter(|e| e.next_update_at < now).collect();
+        }
 
         let client = Client::new();
         for mut config in configs {

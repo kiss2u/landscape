@@ -64,7 +64,7 @@ async fn get_geo_ip_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoConf
 }
 
 async fn refresh_geo_ip_cache(State(state): State<LandscapeApp>) -> Json<SimpleResult> {
-    state.geo_ip_service.refresh().await;
+    state.geo_ip_service.refresh(true).await;
     Json(SimpleResult { success: true })
 }
 

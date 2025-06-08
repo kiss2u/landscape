@@ -17,7 +17,7 @@ use landscape::{
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
-    sys_service::dns_service::LandscapeDnsService,
+    sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
     args::{LAND_ARGS, LAND_HOME_PATH},
@@ -50,6 +50,8 @@ use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_path
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::{error, info};
 
+use crate::sys_service::config_service::get_config_paths;
+
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;
 const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
 
@@ -62,6 +64,7 @@ pub struct LandscapeApp {
     pub fire_wall_rule_service: FirewallRuleService,
     pub dst_ip_rule_service: DstIpRuleService,
     pub geo_ip_service: GeoIpService,
+    pub config_service: LandscapeConfigService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -114,6 +117,8 @@ async fn main() -> LdResult<()> {
         DstIpRuleService::new(db_store_provider.clone(), geo_ip_service.clone(), dst_ip_service_rx)
             .await;
 
+    let config_service =
+        LandscapeConfigService::new(config.clone(), db_store_provider.clone()).await;
     let landscape_app_status = LandscapeApp {
         dns_service,
         dns_rule_service,
@@ -122,6 +127,7 @@ async fn main() -> LdResult<()> {
         fire_wall_rule_service,
         dst_ip_rule_service,
         geo_ip_service,
+        config_service,
     };
     // 初始化结束
 
@@ -170,7 +176,13 @@ async fn main() -> LdResult<()> {
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest("/metric", metric::get_metric_service_paths().await)
-        .nest("/sys_service", get_dns_paths().await.with_state(landscape_app_status.clone()))
+        .nest(
+            "/sys_service",
+            Router::new()
+                .merge(get_dns_paths().await)
+                .merge(get_config_paths().await)
+                .with_state(landscape_app_status.clone()),
+        )
         .nest(
             "/config",
             Router::new()

@@ -7,6 +7,7 @@ import { NIcon } from "naive-ui";
 
 import {
   Network4,
+  Settings,
   CicsSystemGroup,
   ModelBuilder,
   ChartCombo,
@@ -107,6 +108,11 @@ const menuOptions: MenuOption[] = [
         key: "geo-ip",
       },
     ],
+  },
+  {
+    label: "系统配置",
+    key: "config",
+    icon: renderIcon(Settings),
   },
 ];
 </script>

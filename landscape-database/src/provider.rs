@@ -43,6 +43,7 @@ impl LandscapeDBServiceProvider {
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
         tracing::info!("init config: {config:?}");
         if let Some(InitConfig {
+            ifaces,
             ipconfigs,
             nats,
             marks,
@@ -55,9 +56,9 @@ impl LandscapeDBServiceProvider {
             firewall_rules,
             wifi_configs,
             mss_clamps,
-            ifaces,
             dst_ip_mark,
             dhcpv4_services,
+            ..
         }) = config
         {
             let iface_store = self.iface_store();

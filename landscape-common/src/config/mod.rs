@@ -46,6 +46,9 @@ pub type ConfigId = Uuid;
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 pub struct InitConfig {
+    /// config file
+    pub config: LandscapeConfig,
+
     pub ifaces: Vec<NetworkIfaceConfig>,
     pub ipconfigs: Vec<IfaceIpServiceConfig>,
     pub nats: Vec<NatServiceConfig>,

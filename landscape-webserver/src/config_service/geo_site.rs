@@ -64,7 +64,7 @@ async fn get_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoCo
 }
 
 async fn refresh_geo_site_cache(State(state): State<LandscapeApp>) -> Json<SimpleResult> {
-    state.geo_site_service.refresh().await;
+    state.geo_site_service.refresh(true).await;
     Json(SimpleResult { success: true })
 }
 
