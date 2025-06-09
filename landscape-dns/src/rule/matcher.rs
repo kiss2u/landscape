@@ -98,8 +98,21 @@ impl DomainMatcher {
 }
 
 #[cfg(test)]
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+#[cfg(test)]
 mod tests {
+    use std::{path::PathBuf, time::Instant};
+
+    use jemalloc_ctl::{epoch, stats};
+
     use crate::rule::{DomainConfig, DomainMatchType};
+    use landscape_common::{
+        config::geo::{GeoConfigKey, GeoDomainConfig},
+        store::storev3::StoreFileManager,
+        LANDSCAPE_GEO_CACHE_TMP_DIR,
+    };
 
     use super::DomainMatcher;
 
@@ -114,5 +127,62 @@ mod tests {
         let matcher = DomainMatcher::new(configs);
         assert!(matcher.is_match("baidu.com"));
         assert!(matcher.is_match("abaidu.com"));
+    }
+
+    fn test_memory_usage() {
+        epoch::advance().unwrap();
+
+        let allocated = stats::allocated::read().unwrap();
+        let active = stats::active::read().unwrap();
+
+        println!("Allocated memory: {} kbytes", allocated / 1024);
+        println!("Active memory: {} kbytes", active / 1024);
+    }
+
+    #[test]
+    pub fn mem_useage() {
+        for _ in 0..3 {
+            epoch::advance().unwrap(); // 预热几次
+        }
+
+        println!("==== start ====");
+        test_memory_usage();
+
+        let mut site_store: StoreFileManager<GeoConfigKey, GeoDomainConfig> = StoreFileManager::new(
+            PathBuf::from("/root/.landscape-router").join(LANDSCAPE_GEO_CACHE_TMP_DIR),
+            "site".to_string(),
+        );
+
+        println!("==== after StoreFileManager::new ====");
+        test_memory_usage();
+
+        let all = site_store.list();
+
+        println!("all size: {}", all.len());
+        println!("==== after list ====");
+        test_memory_usage();
+
+        let mut config = vec![];
+
+        for each in all.iter() {
+            config.extend_from_slice(&each.values);
+        }
+
+        println!("==== after config extend ====");
+        test_memory_usage();
+
+        let matcher = DomainMatcher::new(config);
+
+        println!("==== after DomainMatcher::new ====");
+        test_memory_usage();
+
+        let time = Instant::now();
+        if matcher.is_match("google.com") {
+            println!("got it");
+        }
+        println!("elpase: {}", time.elapsed().as_micros());
+
+        println!("==== after first matcher.is_match ====");
+        test_memory_usage();
     }
 }
