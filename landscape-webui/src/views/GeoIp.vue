@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { refresh_geo_cache_key, search_geo_ip_cache } from "@/api/geo/ip";
 import { QueryGeoKey } from "@/rust_bindings/common/geo";
+import { sleep } from "seemly";
 import { onMounted, ref } from "vue";
 
 const rules = ref<any>([]);
@@ -18,9 +19,17 @@ async function refresh() {
   rules.value = await search_geo_ip_cache(filter.value);
 }
 
+const loading = ref(false);
 async function refresh_cache() {
-  await refresh_geo_cache_key();
-  await refresh();
+  (async () => {
+    loading.value = true;
+    try {
+      await refresh_geo_cache_key();
+      await refresh();
+    } finally {
+      loading.value = false;
+    }
+  })();
 }
 
 const show_geo_drawer_modal = ref(false);
@@ -31,7 +40,16 @@ const show_geo_drawer_modal = ref(false);
       <n-flex :wrap="false">
         <!-- {{ filter }} -->
         <n-button @click="show_geo_drawer_modal = true">Geo IP 配置</n-button>
-        <n-button @click="refresh_cache">手动触发更新</n-button>
+        <n-popconfirm
+          :positive-button-props="{ loading: loading }"
+          @positive-click="refresh_cache"
+        >
+          <template #trigger>
+            <n-button>强制刷新</n-button>
+          </template>
+          强制刷新吗? 将会清空所有 key 并且重新下载. 可能会持续一段时间
+        </n-popconfirm>
+
         <GeoIpNameSelect
           v-model:name="filter.name"
           @refresh="refresh"

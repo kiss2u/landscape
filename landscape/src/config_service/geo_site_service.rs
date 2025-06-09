@@ -105,6 +105,9 @@ impl GeoSiteService {
         if !force {
             let now = get_f64_timestamp();
             configs = configs.into_iter().filter(|e| e.next_update_at < now).collect();
+            let mut file_cache_lock = self.file_cache.lock().await;
+            file_cache_lock.truncate();
+            drop(file_cache_lock);
         }
 
         let client = Client::new();
