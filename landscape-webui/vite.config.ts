@@ -7,7 +7,7 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { NaiveUiResolver } from "unplugin-vue-components/resolvers";
 
-const HOST_PORT = "localhost:6300";
+const HOST_PORT = "localhost:6443";
 
 // https://vitejs.dev/config/
 export default defineConfig({

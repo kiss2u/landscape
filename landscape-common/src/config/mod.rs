@@ -89,8 +89,11 @@ pub struct LandscapeWebConfig {
     /// Web Root
     pub web_root: Option<PathBuf>,
 
-    /// Listen port
+    /// Listen HTTP port
     pub port: Option<u16>,
+
+    /// Listen HTTPS port
+    pub https_port: Option<u16>,
 
     /// Listen address
     pub address: Option<IpAddr>,
@@ -195,6 +198,7 @@ impl RuntimeConfig {
         let web = WebRuntimeConfig {
             web_root: read_value(&args.web, &config.web.web_root, default_web_path),
             port: read_value(&args.port, &config.web.port, 6300),
+            https_port: read_value(&args.port, &config.web.port, 6443),
             address: read_value(
                 &args.address,
                 &config.web.address,
@@ -222,9 +226,13 @@ impl RuntimeConfig {
     }
 
     pub fn to_string_summary(&self) -> String {
-        let address_str = match self.web.address {
+        let address_http_str = match self.web.address {
             std::net::IpAddr::V4(addr) => format!("{}:{}", addr, self.web.port),
             std::net::IpAddr::V6(addr) => format!("[{}]:{}", addr, self.web.port),
+        };
+        let address_https_str = match self.web.address {
+            std::net::IpAddr::V4(addr) => format!("{}:{}", addr, self.web.https_port),
+            std::net::IpAddr::V6(addr) => format!("[{}]:{}", addr, self.web.https_port),
         };
         format!(
             "\n\
@@ -242,7 +250,8 @@ impl RuntimeConfig {
          \n\
          [Web]\n\
          Web Root Path: {}\n\
-         Listen on: https://{}\n\
+         Listen HTTP on: http://{}\n\
+         Listen HTTPS on: https://{}\n\
          \n\
          [Store]\n\
          Database Connect: {}\n",
@@ -254,7 +263,8 @@ impl RuntimeConfig {
             self.log.log_output_in_terminal,
             self.log.max_log_files,
             self.web.web_root.display(),
-            address_str,
+            address_http_str,
+            address_https_str,
             self.store.database_path,
         )
     }
@@ -282,8 +292,11 @@ pub struct WebRuntimeConfig {
     /// Web Root
     pub web_root: PathBuf,
 
-    /// Listen port
+    /// Listen HTTP port
     pub port: u16,
+
+    /// Listen HTTPS port
+    pub https_port: u16,
 
     /// Listen address
     pub address: IpAddr,

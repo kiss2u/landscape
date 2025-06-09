@@ -32,9 +32,13 @@ pub struct WebCommArgs {
     #[arg(short, long, env = "LANDSCAPE_WEB_ROOT")]
     pub web: Option<PathBuf>,
 
-    /// Listen port [default: 6300]
-    #[arg(short, long, env = "LANDSCAPE_WEB_PORT")]
+    /// Listen HTTP port [default: 6300]
+    #[arg(short, long, env = "LANDSCAPE_WEB_HTTP_PORT")]
     pub port: Option<u16>,
+
+    /// Listen HTTPS port [default: 6300]
+    #[arg(short = 's', long = "https", env = "LANDSCAPE_WEB_HTTPS_PORT")]
+    pub https_port: Option<u16>,
 
     /// Listen address [default: 0.0.0.0]
     #[arg(short, long, env = "LANDSCAPE_WEB_ADDR")]

@@ -37,6 +37,7 @@ mod dump;
 mod error;
 mod iface;
 mod metric;
+mod redirect_https;
 mod service;
 mod sys_service;
 mod sysinfo;
@@ -164,8 +165,9 @@ async fn main() -> LdResult<()> {
         error!("sysctl cmd exec err: {e:#?}");
     }
 
-    let addr = SocketAddr::from((config.web.address, config.web.port));
-
+    let addr = SocketAddr::from((config.web.address, config.web.https_port));
+    // spawn a second server to redirect http requests to this server
+    tokio::spawn(redirect_https::redirect_http_to_https(config.web.clone()));
     let service = handle_404.into_service();
 
     let serve_dir = ServeDir::new(&config.web.web_root).not_found_service(service);
