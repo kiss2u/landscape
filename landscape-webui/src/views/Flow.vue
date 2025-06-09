@@ -19,7 +19,7 @@ async function refresh() {
   <n-layout :native-scrollbar="false" content-style="padding: 10px;">
     <n-flex vertical>
       <!-- <n-flex> cccc</n-flex> -->
-      <n-grid x-gap="12" y-gap="10" cols="1 600:2 900:3 1200:4 1600:5">
+      <n-grid x-gap="12" y-gap="10" cols="1 600:1 900:2 1200:3 1600:4">
         <n-grid-item style="display: flex">
           <n-card size="small" content-style="display:flex;">
             <n-flex style="flex: 1" justify="center" align="center">
@@ -44,6 +44,10 @@ async function refresh() {
         </n-grid-item>
       </n-grid>
     </n-flex>
-    <FlowEditModal @refresh="refresh" v-model:show="show_edit" />
+    <FlowEditModal
+      :rule_id="null"
+      @refresh="refresh"
+      v-model:show="show_edit"
+    />
   </n-layout>
 </template>
