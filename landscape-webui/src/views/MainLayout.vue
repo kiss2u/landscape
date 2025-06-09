@@ -16,6 +16,7 @@ import LandscapeSiderBar from "@/views/LandscapeSiderBar.vue";
           <n-flex style="flex: 1" justify="space-between" align="center">
             <n-flex>/</n-flex>
             <n-flex>
+              <PresentationMode></PresentationMode>
               <LanguageSetting />
               <IntervalFetch />
             </n-flex>

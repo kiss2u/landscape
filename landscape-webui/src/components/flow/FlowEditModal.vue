@@ -2,16 +2,14 @@
 import { push_flow_rules } from "@/api/flow";
 import { useMessage } from "naive-ui";
 
-import { ChangeCatalog } from "@vicons/carbon";
 import { computed, onMounted, toRaw } from "vue";
 import { ref } from "vue";
 import FlowMatchRule from "./match/FlowMatchRule.vue";
-import {
-  flow_config_default,
-  FlowTargetTypes,
-  flow_target_options,
-} from "@/lib/default_value";
+import { flow_config_default, FlowTargetTypes } from "@/lib/default_value";
 import { FlowConfig, FlowTarget } from "@/rust_bindings/common/flow";
+import { useFrontEndStore } from "@/stores/front_end_config";
+
+const frontEndStore = useFrontEndStore();
 
 const message = useMessage();
 
@@ -88,7 +86,10 @@ function switch_target() {}
         </n-form-item-gi>
 
         <n-form-item-gi :span="2" label="备注">
-          <n-input v-model:value="rule.remark" type="text" />
+          <n-input
+            :type="frontEndStore.presentation_mode ? 'password' : 'text'"
+            v-model:value="rule.remark"
+          />
         </n-form-item-gi>
         <!-- <n-form-item-gi :span="5" label="分流目标网卡">
           <n-dynamic-input

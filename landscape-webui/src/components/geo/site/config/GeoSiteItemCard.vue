@@ -2,7 +2,10 @@
 import { delete_geo_site_config } from "@/api/geo/site";
 import { GeoSiteConfig } from "@/rust_bindings/common/geo_site";
 import { ref } from "vue";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
 
+const frontEndStore = useFrontEndStore();
 const emit = defineEmits(["refresh"]);
 
 interface Prop {
@@ -24,13 +27,21 @@ async function del() {
       <!-- {{ geo_site }} -->
       <n-descriptions bordered label-placement="top" :column="3">
         <n-descriptions-item label="名称">
-          {{ geo_site.name }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(geo_site.name)
+              : geo_site.name
+          }}
         </n-descriptions-item>
         <n-descriptions-item label="启用">
           {{ geo_site.enable }}
         </n-descriptions-item>
         <n-descriptions-item label="URL">
-          {{ geo_site.url }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(geo_site.url)
+              : geo_site.url
+          }}
         </n-descriptions-item>
         <n-descriptions-item label="下次更新时间">
           {{ geo_site.next_update_at }}

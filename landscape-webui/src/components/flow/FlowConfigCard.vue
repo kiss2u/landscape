@@ -4,6 +4,10 @@ import { FlowConfig } from "@/rust_bindings/common/flow";
 import { FlowTargetTypes } from "@/lib/default_value";
 import FlowEditModal from "@/components/flow/FlowEditModal.vue";
 import DnsRuleDrawer from "@/components/dns/DnsRuleDrawer.vue";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
+
+const frontEndStore = useFrontEndStore();
 
 interface Props {
   config: FlowConfig;
@@ -60,7 +64,11 @@ async function refresh() {
         {{ config.enable ? "启用" : "禁用" }}
       </n-descriptions-item>
       <n-descriptions-item label="备注">
-        {{ config.remark }}
+        {{
+          frontEndStore.presentation_mode
+            ? mask_string(config.remark)
+            : config.remark
+        }}
       </n-descriptions-item>
     </n-descriptions>
     <!-- {{ config }} -->
