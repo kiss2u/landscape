@@ -75,6 +75,9 @@ struct SimpleResult {
 
 #[tokio::main]
 async fn main() -> LdResult<()> {
+    let home_path = LAND_HOME_PATH.clone();
+    let need_init_config = boot_check(&home_path)?;
+
     let config = RuntimeConfig::new((*LAND_ARGS).clone());
 
     if let Err(e) = init_logger(config.log.clone()) {
@@ -86,11 +89,8 @@ async fn main() -> LdResult<()> {
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
 
-    let home_path = LAND_HOME_PATH.clone();
-
     let db_store_provider = LandscapeDBServiceProvider::new(&config.store).await;
 
-    let need_init_config = boot_check(&home_path)?;
     db_store_provider.truncate_and_fit_from(need_init_config).await;
 
     // 初始化 App

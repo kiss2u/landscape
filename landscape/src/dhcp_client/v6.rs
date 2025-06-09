@@ -309,13 +309,6 @@ pub async fn dhcp_v6_pd_client(
                     tracing::error!("get change result error. exit loop");
                     break;
                 }
-                // let exit =  {
-                //     let current_status = &*service_status_subscribe.borrow();
-                //     match current_status {
-                //         ServiceStatus::Stopping |ServiceStatus::Stop => true,
-                //         _ => false
-                //     }
-                // };
                 if service_status.is_exit() {
                     if let Some(service_id) = status.into_release() {
                         let mut send_msg = v6::Message::new(V6MessageType::Release);
