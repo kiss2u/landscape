@@ -62,7 +62,7 @@ impl FirewallEvent {
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export, export_to = "common/metric.d.ts")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum FirewallEventType {
     #[default]
     Unknow,

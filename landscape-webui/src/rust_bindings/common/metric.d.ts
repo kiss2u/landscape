@@ -24,7 +24,7 @@ export type FirewallEvent = {
   create_time: number;
 };
 
-export type FirewallEventType = "unknow" | "createconnect" | "disconnct";
+export type FirewallEventType = "unknow" | "create_connect" | "dis_connct";
 
 export type FirewallKey = {
   src_ip: string;

@@ -42,9 +42,13 @@ export type LandscapeWebConfig = {
    */
   web_root: string | null;
   /**
-   * Listen port
+   * Listen HTTP port
    */
   port: number | null;
+  /**
+   * Listen HTTPS port
+   */
+  https_port: number | null;
   /**
    * Listen address
    */

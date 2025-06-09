@@ -55,7 +55,7 @@ pub struct PacketMatchMark {
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export, export_to = "common/flow.ts")]
 #[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum FlowTarget {
     Interface { name: String },
     Netns { container_name: String },

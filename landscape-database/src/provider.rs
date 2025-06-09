@@ -76,16 +76,19 @@ impl LandscapeDBServiceProvider {
             }
 
             let wifi_config_store = self.wifi_service_store();
+            wifi_config_store.truncate_table().await.unwrap();
             for each_config in wifi_configs {
                 wifi_config_store.set_model(each_config).await.unwrap();
             }
 
             let firewall_service_store = self.firewall_service_store();
+            firewall_service_store.truncate_table().await.unwrap();
             for each_config in firewalls {
                 firewall_service_store.set_model(each_config).await.unwrap();
             }
 
             let firewall_rules_store = self.firewall_rule_store();
+            firewall_rules_store.truncate_table().await.unwrap();
             for each_config in firewall_rules {
                 firewall_rules_store.set_model(each_config).await.unwrap();
             }
@@ -115,7 +118,7 @@ impl LandscapeDBServiceProvider {
             }
 
             let dst_ip_rule_store = self.dst_ip_rule_store();
-            iface_mark_store.truncate_table().await.unwrap();
+            dst_ip_rule_store.truncate_table().await.unwrap();
             for each_config in dst_ip_mark {
                 dst_ip_rule_store.set_model(each_config).await.unwrap();
             }
