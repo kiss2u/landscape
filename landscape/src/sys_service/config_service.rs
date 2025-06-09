@@ -31,6 +31,8 @@ impl LandscapeConfigService {
             wifi_configs: self.store.wifi_service_store().list().await.unwrap(),
             dhcpv4_services: self.store.dhcp_v4_server_store().list().await.unwrap(),
             mss_clamps: self.store.mss_clamp_service_store().list().await.unwrap(),
+            geo_ips: self.store.geo_ip_rule_store().list().await.unwrap(),
+            geo_sites: self.store.geo_site_rule_store().list().await.unwrap(),
         }
     }
 }

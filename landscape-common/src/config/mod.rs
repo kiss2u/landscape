@@ -34,7 +34,11 @@ use uuid::Uuid;
 use wifi::WifiServiceConfig;
 
 use crate::{
-    args::WebCommArgs, firewall::FirewallRuleConfig, flow::FlowConfig, ip_mark::WanIpRuleConfig,
+    args::WebCommArgs,
+    config::geo::{GeoIpSourceConfig, GeoSiteConfig},
+    firewall::FirewallRuleConfig,
+    flow::FlowConfig,
+    ip_mark::WanIpRuleConfig,
     LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_DB_SQLITE_NAME, LANDSCAPE_LOG_DIR_NAME,
     LANDSCAPE_WEBROOT_DIR_NAME, LAND_CONFIG,
 };
@@ -69,6 +73,9 @@ pub struct InitConfig {
     pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
 
     pub mss_clamps: Vec<MSSClampServiceConfig>,
+
+    pub geo_ips: Vec<GeoIpSourceConfig>,
+    pub geo_sites: Vec<GeoSiteConfig>,
 }
 
 /// auth realte config

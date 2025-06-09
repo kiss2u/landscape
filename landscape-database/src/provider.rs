@@ -58,6 +58,8 @@ impl LandscapeDBServiceProvider {
             mss_clamps,
             dst_ip_mark,
             dhcpv4_services,
+            geo_ips,
+            geo_sites,
             ..
         }) = config
         {
@@ -146,6 +148,18 @@ impl LandscapeDBServiceProvider {
             mss_clamp_store.truncate_table().await.unwrap();
             for each_config in mss_clamps {
                 mss_clamp_store.set_model(each_config).await.unwrap();
+            }
+
+            let geo_ip_store = self.geo_ip_rule_store();
+            geo_ip_store.truncate_table().await.unwrap();
+            for each_config in geo_ips {
+                geo_ip_store.set_model(each_config).await.unwrap();
+            }
+
+            let geo_site_store = self.geo_site_rule_store();
+            geo_site_store.truncate_table().await.unwrap();
+            for each_config in geo_sites {
+                geo_site_store.set_model(each_config).await.unwrap();
             }
         }
     }
