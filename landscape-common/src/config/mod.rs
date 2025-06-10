@@ -53,28 +53,44 @@ pub struct InitConfig {
     /// config file
     pub config: LandscapeConfig,
 
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ifaces: Vec<NetworkIfaceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ipconfigs: Vec<IfaceIpServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub nats: Vec<NatServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub marks: Vec<FlowWanServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub pppds: Vec<PPPDServiceConfig>,
 
     pub flow_rules: Vec<FlowConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dns_rules: Vec<DNSRuleConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dst_ip_mark: Vec<WanIpRuleConfig>,
 
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub icmpras: Vec<IPV6RAServiceConfig>,
 
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub firewalls: Vec<FirewallServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub firewall_rules: Vec<FirewallRuleConfig>,
 
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub wifi_configs: Vec<WifiServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dhcpv4_services: Vec<DHCPv4ServiceConfig>,
 
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub mss_clamps: Vec<MSSClampServiceConfig>,
 
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub geo_ips: Vec<GeoIpSourceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub geo_sites: Vec<GeoSiteSourceConfig>,
 }
 
