@@ -2,12 +2,12 @@ import api from "@/api";
 import { GeoConfigKey, QueryGeoKey } from "@/rust_bindings/common/geo";
 import {
   GeoDomainConfig,
-  GeoSiteConfig,
+  GeoSiteSourceConfig,
 } from "@/rust_bindings/common/geo_site";
 
 export async function get_geo_site_configs(
   name?: string
-): Promise<GeoSiteConfig[]> {
+): Promise<GeoSiteSourceConfig[]> {
   let data = await api.api.get(`config/geo_sites`, {
     params: {
       name,
@@ -16,19 +16,21 @@ export async function get_geo_site_configs(
   return data.data;
 }
 
-export async function get_geo_site_config(id: string): Promise<GeoSiteConfig> {
+export async function get_geo_site_config(
+  id: string
+): Promise<GeoSiteSourceConfig> {
   let data = await api.api.get(`config/geo_sites/${id}`);
   return data.data;
 }
 
 export async function push_geo_site_config(
-  config: GeoSiteConfig
+  config: GeoSiteSourceConfig
 ): Promise<void> {
   let data = await api.api.post(`config/geo_sites`, config);
 }
 
 export async function push_many_geo_site_rule(
-  rules: GeoSiteConfig[]
+  rules: GeoSiteSourceConfig[]
 ): Promise<void> {
   let data = await api.api.post(`config/geo_sites/set_many`, rules);
 }

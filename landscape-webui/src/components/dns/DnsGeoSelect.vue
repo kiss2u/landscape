@@ -7,7 +7,7 @@ import {
 import { GeoConfigKey } from "@/rust_bindings/common/geo";
 import {
   GeoDomainConfig,
-  GeoSiteConfig,
+  GeoSiteSourceConfig,
 } from "@/rust_bindings/common/geo_site";
 import { computed, onMounted, ref } from "vue";
 
@@ -31,7 +31,7 @@ onMounted(async () => {
   await typing_key("");
 });
 
-const configs = ref<GeoSiteConfig[]>();
+const configs = ref<GeoSiteSourceConfig[]>();
 async function typing_name_key(query?: string) {
   try {
     loading_name.value = true;

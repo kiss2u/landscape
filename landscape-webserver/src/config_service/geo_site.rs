@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::config::{
-    geo::{GeoConfigKey, GeoDomainConfig, GeoSiteConfig, QueryGeoDomainConfig, QueryGeoKey},
+    geo::{GeoConfigKey, GeoDomainConfig, GeoSiteSourceConfig, QueryGeoDomainConfig, QueryGeoKey},
     ConfigId,
 };
 use landscape_common::service::controller_service::ConfigController;
@@ -71,7 +71,7 @@ async fn refresh_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Simpl
 async fn get_geo_sites(
     State(state): State<LandscapeApp>,
     Query(q): Query<QueryGeoDomainConfig>,
-) -> Json<Vec<GeoSiteConfig>> {
+) -> Json<Vec<GeoSiteSourceConfig>> {
     let result = state.geo_site_service.query_geo_by_name(q.name).await;
     Json(result)
 }
@@ -79,7 +79,7 @@ async fn get_geo_sites(
 async fn get_geo_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> LandscapeResult<Json<GeoSiteConfig>> {
+) -> LandscapeResult<Json<GeoSiteSourceConfig>> {
     let result = state.geo_site_service.find_by_id(id).await;
     if let Some(config) = result {
         Ok(Json(config))
@@ -90,15 +90,15 @@ async fn get_geo_rule(
 
 async fn add_geo_site(
     State(state): State<LandscapeApp>,
-    Json(dns_rule): Json<GeoSiteConfig>,
-) -> Json<GeoSiteConfig> {
+    Json(dns_rule): Json<GeoSiteSourceConfig>,
+) -> Json<GeoSiteSourceConfig> {
     let result = state.geo_site_service.set(dns_rule).await;
     Json(result)
 }
 
 async fn add_many_geo_sites(
     State(state): State<LandscapeApp>,
-    Json(rules): Json<Vec<GeoSiteConfig>>,
+    Json(rules): Json<Vec<GeoSiteSourceConfig>>,
 ) -> Json<SimpleResult> {
     state.geo_site_service.set_list(rules).await;
     Json(SimpleResult { success: true })

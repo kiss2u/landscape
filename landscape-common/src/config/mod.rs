@@ -35,7 +35,7 @@ use wifi::WifiServiceConfig;
 
 use crate::{
     args::WebCommArgs,
-    config::geo::{GeoIpSourceConfig, GeoSiteConfig},
+    config::geo::{GeoIpSourceConfig, GeoSiteSourceConfig},
     firewall::FirewallRuleConfig,
     flow::FlowConfig,
     ip_mark::WanIpRuleConfig,
@@ -75,7 +75,7 @@ pub struct InitConfig {
     pub mss_clamps: Vec<MSSClampServiceConfig>,
 
     pub geo_ips: Vec<GeoIpSourceConfig>,
-    pub geo_sites: Vec<GeoSiteConfig>,
+    pub geo_sites: Vec<GeoSiteSourceConfig>,
 }
 
 /// auth realte config

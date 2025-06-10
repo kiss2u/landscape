@@ -10,7 +10,7 @@ use super::dns::DomainConfig;
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
 #[ts(export, export_to = "common/geo_site.ts")]
-pub struct GeoSiteConfig {
+pub struct GeoSiteSourceConfig {
     /// 用这个 ID 作为文件名称
     pub id: Option<Uuid>,
     /// 记录更新时间
@@ -27,7 +27,7 @@ pub struct GeoSiteConfig {
     pub geo_keys: Vec<String>,
 }
 
-impl LandscapeDBStore<Uuid> for GeoSiteConfig {
+impl LandscapeDBStore<Uuid> for GeoSiteSourceConfig {
     fn get_id(&self) -> Uuid {
         self.id.unwrap_or(Uuid::new_v4())
     }

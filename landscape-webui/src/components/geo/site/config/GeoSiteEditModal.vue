@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { get_geo_site_config, push_geo_site_config } from "@/api/geo/site";
-import { GeoSiteConfig } from "@/rust_bindings/common/geo_site";
+import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
 import { computed, ref } from "vue";
 
 const emit = defineEmits(["refresh"]);
@@ -12,7 +12,7 @@ interface Prop {
 const props = defineProps<Prop>();
 const commit_spin = ref(false);
 
-const rule = ref<GeoSiteConfig>();
+const rule = ref<GeoSiteSourceConfig>();
 const rule_json = ref<string>("");
 
 async function enter() {

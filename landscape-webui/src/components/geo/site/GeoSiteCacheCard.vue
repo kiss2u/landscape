@@ -2,7 +2,7 @@
 import { delete_geo_site_config } from "@/api/geo/site";
 import {
   GeoDomainConfig,
-  GeoSiteConfig,
+  GeoSiteSourceConfig,
 } from "@/rust_bindings/common/geo_site";
 import { ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";

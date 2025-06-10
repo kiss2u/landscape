@@ -1,4 +1,4 @@
-use landscape_common::{config::geo::GeoSiteConfig, database::repository::UpdateActiveModel};
+use landscape_common::{config::geo::GeoSiteSourceConfig, database::repository::UpdateActiveModel};
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
@@ -39,9 +39,9 @@ impl ActiveModelBehavior for ActiveModel {
     }
 }
 
-impl From<Model> for GeoSiteConfig {
+impl From<Model> for GeoSiteSourceConfig {
     fn from(entity: Model) -> Self {
-        GeoSiteConfig {
+        GeoSiteSourceConfig {
             id: Some(entity.id),
             update_at: entity.update_at,
             url: entity.url,
@@ -53,7 +53,7 @@ impl From<Model> for GeoSiteConfig {
     }
 }
 
-impl Into<ActiveModel> for GeoSiteConfig {
+impl Into<ActiveModel> for GeoSiteSourceConfig {
     fn into(self) -> ActiveModel {
         let mut active = ActiveModel {
             id: Set(self.id.unwrap_or_else(Uuid::new_v4)),
@@ -64,7 +64,7 @@ impl Into<ActiveModel> for GeoSiteConfig {
     }
 }
 
-impl UpdateActiveModel<ActiveModel> for GeoSiteConfig {
+impl UpdateActiveModel<ActiveModel> for GeoSiteSourceConfig {
     fn update(self, active: &mut ActiveModel) {
         active.update_at = Set(self.update_at);
         active.url = Set(self.url);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { delete_geo_site_config } from "@/api/geo/site";
-import { GeoSiteConfig } from "@/rust_bindings/common/geo_site";
+import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
 import { ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";
@@ -9,7 +9,7 @@ const frontEndStore = useFrontEndStore();
 const emit = defineEmits(["refresh"]);
 
 interface Prop {
-  geo_site: GeoSiteConfig;
+  geo_site: GeoSiteSourceConfig;
 }
 const props = defineProps<Prop>();
 const show_edit_modal = ref(false);

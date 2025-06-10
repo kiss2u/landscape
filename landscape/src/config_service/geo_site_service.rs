@@ -15,7 +15,7 @@ use std::{
 };
 
 use landscape_common::{
-    args::LAND_HOME_PATH, config::geo::GeoSiteConfig, event::dns::DnsEvent,
+    args::LAND_HOME_PATH, config::geo::GeoSiteSourceConfig, event::dns::DnsEvent,
     store::storev3::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
@@ -100,7 +100,7 @@ impl GeoSiteService {
 
     pub async fn refresh(&self, force: bool) {
         // 读取当前规则
-        let mut configs: Vec<GeoSiteConfig> = self.store.list().await.unwrap();
+        let mut configs: Vec<GeoSiteSourceConfig> = self.store.list().await.unwrap();
 
         if !force {
             let now = get_f64_timestamp();
@@ -168,7 +168,7 @@ impl GeoSiteService {
         lock.get(key)
     }
 
-    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteConfig> {
+    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteSourceConfig> {
         self.store.query_by_name(name).await.unwrap()
     }
 }
@@ -177,7 +177,7 @@ impl GeoSiteService {
 impl ConfigController for GeoSiteService {
     type Id = Uuid;
 
-    type Config = GeoSiteConfig;
+    type Config = GeoSiteSourceConfig;
 
     type DatabseAction = GeoSiteConfigRepository;
 

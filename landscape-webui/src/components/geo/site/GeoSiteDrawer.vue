@@ -4,7 +4,7 @@ import {
   copy_context_to_clipboard,
   read_context_from_clipboard,
 } from "@/lib/common";
-import { GeoSiteConfig } from "@/rust_bindings/common/geo_site";
+import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
 import { onMounted, ref } from "vue";
 
 import { useMessage } from "naive-ui";
