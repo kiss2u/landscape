@@ -58,7 +58,12 @@ function onCreate(): WanIPRuleSource {
 function changeCurrentRuleType(value: WanIPRuleSource, index: number) {
   if (rule.value) {
     if (value.t == "config") {
-      rule.value.source[index] = { t: "geo_key", name: "", key: "" };
+      rule.value.source[index] = {
+        t: "geo_key",
+        name: "",
+        key: "",
+        inverse: false,
+      };
     } else {
       rule.value.source[index] = new_wan_rules({
         t: "config",

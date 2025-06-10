@@ -1,6 +1,6 @@
 use landscape_common::{
     config::{
-        dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
+        dns::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
         geo::{GeoConfigKey, GeoDomainConfig},
     },
     database::LandscapeDBTrait,
@@ -10,6 +10,7 @@ use landscape_common::{
 use uuid::Uuid;
 
 use std::{
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -66,25 +67,50 @@ impl GeoSiteService {
         configs: Vec<DNSRuleConfig>,
     ) -> Vec<DNSRuntimeRule> {
         let mut lock = self.file_cache.lock().await;
-        let mut result = vec![];
+        let mut result = Vec::with_capacity(configs.len());
         for config in configs.into_iter() {
-            let mut source = vec![];
-            for each in config.source.iter() {
+            let mut usage_keys = HashSet::new();
+            let mut source: HashSet<DomainConfig> = HashSet::new();
+
+            let mut inverse_keys: HashMap<String, HashSet<String>> = HashMap::new();
+            for each in config.source.into_iter() {
                 match each {
-                    RuleSource::GeoKey(config_key) => {
-                        if let Some(domains) = lock.get(config_key) {
-                            source.extend(domains.values.iter().cloned());
+                    RuleSource::GeoKey(k) if k.inverse => {
+                        inverse_keys.entry(k.name).or_default().insert(k.key);
+                    }
+                    RuleSource::GeoKey(k) => {
+                        if let Some(domains) = lock.get(&k) {
+                            source.extend(domains.values.into_iter());
                         }
+                        usage_keys.insert(k);
                     }
                     RuleSource::Config(c) => {
-                        // all_domain_rules.extend(vec.iter().cloned());
-                        source.push(c.clone());
+                        source.insert(c);
                     }
                 }
             }
 
+            if inverse_keys.len() > 0 {
+                let all_keys: Vec<_> = lock.keys();
+                tracing::debug!("all_keys {:?}", all_keys.len());
+                tracing::debug!("{:?}", inverse_keys);
+                for (inverse_key, excluded_names) in inverse_keys {
+                    for key in all_keys.iter().filter(|k| k.name == inverse_key) {
+                        if !excluded_names.contains(&key.key) {
+                            if let Some(domains) = lock.get(key) {
+                                usage_keys.insert(key.clone());
+                                source.extend(domains.values.into_iter());
+                            }
+                            // } else {
+                            //     tracing::debug!("excluded_names: {:#?}", key);
+                        }
+                    }
+                }
+                tracing::debug!("using key len: {:#?}", usage_keys.len());
+            }
+
             result.push(DNSRuntimeRule {
-                source,
+                source: source.into_iter().collect(),
                 id: config.id,
                 name: config.name,
                 index: config.index,
@@ -105,6 +131,7 @@ impl GeoSiteService {
         if !force {
             let now = get_f64_timestamp();
             configs = configs.into_iter().filter(|e| e.next_update_at < now).collect();
+        } else {
             let mut file_cache_lock = self.file_cache.lock().await;
             file_cache_lock.truncate();
             drop(file_cache_lock);

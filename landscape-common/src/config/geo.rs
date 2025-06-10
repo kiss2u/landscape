@@ -44,7 +44,11 @@ pub struct GeoDomainConfig {
 impl LandscapeStoreTrait for GeoDomainConfig {
     type K = GeoConfigKey;
     fn get_store_key(&self) -> GeoConfigKey {
-        GeoConfigKey { name: self.name.clone(), key: self.key.clone() }
+        GeoConfigKey {
+            name: self.name.clone(),
+            key: self.key.clone(),
+            inverse: false,
+        }
     }
 }
 
@@ -53,6 +57,8 @@ impl LandscapeStoreTrait for GeoDomainConfig {
 pub struct GeoConfigKey {
     pub name: String,
     pub key: String,
+    #[serde(default)]
+    pub inverse: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
@@ -103,7 +109,11 @@ pub struct GeoIpConfig {
 impl LandscapeStoreTrait for GeoIpConfig {
     type K = GeoConfigKey;
     fn get_store_key(&self) -> GeoConfigKey {
-        GeoConfigKey { name: self.name.clone(), key: self.key.clone() }
+        GeoConfigKey {
+            name: self.name.clone(),
+            key: self.key.clone(),
+            inverse: false,
+        }
     }
 }
 

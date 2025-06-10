@@ -17,6 +17,10 @@ const key = defineModel<string>("geo_key", {
 const name = defineModel<string>("geo_name", {
   required: true,
 });
+const inverse = defineModel<boolean>("geo_inverse", {
+  default: false,
+});
+
 const emit = defineEmits(["refresh"]);
 
 interface Prop {
@@ -86,29 +90,37 @@ function select_key(value: string, option: any) {
 }
 </script>
 <template>
-  <n-input-group>
-    <n-select
-      :style="{ width: '33%' }"
-      v-model:value="name"
-      filterable
-      placeholder="选择 geo 名称"
-      :options="geo_name_options"
-      :loading="loading_name"
-      clearable
-      remote
-      @update:value="emit('refresh')"
-      @search="typing_name_key"
-    />
-    <n-select
-      v-model:value="key"
-      filterable
-      placeholder="筛选key"
-      :options="geo_key_options"
-      :loading="loading_key"
-      clearable
-      remote
-      @update:value="select_key"
-      @search="typing_key"
-    />
-  </n-input-group>
+  <n-flex :wrap="false" align="center">
+    <n-popover trigger="hover">
+      <template #trigger>
+        <n-checkbox v-model:checked="inverse"> </n-checkbox>
+      </template>
+      <span>反选 </span>
+    </n-popover>
+    <n-input-group>
+      <n-select
+        :style="{ width: '33%' }"
+        v-model:value="name"
+        filterable
+        placeholder="选择 geo 名称"
+        :options="geo_name_options"
+        :loading="loading_name"
+        clearable
+        remote
+        @update:value="emit('refresh')"
+        @search="typing_name_key"
+      />
+      <n-select
+        v-model:value="key"
+        filterable
+        placeholder="筛选key"
+        :options="geo_key_options"
+        :loading="loading_key"
+        clearable
+        remote
+        @update:value="select_key"
+        @search="typing_key"
+      />
+    </n-input-group>
+  </n-flex>
 </template>
