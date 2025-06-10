@@ -102,10 +102,10 @@ impl LandscapeDnsRequestHandle {
                         let new_mark = resolver.mark().clone();
                         // println!("old domain match resolver: {domain:?}");
                         let mut cache_items = vec![];
-                        println!(
-                            "resolves: {:?}: match: {domain:?}, new_mark: {new_mark:?}",
-                            resolver.config
-                        );
+                        // println!(
+                        //     "resolves: {:?}: match: {domain:?}, new_mark: {new_mark:?}",
+                        //     resolver.config
+                        // );
                         for cache_item in value.iter() {
                             // 新配置是 NoMark 的排除
                             match (

@@ -47,11 +47,15 @@ impl ConfigController for DNSRuleService {
         &self.store
     }
 
-    async fn after_update_config(
-        &self,
-        _new_configs: Vec<Self::Config>,
-        _old_configs: Vec<Self::Config>,
-    ) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated).await;
+    async fn update_one_config(&self, config: Self::Config) {
+        let _ =
+            self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: Some(config.flow_id) }).await;
+    }
+    async fn delete_one_config(&self, config: Self::Config) {
+        let _ =
+            self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: Some(config.flow_id) }).await;
+    }
+    async fn update_many_config(&self, _configs: Vec<Self::Config>) {
+        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
     }
 }

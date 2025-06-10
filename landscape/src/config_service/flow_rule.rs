@@ -1,4 +1,7 @@
-use landscape_common::{flow::FlowConfig, service::controller_service::ConfigController};
+use landscape_common::{
+    flow::FlowConfig,
+    service::controller_service::{ConfigController, FlowConfigController},
+};
 use landscape_database::{
     flow_rule::repository::FlowConfigRepository, provider::LandscapeDBServiceProvider,
 };
@@ -19,6 +22,8 @@ impl FlowRuleService {
         result
     }
 }
+
+impl FlowConfigController for FlowRuleService {}
 
 #[async_trait::async_trait]
 impl ConfigController for FlowRuleService {

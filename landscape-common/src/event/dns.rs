@@ -1,5 +1,5 @@
 pub enum DnsEvent {
-    RuleUpdated,
+    RuleUpdated { flow_id: Option<u32> },
     GeositeUpdated,
 }
 

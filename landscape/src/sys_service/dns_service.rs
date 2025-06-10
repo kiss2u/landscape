@@ -1,6 +1,11 @@
+use std::time::Instant;
+
 use landscape_common::{
     event::dns::DnsEvent,
-    service::{controller_service::ConfigController, DefaultWatchServiceStatus},
+    service::{
+        controller_service::{ConfigController, FlowConfigController},
+        DefaultWatchServiceStatus,
+    },
 };
 use landscape_dns::diff_server::{CheckDnsReq, CheckDnsResult, LandscapeFiffFlowDnsService};
 use tokio::sync::mpsc;
@@ -39,16 +44,42 @@ impl LandscapeDnsService {
         tokio::spawn(async move {
             while let Some(event) = receiver.recv().await {
                 match event {
-                    DnsEvent::RuleUpdated | DnsEvent::GeositeUpdated => {
+                    DnsEvent::RuleUpdated { flow_id: None } | DnsEvent::GeositeUpdated => {
                         tracing::info!("refresh dns rule");
+                        let time = Instant::now();
                         let dns_rules = dns_rule_service_clone.list().await;
                         let flow_rules = flow_rule_service_clone.list().await;
 
+                        tracing::info!("load rule: {:?}", time.elapsed().as_secs());
                         let dns_rules =
                             geo_site_service_clone.convert_config_to_runtime_rule(dns_rules).await;
+
+                        tracing::info!("convert rule: {:?}", time.elapsed().as_secs());
                         dns_service_clone.init_handle(dns_rules).await;
+                        tracing::info!("init rule: {:?}", time.elapsed().as_secs());
+
                         dns_service_clone.update_flow_map(&flow_rules).await;
+                        tracing::info!("update flow: {:?}", time.elapsed().as_secs());
                         // dns_service_clone.restart(53).await;
+                    }
+                    DnsEvent::RuleUpdated { flow_id: Some(flow_id) } => {
+                        tracing::info!("refresh dns rule");
+                        let time = Instant::now();
+                        let flow_dns_rules =
+                            dns_rule_service_clone.list_flow_configs(flow_id).await;
+                        let flow_rules = flow_rule_service_clone.list_flow_configs(flow_id).await;
+
+                        tracing::info!("load rule: {:?}", time.elapsed().as_secs());
+                        let dns_rules = geo_site_service_clone
+                            .convert_config_to_runtime_rule(flow_dns_rules)
+                            .await;
+
+                        tracing::info!("convert rule: {:?}", time.elapsed().as_secs());
+                        dns_service_clone.init_handle(dns_rules).await;
+                        tracing::info!("init rule: {:?}", time.elapsed().as_secs());
+
+                        dns_service_clone.update_flow_map(&flow_rules).await;
+                        tracing::info!("update flow: {:?}", time.elapsed().as_secs());
                     }
                 }
             }

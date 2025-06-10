@@ -1,4 +1,8 @@
-use landscape_common::{database::repository::UpdateActiveModel, flow::FlowConfig};
+use landscape_common::{
+    database::{repository::UpdateActiveModel, LandscapeDBFlowFilterExpr},
+    flow::FlowConfig,
+};
+use migration::SimpleExpr;
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
@@ -75,5 +79,11 @@ impl UpdateActiveModel<ActiveModel> for FlowConfig {
             Set(serde_json::to_value(self.packet_handle_iface_name).unwrap().into());
         active.remark = Set(self.remark);
         active.update_at = Set(self.update_at);
+    }
+}
+
+impl LandscapeDBFlowFilterExpr for FlowConfigModel {
+    fn get_flow_filter(id: landscape_common::config::FlowId) -> SimpleExpr {
+        Column::FlowId.eq(id)
     }
 }

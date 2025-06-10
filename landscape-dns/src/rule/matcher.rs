@@ -1,6 +1,6 @@
 use aho_corasick::AhoCorasick;
 use regex::Regex;
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Instant};
 use tracing::debug;
 use trie_rs::TrieBuilder;
 
@@ -18,6 +18,7 @@ pub struct DomainMatcher {
 
 impl DomainMatcher {
     pub fn new(domains_config: Vec<DomainConfig>) -> Self {
+        let config = Instant::now();
         let mut full_domains = HashSet::new();
         let mut regex_domains = Vec::new();
         let mut keywords = Vec::new();
@@ -59,6 +60,8 @@ impl DomainMatcher {
         debug!("total {:?}", sum_count);
         debug!("full_domains {:?}", full_domains.len());
         debug!("subdomain_trie {:?}", size);
+
+        debug!("dns match rule load time: {:?}s", config.elapsed().as_secs());
         DomainMatcher {
             regex_domains,
             full_domains,

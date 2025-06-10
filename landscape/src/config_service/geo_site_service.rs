@@ -1,6 +1,6 @@
 use landscape_common::{
     config::{
-        dns::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
+        dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
         geo::{GeoConfigKey, GeoDomainConfig},
     },
     database::LandscapeDBTrait,
@@ -66,11 +66,12 @@ impl GeoSiteService {
         &self,
         configs: Vec<DNSRuleConfig>,
     ) -> Vec<DNSRuntimeRule> {
+        let time = Instant::now();
         let mut lock = self.file_cache.lock().await;
         let mut result = Vec::with_capacity(configs.len());
         for config in configs.into_iter() {
             let mut usage_keys = HashSet::new();
-            let mut source: HashSet<DomainConfig> = HashSet::new();
+            let mut source = vec![];
 
             let mut inverse_keys: HashMap<String, HashSet<String>> = HashMap::new();
             for each in config.source.into_iter() {
@@ -85,7 +86,7 @@ impl GeoSiteService {
                         usage_keys.insert(k);
                     }
                     RuleSource::Config(c) => {
-                        source.insert(c);
+                        source.push(c);
                     }
                 }
             }
@@ -98,8 +99,10 @@ impl GeoSiteService {
                     for key in all_keys.iter().filter(|k| k.name == inverse_key) {
                         if !excluded_names.contains(&key.key) {
                             if let Some(domains) = lock.get(key) {
-                                usage_keys.insert(key.clone());
-                                source.extend(domains.values.into_iter());
+                                if !usage_keys.contains(key) {
+                                    usage_keys.insert(key.clone());
+                                    source.extend(domains.values.into_iter());
+                                }
                             }
                             // } else {
                             //     tracing::debug!("excluded_names: {:#?}", key);
@@ -110,7 +113,7 @@ impl GeoSiteService {
             }
 
             result.push(DNSRuntimeRule {
-                source: source.into_iter().collect(),
+                source,
                 id: config.id,
                 name: config.name,
                 index: config.index,
@@ -121,6 +124,7 @@ impl GeoSiteService {
                 flow_id: config.flow_id,
             });
         }
+        tracing::debug!("covert config time: {:?}s", time.elapsed().as_secs());
         result
     }
 
