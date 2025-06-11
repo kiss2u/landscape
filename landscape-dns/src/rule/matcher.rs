@@ -79,9 +79,15 @@ impl DomainMatcher {
 
         // 子域名匹配
         let reversed_domain = domain.chars().rev().collect::<String>();
-        if self.subdomain_trie.common_prefix_search::<Vec<u8>, _>(reversed_domain).next().is_some()
+        let reversed_bytes = reversed_domain.as_bytes();
+
+        for result in
+            self.subdomain_trie.common_prefix_search::<Vec<u8>, _>(reversed_domain.clone())
         {
-            return true;
+            let prefix_len = result.len();
+            if reversed_bytes.len() == prefix_len || reversed_bytes.get(prefix_len) == Some(&b'.') {
+                return true;
+            }
         }
 
         // 关键字匹配
@@ -187,5 +193,87 @@ mod tests {
 
         println!("==== after first matcher.is_match ====");
         test_memory_usage();
+    }
+
+    #[test]
+    pub fn sub_domain_must_match_label_boundary() {
+        let configs = vec![DomainConfig {
+            match_type: DomainMatchType::Domain,
+            value: "ab.com".to_string(),
+        }];
+
+        let matcher = DomainMatcher::new(configs);
+
+        // ❌ 错误匹配：zab.com 不是 ab.com 的子域
+        assert!(!matcher.is_match("zab.com"), "Should not match zab.com as a subdomain of ab.com");
+
+        // ✅ 正确匹配：x.ab.com 是 ab.com 的子域
+        assert!(matcher.is_match("x.ab.com"), "Should match x.ab.com as subdomain of ab.com");
+    }
+
+    #[test]
+    fn sub_domain_match_exact_same_domain() {
+        let configs = vec![DomainConfig {
+            match_type: DomainMatchType::Domain,
+            value: "example.com".to_string(),
+        }];
+
+        let matcher = DomainMatcher::new(configs);
+
+        // ✅ 和规则完全一致的域名，也应匹配
+        assert!(matcher.is_match("example.com"), "Should match exact domain same as rule");
+
+        // ✅ 子域名应匹配
+        assert!(matcher.is_match("www.example.com"), "Should match subdomain of example.com");
+
+        // ❌ 错误匹配（子串但非子域）
+        assert!(
+            !matcher.is_match("badexample.com"),
+            "Should not match partial string like badexample.com"
+        );
+    }
+
+    #[test]
+    pub fn sub_domain_match_strict_boundary_test() {
+        let configs = vec![
+            DomainConfig {
+                match_type: DomainMatchType::Domain,
+                value: "bbb.com".to_string(), // 更短的匹配
+            },
+            DomainConfig {
+                match_type: DomainMatchType::Domain,
+                value: "aaa.bbb.com".to_string(), // 更精确的匹配
+            },
+        ];
+
+        let matcher = DomainMatcher::new(configs);
+
+        // 正例：应匹配 aaa.bbb.com，因为 test.aaa.bbb.com 是其子域
+        assert!(matcher.is_match("test.aaa.bbb.com"), "Should match subdomain of aaa.bbb.com");
+
+        // 反例：确保 example.bbb.com 只匹配 bbb.com，不误匹配 aaa.bbb.com
+        assert!(matcher.is_match("example.bbb.com"), "Should match bbb.com");
+
+        // 反例：example.ccc.com 不应匹配任何
+        assert!(!matcher.is_match("example.ccc.com"), "Should not match ccc.com");
+    }
+
+    #[test]
+    pub fn sub_domain_match_test() {
+        // 测试域名："news.google.com"
+        // 我们提供的匹配规则是 "google.com"，类型为 DomainMatchType::Domain
+
+        let configs = vec![DomainConfig {
+            match_type: DomainMatchType::Domain,
+            value: "google.com".to_string(),
+        }];
+
+        let matcher = DomainMatcher::new(configs);
+
+        // ✅ 正向用例：应该匹配成功
+        assert!(matcher.is_match("news.google.com"), "Should match subdomain of google.com");
+
+        // ❌ 反向用例：不应该匹配
+        assert!(!matcher.is_match("example.com"), "Should not match unrelated domain");
     }
 }
