@@ -171,12 +171,22 @@ impl LandscapeDnsRequestHandle {
         for (_index, resolver) in self.resolves.iter() {
             if resolver.is_match(&domain) {
                 result.config = Some(resolver.config.clone());
-                match resolver.lookup(&domain, query_type).await {
-                    Ok(rdata_vec) => {
+                match tokio::time::timeout(
+                    tokio::time::Duration::from_secs(5),
+                    resolver.lookup(&domain, query_type),
+                )
+                .await
+                {
+                    Ok(Ok(rdata_vec)) => {
                         result.records = Some(rdata_vec);
                     }
-                    Err(_) => {}
-                };
+                    Ok(Err(_)) => {
+                        // lookup 返回了错误
+                    }
+                    Err(_) => {
+                        tracing::error!("check domain timeout")
+                    }
+                }
                 break;
             }
         }
