@@ -82,6 +82,7 @@ pub async fn icmp_ra_server(
 
     let Some(ipaddr) = link_ipv6_addr else {
         tracing::error!("can not find unicast_link_local");
+        service_status.just_change_status(ServiceStatus::Stop);
         return Ok(());
     };
     tracing::info!("address {:?}", ipaddr);
