@@ -48,38 +48,35 @@ impl LandscapeDnsService {
                         tracing::info!("refresh dns rule");
                         let time = Instant::now();
                         let dns_rules = dns_rule_service_clone.list().await;
-                        let flow_rules = flow_rule_service_clone.list().await;
-
                         tracing::info!("load rule: {:?}", time.elapsed().as_secs());
+
                         let dns_rules =
                             geo_site_service_clone.convert_config_to_runtime_rule(dns_rules).await;
-
                         tracing::info!("convert rule: {:?}", time.elapsed().as_secs());
+
                         dns_service_clone.init_handle(dns_rules).await;
                         tracing::info!("init rule: {:?}", time.elapsed().as_secs());
-
-                        dns_service_clone.update_flow_map(&flow_rules).await;
-                        tracing::info!("update flow: {:?}", time.elapsed().as_secs());
-                        // dns_service_clone.restart(53).await;
                     }
                     DnsEvent::RuleUpdated { flow_id: Some(flow_id) } => {
-                        tracing::info!("refresh dns rule");
+                        tracing::info!("refresh dns rule: flow_id: {flow_id}");
                         let time = Instant::now();
                         let flow_dns_rules =
                             dns_rule_service_clone.list_flow_configs(flow_id).await;
-                        let flow_rules = flow_rule_service_clone.list_flow_configs(flow_id).await;
-
                         tracing::info!("load rule: {:?}", time.elapsed().as_secs());
+
                         let dns_rules = geo_site_service_clone
                             .convert_config_to_runtime_rule(flow_dns_rules)
                             .await;
-
                         tracing::info!("convert rule: {:?}", time.elapsed().as_secs());
+
                         dns_service_clone.init_handle(dns_rules).await;
                         tracing::info!("init rule: {:?}", time.elapsed().as_secs());
+                    }
+                    DnsEvent::FlowUpdated => {
+                        let flow_rules = flow_rule_service_clone.list().await;
 
                         dns_service_clone.update_flow_map(&flow_rules).await;
-                        tracing::info!("update flow: {:?}", time.elapsed().as_secs());
+                        tracing::info!("update flow dispatch rule in DNS server");
                     }
                 }
             }

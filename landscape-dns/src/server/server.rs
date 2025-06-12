@@ -128,7 +128,7 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                         },
                     };
 
-                    // tracing::info!("tos: {tos:?}, addr: {addr:?}, is_ipv4: {}", addr.is_ipv4());
+                    tracing::info!("tos: {tos:?}, addr: {addr:?}, is_ipv4: {}", addr.is_ipv4());
                     let qos = if tos == 0 { None } else { Some(tos) };
 
                     let ip = match landscape_common::utils::ip::extract_real_ip(addr) {
@@ -138,10 +138,10 @@ impl<T: RequestHandler + Clone> DiffFlowServer<T> {
                     let find_key = PacketMatchMark { ip, vlan_id: None, qos };
                     let mark = if let Some(mark) = dispatch_rules.read().await.get(&find_key) {
                         let mark = mark.clone();
-                        tracing::debug!("get mark: {mark:?}, using: {find_key:?}");
+                        tracing::info!("get mark: {mark:?}, using: {find_key:?}");
                         mark
                     } else {
-                        tracing::debug!("can not get mark, using: {find_key:?}");
+                        tracing::info!("can not get mark, using: {find_key:?}");
                         0
                     };
 

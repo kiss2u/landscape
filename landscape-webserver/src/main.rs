@@ -100,7 +100,8 @@ async fn main() -> LdResult<()> {
         GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_rule_service =
         DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
-    let flow_rule_service = FlowRuleService::new(db_store_provider.clone()).await;
+    let flow_rule_service =
+        FlowRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_service = LandscapeDnsService::new(
         dns_service_rx,
         dns_rule_service.clone(),

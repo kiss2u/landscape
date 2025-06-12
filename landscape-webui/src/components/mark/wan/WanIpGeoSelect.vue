@@ -53,7 +53,6 @@ const keys = ref<GeoConfigKey[]>();
 const geo_key_options = computed(() => {
   let result = [];
   let show_name = name.value == "" || name.value == null;
-  console.log(name.value);
   if (keys.value) {
     for (const each_key of keys.value) {
       result.push({
