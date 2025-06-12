@@ -148,7 +148,7 @@ async function saveRule() {
               <WanIpGeoSelect
                 v-model:geo_key="value.key"
                 v-model:geo_name="value.name"
-                v-if="value.t === 'geokey'"
+                v-if="value.t === 'geo_key'"
               >
               </WanIpGeoSelect>
               <!-- <n-input
