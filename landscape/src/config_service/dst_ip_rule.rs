@@ -27,7 +27,7 @@ impl DstIpRuleService {
     ) -> Self {
         let store = store.dst_ip_rule_store();
         let dst_ip_rule_service = Self { store, geo_ip_service };
-        dst_ip_rule_service.after_update_config(dst_ip_rule_service.list().await, vec![]).await;
+        dst_ip_rule_service.update_many_config(dst_ip_rule_service.list().await).await;
         let dst_ip_rule_service_clone = dst_ip_rule_service.clone();
         tokio::spawn(async move {
             while let Some(event) = receiver.recv().await {
@@ -35,7 +35,7 @@ impl DstIpRuleService {
                     DstIpEvent::GeoIpUpdated => {
                         tracing::info!("refresh dst ip rule");
                         dst_ip_rule_service_clone
-                            .after_update_config(dst_ip_rule_service_clone.list().await, vec![])
+                            .update_many_config(dst_ip_rule_service_clone.list().await)
                             .await;
                     }
                 }
@@ -60,12 +60,18 @@ impl ConfigController for DstIpRuleService {
         &self.store
     }
 
-    async fn after_update_config(
-        &self,
-        mut new_configs: Vec<Self::Config>,
-        _old_configs: Vec<Self::Config>,
-    ) {
-        new_configs.sort_by(|a, b| a.index.cmp(&b.index));
+    async fn update_one_config(&self, config: Self::Config) {
+        let flow_id = config.flow_id;
+        let rules = self.list_flow_configs(flow_id).await;
+        update_flow_dst_ip_map(self.geo_ip_service.clone(), flow_id, rules).await;
+    }
+    async fn delete_one_config(&self, config: Self::Config) {
+        let flow_id = config.flow_id;
+        let rules = self.list_flow_configs(flow_id).await;
+        update_flow_dst_ip_map(self.geo_ip_service.clone(), flow_id, rules).await;
+    }
+
+    async fn update_many_config(&self, new_configs: Vec<Self::Config>) {
         let mut flow_ids = HashSet::new();
         let mut rule_map: HashMap<u32, Vec<WanIpRuleConfig>> = HashMap::new();
 
@@ -83,8 +89,19 @@ impl ConfigController for DstIpRuleService {
 
         for flow_id in flow_ids {
             let rules = rule_map.remove(&flow_id).unwrap_or_default();
-            let result = self.geo_ip_service.convert_config_to_runtime_rule(rules).await;
-            landscape_ebpf::map_setting::flow_wanip::add_wan_ip_mark(flow_id, result);
+            let geo_ip_service = self.geo_ip_service.clone();
+            update_flow_dst_ip_map(geo_ip_service, flow_id, rules).await;
         }
     }
+}
+
+async fn update_flow_dst_ip_map(
+    geo_ip_service: GeoIpService,
+    flow_id: u32,
+    mut rules: Vec<WanIpRuleConfig>,
+) {
+    rules.sort_by(|a, b| a.index.cmp(&b.index));
+    tracing::info!("[flow_id: {flow_id}] update dst ip rules: {rules:?}");
+    let result = geo_ip_service.convert_config_to_runtime_rule(rules).await;
+    landscape_ebpf::map_setting::flow_wanip::add_wan_ip_mark(flow_id, result);
 }

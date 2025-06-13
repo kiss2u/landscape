@@ -138,7 +138,7 @@ int flow_verdict_egress(struct __sk_buff *skb) {
     struct flow_ip_trie_key ip_trie_key = {0};
     ip_trie_key.prefixlen = is_ipv4 ? 64 : 160;
     ip_trie_key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
-    COPY_ADDR_FROM(ip_trie_key.addr.all, cache_key.dst_addr.all);
+    COPY_ADDR_FROM(ip_trie_key.addr, cache_key.dst_addr.all);
     struct flow_ip_trie_value *ip_flow_mark;
     void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
     if (ip_rules_map != NULL) {

@@ -139,7 +139,7 @@ struct flow_ip_trie_key {
     __u32 prefixlen;
     u8 l3_protocol;
     u8 _pad[3];
-    union u_inet_addr addr;
+    u8 addr[16];
 } __flow_ip_trie_key;
 
 struct flow_ip_trie_value {

@@ -108,7 +108,16 @@ pub fn init_ebpf() {
     });
 }
 
+fn bump_memlock_rlimit() {
+    let rlimit = libc::rlimit { rlim_cur: 1024 << 20, rlim_max: 1024 << 20 };
+
+    if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
+        tracing::error!("Failed to increase rlimit");
+    }
+}
+
 pub fn setting_libbpf_log() {
+    bump_memlock_rlimit();
     use libbpf_rs::PrintLevel;
     use tracing::{debug, info, span, warn};
     libbpf_rs::set_print(Some((PrintLevel::Debug, |level, msg| {

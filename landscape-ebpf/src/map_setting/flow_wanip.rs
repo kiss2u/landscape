@@ -8,14 +8,15 @@ use crate::{
     LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
 };
 
-use super::share_map::types::{flow_ip_trie_key, flow_ip_trie_value, u_inet_addr};
+use super::share_map::types::{flow_ip_trie_key, flow_ip_trie_value};
 
-const DNS_MATCH_MAX_ENTRIES: u32 = 2048;
+const IP_MATCH_MAX_ENTRIES: u32 = 65536;
 
 fn create_inner_flow_match_map(flow_id: u32, ips: Vec<IpMarkInfo>) -> LdEbpfResult<()> {
+    let sz = size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t;
     #[allow(clippy::needless_update)]
     let opts = libbpf_sys::bpf_map_create_opts {
-        sz: size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
+        sz,
         map_flags: libbpf_sys::BPF_F_NO_PREALLOC,
         ..Default::default()
     };
@@ -28,7 +29,7 @@ fn create_inner_flow_match_map(flow_id: u32, ips: Vec<IpMarkInfo>) -> LdEbpfResu
         Some(format!("flow_ip_{}", flow_id)),
         key_size,
         value_size,
-        DNS_MATCH_MAX_ENTRIES,
+        IP_MATCH_MAX_ENTRIES,
         &opts,
     )?;
 
@@ -48,7 +49,7 @@ fn create_inner_flow_match_map(flow_id: u32, ips: Vec<IpMarkInfo>) -> LdEbpfResu
 
 pub fn add_wan_ip_mark(flow_id: u32, ips: Vec<IpMarkInfo>) {
     if let Err(e) = add_wan_ip_mark_inner(flow_id, ips) {
-        tracing::debug!("{e:?}");
+        tracing::error!("{e:?}");
     }
 }
 
@@ -103,11 +104,11 @@ where
         let mut key = flow_ip_trie_key::default();
         match cidr.ip {
             std::net::IpAddr::V4(ipv4_addr) => {
-                key.addr.ip = ipv4_addr.to_bits().to_be();
+                key.addr[..4].copy_from_slice(&ipv4_addr.to_bits().to_be_bytes());
                 key.l3_protocol = LANDSCAPE_IPV4_TYPE;
             }
             std::net::IpAddr::V6(ipv6_addr) => {
-                key.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
+                key.addr = ipv6_addr.to_bits().to_be_bytes();
                 key.l3_protocol = LANDSCAPE_IPV6_TYPE;
             }
         };
@@ -156,11 +157,11 @@ where
         let mut key = flow_ip_trie_key::default();
         match cidr.ip {
             std::net::IpAddr::V4(ipv4_addr) => {
-                key.addr.ip = ipv4_addr.to_bits().to_be();
+                key.addr[..4].copy_from_slice(&ipv4_addr.to_bits().to_be_bytes());
                 key.l3_protocol = LANDSCAPE_IPV4_TYPE;
             }
             std::net::IpAddr::V6(ipv6_addr) => {
-                key.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
+                key.addr = ipv6_addr.to_bits().to_be_bytes();
                 key.l3_protocol = LANDSCAPE_IPV6_TYPE;
             }
         };
