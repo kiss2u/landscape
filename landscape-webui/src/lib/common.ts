@@ -37,3 +37,21 @@ export async function copy_context_to_clipboard(
 export async function read_context_from_clipboard(): Promise<string> {
   return await navigator.clipboard.readText();
 }
+
+export function mask_string(value: string | undefined | null): string {
+  if (!value) return "***";
+
+  const length = value.length;
+
+  if (length <= 4) {
+    return value.substring(0, 1) + "*****";
+  } else if (length <= 10) {
+    return value.substring(0, 3) + "*****";
+  } else {
+    return value.substring(0, 5) + "*******";
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

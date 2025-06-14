@@ -3,19 +3,16 @@ import { computed, ref } from "vue";
 import CreatePPPDConfigModal from "@/components/pppd/CreatePPPDConfigModal.vue";
 import { PPPDServiceConfig } from "@/lib/pppd";
 import { stop_and_del_iface_pppd } from "@/api/service_pppd";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
+
+const frontEndStore = useFrontEndStore();
 
 const config = defineModel<PPPDServiceConfig>("config", { required: true });
 
 const show_create_pppd_modal = ref(false);
 const emit = defineEmits(["refresh"]);
 
-const maskedUser = computed(() => {
-  let username = config.value.pppd_config.peer_id;
-  if (username && username.length > 3) {
-    return "****" + username.slice(-3);
-  }
-  return username;
-});
 async function del() {
   await stop_and_del_iface_pppd(config.value.iface_name);
   emit("refresh");
@@ -36,7 +33,11 @@ async function del() {
           {{ config.pppd_config.default_route }}
         </n-descriptions-item>
         <n-descriptions-item label="用户名">
-          {{ maskedUser }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(config.pppd_config.peer_id)
+              : config.pppd_config.peer_id
+          }}
         </n-descriptions-item>
       </n-descriptions>
       <template #header-extra>

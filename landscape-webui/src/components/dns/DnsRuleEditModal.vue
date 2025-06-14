@@ -59,6 +59,7 @@ function onCreate(): RuleSource {
     t: RuleSourceEnum.GeoKey,
     key: "",
     name: "",
+    inverse: false,
   };
 }
 
@@ -305,6 +306,7 @@ async function import_rules() {
               <DnsGeoSelect
                 v-model:geo_key="value.key"
                 v-model:geo_name="value.name"
+                v-model:geo_inverse="value.inverse"
                 v-if="value.t === RuleSourceEnum.GeoKey"
               ></DnsGeoSelect>
               <n-flex v-else style="flex: 1">

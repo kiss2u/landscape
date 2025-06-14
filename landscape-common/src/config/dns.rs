@@ -102,14 +102,14 @@ pub enum RuleSource {
     Config(DomainConfig),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
 #[ts(export, export_to = "common/dns.d.ts")]
 pub struct DomainConfig {
     pub match_type: DomainMatchType,
     pub value: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
 #[ts(export, export_to = "common/dns.d.ts")]
 #[serde(rename_all = "snake_case")]
 pub enum DomainMatchType {

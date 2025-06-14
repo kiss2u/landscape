@@ -1,6 +1,7 @@
 use landscape_common::{
     config::dhcp_v6_client::{IPV6PDConfig, IPV6PDServiceConfig},
     database::repository::UpdateActiveModel,
+    net::MacAddr,
 };
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
@@ -31,7 +32,7 @@ impl ActiveModelBehavior for ActiveModel {}
 
 impl From<Model> for IPV6PDServiceConfig {
     fn from(entity: Model) -> Self {
-        let config = IPV6PDConfig { mac: serde_json::from_str(&entity.mac).unwrap() };
+        let config = IPV6PDConfig { mac: MacAddr::from_str(&entity.mac).unwrap() };
         IPV6PDServiceConfig {
             iface_name: entity.iface_name,
             enable: entity.enable,
@@ -59,9 +60,3 @@ impl UpdateActiveModel<ActiveModel> for IPV6PDServiceConfig {
         active.update_at = Set(self.update_at);
     }
 }
-
-// pub(crate) fn update(config: IPV6PDServiceConfig, active: &mut ActiveModel) {
-//     active.enable = Set(config.enable);
-//     active.mac = Set(config.config.mac.to_string());
-//     active.update_at = Set(config.update_at);
-// }

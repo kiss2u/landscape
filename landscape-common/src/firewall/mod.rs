@@ -4,8 +4,8 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
-    args::LAND_ARGS, mark::PacketMark, network::LandscapeIpProtocolCode,
-    store::storev2::LandscapeStore, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+    mark::PacketMark, network::LandscapeIpProtocolCode, store::storev2::LandscapeStore,
+    LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
 
 use crate::database::repository::LandscapeDBStore;
@@ -135,20 +135,21 @@ pub fn insert_default_firewall_rule() -> Option<FirewallRuleConfig> {
         ip_prefixlen: 0,
     });
 
-    if LAND_ARGS.export_manager {
-        items.push(FirewallRuleConfigItem {
-            ip_protocol: Some(LandscapeIpProtocolCode::TCP),
-            local_port: Some(format!("{}", LAND_ARGS.port)),
-            address: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-            ip_prefixlen: 0,
-        });
-        items.push(FirewallRuleConfigItem {
-            ip_protocol: Some(LandscapeIpProtocolCode::TCP),
-            local_port: Some(format!("{}", LAND_ARGS.port)),
-            address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            ip_prefixlen: 0,
-        });
-    }
+    // TODO:
+    // if LAND_ARGS.export_manager {
+    //     items.push(FirewallRuleConfigItem {
+    //         ip_protocol: Some(LandscapeIpProtocolCode::TCP),
+    //         local_port: Some(format!("{}", LAND_ARGS.port)),
+    //         address: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+    //         ip_prefixlen: 0,
+    //     });
+    //     items.push(FirewallRuleConfigItem {
+    //         ip_protocol: Some(LandscapeIpProtocolCode::TCP),
+    //         local_port: Some(format!("{}", LAND_ARGS.port)),
+    //         address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+    //         ip_prefixlen: 0,
+    //     });
+    // }
 
     if items.is_empty() {
         None

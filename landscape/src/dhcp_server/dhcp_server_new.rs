@@ -506,6 +506,7 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
         end: vec![255],
     };
 
+    options.update_or_create_option(DhcpOptions::AddressLeaseTime(server.address_lease_time));
     options.update_or_create_option(DhcpOptions::ServerIdentifier(server.server_ip));
 
     if let Some(client_addr) = server.offer_ip(&frame.chaddr) {

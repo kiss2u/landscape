@@ -76,7 +76,7 @@ pub async fn create_pppd_thread(
     });
 
     let Ok(_) = pppd_conf.write_config(&attach_iface_name, &ppp_iface_name) else {
-        tracing::error!("pppd 配置写入失败");
+        tracing::error!("pppd config write error");
         service_status.just_change_status(ServiceStatus::Stop);
         return;
     };

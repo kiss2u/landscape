@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { PacketMatchMark } from "@/rust_bindings/common/flow";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
+const frontEndStore = useFrontEndStore();
 const match_rules = defineModel<PacketMatchMark[]>("match_rules", {
   required: true,
 });
@@ -28,6 +30,7 @@ function onCreate(): PacketMatchMark {
           :show-button="false"
         />
         <n-input
+          :type="frontEndStore.presentation_mode ? 'password' : 'text'"
           v-model:value="value.ip"
           :style="{ width: '66%' }"
           placeholder="IP 地址"

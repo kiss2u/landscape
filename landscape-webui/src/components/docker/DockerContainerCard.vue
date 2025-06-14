@@ -12,7 +12,10 @@ import {
   LAND_REDIRECT_ID_KEY,
 } from "@/lib/docker";
 import { useDockerStore } from "@/stores/status_docker";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
 
+const frontEndStore = useFrontEndStore();
 const props = defineProps<{
   container: DockerContainerSummary;
 }>();
@@ -89,7 +92,7 @@ const tags = computed(() => {
         {{ title }}
       </n-marquee> -->
       <n-ellipsis>
-        {{ title }}
+        {{ frontEndStore.presentation_mode ? mask_string(title) : title }}
       </n-ellipsis>
     </template>
     <template #header-extra>
@@ -141,7 +144,11 @@ const tags = computed(() => {
     <n-descriptions :column="1" label-placement="left">
       <n-descriptions-item label="镜像">
         <n-ellipsis style="max-width: 220px">
-          {{ props.container.Image }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(props.container.Image)
+              : props.container.Image
+          }}
         </n-ellipsis>
       </n-descriptions-item>
       <n-descriptions-item label="状态">
@@ -161,7 +168,11 @@ const tags = computed(() => {
         <n-flex>
           <span v-if="tags[0].length == 0"> {{ "" }}</span>
           <n-tag v-else v-for="tag in tags[0]" :bordered="false">
-            {{ `${tag[0]}: ${tag[1]}` }}
+            {{
+              `${tag[0]}: ${
+                frontEndStore.presentation_mode ? mask_string(tag[1]) : tag[1]
+              }`
+            }}
           </n-tag>
         </n-flex>
 

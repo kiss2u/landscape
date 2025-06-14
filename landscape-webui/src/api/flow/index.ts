@@ -14,3 +14,7 @@ export async function get_flow_rule(id: string): Promise<FlowConfig> {
 export async function push_flow_rules(config: FlowConfig): Promise<void> {
   await api.api.post(`config/flow_rules`, config);
 }
+
+export async function del_flow_rules(id: string): Promise<void> {
+  await api.api.delete(`config/flow_rules/${id}`);
+}

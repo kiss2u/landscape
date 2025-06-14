@@ -7,7 +7,7 @@ export type GeoDomainConfig = {
   values: Array<DomainConfig>;
 };
 
-export type GeoSiteConfig = {
+export type GeoSiteSourceConfig = {
   /**
    * 用这个 ID 作为文件名称
    */

@@ -22,8 +22,7 @@ pub mod dev_wifi;
 pub mod ip;
 
 // 前端渲染拓扑节点
-#[derive(Serialize, Debug, Clone, TS)]
-#[ts(export, export_to = "iface.ts")]
+#[derive(Serialize, Debug, Clone)]
 pub struct IfaceTopology {
     // 配置
     #[serde(flatten)]

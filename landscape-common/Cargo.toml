@@ -12,10 +12,9 @@ sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 homedir = { workspace = true }
-hostname = "0.3"
+hostname = "0.4.1"
 dotenvy = { workspace = true }
 
-toml_edit = { workspace = true }
 tracing = { workspace = true }
 
 ts-rs = { workspace = true }
@@ -31,6 +30,9 @@ hickory-proto = { version = "*", features = ["serde-config"] }
 dhcproto = { workspace = true, features = ["serde"] }
 sea-orm = { workspace = true, features = ["with-uuid", "with-json"] }
 async-trait = { workspace = true }
+
+
+toml = { workspace = true }
 
 [dev-dependencies]
 tempfile = "*"

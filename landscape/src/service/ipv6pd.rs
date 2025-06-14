@@ -27,7 +27,6 @@ impl ServiceHandler for IPV6PDService {
 
     async fn initialize(config: IPV6PDServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
-        // service_status.just_change_status(ServiceStatus::Staring);
         if config.enable {
             if let Some(_) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();

@@ -2,7 +2,9 @@
 import { update_iface_pppd_config } from "@/api/service_pppd";
 import { PPPDConfig, PPPDServiceConfig } from "@/lib/pppd";
 import { computed, ref } from "vue";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
+const frontEndStore = useFrontEndStore();
 const show = defineModel<boolean>("show", { required: true });
 const props = defineProps<{
   attach_iface_name: string;
@@ -76,7 +78,7 @@ async function confirm_config() {
 
       <n-form-item label="用户名">
         <n-input
-          type="password"
+          :type="frontEndStore.presentation_mode ? 'password' : 'text'"
           show-password-on="click"
           v-model:value="value.pppd_config.peer_id"
         />
@@ -84,7 +86,7 @@ async function confirm_config() {
 
       <n-form-item label="密码">
         <n-input
-          type="password"
+          :type="frontEndStore.presentation_mode ? 'password' : 'text'"
           show-password-on="click"
           v-model:value="value.pppd_config.password"
         />

@@ -1,11 +1,6 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
-use axum::{
-    handler::HandlerWithoutStateExt,
-    http::StatusCode,
-    routing::{get, post},
-    Router,
-};
+use axum::{handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router};
 
 use axum_server::tls_rustls::RustlsConfig;
 use colored::Colorize;
@@ -22,10 +17,11 @@ use landscape::{
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
-    sys_service::dns_service::LandscapeDnsService,
+    sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
-    args::{DATABASE_ARGS, LAND_ARGS, LAND_HOME_PATH, LAND_LOG_ARGS, LAND_WEB_ARGS},
+    args::{LAND_ARGS, LAND_HOME_PATH},
+    config::RuntimeConfig,
     error::LdResult,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -41,6 +37,7 @@ mod dump;
 mod error;
 mod iface;
 mod metric;
+mod redirect_https;
 mod service;
 mod sys_service;
 mod sysinfo;
@@ -54,6 +51,8 @@ use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_path
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::{error, info};
 
+use crate::sys_service::config_service::get_config_paths;
+
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;
 const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
 
@@ -66,6 +65,7 @@ pub struct LandscapeApp {
     pub fire_wall_rule_service: FirewallRuleService,
     pub dst_ip_rule_service: DstIpRuleService,
     pub geo_ip_service: GeoIpService,
+    pub config_service: LandscapeConfigService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -75,20 +75,23 @@ struct SimpleResult {
 
 #[tokio::main]
 async fn main() -> LdResult<()> {
-    if let Err(e) = init_logger() {
+    let home_path = LAND_HOME_PATH.clone();
+    let need_init_config = boot_check(&home_path)?;
+
+    let config = RuntimeConfig::new((*LAND_ARGS).clone());
+
+    if let Err(e) = init_logger(config.log.clone()) {
         panic!("init log error: {e:?}");
     }
-    banner();
+
+    banner(&config);
 
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
 
-    let home_path = LAND_HOME_PATH.clone();
+    let db_store_provider = LandscapeDBServiceProvider::new(&config.store).await;
 
-    let db_store_provider = LandscapeDBServiceProvider::new(DATABASE_ARGS.clone()).await;
-
-    let need_init_config = boot_check(&home_path)?;
-    db_store_provider.truncate_and_fit_from(need_init_config.clone()).await;
+    db_store_provider.truncate_and_fit_from(need_init_config).await;
 
     // 初始化 App
 
@@ -97,7 +100,8 @@ async fn main() -> LdResult<()> {
         GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_rule_service =
         DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
-    let flow_rule_service = FlowRuleService::new(db_store_provider.clone()).await;
+    let flow_rule_service =
+        FlowRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_service = LandscapeDnsService::new(
         dns_service_rx,
         dns_rule_service.clone(),
@@ -115,6 +119,8 @@ async fn main() -> LdResult<()> {
         DstIpRuleService::new(db_store_provider.clone(), geo_ip_service.clone(), dst_ip_service_rx)
             .await;
 
+    let config_service =
+        LandscapeConfigService::new(config.clone(), db_store_provider.clone()).await;
     let landscape_app_status = LandscapeApp {
         dns_service,
         dns_rule_service,
@@ -123,19 +129,11 @@ async fn main() -> LdResult<()> {
         fire_wall_rule_service,
         dst_ip_rule_service,
         geo_ip_service,
+        config_service,
     };
     // 初始化结束
 
     let dev_obs = landscape::observer::dev_observer().await;
-
-    let home_log_str = format!("{}", home_path.display()).bright_green();
-    if !LAND_ARGS.log_output_in_terminal {
-        let log_path = format!("{}", LAND_LOG_ARGS.log_path.display()).green();
-        println!("Log Folder path: {}", log_path);
-        println!("All Config Home path: {home_log_str}");
-    }
-    info!("config path: {home_log_str}");
-    info!("init config: {need_init_config:#?}");
 
     let tls_config = load_or_generate_cert(home_path.clone()).await;
     // let tls_config = Arc::new(tls_config);
@@ -168,34 +166,26 @@ async fn main() -> LdResult<()> {
         error!("sysctl cmd exec err: {e:#?}");
     }
 
-    let addr = SocketAddr::from((LAND_WEB_ARGS.address, LAND_WEB_ARGS.port));
-    // let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-
-    // let _ = landscape_dns::connection::set_socket_mark(
-    //     std::os::fd::AsFd::as_fd(&listener).as_raw_fd(),
-    //     landscape_common::mark::PacketMark::LandscapeSys.into(),
-    // )
-    // .unwrap();
-
+    let addr = SocketAddr::from((config.web.address, config.web.https_port));
+    // spawn a second server to redirect http requests to this server
+    tokio::spawn(redirect_https::redirect_http_to_https(config.web.clone()));
     let service = handle_404.into_service();
 
-    let web_root_str = format!("{}", LAND_WEB_ARGS.web_root.display()).green();
-    let listen_at_str = format!("{:?}:{:?}", LAND_ARGS.address, LAND_ARGS.port).green();
-    if !LAND_ARGS.log_output_in_terminal {
-        println!("Web Root path: {}", web_root_str);
-        println!("Listen   on: {}", listen_at_str);
-    }
+    let serve_dir = ServeDir::new(&config.web.web_root).not_found_service(service);
 
-    info!("Web Root path: {}", web_root_str);
-    info!("Listen   on: {}", listen_at_str);
-    let serve_dir = ServeDir::new(&LAND_WEB_ARGS.web_root).not_found_service(service);
-
-    auth::output_sys_token().await;
+    let auth_share = Arc::new(config.auth.clone());
+    auth::output_sys_token(&config.auth).await;
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest("/metric", metric::get_metric_service_paths().await)
-        .nest("/sys_service", get_dns_paths().await.with_state(landscape_app_status.clone()))
+        .nest(
+            "/sys_service",
+            Router::new()
+                .merge(get_dns_paths().await)
+                .merge(get_config_paths().await)
+                .with_state(landscape_app_status.clone()),
+        )
         .nest(
             "/config",
             Router::new()
@@ -240,14 +230,13 @@ async fn main() -> LdResult<()> {
                 .merge(get_iface_flow_wan_paths(db_store_provider.clone(), dev_obs).await),
         )
         .nest("/sysinfo", sysinfo::get_sys_info_route())
-        .route_layer(axum::middleware::from_fn(auth::auth_middleware));
+        .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler));
 
-    let auth_route = Router::new().route("/login", post(auth::login_handler));
     let api_route = Router::new()
         // 资源路由
         .nest("/src", source_route)
         // 认证路由
-        .nest("/auth", auth_route);
+        .nest("/auth", auth::get_auth_route(auth_share));
     let app = Router::new()
         .nest("/api", api_route)
         .nest("/sock", dump::get_tump_router())
@@ -269,7 +258,7 @@ async fn handle_404() -> (StatusCode, &'static str) {
     (StatusCode::NOT_FOUND, "Not found")
 }
 
-fn banner() {
+fn banner(config: &RuntimeConfig) {
     let banner = r#"
 ██╗      █████╗ ███╗   ██╗██████╗ ███████╗ ██████╗ █████╗ ██████╗ ███████╗
 ██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝
@@ -285,14 +274,13 @@ fn banner() {
 ██║  ██║╚██████╔╝╚██████╔╝   ██║   ███████╗██║  ██║                       
 ╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝                       
     "#;
-    let args = LAND_ARGS.clone();
     let banner = banner.bright_blue().bold();
-    let args_str = format!("{args:#?}").green();
+    let config_str = config.to_string_summary().green();
     info!("{}", banner);
-    info!("Using Args: {}", args_str);
-    if !args.log_output_in_terminal {
+    info!("{}", config_str);
+    if !config.log.log_output_in_terminal {
         // 当日志不在 terminal 直接展示时, 仅输出一些信息
         println!("{}", banner);
-        println!("Using Args: {}", args_str);
+        println!("{}", config_str);
     }
 }

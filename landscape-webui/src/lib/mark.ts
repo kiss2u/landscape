@@ -2,11 +2,11 @@ import { PacketMark } from "@/rust_bindings/mark";
 import { MarkType } from "./dns";
 
 export enum FlowMarkType {
-  KEEP_GOING = "keepgoing",
+  KEEP_GOING = "keep_going",
   DIRECT = "direct",
   DROP = "drop",
   REDIRECT = "redirect",
-  ALLOW_REUSE_PORT = "allowreuseport",
+  ALLOW_REUSE_PORT = "allow_reuse_port",
 }
 
 export class MarkServiceConfig {
@@ -86,7 +86,7 @@ export function new_wan_rules(e: any): WanIPRuleSource {
   if (e.t == "config") {
     return { t: "config", ip: e.ip, prefix: e.prefix };
   } else {
-    return { t: "geokey", key: e.key, name: e.name };
+    return { t: "geo_key", key: e.key, name: e.name, inverse: false };
   }
 }
 

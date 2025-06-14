@@ -48,7 +48,7 @@ impl LandscapeDBStore<Uuid> for WanIpRuleConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "flow.ts")]
 #[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum WanIPRuleSource {
     GeoKey(GeoConfigKey),
     Config(IpConfig),

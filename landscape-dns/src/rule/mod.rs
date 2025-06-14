@@ -23,6 +23,7 @@ mod matcher;
 
 #[derive(Debug)]
 pub struct CacheResolver {
+    pub flow_id: u32,
     pub resolver: Resolver<MarkConnectionProvider>,
 }
 
@@ -42,7 +43,7 @@ impl CacheResolver {
             MarkConnectionProvider::new(MarkRuntimeProvider::new(mark_value)),
         )
         .build();
-        CacheResolver { resolver }
+        CacheResolver { resolver, flow_id: mark_value }
     }
 }
 
@@ -129,7 +130,12 @@ impl ResolverType {
                         let result = if e.is_no_records_found() {
                             ResponseCode::NoError
                         } else {
-                            tracing::error!("DNS resolution failed for {}: {}", domain, e);
+                            tracing::error!(
+                                "[flow_id: {:?}] DNS resolution failed for {}: {}",
+                                resolver.flow_id,
+                                domain,
+                                e
+                            );
                             ResponseCode::ServFail
                         };
                         Err(result)

@@ -1,9 +1,9 @@
 use std::{fs::OpenOptions, io::Write, path::Path};
 
 use landscape_common::{
-    config::InitConfig,
+    config::{InitConfig, LandscapeConfig},
     error::{LdError, LdResult},
-    INIT_FILE_NAME, INIT_LOCK_FILE_NAME,
+    INIT_FILE_NAME, INIT_LOCK_FILE_NAME, LAND_CONFIG,
 };
 
 pub mod log;
@@ -38,7 +38,9 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
         let config_path = home_path.as_ref().join(INIT_FILE_NAME);
         let config = if config_path.exists() && config_path.is_file() {
             let config_raw = std::fs::read_to_string(config_path).unwrap();
-            toml::from_str(&config_raw).unwrap()
+            let init_config: InitConfig = toml::from_str(&config_raw).unwrap();
+            write_config_toml(home_path, init_config.config.clone())?;
+            init_config
         } else {
             InitConfig::default()
         };
@@ -51,4 +53,11 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     }
 
     Err(LdError::Boot("check boot lock file faile: is not a file".to_string()))
+}
+
+fn write_config_toml<P: AsRef<Path>>(home_path: P, config: LandscapeConfig) -> LdResult<()> {
+    let config_path = home_path.as_ref().join(LAND_CONFIG);
+    let mut file = OpenOptions::new().write(true).truncate(true).create(true).open(&config_path)?;
+    file.write_all(toml::to_string_pretty(&config).unwrap().as_bytes())?;
+    Ok(())
 }

@@ -1,5 +1,5 @@
 use landscape_common::{
-    config::geo::GeoSiteConfig,
+    config::geo::GeoSiteSourceConfig,
     database::{repository::Repository, LandscapeDBTrait},
     error::LdError,
 };
@@ -19,7 +19,10 @@ impl GeoSiteConfigRepository {
         Self { db }
     }
 
-    pub async fn query_by_name(&self, name: Option<String>) -> Result<Vec<GeoSiteConfig>, LdError> {
+    pub async fn query_by_name(
+        &self,
+        name: Option<String>,
+    ) -> Result<Vec<GeoSiteSourceConfig>, LdError> {
         let result = GeoSiteConfigEntity::find()
             .filter(Column::Name.contains(name.unwrap_or("".to_string())))
             .order_by_desc(Column::UpdateAt)
@@ -37,7 +40,7 @@ impl Repository for GeoSiteConfigRepository {
     type Model = GeoSiteConfigModel;
     type Entity = GeoSiteConfigEntity;
     type ActiveModel = GeoSiteConfigActiveModel;
-    type Data = GeoSiteConfig;
+    type Data = GeoSiteSourceConfig;
     type Id = DBId;
 
     fn db(&self) -> &DatabaseConnection {

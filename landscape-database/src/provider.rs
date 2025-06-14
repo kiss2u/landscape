@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use landscape_common::{config::InitConfig, database::repository::Repository};
+use landscape_common::{
+    config::{InitConfig, StoreRuntimeConfig},
+    database::repository::Repository,
+};
 use sea_orm::{Database, DatabaseConnection};
 
 use migration::{Migrator, MigratorTrait};
@@ -26,8 +29,8 @@ pub struct LandscapeDBServiceProvider {
 }
 
 impl LandscapeDBServiceProvider {
-    pub async fn new(db_url: String) -> Self {
-        let mut opt: migration::sea_orm::ConnectOptions = db_url.into();
+    pub async fn new(config: &StoreRuntimeConfig) -> Self {
+        let mut opt: migration::sea_orm::ConnectOptions = config.database_path.clone().into();
         let (lever, _) = opt.get_sqlx_slow_statements_logging_settings();
         opt.sqlx_slow_statements_logging_settings(lever, Duration::from_secs(10));
 
@@ -38,7 +41,9 @@ impl LandscapeDBServiceProvider {
 
     /// 清空数据并且从配置从初始化
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
+        tracing::info!("init config: {config:?}");
         if let Some(InitConfig {
+            ifaces,
             ipconfigs,
             nats,
             marks,
@@ -51,9 +56,11 @@ impl LandscapeDBServiceProvider {
             firewall_rules,
             wifi_configs,
             mss_clamps,
-            ifaces,
             dst_ip_mark,
             dhcpv4_services,
+            geo_ips,
+            geo_sites,
+            ..
         }) = config
         {
             let iface_store = self.iface_store();
@@ -69,16 +76,19 @@ impl LandscapeDBServiceProvider {
             }
 
             let wifi_config_store = self.wifi_service_store();
+            wifi_config_store.truncate_table().await.unwrap();
             for each_config in wifi_configs {
                 wifi_config_store.set_model(each_config).await.unwrap();
             }
 
             let firewall_service_store = self.firewall_service_store();
+            firewall_service_store.truncate_table().await.unwrap();
             for each_config in firewalls {
                 firewall_service_store.set_model(each_config).await.unwrap();
             }
 
             let firewall_rules_store = self.firewall_rule_store();
+            firewall_rules_store.truncate_table().await.unwrap();
             for each_config in firewall_rules {
                 firewall_rules_store.set_model(each_config).await.unwrap();
             }
@@ -108,7 +118,7 @@ impl LandscapeDBServiceProvider {
             }
 
             let dst_ip_rule_store = self.dst_ip_rule_store();
-            iface_mark_store.truncate_table().await.unwrap();
+            dst_ip_rule_store.truncate_table().await.unwrap();
             for each_config in dst_ip_mark {
                 dst_ip_rule_store.set_model(each_config).await.unwrap();
             }
@@ -141,6 +151,18 @@ impl LandscapeDBServiceProvider {
             mss_clamp_store.truncate_table().await.unwrap();
             for each_config in mss_clamps {
                 mss_clamp_store.set_model(each_config).await.unwrap();
+            }
+
+            let geo_ip_store = self.geo_ip_rule_store();
+            geo_ip_store.truncate_table().await.unwrap();
+            for each_config in geo_ips {
+                geo_ip_store.set_model(each_config).await.unwrap();
+            }
+
+            let geo_site_store = self.geo_site_rule_store();
+            geo_site_store.truncate_table().await.unwrap();
+            for each_config in geo_sites {
+                geo_site_store.set_model(each_config).await.unwrap();
             }
         }
     }
@@ -220,13 +242,17 @@ impl LandscapeDBServiceProvider {
 
 #[cfg(test)]
 mod tests {
+    use landscape_common::config::StoreRuntimeConfig;
+
     use crate::provider::LandscapeDBServiceProvider;
 
     #[tokio::test]
     pub async fn test_run_database() {
         landscape_common::init_tracing!();
 
-        let _provider =
-            LandscapeDBServiceProvider::new("sqlite://../db.sqlite?mode=rwc".to_string()).await;
+        let config = StoreRuntimeConfig {
+            database_path: "sqlite://../db.sqlite?mode=rwc".to_string(),
+        };
+        let _provider = LandscapeDBServiceProvider::new(&config).await;
     }
 }

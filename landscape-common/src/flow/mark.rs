@@ -4,7 +4,7 @@ use ts_rs::TS;
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Eq, Hash, TS)]
 #[ts(export, export_to = "flow.ts")]
 #[serde(tag = "t")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum FlowDnsMark {
     /// 按照当前 Flow 的配置继续
     #[default]

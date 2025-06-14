@@ -10,6 +10,7 @@ import Firewall from "@/views/Firewall.vue";
 import Metric from "@/views/Metric.vue";
 import GeoDomain from "@/views/GeoDomain.vue";
 import GeoIp from "@/views/GeoIp.vue";
+import Config from "@/views/Config.vue";
 
 import Login from "@/views/Login.vue";
 
@@ -53,6 +54,11 @@ const inner_zone: Array<RouteRecordRaw> = [
     path: "/geo-ip",
     name: "geo-ip",
     component: GeoIp,
+  },
+  {
+    path: "/config",
+    name: "config",
+    component: Config,
   },
 ];
 

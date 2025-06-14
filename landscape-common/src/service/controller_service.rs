@@ -58,25 +58,32 @@ pub trait ConfigController {
 
     async fn after_update_config(
         &self,
-        new_configs: Vec<Self::Config>,
-        old_configs: Vec<Self::Config>,
-    );
+        _new_configs: Vec<Self::Config>,
+        _old_configs: Vec<Self::Config>,
+    ) {
+    }
+
+    async fn update_one_config(&self, _config: Self::Config) {}
+    async fn delete_one_config(&self, _config: Self::Config) {}
+    async fn update_many_config(&self, _configs: Vec<Self::Config>) {}
 
     async fn set(&self, config: Self::Config) -> Self::Config {
         let old_configs = self.list().await;
         let add_result = self.get_repository().set(config).await.unwrap();
         let new_configs = self.list().await;
-        self.after_update_config(old_configs, new_configs).await;
+        self.after_update_config(new_configs, old_configs).await;
+        self.update_one_config(add_result.clone()).await;
         add_result
     }
 
     async fn set_list(&self, configs: Vec<Self::Config>) {
         let old_configs = self.list().await;
-        for config in configs {
+        for config in configs.clone() {
             let _ = self.get_repository().set(config).await.unwrap();
         }
         let new_configs = self.list().await;
-        self.after_update_config(old_configs, new_configs).await;
+        self.after_update_config(new_configs, old_configs).await;
+        self.update_many_config(configs).await;
     }
 
     async fn list(&self) -> Vec<Self::Config> {
@@ -88,10 +95,13 @@ pub trait ConfigController {
     }
 
     async fn delete(&self, id: Self::Id) {
-        let old_configs = self.list().await;
-        self.get_repository().delete(id).await.unwrap();
-        let new_configs = self.list().await;
-        self.after_update_config(old_configs, new_configs).await;
+        if let Some(config) = self.find_by_id(id.clone()).await {
+            let old_configs = self.list().await;
+            self.get_repository().delete(id).await.unwrap();
+            let new_configs = self.list().await;
+            self.after_update_config(new_configs, old_configs).await;
+            self.update_one_config(config).await;
+        }
     }
 }
 

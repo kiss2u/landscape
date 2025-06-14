@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { get_geo_site_configs } from "@/api/geo/site";
-import { GeoSiteConfig } from "@/rust_bindings/common/geo_site";
+import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
 import { computed, onMounted, ref } from "vue";
 
 const name = defineModel<string | null>("name", { required: true });
 
 const loading = ref(false);
 
-const configs = ref<GeoSiteConfig[]>();
+const configs = ref<GeoSiteSourceConfig[]>();
 
 onMounted(async () => {
   await typing_key();

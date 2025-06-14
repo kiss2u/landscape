@@ -18,9 +18,17 @@ async function refresh() {
   rules.value = await search_geo_site_cache(filter.value);
 }
 
+const loading = ref(false);
 async function refresh_cache() {
-  await refresh_geo_cache_key();
-  await refresh();
+  (async () => {
+    loading.value = true;
+    try {
+      await refresh_geo_cache_key();
+      await refresh();
+    } finally {
+      loading.value = false;
+    }
+  })();
 }
 
 const show_geo_drawer_modal = ref(false);
@@ -31,7 +39,15 @@ const show_geo_drawer_modal = ref(false);
       <n-flex :wrap="false">
         <!-- {{ filter }} -->
         <n-button @click="show_geo_drawer_modal = true">Geo 配置</n-button>
-        <n-button @click="refresh_cache">手动触发更新</n-button>
+        <n-popconfirm
+          :positive-button-props="{ loading: loading }"
+          @positive-click="refresh_cache"
+        >
+          <template #trigger>
+            <n-button>强制刷新</n-button>
+          </template>
+          强制刷新吗? 将会清空所有 key 并且重新下载
+        </n-popconfirm>
         <GeoSiteNameSelect
           v-model:name="filter.name"
           @refresh="refresh"

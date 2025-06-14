@@ -4,25 +4,16 @@ import { GeoConfigKey } from "@/rust_bindings/common/geo";
 import { GeoIpConfig, GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
 import { computed, onMounted, ref } from "vue";
 
-const key = defineModel<string>("geo_key", {
+const key = defineModel<string | null>("geo_key", {
   required: true,
 });
-const name = defineModel<string>("geo_name", {
+const name = defineModel<string | null>("geo_name", {
   required: true,
 });
 const emit = defineEmits(["refresh"]);
 
-interface Prop {
-  geo_ip: GeoIpConfig;
-}
-const props = defineProps<Prop>();
 const loading_name = ref(false);
 const loading_key = ref(false);
-
-onMounted(async () => {
-  await typing_name_key("");
-  await typing_key("");
-});
 
 const configs = ref<GeoIpSourceConfig[]>();
 async function typing_name_key(query?: string) {
@@ -61,10 +52,11 @@ async function typing_key(query: string) {
 const keys = ref<GeoConfigKey[]>();
 const geo_key_options = computed(() => {
   let result = [];
+  let show_name = name.value == "" || name.value == null;
   if (keys.value) {
     for (const each_key of keys.value) {
       result.push({
-        label: `${each_key.name}-${each_key.key}`,
+        label: show_name ? `${each_key.name}-${each_key.key}` : each_key.key,
         value: each_key.key,
         data: each_key,
       });
@@ -76,6 +68,19 @@ const geo_key_options = computed(() => {
 function select_key(value: string, option: any) {
   key.value = value;
   name.value = option.data.name;
+}
+
+async function update_key() {
+  await typing_key("");
+  emit("refresh");
+}
+
+async function show_keys() {
+  await typing_key("");
+}
+
+async function show_names() {
+  await typing_name_key("");
 }
 </script>
 <template>
@@ -89,7 +94,8 @@ function select_key(value: string, option: any) {
       :loading="loading_name"
       clearable
       remote
-      @update:value="emit('refresh')"
+      @update:show="show_names"
+      @update:value="update_key"
       @search="typing_name_key"
     />
     <n-select
@@ -100,6 +106,7 @@ function select_key(value: string, option: any) {
       :loading="loading_key"
       clearable
       remote
+      @update:show="show_keys"
       @update:value="select_key"
       @search="typing_key"
     />

@@ -2,7 +2,10 @@
 import { delete_geo_ip_config } from "@/api/geo/ip";
 import { GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
 import { ref } from "vue";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
 
+const frontEndStore = useFrontEndStore();
 const emit = defineEmits(["refresh"]);
 
 interface Prop {
@@ -24,13 +27,21 @@ async function del() {
       <!-- {{ geo_ip_source }} -->
       <n-descriptions bordered label-placement="top" :column="3">
         <n-descriptions-item label="名称">
-          {{ geo_ip_source.name }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(geo_ip_source.name)
+              : geo_ip_source.name
+          }}
         </n-descriptions-item>
         <n-descriptions-item label="启用">
           {{ geo_ip_source.enable }}
         </n-descriptions-item>
         <n-descriptions-item label="URL">
-          {{ geo_ip_source.url }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(geo_ip_source.url)
+              : geo_ip_source.url
+          }}
         </n-descriptions-item>
         <n-descriptions-item label="下次更新时间">
           {{ geo_ip_source.next_update_at }}

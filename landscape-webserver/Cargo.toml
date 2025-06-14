@@ -14,6 +14,8 @@ rustls = { workspace = true }
 rcgen = { workspace = true }
 rustls-pemfile = { workspace = true }
 tokio-rustls = { workspace = true }
+toml = { workspace = true }
+chrono = { workspace = true }
 
 colored = { workspace = true }
 jsonwebtoken = "9"

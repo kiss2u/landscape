@@ -2,14 +2,14 @@
 import type { GeoConfigKey } from "./common/geo";
 
 export type FlowDnsMark =
-  | { "t": "keepgoing" }
+  | { "t": "keep_going" }
   | { "t": "direct" }
   | { "t": "drop" }
   | { "t": "redirect"; flow_id: number }
-  | { "t": "allowreuseport" };
+  | { "t": "allow_reuse_port" };
 
 export type IpConfig = { ip: string; prefix: number };
 
 export type WanIPRuleSource =
-  | { "t": "geokey" } & GeoConfigKey
+  | { "t": "geo_key" } & GeoConfigKey
   | { "t": "config" } & IpConfig;

@@ -1,3 +1,4 @@
+use landscape_common::database::LandscapeFlowTrait;
 use landscape_common::{
     database::{repository::Repository, LandscapeDBTrait},
     flow::FlowConfig,
@@ -21,6 +22,9 @@ impl FlowConfigRepository {
 
 #[async_trait::async_trait]
 impl LandscapeDBTrait for FlowConfigRepository {}
+
+#[async_trait::async_trait]
+impl LandscapeFlowTrait for FlowConfigRepository {}
 
 #[async_trait::async_trait]
 impl Repository for FlowConfigRepository {

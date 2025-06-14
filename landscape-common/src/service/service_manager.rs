@@ -63,12 +63,14 @@ impl<H: ServiceHandler> ServiceManager<H> {
                 if let Some((target, _)) = write_lock.get_mut(&key) {
                     *target = status;
                 } else {
+                    tracing::error!("get service map lock error, break loop");
                     break;
                 }
                 drop(write_lock);
             }
 
             if let Some(exist_status) = iface_status.take() {
+                tracing::error!("exist running service, stop it");
                 exist_status.wait_stop().await;
             }
         });

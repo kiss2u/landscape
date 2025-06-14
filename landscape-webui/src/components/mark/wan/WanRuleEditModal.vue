@@ -58,7 +58,12 @@ function onCreate(): WanIPRuleSource {
 function changeCurrentRuleType(value: WanIPRuleSource, index: number) {
   if (rule.value) {
     if (value.t == "config") {
-      rule.value.source[index] = { t: "geokey", name: "", key: "" };
+      rule.value.source[index] = {
+        t: "geo_key",
+        name: "",
+        key: "",
+        inverse: false,
+      };
     } else {
       rule.value.source[index] = new_wan_rules({
         t: "config",
@@ -143,7 +148,7 @@ async function saveRule() {
               <WanIpGeoSelect
                 v-model:geo_key="value.key"
                 v-model:geo_name="value.name"
-                v-if="value.t === 'geokey'"
+                v-if="value.t === 'geo_key'"
               >
               </WanIpGeoSelect>
               <!-- <n-input

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::{fs::OpenOptions, io::Write};
 
 use serde::{Deserialize, Serialize};
@@ -42,15 +43,23 @@ impl PPPDConfig {
     pub fn delete_config(&self, ppp_iface_name: &str) {
         let _ = std::fs::remove_file(format!("/etc/ppp/peers/{}", ppp_iface_name));
     }
-    pub fn write_config(&self, attach_iface_name: &str, ppp_iface_name: &str) -> Result<(), ()> {
-        // 打开文件（如果文件不存在则创建）
 
+    pub fn write_config(&self, attach_iface_name: &str, ppp_iface_name: &str) -> Result<(), ()> {
+        // 检查 PPP 文件目录是否存在, 不存在提示用户安装 ppp
+        let path = PathBuf::from("/etc/ppp/peers");
+        if !path.exists() {
+            tracing::error!("The directory /etc/ppp/peers does not exist, please check whether ppp is installed");
+            return Err(());
+        }
+
+        // 打开文件（如果文件不存在则创建）
         let Ok(mut file) = OpenOptions::new()
             .write(true) // 打开文件以进行写入
             .truncate(true) // 文件存在时会被截断
             .create(true) // 如果文件不存在，则会创建
             .open(format!("/etc/ppp/peers/{}", ppp_iface_name))
         else {
+            tracing::error!("Error opening file handle");
             return Err(());
         };
 
@@ -79,6 +88,7 @@ ifname {ppp_iface_name}
             ppp_iface_name = ppp_iface_name
         );
         let Ok(_) = file.write_all(config.as_bytes()) else {
+            tracing::error!("Error writing configuration file bytes");
             return Err(());
         };
 

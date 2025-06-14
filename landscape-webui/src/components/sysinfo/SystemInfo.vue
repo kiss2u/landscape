@@ -22,6 +22,7 @@ setInterval(() => {
 onMounted(async () => {
   sysinfo.value = await get_sysinfo();
 });
+const ui_version = __APP_VERSION__;
 </script>
 <template>
   <n-card title="系统">
@@ -51,7 +52,7 @@ onMounted(async () => {
         <n-time :to="now" :time="sysinfo.start_at * 1000" type="relative" />
       </n-descriptions-item> -->
       <n-descriptions-item :span="2" label="Landscape Router 版本">
-        {{ sysinfo.landscape_version }}
+        {{ sysinfo.landscape_version }} {{ `( UI 版本: ${ui_version} )` }}
       </n-descriptions-item>
     </n-descriptions>
   </n-card>

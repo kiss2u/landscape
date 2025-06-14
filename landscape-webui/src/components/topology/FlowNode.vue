@@ -27,7 +27,10 @@ import { DevStateType } from "@/lib/dev";
 import { useIfaceNodeStore } from "@/stores/iface_node";
 import { add_controller, change_iface_status } from "@/api/network";
 import { ServiceExhibitSwitch } from "@/lib/services";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
 
+const frontEndStore = useFrontEndStore();
 const props = defineProps(["node"]);
 
 const themeVars = ref(useThemeVars());
@@ -199,10 +202,18 @@ const show_switch = computed(() => {
       </template>
       <n-descriptions label-placement="left" :column="2">
         <n-descriptions-item label="mac地址">
-          {{ node.mac ?? "N/A" }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(node.mac)
+              : node.mac ?? "N/A"
+          }}
         </n-descriptions-item>
         <n-descriptions-item label="物理mca">
-          {{ node.perm_mac ?? "N/A" }}
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(node.perm_mac)
+              : node.perm_mac ?? "N/A"
+          }}
         </n-descriptions-item>
         <n-descriptions-item label="网路类型">
           {{ node.dev_type ?? "N/A" }}/{{ node.dev_kind ?? "N/A" }}

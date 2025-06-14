@@ -17,5 +17,5 @@ walkdir = "*"
 
 [dev-dependencies]
 homedir = { workspace = true }
-jemallocator = "0.5"
-jemalloc-ctl = "0.5"
+jemallocator = { workspace = true }
+jemalloc-ctl = { workspace = true }

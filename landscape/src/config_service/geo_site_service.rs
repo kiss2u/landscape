@@ -10,12 +10,13 @@ use landscape_common::{
 use uuid::Uuid;
 
 use std::{
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use landscape_common::{
-    args::LAND_HOME_PATH, config::geo::GeoSiteConfig, event::dns::DnsEvent,
+    args::LAND_HOME_PATH, config::geo::GeoSiteSourceConfig, event::dns::DnsEvent,
     store::storev3::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
@@ -53,7 +54,7 @@ impl GeoSiteService {
             //
             let mut ticker = tokio::time::interval(Duration::from_secs(A_DAY));
             loop {
-                service_clone.refresh().await;
+                service_clone.refresh(false).await;
                 // 等待下一次 tick
                 ticker.tick().await;
             }
@@ -65,22 +66,50 @@ impl GeoSiteService {
         &self,
         configs: Vec<DNSRuleConfig>,
     ) -> Vec<DNSRuntimeRule> {
+        let time = Instant::now();
         let mut lock = self.file_cache.lock().await;
-        let mut result = vec![];
+        let mut result = Vec::with_capacity(configs.len());
         for config in configs.into_iter() {
+            let mut usage_keys = HashSet::new();
             let mut source = vec![];
-            for each in config.source.iter() {
+
+            let mut inverse_keys: HashMap<String, HashSet<String>> = HashMap::new();
+            for each in config.source.into_iter() {
                 match each {
-                    RuleSource::GeoKey(config_key) => {
-                        if let Some(domains) = lock.get(config_key) {
-                            source.extend(domains.values.iter().cloned());
+                    RuleSource::GeoKey(k) if k.inverse => {
+                        inverse_keys.entry(k.name).or_default().insert(k.key);
+                    }
+                    RuleSource::GeoKey(k) => {
+                        if let Some(domains) = lock.get(&k) {
+                            source.extend(domains.values.into_iter());
                         }
+                        usage_keys.insert(k);
                     }
                     RuleSource::Config(c) => {
-                        // all_domain_rules.extend(vec.iter().cloned());
-                        source.push(c.clone());
+                        source.push(c);
                     }
                 }
+            }
+
+            if inverse_keys.len() > 0 {
+                let all_keys: Vec<_> = lock.keys();
+                tracing::debug!("all_keys {:?}", all_keys.len());
+                tracing::debug!("{:?}", inverse_keys);
+                for (inverse_key, excluded_names) in inverse_keys {
+                    for key in all_keys.iter().filter(|k| k.name == inverse_key) {
+                        if !excluded_names.contains(&key.key) {
+                            if let Some(domains) = lock.get(key) {
+                                if !usage_keys.contains(key) {
+                                    usage_keys.insert(key.clone());
+                                    source.extend(domains.values.into_iter());
+                                }
+                            }
+                            // } else {
+                            //     tracing::debug!("excluded_names: {:#?}", key);
+                        }
+                    }
+                }
+                tracing::debug!("using key len: {:#?}", usage_keys.len());
             }
 
             result.push(DNSRuntimeRule {
@@ -95,12 +124,22 @@ impl GeoSiteService {
                 flow_id: config.flow_id,
             });
         }
+        tracing::debug!("covert config time: {:?}s", time.elapsed().as_secs());
         result
     }
 
-    pub async fn refresh(&self) {
+    pub async fn refresh(&self, force: bool) {
         // 读取当前规则
-        let configs: Vec<GeoSiteConfig> = self.store.list().await.unwrap();
+        let mut configs: Vec<GeoSiteSourceConfig> = self.store.list().await.unwrap();
+
+        if !force {
+            let now = get_f64_timestamp();
+            configs = configs.into_iter().filter(|e| e.next_update_at < now).collect();
+        } else {
+            let mut file_cache_lock = self.file_cache.lock().await;
+            file_cache_lock.truncate();
+            drop(file_cache_lock);
+        }
 
         let client = Client::new();
         for mut config in configs {
@@ -160,7 +199,7 @@ impl GeoSiteService {
         lock.get(key)
     }
 
-    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteConfig> {
+    pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteSourceConfig> {
         self.store.query_by_name(name).await.unwrap()
     }
 }
@@ -169,7 +208,7 @@ impl GeoSiteService {
 impl ConfigController for GeoSiteService {
     type Id = Uuid;
 
-    type Config = GeoSiteConfig;
+    type Config = GeoSiteSourceConfig;
 
     type DatabseAction = GeoSiteConfigRepository;
 
