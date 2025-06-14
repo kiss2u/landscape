@@ -48,7 +48,9 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     - ❌ 对指定数据设置跟踪标记
     - ✅ 外网 IP 行为控制, 按照标记的规则控制外网 IP, 并支持使用 `geoip.dat` 协助配置
     - ✅ 允许外网 IP 规则选择是否将 DNS 动作覆盖.
-    - ❌ GeoIP 文件自动更新
+- <u>Geo 管理</u>
+    - ✅ 多 Geo 来源管理
+    - ✅ Geo IP/Site 自动更新
 - <u>DNS</u>
     - ✅ 支持使用 DNS over HTTPS 和 DNS over TLS 向上游请求 DNS
     - ✅ 支持指定网址使用特定上游 DNS
@@ -56,8 +58,8 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     - ❌ DNS 劫持返回多条记录 ( 除了 A 解析之外的)
     - ✅ 对指定 DNS 解析结果进行 IP 标记, 配置标记模块进行处理
     - ✅ GeoSite 文件支持
-    - ❌ 自动定时更新 GeoSite 文件
-    - ❌ 支持将 Docker 容器镜像名加入解析缓存
+    - ❌ 支持将 Docker 容器设置的域名label 加入 DNS 解析中
+    - ✅ 支持进行测试域名查询
 - <u>NAT (eBPF) 实现</u>
     - ✅ 基础 NAT 
     - ⚠ 静态映射 / 开放指定端口 ( UI 界面未完善 )
@@ -75,7 +77,10 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     - ✅ 使用 hostapd 配置创建 WIFI 热点
     - ❌ 接入 WIFI 热点
 - <u> 存储 </u>
-    - ❌ 使用数据库替代当前配置存储
+    - ✅ 使用数据库替代当前配置存储
+    - ✅ 导出当前所有配置为 `landscape_init.toml` 文件
+    - ❌ UI 提供配置上传还原组件
+    - ❌ 增加 配置修改 组件
     - ❌ 指标库单独指定数据库地址
 - <u> 杂项 </u>
     - ✅ 登录界面
@@ -88,9 +93,9 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 
 ### 系统要求
 - 支持的 Linux 内核版本：`6.1` 及以上。
-- 安装 `iptables (pppd 版本 pppoe mss 钳制)`, `docker`
+- (可选) `docker`
 
-### 常规启动步骤
+### 手工部署步骤
 1. 创建配置文件夹：
    ```shell
    mkdir -p ~/.landscape-router

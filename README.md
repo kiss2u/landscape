@@ -23,82 +23,96 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 > ❌ Not implemented
 
 * <u>IP Configuration</u>
+  * *Static IP*
 
-  * *Static IP Configuration*
-
-    * ✅ Assign IP address
-    * ✅ Set default gateway route
+    * ✅ Set IP address
+    * ✅ Configure default route via gateway
   * *DHCP Client*
 
-    * ✅ Set hostname
-    * ❌ Custom options
+    * ✅ Specify hostname
+    * ❌ Custom DHCP options
   * *PPPoE (PPPD version)*
 
     * ✅ Set as default route
-    * ⚠ Multi-NIC dialing
-    * ✅ Specify network interface
+    * ⚠ Multi-interface dialing
+    * ✅ Specify interface name
   * *PPPoE (eBPF version)*
 
     * ✅ Protocol core implemented
-    * ❌ GRO/GSO causes packet size to exceed MTU (unsolved)
+    * ❌ GRO/GSO causing oversized packets (unsolved)
   * *DHCP Server*
 
-    * ✅ Basic IP lease and renewal
-    * ✅ Custom IP range/gateway/access configuration
-    * ✅ MAC-to-IP binding
-    * ✅ IP allocation display
+    * ✅ Provide basic IP assignment and renewal
+    * ✅ Custom gateway/subnet/access rules
+    * ✅ IP-MAC binding
+    * ✅ IP lease display
   * *IPv6 Support*
 
-    * ✅ Request prefix via DHCPv6-PD
-    * ✅ Advertise prefix using RA to downstream devices
+    * ✅ Use DHCPv6-PD to request prefix from upstream
+    * ✅ Use RA to advertise prefix to downstream
+
 * <u>Traffic Control Module</u>
 
-  * ✅ Identify flows using IP + QoS
-  * ✅ Each flow can have its own DNS and cache
-  * ✅ Forward marked traffic by policy (direct/drop/reuse port/redirect to Docker or NIC)
-  * ❌ Mark flows for tracking
-  * ✅ Control external IP behavior with GeoIP-based rules
-  * ✅ Choose whether to override DNS behavior for external IP rules
-  * ❌ Auto-update GeoIP file
+  * ✅ Tag flows using IP + QoS
+  * ✅ Each flow can have its own DNS settings and cache
+  * ✅ Route marked traffic based on rules (direct/drop/reuse port/redirect to Docker or NIC)
+  * ❌ Assign tracking marks to specified packets
+  * ✅ External IP behavior control via tagging and `geoip.dat` support
+  * ✅ Optionally override DNS for external IP rules
+
+* <u>Geo Management</u>
+
+  * ✅ Manage multiple Geo sources
+  * ✅ Auto-update Geo IP/Site data
+
 * <u>DNS</u>
 
-  * ✅ DNS over HTTPS and TLS to upstream
-  * ✅ Custom upstream DNS per domain
-  * ✅ DNS hijacking (A record response)
-  * ❌ DNS hijack returns multiple records (non-A)
-  * ✅ Mark IPs from specific DNS responses for further processing
-  * ✅ GeoSite file support
-  * ❌ Auto-update GeoSite file
-  * ❌ Add Docker image names to DNS cache
-* <u>NAT (eBPF-based)</u>
+  * ✅ Support DNS over HTTPS and DNS over TLS for upstream
+  * ✅ Assign specific upstream DNS by domain
+  * ✅ DNS Hijacking (return A records)
+  * ❌ Hijack to return multiple records (other than A)
+  * ✅ Tag resolved IPs and handle with traffic control
+  * ✅ Support GeoSite files
+  * ❌ Parse Docker container domain labels into DNS records
+  * ✅ Test domain resolution
 
-  * ✅ Basic NAT
-  * ⚠ Static mapping / open ports (UI not finished)
-  * ✅ NAT disables port reuse by default, can be dynamically enabled via flow marking
-* <u>Metrics Module</u>
+* <u>NAT (eBPF)</u>
+
+  * ✅ Basic NAT support
+  * ⚠ Static mapping / Port forwarding (UI incomplete)
+  * ✅ NAT disables port reuse by default; reuse allowed via tagging rules
+
+* <u>Metrics</u>
 
   * ✅ Report connection stats (bytes/packets) every 5 seconds
-  * ✅ Display current connections (not yet integrated with NAT info)
-  * ❌ Export metrics via API
+  * ✅ Display active connections (not yet combined with NAT)
+  * ❌ Open export API for metrics
+
 * <u>Docker</u>
 
-  * ✅ Manage and run basic Docker containers
-  * ⚠ Image pulling
-  * ✅ Redirect traffic to TProxy-enabled Docker container
-* <u>WiFi</u>
+  * ✅ Basic Docker container management and runtime
+  * ⚠ Pull images
+  * ✅ Route traffic into TProxy-enabled containers
 
-  * ✅ Switch wireless interface state via `iw`
-  * ✅ Create WiFi hotspot via `hostapd`
-  * ❌ Connect to WiFi hotspot
+* <u>Wi-Fi</u>
+
+  * ✅ Enable/disable Wi-Fi using `iw`
+  * ✅ Create AP with `hostapd`
+  * ❌ Connect to existing Wi-Fi hotspot
+
 * <u>Storage</u>
 
-  * ❌ Use database to replace current config storage
-  * ❌ Specify separate database for metrics
+  * ✅ Use database instead of file-based config
+  * ✅ Export all current configs as `landscape_init.toml`
+  * ❌ UI component to upload/restore config
+  * ❌ Config editor via UI
+  * ❌ Separate DB path for metrics
+
 * <u>Miscellaneous</u>
 
-  * ✅ Login page
-  * ❌ English version of front-end
-  * ❌ Optimize NIC XPS/RSP to distribute load across CPU cores
+  * ✅ Login screen
+  * ❌ English UI frontend
+  * ❌ NIC XPS/RPS optimization to distribute load across CPU cores
 
 ---
 
@@ -107,48 +121,50 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 ### System Requirements
 
 * Supported Linux Kernel: `6.1` or later
-* Install `iptables` (for MSS clamping in PPPD version), `docker`
+* (Optional) `docker`
 
-### General Startup Steps
+### Manual Startup
 
 1. Create config directory:
 
    ```bash
    mkdir -p ~/.landscape-router
    ```
-
-2. Download `static.zip` from [Releases](https://github.com/ThisSeanZhang/landscape/releases), and extract it to `~/.landscape-router/static`.
-
-3. If you're using a desktop environment with a browser, you can skip this.
-   Otherwise, create an initial config file `landscape_init.toml` based on [Quick Start Guide](https://landscape.whileaway.dev/quick.html).
-
-4. Download the appropriate binary from [Releases](https://github.com/ThisSeanZhang/landscape/releases), then run with root:
+2. Download **static.zip** from [release](https://github.com/ThisSeanZhang/landscape/releases) and extract to `~/.landscape-router/static`
+3. If you have a desktop environment and browser, you can skip this step.
+   Otherwise, refer to [Quick Start Guide](https://landscape.whileaway.dev/quick.html) to create `landscape_init.toml`
+4. Start the service by downloading a release binary from [Releases](https://github.com/ThisSeanZhang/landscape/releases)
+   Then run (as root):
 
    ```bash
    ./landscape-webserver
    ```
 
-   Default port: `6300`, username: `root`, password: `root`.
-   Use `./landscape-webserver --help` for more options.
+   Default port: **6300**
+   Default username: **root**
+   Default password: **root**
+   Use `./landscape-webserver --help` for other options.
 
 ### Docker Compose
 
-Refer to [Quick Start](https://landscape.whileaway.dev/quick.html)
+See [Quick Start Guide](https://landscape.whileaway.dev/quick.html)
 
 ### Armbian Integration
 
-See [Armbian Guide](https://landscape.whileaway.dev/compilation/armbian.html)
+See [Armbian Integration Guide](https://landscape.whileaway.dev/compilation/armbian.html)
 
 ---
 
-## Building from Source
+## Build Instructions
 
-Refer to the [Build Guide](https://landscape.whileaway.dev/compilation/) or [Cross Compilation](https://landscape.whileaway.dev/compilation/cross.html)
+See [Build Documentation](https://landscape.whileaway.dev/compilation/) or [Cross-compilation Guide](https://landscape.whileaway.dev/compilation/cross.html)
 
-## License
+---
 
-* `landscape-ebpf`: [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
-* Other components: [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html)
+## LICENSE
+
+* `landscape-ebpf`: [GNU GPL v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+* Other parts: [GNU GPL v3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 
 ---
 

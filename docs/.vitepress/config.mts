@@ -20,7 +20,12 @@ export default defineConfig({
           { text: "注意事项", link: "/attention" },
           { text: "快速体验 (只是体验界面)", link: "/quick" },
           { text: "部分界面截图", link: "/screenshot" },
+          { text: "分流控制", link: "/flow" },
         ],
+      },
+      {
+        text: "配置",
+        items: [{ text: "配置介绍", link: "/config/index.md" }],
       },
       {
         text: "编译",

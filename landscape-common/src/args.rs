@@ -52,9 +52,8 @@ pub struct WebCommArgs {
     #[clap(short, long, env = "LANDSCAPE_CONF_PATH")]
     pub config_dir: Option<PathBuf>,
 
-    /// Database URL, SQLite Connect Like  
-    /// sqlite://./db.sqlite?mode=rwc
-    /// [default: ~/.landscape-router/landscape_db.sqlite]
+    /// Database URL, SQLite Connect Like Default
+    /// [default: sqlite://~/.landscape-router/landscape_db.sqlite]
     #[clap(long = "db_url", env = "DATABASE_URL")]
     pub database_path: Option<String>,
 
