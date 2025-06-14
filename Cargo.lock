@@ -1883,15 +1883,15 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hickory-client"
-version = "0.25.1"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bbd1b5def7a1b77783366577e86cb51172196f689823b0f8107da9391ba183f"
+checksum = "c466cd63a4217d5b2b8e32f23f58312741ce96e3c84bf7438677d2baff0fc555"
 dependencies = [
  "cfg-if",
  "data-encoding",
  "futures-channel",
  "futures-util",
- "hickory-proto 0.25.1",
+ "hickory-proto",
  "once_cell",
  "radix_trie",
  "rand 0.9.1",
@@ -1902,40 +1902,13 @@ dependencies = [
 
 [[package]]
 name = "hickory-proto"
-version = "0.24.1"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07698b8420e2f0d6447a436ba999ec85d8fbf2a398bbd737b82cac4a2e96e512"
+checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
 dependencies = [
- "async-trait",
- "cfg-if",
- "data-encoding",
- "enum-as-inner 0.6.1",
- "futures-channel",
- "futures-io",
- "futures-util",
- "idna 0.4.0",
- "ipnet",
- "once_cell",
- "rand 0.8.5",
- "serde",
- "thiserror 1.0.64",
- "tinyvec",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "hickory-proto"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d844af74f7b799e41c78221be863bade11c430d46042c3b49ca8ae0c6d27287"
-dependencies = [
- "async-recursion",
  "async-trait",
  "bytes",
  "cfg-if",
- "critical-section",
  "data-encoding",
  "enum-as-inner 0.6.1",
  "futures-channel",
@@ -1961,13 +1934,13 @@ dependencies = [
 
 [[package]]
 name = "hickory-resolver"
-version = "0.25.1"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a128410b38d6f931fcc6ca5c107a3b02cabd6c05967841269a4ad65d23c44331"
+checksum = "dc62a9a99b0bfb44d2ab95a7208ac952d31060efc16241c87eaf36406fecf87a"
 dependencies = [
  "cfg-if",
  "futures-util",
- "hickory-proto 0.25.1",
+ "hickory-proto",
  "ipconfig",
  "moka",
  "once_cell",
@@ -1984,9 +1957,9 @@ dependencies = [
 
 [[package]]
 name = "hickory-server"
-version = "0.25.1"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "716f516285473ce476dfc996bac9a3c9ef2fee4f380ebec5980b12216fe4f547"
+checksum = "d53e5fe811b941c74ee46b8818228bfd2bc2688ba276a0eaeb0f2c95ea3b2585"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1994,7 +1967,7 @@ dependencies = [
  "data-encoding",
  "enum-as-inner 0.6.1",
  "futures-util",
- "hickory-proto 0.25.1",
+ "hickory-proto",
  "ipnet",
  "prefix-trie",
  "serde",
@@ -2393,16 +2366,6 @@ dependencies = [
 
 [[package]]
 name = "idna"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
-dependencies = [
- "unicode-bidi",
- "unicode-normalization",
-]
-
-[[package]]
-name = "idna"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
@@ -2636,7 +2599,7 @@ dependencies = [
  "ctrlc",
  "dhcproto",
  "futures",
- "hickory-proto 0.24.1",
+ "hickory-proto",
  "landscape-common",
  "landscape-database",
  "landscape-dns",
@@ -2680,7 +2643,7 @@ dependencies = [
  "clap 4.5.39",
  "dhcproto",
  "dotenvy",
- "hickory-proto 0.24.1",
+ "hickory-proto",
  "homedir",
  "hostname 0.4.1",
  "libc",
@@ -2726,7 +2689,7 @@ dependencies = [
  "ctrlc",
  "futures-util",
  "hickory-client",
- "hickory-proto 0.25.1",
+ "hickory-proto",
  "hickory-resolver",
  "hickory-server",
  "homedir",
@@ -3775,9 +3738,9 @@ dependencies = [
 
 [[package]]
 name = "prefix-trie"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb5f930995ba4986bd239ba8d8fded67cad82d1db329c4f316f312847cba16aa"
+checksum = "85cf4c7c25f1dd66c76b451e9041a8cfce26e4ca754934fa7aed8d5a59a01d20"
 dependencies = [
  "ipnet",
  "num-traits",

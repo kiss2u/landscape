@@ -8,15 +8,15 @@ landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-common = { path = "../landscape-common" }
 landscape-protobuf = { path = "../landscape-protobuf" }
 
-hickory-server = "0.25.1"
-hickory-client = "0.25.1"
-hickory-resolver = { version = "0.25.1", features = [
+hickory-server = { workspace = true }
+hickory-client = { workspace = true }
+hickory-resolver = { workspace = true, features = [
     "system-config",
     "__tls",
     "__https",
     "rustls-platform-verifier",
 ] }
-hickory-proto = { version = "0.25.1", features = [
+hickory-proto = { workspace = true, features = [
     "__https",
     "__tls",
     "tls-ring",

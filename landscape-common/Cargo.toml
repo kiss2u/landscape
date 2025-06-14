@@ -25,7 +25,7 @@ libc = { workspace = true }
 
 paste = { workspace = true }
 
-hickory-proto = { version = "*", features = ["serde-config"] }
+hickory-proto = { workspace = true, features = ["serde"] }
 
 dhcproto = { workspace = true, features = ["serde"] }
 sea-orm = { workspace = true, features = ["with-uuid", "with-json"] }

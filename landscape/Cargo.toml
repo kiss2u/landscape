@@ -37,7 +37,7 @@ ctrlc = { workspace = true }
 
 cidr = { workspace = true }
 
-hickory-proto = { version = "*", features = ["serde-config"] }
+hickory-proto = { workspace = true, features = ["serde"] }
 socket2 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
