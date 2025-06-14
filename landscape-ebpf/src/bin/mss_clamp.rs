@@ -9,6 +9,7 @@ use std::{
 use tokio::{sync::oneshot, time::sleep};
 
 // cargo run --package landscape-ebpf --bin mss_clamp
+// cargo build --package landscape-ebpf --bin mss_clamp --target aarch64-unknown-linux-gnu
 #[tokio::main]
 pub async fn main() {
     landscape_common::init_tracing!();
