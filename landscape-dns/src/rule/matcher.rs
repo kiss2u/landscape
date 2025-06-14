@@ -18,11 +18,14 @@ pub struct DomainMatcher {
 
 impl DomainMatcher {
     pub fn new(domains_config: Vec<DomainConfig>) -> Self {
-        let config = Instant::now();
+        let timer = Instant::now();
+
         let mut full_domains = HashSet::new();
         let mut regex_domains = Vec::new();
         let mut keywords = Vec::new();
         let mut trie_builder = TrieBuilder::new();
+
+        let mut subdomain_trie_size = 0;
 
         let mut sum_count = 0;
         // 解析每个 GeoSite 的域名
@@ -41,6 +44,7 @@ impl DomainMatcher {
                 }
                 DomainMatchType::Domain => {
                     // 子域名匹配（倒序存储以便构建 Trie）
+                    subdomain_trie_size += 1;
                     let reversed_domain = each_config.value.chars().rev().collect::<String>();
                     trie_builder.push(reversed_domain);
                 }
@@ -54,14 +58,15 @@ impl DomainMatcher {
         // 构建 Trie 和 Aho-Corasick 自动机
         let subdomain_trie = trie_builder.build();
         let keyword_ac = AhoCorasick::new(&keywords).unwrap();
-        let size = subdomain_trie.iter::<Vec<u8>, _>().count();
-        // 返回构建好的 DomainMatcher 实例
 
         debug!("total {:?}", sum_count);
         debug!("full_domains {:?}", full_domains.len());
-        debug!("subdomain_trie {:?}", size);
+        debug!("regex_domains {:?}", regex_domains.len());
+        debug!("subdomain_trie {:?}", subdomain_trie_size);
 
-        debug!("dns match rule load time: {:?}s", config.elapsed().as_secs());
+        debug!("dns match rule load time: {:?}s", timer.elapsed().as_secs());
+
+        // 返回构建好的 DomainMatcher 实例
         DomainMatcher {
             regex_domains,
             full_domains,
