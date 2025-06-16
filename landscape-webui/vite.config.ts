@@ -12,6 +12,10 @@ const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
 
 const env = loadEnv("development", "./");
 
+const address = env.VITE_PROXY_ADDRESS ?? "localhost";
+const port = env.VITE_PROXY_PORT ?? "6443";
+const dev_host = env.VITE_DEV_HOST ?? "0.0.0.0";
+
 // https://vitejs.dev/config/
 export default defineConfig({
   define: {
@@ -44,11 +48,10 @@ export default defineConfig({
     },
   },
   server: {
-    host: "localhost",
-    port: 5173,
+    host: dev_host,
     proxy: {
       "/api": {
-        target: `https://${env.VITE_PROXY_ADDRESS}`,
+        target: `https://${address}:${port}`,
         changeOrigin: true,
         secure: false,
         configure: (proxy: any, options: any) => {
@@ -56,7 +59,7 @@ export default defineConfig({
         },
       },
       "/ws": {
-        target: `ws://${env.VITE_PROXY_ADDRESS}`,
+        target: `ws://${address}:${port}`,
         changeOrigin: true,
         ws: true,
         rewrite: (path: any) => path.replace(/^\/ws/, ""),
