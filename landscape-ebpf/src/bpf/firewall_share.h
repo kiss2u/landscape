@@ -40,6 +40,7 @@ struct firewall_conn_event {
     u16 src_port;
     u16 dst_port;
     u64 create_time;
+    u64 report_time;
     u8 l4_proto;
     u8 l3_proto;
     u8 event_type;

@@ -414,7 +414,7 @@ ct_state_transition(u8 l4proto, u8 pkt_type, struct firewall_conntrack_action_v2
     //     }
 
     __sync_lock_test_and_set(&ct_timer_value->conn_status, FIREWALL_ACTIVE);
-    bpf_log_info("flush status to FIREWALL_ACTIVE:20");
+    // bpf_log_info("flush status to FIREWALL_ACTIVE:20");
     bpf_timer_start(&ct_timer_value->timer, CONN_EST_TIMEOUT, 0);
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
@@ -445,6 +445,7 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
             event->flow_id = value->flow_id;
             event->trace_id = 0;
             event->create_time = value->create_time;
+            event->report_time = bpf_ktime_get_ns();
             event->event_type = FIREWALL_DELETE_CONN;
             bpf_ringbuf_submit(event, 0);
         }
@@ -596,6 +597,7 @@ static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool do_ne
         event->flow_id = action.flow_id;
         event->trace_id = 0;
         event->create_time = action.create_time;
+        event->report_time = action.create_time;
         event->event_type = FIREWALL_CREATE_CONN;
         bpf_ringbuf_submit(event, 0);
     }
