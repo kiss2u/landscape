@@ -307,13 +307,9 @@ static __always_inline int icmp6_msg_type(struct icmp6hdr *icmp6h) {
 
 const volatile u64 REPORT_INTERVAL = 1E9 * 5;
 static __always_inline void
-firewall_metric_repoort(struct __sk_buff *skb,bool ingress, struct firewall_conntrack_key *timer_key, struct firewall_conntrack_action *timer_track_value) {
-    
-#define BPF_LOG_TOPIC "firewall_metric_repoort"
-    // u64 packets = skb->gso_segs == 0? 1 : skb->gso_segs;
+firewall_metric_accumulate(struct __sk_buff *skb, bool ingress,
+                           struct firewall_conntrack_action_v2 *timer_track_value) {
     u64 bytes = skb->len;
-    
-    // bpf_log_info("skb->len : %d, skb->gso_segs : %d", skb->len, skb->gso_segs);
     if (ingress) {
         __sync_fetch_and_add(&timer_track_value->ingress_bytes, bytes);
         __sync_fetch_and_add(&timer_track_value->ingress_packets, 1);
@@ -321,140 +317,201 @@ firewall_metric_repoort(struct __sk_buff *skb,bool ingress, struct firewall_conn
         __sync_fetch_and_add(&timer_track_value->egress_bytes, bytes);
         __sync_fetch_and_add(&timer_track_value->egress_packets, 1);
     }
+}
 
+static __always_inline enum firewall_report_status
+firewall_metric_try_report(struct firewall_conntrack_key *timer_key,
+                           struct firewall_conntrack_action_v2 *timer_track_value) {
+#define BPF_LOG_TOPIC "fm_try_report"
     __u64 now = bpf_ktime_get_ns();
     __u64 last = __sync_fetch_and_add(&timer_track_value->last_upload_ts, 0);
-    if (now - last > REPORT_INTERVAL &&
-        __sync_val_compare_and_swap(&timer_track_value->last_upload_ts, last, now) == last) {
-        // 成为唯一上报线程
-        __u64 ingress_bytes_before = __sync_fetch_and_add(&timer_track_value->ingress_bytes, 0);
-        __u64 ingress_packets_before = __sync_fetch_and_add(&timer_track_value->ingress_packets, 0);
-        __u64 egress_bytes_before = __sync_fetch_and_add(&timer_track_value->egress_bytes, 0);
-        __u64 egress_packets_before = __sync_fetch_and_add(&timer_track_value->egress_packets, 0);
 
-        // ringbuf 上报
-        struct firewall_conn_metric_event* event;
-        event = bpf_ringbuf_reserve(&firewall_conn_metric_events, sizeof(struct firewall_conn_metric_event), 0);
-        if (event != NULL) {
-            COPY_ADDR_FROM(event->dst_addr.all, timer_track_value->trigger_addr.all);
-            COPY_ADDR_FROM(event->src_addr.all, timer_key->local_addr.all);
-            event->src_port = timer_key->local_port;
-            event->dst_port = timer_track_value->trigger_port;
-            event->l4_proto = timer_key->ip_protocol;
-            event->l3_proto = timer_key->ip_type;
-            event->flow_id = timer_track_value->flow_id;
-            event->trace_id = 0;
-            event->time = now;
-            event->create_time = timer_track_value->create_time;
-            event->ingress_bytes = ingress_bytes_before;
-            event->ingress_packets = ingress_packets_before;
-            event->egress_bytes = egress_bytes_before;
-            event->egress_packets = egress_packets_before;
-            bpf_ringbuf_submit(event, 0);
-        }
-
-        // 清理
-        __sync_fetch_and_sub(&timer_track_value->ingress_bytes, ingress_bytes_before);
-        __sync_fetch_and_sub(&timer_track_value->ingress_packets, ingress_packets_before);
-        __sync_fetch_and_sub(&timer_track_value->egress_bytes, egress_bytes_before);
-        __sync_fetch_and_sub(&timer_track_value->egress_packets, egress_packets_before);
+    if (now - last <= REPORT_INTERVAL) {
+        return FIREWALL_REPORT_NONE;
     }
-    #undef BPF_LOG_TOPIC
-}
 
-static __always_inline bool ct_change_state(struct firewall_conntrack_action *timer_track_value,
-                                            u64 curr_state, u64 next_state) {
-    return __sync_bool_compare_and_swap(&timer_track_value->status, curr_state, next_state);
-}
+    if (__sync_val_compare_and_swap(&timer_track_value->last_upload_ts, last, now) != last) {
+        return FIREWALL_REPORT_CONFLICT;
+    }
 
-static __always_inline int ct_reset_timer(struct firewall_conntrack_action *timer_track_value,
-                                          u64 timeout) {
-#define BPF_LOG_TOPIC "ct_reset_timer"
-    // bpf_log_info("ct_reset_timer : %llu", timeout);
-    return bpf_timer_start(&timer_track_value->timer, timeout, 0);
+    // 成为唯一上报线程
+    __u64 ingress_bytes_before = __sync_fetch_and_add(&timer_track_value->ingress_bytes, 0);
+    __u64 ingress_packets_before = __sync_fetch_and_add(&timer_track_value->ingress_packets, 0);
+    __u64 egress_bytes_before = __sync_fetch_and_add(&timer_track_value->egress_bytes, 0);
+    __u64 egress_packets_before = __sync_fetch_and_add(&timer_track_value->egress_packets, 0);
+
+    struct firewall_conn_metric_event *event;
+    event = bpf_ringbuf_reserve(&firewall_conn_metric_events,
+                                sizeof(struct firewall_conn_metric_event), 0);
+    if (event != NULL) {
+        COPY_ADDR_FROM(event->dst_addr.all, timer_track_value->trigger_addr.all);
+        COPY_ADDR_FROM(event->src_addr.all, timer_key->local_addr.all);
+        event->src_port = timer_key->local_port;
+        event->dst_port = timer_track_value->trigger_port;
+        event->l4_proto = timer_key->ip_protocol;
+        event->l3_proto = timer_key->ip_type;
+        event->flow_id = timer_track_value->flow_id;
+        event->trace_id = 0;
+        event->time = now;
+        event->create_time = timer_track_value->create_time;
+        event->ingress_bytes = ingress_bytes_before;
+        event->ingress_packets = ingress_packets_before;
+        event->egress_bytes = egress_bytes_before;
+        event->egress_packets = egress_packets_before;
+        bpf_ringbuf_submit(event, 0);
+    }
+
+    __sync_fetch_and_sub(&timer_track_value->ingress_bytes, ingress_bytes_before);
+    __sync_fetch_and_sub(&timer_track_value->ingress_packets, ingress_packets_before);
+    __sync_fetch_and_sub(&timer_track_value->egress_bytes, egress_bytes_before);
+    __sync_fetch_and_sub(&timer_track_value->egress_packets, egress_packets_before);
+
+    return FIREWALL_REPORT_SUCCESS;
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int ct_state_transition(u8 l4proto, u8 pkt_type,
-                                               struct firewall_conntrack_action *ct_timer_value) {
+static __always_inline void
+firewall_metric_report(struct __sk_buff *skb, bool ingress,
+                       struct firewall_conntrack_key *timer_key,
+                       struct firewall_conntrack_action_v2 *timer_track_value) {
+    firewall_metric_accumulate(skb, ingress, timer_track_value);
+    firewall_metric_try_report(timer_key, timer_track_value);
+}
+
+static __always_inline bool ct_change_state(struct firewall_conntrack_action_v2 *timer_track_value,
+                                            u64 curr_state, u64 next_state) {
+    return __sync_bool_compare_and_swap(&timer_track_value->conn_status, curr_state, next_state);
+}
+
+static __always_inline int
+ct_state_transition(u8 l4proto, u8 pkt_type, struct firewall_conntrack_action_v2 *ct_timer_value) {
 #define BPF_LOG_TOPIC "ct_state_transition"
-    u64 curr_state = ct_timer_value->status;
+    // bool ingress = false;
+    u64 curr_state = ct_timer_value->conn_status;
+    //     u64 connect_status = 0;
+    //     if (ingress) {
 
-#define NEW_STATE(__state)                                                                         \
-    if (!ct_change_state(ct_timer_value, curr_state, (__state))) {                                 \
-        return TC_ACT_SHOT;                                                                        \
-    }
-#define RESET_TIMER(__timeout) ct_reset_timer(ct_timer_value, (__timeout))
+    //         connect_status = ct_timer_value->local_status;
+    //     } else {
+    //         connect_status = ct_timer_value->remote_status;
+    //     }
 
-    if (pkt_type == PKT_CONNLESS) {
-        NEW_STATE(OTHER_EST);
-        RESET_TIMER(UDP_TIMEOUT);
-        return TC_ACT_OK;
-    }
+    // #define NEW_STATE(__state)                                                                         \
+//     if (!ct_change_state(ct_timer_value, curr_state, (__state))) {                                 \
+//         return TC_ACT_SHOT;                                                                        \
+//     }
 
-    if (pkt_type == PKT_TCP_RST) {
-        NEW_STATE(TIMER_INIT);
-        RESET_TIMER(TCP_SYN_TIMEOUT);
-        return TC_ACT_OK;
-    }
+    //     if (pkt_type == PKT_CONNLESS) {
+    //         NEW_STATE(OTHER_EST);
+    //     }
 
-    if (pkt_type == PKT_TCP_SYN) {
-        NEW_STATE(TIMER_INIT);
-        RESET_TIMER(TCP_SYN_TIMEOUT);
-        return TC_ACT_OK;
-    }
+    //     if (pkt_type == PKT_TCP_RST) {
+    //         NEW_STATE(TIMER_INIT);
+    //     }
 
-    RESET_TIMER(TCP_TIMEOUT);
+    //     if (pkt_type == PKT_TCP_SYN) {
+    //         NEW_STATE(TIMER_INIT);
+    //     }
 
+    __sync_lock_test_and_set(&ct_timer_value->conn_status, FIREWALL_ACTIVE);
+    bpf_log_info("flush status to FIREWALL_ACTIVE:20");
+    bpf_timer_start(&ct_timer_value->timer, CONN_EST_TIMEOUT, 0);
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
 
 static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntrack_key *key,
-                                struct firewall_conntrack_action *value) {
+                                struct firewall_conntrack_action_v2 *value) {
 #define BPF_LOG_TOPIC "timer_clean_callback"
 
+    __u64 conn_status = value->conn_status;
+    __u64 next_conn_status = conn_status;
+    u64 next_timeout = CONN_EST_TIMEOUT;
+    int ret;
     // bpf_log_info("timer_clean_callback: %d", bpf_ntohs(value->trigger_port));
 
-    struct firewall_conn_event* event;
-    event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
-    if (event != NULL) {
-        COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.all);
-        COPY_ADDR_FROM(event->src_addr.all, key->local_addr.all);
-        event->src_port = key->local_port;
-        event->dst_port = value->trigger_port;
-        event->l4_proto = key->ip_protocol;
-        event->l3_proto = key->ip_type;
-        event->flow_id = value->flow_id;
-        event->trace_id = 0;
-        event->create_time = value->create_time;
-        event->event_type = FIREWALL_DELETE_CONN;
-        bpf_ringbuf_submit(event, 0);
+    __u8 report_result;
+    // 说明是 release 超时, 上报后释放 CONN
+    if (conn_status == FIREWALL_RELEASE) {
+        struct firewall_conn_event *event;
+        event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
+        if (event != NULL) {
+            COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.all);
+            COPY_ADDR_FROM(event->src_addr.all, key->local_addr.all);
+            event->src_port = key->local_port;
+            event->dst_port = value->trigger_port;
+            event->l4_proto = key->ip_protocol;
+            event->l3_proto = key->ip_type;
+            event->flow_id = value->flow_id;
+            event->trace_id = 0;
+            event->create_time = value->create_time;
+            event->event_type = FIREWALL_DELETE_CONN;
+            bpf_ringbuf_submit(event, 0);
+        }
+
+        // bpf_log_info("call back remove conn");
+        ret = bpf_map_delete_elem(&fire2_conn_map, key);
+        if (ret) {
+            bpf_log_error("call back remove conn error: %pI4:%d->%pI4:%d", &key->local_addr, bpf_ntohs(key->local_port), &value->trigger_addr, bpf_ntohs(value->trigger_port));
+        }
+        return 0;
+    }
+    // 否则尝试进行上报
+    report_result = firewall_metric_try_report(key, value);
+    if (report_result != FIREWALL_REPORT_SUCCESS) {
+        bpf_log_info("call back report fail");
+        // 要么没到上报时间 要么没有争夺到上报权限 所以延期当前超时时间
+        bpf_timer_start(&value->timer, CONN_EST_TIMEOUT, 0);
+        return 0;
     }
 
-    bpf_map_delete_elem(&firewall_conntrack_map, key);
+    if (conn_status == FIREWALL_ACTIVE) {
+        // bpf_log_info("call back turn to timeout1");
+        next_conn_status = FIREWALL_TIMEOUT_1;
+        next_timeout = CONN_EST_TIMEOUT;
+    } else if (conn_status == FIREWALL_TIMEOUT_1) {
+        // bpf_log_info("call back turn to timeout2");
+        next_conn_status = FIREWALL_TIMEOUT_2;
+        next_timeout = CONN_EST_TIMEOUT;
+    } else if (conn_status == FIREWALL_TIMEOUT_2) {
+        // bpf_log_info("call back turn to release");
+        next_conn_status = FIREWALL_RELEASE;
+        next_timeout = key->ip_protocol == IPPROTO_TCP ? CONN_TCP_RELEASE : CONN_UDP_RELEASE;
+    }
+
+    if (__sync_val_compare_and_swap(&value->conn_status, conn_status, next_conn_status) !=
+        conn_status) {
+        bpf_log_info("call back modify status fail, current status: %d new status: %d", conn_status,
+                     next_conn_status);
+        // 更新状态失败, 说明有新的数据包到达
+        bpf_timer_start(&value->timer, CONN_EST_TIMEOUT, 0);
+        return 0;
+    }
+
+    bpf_timer_start(&value->timer, next_timeout, 0);
+
     return 0;
 #undef BPF_LOG_TOPIC
 }
 
 static __always_inline struct nat_timer_value *
 insert_new_nat_timer(const struct firewall_conntrack_key *key,
-                     const struct firewall_conntrack_action *val) {
+                     const struct firewall_conntrack_action_v2 *val) {
 #define BPF_LOG_TOPIC "insert_new_nat_timer"
     // bpf_log_info("protocol: %u, src_port: %u -> dst_port: %u", l4proto,
     // bpf_ntohs(key->pair_ip.src_port), bpf_ntohs(key->pair_ip.dst_port)); bpf_log_info("src_ip:
     // %lu -> dst_ip: %lu", bpf_ntohl(key->pair_ip.src_addr.ip),
     // bpf_ntohl(key->pair_ip.dst_addr.ip));
 
-    int ret = bpf_map_update_elem(&firewall_conntrack_map, key, val, BPF_NOEXIST);
+    int ret = bpf_map_update_elem(&fire2_conn_map, key, val, BPF_NOEXIST);
     if (ret) {
         bpf_log_error("failed to insert conntrack entry, err:%d", ret);
         return NULL;
     }
-    struct firewall_conntrack_action *value = bpf_map_lookup_elem(&firewall_conntrack_map, key);
+    struct firewall_conntrack_action_v2 *value = bpf_map_lookup_elem(&fire2_conn_map, key);
     if (!value) return NULL;
 
-    ret = bpf_timer_init(&value->timer, &firewall_conntrack_map, CLOCK_MONOTONIC);
+    ret = bpf_timer_init(&value->timer, &fire2_conn_map, CLOCK_MONOTONIC);
     if (ret) {
         goto delete_timer;
     }
@@ -462,8 +519,7 @@ insert_new_nat_timer(const struct firewall_conntrack_key *key,
     if (ret) {
         goto delete_timer;
     }
-    ret = bpf_timer_start(&value->timer,
-                          key->ip_protocol == IPPROTO_TCP ? TCP_TIMEOUT : UDP_TIMEOUT, 0);
+    ret = bpf_timer_start(&value->timer, key->ip_protocol == CONN_EST_TIMEOUT, 0);
     if (ret) {
         goto delete_timer;
     }
@@ -471,15 +527,15 @@ insert_new_nat_timer(const struct firewall_conntrack_key *key,
     return value;
 delete_timer:
     bpf_log_error("setup timer err:%d", ret);
-    bpf_map_delete_elem(&firewall_conntrack_map, key);
+    bpf_map_delete_elem(&fire2_conn_map, key);
     return NULL;
 #undef BPF_LOG_TOPIC
 }
 
 static __always_inline int lookup_static_rules(struct firewall_static_rule_key *timer_key,
-                                               struct firewall_conntrack_action **timer_value_) {
+                                               struct firewall_conntrack_action_v2 **timer_value_) {
 #define BPF_LOG_TOPIC "lookup_static_rules"
-    struct firewall_conntrack_action *action;
+    struct firewall_conntrack_action_v2 *action;
     action = bpf_map_lookup_elem(&firewall_allow_rules_map, timer_key);
     if (action) {
         *timer_value_ = action;
@@ -492,11 +548,11 @@ static __always_inline int lookup_static_rules(struct firewall_static_rule_key *
 static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool do_new,
                                                struct firewall_conntrack_key *timer_key,
                                                union u_inet_addr *remote_addr, __be16 *remote_port,
-                                               struct firewall_conntrack_action **timer_value_) {
+                                               struct firewall_conntrack_action_v2 **timer_value_) {
 #define BPF_LOG_TOPIC "lookup_or_create_ct"
 
-    struct firewall_conntrack_action *timer_value =
-        bpf_map_lookup_elem(&firewall_conntrack_map, timer_key);
+    struct firewall_conntrack_action_v2 *timer_value =
+        bpf_map_lookup_elem(&fire2_conn_map, timer_key);
     if (timer_value) {
         *timer_value_ = timer_value;
         return TIMER_EXIST;
@@ -505,13 +561,18 @@ static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool do_ne
         return TIMER_NOT_FOUND;
     }
 
-    struct firewall_conntrack_action action = {
-        .status = TIMER_INIT,
-        .mark = 0,
-        ._pad = 0,
-        .trigger_port = *remote_port,
-        .create_time = bpf_ktime_get_ns(),
-    };
+    struct firewall_conntrack_action_v2 action = {.conn_status = FIREWALL_INIT,
+                                                  .local_status = CONN_CLOSED,
+                                                  .remote_status = CONN_CLOSED,
+                                                  .mark = 0,
+                                                  ._pad = 0,
+                                                  .trigger_port = *remote_port,
+                                                  .create_time = bpf_ktime_get_ns(),
+                                                  .last_upload_ts = 0,
+                                                  .ingress_bytes = 0,
+                                                  .ingress_packets = 0,
+                                                  .egress_bytes = 0,
+                                                  .egress_packets = 0};
     action.flow_id = get_flow_id(skb->mark);
     // if (skb->mark !=0) {
     //     bpf_log_info("skb->mark %d, action.flow_id: %d ", skb->mark, action.flow_id);
@@ -523,7 +584,7 @@ static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool do_ne
     }
 
     // 发送 event
-    struct firewall_conn_event* event;
+    struct firewall_conn_event *event;
     event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
     if (event != NULL) {
         COPY_ADDR_FROM(event->dst_addr.all, action.trigger_addr.all);
@@ -887,7 +948,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
         bool allow_create_mapping =
             !is_icmpx_error && pkt_allow_initiating_ct(packet_info.ip_hdr.pkt_type);
 
-        struct firewall_conntrack_action *ct_timer_value;
+        struct firewall_conntrack_action_v2 *ct_timer_value;
         ret = lookup_or_create_ct(skb, allow_create_mapping, &conntrack_key,
                                   &packet_info.ip_hdr.pair_ip.dst_addr,
                                   &packet_info.ip_hdr.pair_ip.dst_port, &ct_timer_value);
@@ -898,7 +959,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
         if (!is_icmpx_error || ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
-            firewall_metric_repoort(skb, false, &conntrack_key, ct_timer_value);
+            firewall_metric_report(skb, false, &conntrack_key, ct_timer_value);
         }
     } else {
         // bpf_log_info("has firewall rule");
@@ -962,7 +1023,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
                                                        packet_info.ip_hdr.pair_ip.dst_port};
     COPY_ADDR_FROM(conntrack_key.local_addr.all, &packet_info.ip_hdr.pair_ip.dst_addr.all);
 
-    struct firewall_conntrack_action *ct_timer_value;
+    struct firewall_conntrack_action_v2 *ct_timer_value;
     ret = lookup_or_create_ct(skb, false, &conntrack_key, &packet_info.ip_hdr.pair_ip.src_addr,
                               &packet_info.ip_hdr.pair_ip.src_port, &ct_timer_value);
 
@@ -970,7 +1031,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
         if (ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
-            firewall_metric_repoort(skb, true, &conntrack_key, ct_timer_value);
+            firewall_metric_report(skb, true, &conntrack_key, ct_timer_value);
             return TC_ACT_UNSPEC;
         }
         bpf_log_error("ct_timer_value is NULL");
@@ -1074,7 +1135,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
             !is_icmpx_error && pkt_allow_initiating_ct(packet_info.ip_hdr.pkt_type);
 
         // 没有端口开放 那就进行检查是否已经动态添加过了
-        struct firewall_conntrack_action *ct_timer_value;
+        struct firewall_conntrack_action_v2 *ct_timer_value;
         ret = lookup_or_create_ct(skb, allow_create_mapping, &conntrack_key,
                                   &packet_info.ip_hdr.pair_ip.dst_addr,
                                   &packet_info.ip_hdr.pair_ip.dst_port, &ct_timer_value);
@@ -1085,7 +1146,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
         if (!is_icmpx_error || ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
-            firewall_metric_repoort(skb, false, &conntrack_key, ct_timer_value);
+            firewall_metric_report(skb, false, &conntrack_key, ct_timer_value);
         }
     } else {
         // bpf_log_info("has firewall rule");
@@ -1140,7 +1201,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
                                                        packet_info.ip_hdr.pair_ip.dst_port};
     COPY_ADDR_FROM(conntrack_key.local_addr.all, &packet_info.ip_hdr.pair_ip.dst_addr.all);
 
-    struct firewall_conntrack_action *ct_timer_value;
+    struct firewall_conntrack_action_v2 *ct_timer_value;
     ret = lookup_or_create_ct(skb, false, &conntrack_key, &packet_info.ip_hdr.pair_ip.src_addr,
                               &packet_info.ip_hdr.pair_ip.src_port, &ct_timer_value);
 
@@ -1148,7 +1209,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
         if (ct_timer_value != NULL) {
             ct_state_transition(packet_info.ip_hdr.ip_protocol, packet_info.ip_hdr.pkt_type,
                                 ct_timer_value);
-            firewall_metric_repoort(skb, true, &conntrack_key, ct_timer_value);
+            firewall_metric_report(skb, true, &conntrack_key, ct_timer_value);
             return TC_ACT_UNSPEC;
         }
         bpf_log_info("ct_timer_value is NULL");

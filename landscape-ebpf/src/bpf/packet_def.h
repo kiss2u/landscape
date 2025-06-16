@@ -98,6 +98,7 @@ enum {
     PKT_TCP_SYN,
     PKT_TCP_RST,
     PKT_TCP_FIN,
+    PKT_TCP_ACK,
 };
 
 /// 作为 fragment 缓存的 key

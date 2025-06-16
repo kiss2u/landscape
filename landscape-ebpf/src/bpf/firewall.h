@@ -18,6 +18,10 @@ const volatile u64 TCP_TIMEOUT = 1E9 * 60 * 10;
 
 const volatile u64 UDP_TIMEOUT = 1E9 * 60 * 5;
 
+const volatile u64 CONN_EST_TIMEOUT = 1E9 * 5;
+const volatile u64 CONN_TCP_RELEASE = 1E9 * 60 * 10;
+const volatile u64 CONN_UDP_RELEASE = 1E9 * 60 * 5;
+
 /// @brief 持有解析的 IP 信息
 struct ip_context {
     // ip 报文承载的协议类型: TCP / UDP / ICMP
@@ -79,19 +83,39 @@ struct firewall_conntrack_action {
     u64 egress_packets;
 };
 
+struct firewall_conntrack_action_v2 {
+    u64 conn_status;
+    union u_inet_addr trigger_addr;
+    __be16 trigger_port;
+    __u8 flow_id;
+    __u8 _pad;
+    __u32 mark;
+    struct bpf_timer timer;
+    u32 local_status;
+    u32 remote_status;
+    u64 create_time;
+    u64 last_upload_ts;
+    u64 ingress_bytes;
+    u64 ingress_packets;
+    u64 egress_bytes;
+    u64 egress_packets;
+};
+
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct firewall_conntrack_key);
-    __type(value, struct firewall_conntrack_action);
+    __type(value, struct firewall_conntrack_action_v2);
     __uint(max_entries, 35565);
     __uint(map_flags, BPF_F_NO_PREALLOC);
-} firewall_conntrack_map SEC(".maps");
+} fire2_conn_map SEC(".maps");
 
 // ipv4 = 32 + 8 + 8 + 16 = 64
 // ipv6 = 128 + 8 + 8 + 16 = 160
 struct firewall_static_rule_key {
     __u32 prefixlen;
+    // l3_proto
     u8 ip_type;
+    // l4_proto
     u8 ip_protocol;
     __be16 local_port;
     union u_inet_addr remote_address;
@@ -102,4 +126,26 @@ struct firewall_static_ct_action {
     __u32 mark;
 };
 
+enum firewall_report_status {
+    FIREWALL_REPORT_NONE = 0,      // 没到时间，不需要上报
+    FIREWALL_REPORT_SUCCESS = 1,   // 成功上报（且完成清理）
+    FIREWALL_REPORT_CONFLICT = 2   // 到了时间，但 CAS 没成功，没争夺到上报权
+};
+
+enum connect_status {
+    CONN_CLOSED = 0ULL,
+    CONN_TCP_SYN = 1ULL,
+    CONN_TCP_SYN_ACK = 2ULL,
+    CONN_TCP_FIN = 3ULL,
+    CONN_TCP_FIN_ACK = 4ULL,
+    CONN_UDP_EST = 5ULL,
+};
+
+enum firewall_connect_status {
+    FIREWALL_INIT = 0ULL,
+    FIREWALL_ACTIVE = 20ULL,
+    FIREWALL_TIMEOUT_1 = 30ULL,
+    FIREWALL_TIMEOUT_2 = 31ULL,
+    FIREWALL_RELEASE = 40ULL,
+};
 #endif /* __LD_FIREWALL_H__ */

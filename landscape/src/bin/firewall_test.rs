@@ -16,7 +16,6 @@ use landscape_common::{
 };
 use landscape_ebpf::map_setting::add_firewall_rule;
 use tokio::{sync::oneshot, time::sleep};
-use tracing::Level;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -27,9 +26,7 @@ pub struct Args {
 // cargo run --package landscape --bin firewall_test
 #[tokio::main]
 pub async fn main() {
-    let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
-    tracing_subscriber::fmt().with_max_level(Level::DEBUG).with_writer(non_blocking).init();
-
+    landscape_common::init_tracing!();
     landscape_ebpf::setting_libbpf_log();
 
     let args = Args::parse();
