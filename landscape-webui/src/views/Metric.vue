@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from "vue";
-import { get_firewall_metric_status } from "@/api/metric";
-import { FrontEndFirewallMetricServiceData } from "@/rust_bindings/common/metric";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useMetricStore } from "@/stores/status_metric";
 import { ConnectFilter } from "@/lib/metric.rs";
 
-const data = ref<FrontEndFirewallMetricServiceData>();
 const metricStore = useMetricStore();
-const show_edit = ref(false);
+
+onMounted(async () => {
+  metricStore.SET_ENABLE(true);
+  await metricStore.UPDATE_INFO();
+});
+
+onUnmounted(() => {
+  metricStore.SET_ENABLE(false);
+});
 
 // 初始化过滤器
 const filter = ref(new ConnectFilter());
@@ -31,8 +36,8 @@ const ipTypeOptions = [
 const filteredConnectMetrics = computed(() => {
   if (!metricStore.firewall_info) return [];
 
-  return metricStore.firewall_info.connect_metrics.filter((item) => {
-    const key = item.key;
+  return metricStore.firewall_info.filter((item) => {
+    const key = item;
 
     // 源IP过滤 (支持部分匹配)
     if (filter.value.src_ip && !key.src_ip.includes(filter.value.src_ip)) {
@@ -46,7 +51,7 @@ const filteredConnectMetrics = computed(() => {
 
     // 源端口精准匹配
     if (
-      filter.value.port_start !== undefined &&
+      filter.value.port_start !== null &&
       key.src_port !== filter.value.port_start
     ) {
       return false;
@@ -54,7 +59,7 @@ const filteredConnectMetrics = computed(() => {
 
     // 目标端口精准匹配
     if (
-      filter.value.port_end !== undefined &&
+      filter.value.port_end !== null &&
       key.dst_port !== filter.value.port_end
     ) {
       return false;
@@ -62,7 +67,7 @@ const filteredConnectMetrics = computed(() => {
 
     // L3协议过滤 (精确匹配)
     if (
-      filter.value.l3_proto !== undefined &&
+      filter.value.l3_proto !== null &&
       key.l3_proto !== filter.value.l3_proto
     ) {
       return false;
@@ -70,17 +75,14 @@ const filteredConnectMetrics = computed(() => {
 
     // L4协议过滤 (精确匹配)
     if (
-      filter.value.l4_proto !== undefined &&
+      filter.value.l4_proto !== null &&
       key.l4_proto !== filter.value.l4_proto
     ) {
       return false;
     }
 
     // Flow ID过滤 (精确匹配)
-    if (
-      filter.value.flow_id !== undefined &&
-      key.flow_id !== filter.value.flow_id
-    ) {
+    if (filter.value.flow_id !== null && key.flow_id !== filter.value.flow_id) {
       return false;
     }
 
@@ -172,7 +174,7 @@ const applyFilter = () => {};
     </n-flex>
 
     <n-scrollbar style="flex: 1">
-      <FirewallConnectList :connect_metrics="filteredConnectMetrics" />
+      <ConnectList :connect_metrics="filteredConnectMetrics" />
     </n-scrollbar>
   </n-flex>
 </template>

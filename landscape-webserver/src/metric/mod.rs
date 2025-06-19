@@ -1,25 +1,32 @@
-use axum::{extract::State, routing::get, Json, Router};
-use landscape::metric::MetricService;
-use landscape_common::metric::firewall::FrontEndFirewallMetricServiceData;
+use axum::{
+    extract::State,
+    routing::{get, post},
+    Json, Router,
+};
+use landscape_common::metric::connect::{ConnectKey, ConnectMetric};
 use serde_json::Value;
 
-pub async fn get_metric_service_paths() -> Router {
-    let metric_service = MetricService::new().await;
+use crate::LandscapeApp;
 
-    metric_service.start_service().await;
+pub async fn get_metric_service_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/status", get(get_metric_status))
-        .route("/firewall", get(get_firewall_metric_info))
-        .with_state(metric_service)
+        .route("/connects", get(get_connects_info))
+        .route("/connects/chart", post(get_connect_metric_info))
 }
 
-pub async fn get_metric_status(State(state): State<MetricService>) -> Json<Value> {
-    Json(serde_json::to_value(&state.status).unwrap())
+pub async fn get_metric_status(State(state): State<LandscapeApp>) -> Json<Value> {
+    Json(serde_json::to_value(&state.metric_service.status).unwrap())
 }
 
-pub async fn get_firewall_metric_info(
-    State(state): State<MetricService>,
-) -> Json<FrontEndFirewallMetricServiceData> {
-    let data = state.data.firewall.convert_to_front_formart().await;
+pub async fn get_connects_info(State(state): State<LandscapeApp>) -> Json<Vec<ConnectKey>> {
+    let data = state.metric_service.data.connect_metric.connect_infos().await;
+    Json(data)
+}
+pub async fn get_connect_metric_info(
+    State(state): State<LandscapeApp>,
+    Json(key): Json<ConnectKey>,
+) -> Json<Vec<ConnectMetric>> {
+    let data = state.metric_service.data.connect_metric.connect_metric_in_a_min(key).await;
     Json(data)
 }

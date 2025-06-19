@@ -17,6 +17,7 @@ use landscape::{
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
+    metric::MetricService,
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
@@ -66,6 +67,9 @@ pub struct LandscapeApp {
     pub dst_ip_rule_service: DstIpRuleService,
     pub geo_ip_service: GeoIpService,
     pub config_service: LandscapeConfigService,
+
+    /// Metric
+    pub metric_service: MetricService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -121,6 +125,10 @@ async fn main() -> LdResult<()> {
 
     let config_service =
         LandscapeConfigService::new(config.clone(), db_store_provider.clone()).await;
+
+    let metric_service = MetricService::new(home_path.clone()).await;
+
+    metric_service.start_service().await;
     let landscape_app_status = LandscapeApp {
         dns_service,
         dns_rule_service,
@@ -130,6 +138,7 @@ async fn main() -> LdResult<()> {
         dst_ip_rule_service,
         geo_ip_service,
         config_service,
+        metric_service,
     };
     // 初始化结束
 
@@ -178,7 +187,10 @@ async fn main() -> LdResult<()> {
     let source_route = Router::new()
         .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
-        .nest("/metric", metric::get_metric_service_paths().await)
+        .nest(
+            "/metric",
+            metric::get_metric_service_paths().await.with_state(landscape_app_status.clone()),
+        )
         .nest(
             "/sys_service",
             Router::new()

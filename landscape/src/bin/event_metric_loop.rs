@@ -1,6 +1,7 @@
-use landscape_common::metric::MetricData;
+use landscape_common::{metric::MetricData, LANDSCAPE_METRIC_DIR_NAME};
 use landscape_ebpf::metric::new_metric;
 use std::{
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -19,10 +20,12 @@ async fn main() {
     })
     .unwrap();
 
+    let metric_path = PathBuf::from("/root/.landscape-router").join(LANDSCAPE_METRIC_DIR_NAME);
+
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
 
-    let metric_service = MetricData::new().await;
+    let metric_service = MetricData::new(metric_path).await;
     let metric_service_clone = metric_service.clone();
     std::thread::spawn(move || {
         new_metric(rx, metric_service_clone);
@@ -31,7 +34,7 @@ async fn main() {
 
     while running.load(Ordering::SeqCst) {
         tokio::time::sleep(Duration::new(1, 0)).await;
-        println!("data: {:?}", metric_service.firewall.convert_to_front_formart().await);
+        println!("data: {:?}", metric_service.connect_metric.connect_infos().await);
     }
 
     let _ = tx.send(());

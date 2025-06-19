@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use landscape_common::{
     metric::MetricData,
     service::{DefaultWatchServiceStatus, ServiceStatus},
+    LANDSCAPE_METRIC_DIR_NAME,
 };
 use tokio::sync::oneshot;
 
@@ -11,9 +14,10 @@ pub struct MetricService {
 }
 
 impl MetricService {
-    pub async fn new() -> Self {
+    pub async fn new(home_path: PathBuf) -> Self {
+        let metric_path = home_path.join(LANDSCAPE_METRIC_DIR_NAME);
         let status = DefaultWatchServiceStatus::new();
-        MetricService { data: MetricData::new().await, status }
+        MetricService { data: MetricData::new(metric_path).await, status }
     }
 
     pub async fn start_service(&self) {

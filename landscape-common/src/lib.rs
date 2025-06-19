@@ -44,6 +44,9 @@ pub const TLS_DEFAULT_KEY: &str = "key.pem";
 pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 /// web resource
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
+/// metric
+pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
+
 /// default sqlite path
 pub const LANDSCAPE_DB_SQLITE_NAME: &str = "landscape_db.sqlite";
 /// LOG Path

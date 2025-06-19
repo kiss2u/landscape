@@ -1,14 +1,18 @@
-use firewall::FirewallMetricService;
+use std::path::PathBuf;
 
-pub mod firewall;
+use crate::metric::connect::ConnectMetricManager;
+
+pub mod connect;
 
 #[derive(Clone)]
 pub struct MetricData {
-    pub firewall: FirewallMetricService,
+    pub connect_metric: ConnectMetricManager,
 }
 
 impl MetricData {
-    pub async fn new() -> Self {
-        MetricData { firewall: FirewallMetricService::new().await }
+    pub async fn new(home_path: PathBuf) -> Self {
+        MetricData {
+            connect_metric: ConnectMetricManager::new(home_path),
+        }
     }
 }

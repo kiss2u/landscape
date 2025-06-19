@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use landscape_common::event::firewall::{FirewallEvent, FirewallMessage, FirewallMetric};
+use landscape_common::event::ConnectMessage;
+use landscape_common::metric::connect::{ConnectInfo, ConnectMetric};
 use landscape_common::{event::nat::NatEvent, metric::MetricData};
 use tokio::sync::oneshot::{self, error::TryRecvError};
 
@@ -16,6 +17,8 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
 
     let offset_time = landscape_common::utils::time::get_relative_time_ns().unwrap_or_default();
 
+    let revise_time = |time: u64| -> u64 { (time + offset_time) / 1_000_000 };
+
     let nat_conn_callback = |data: &[u8]| -> i32 {
         let nat_conn_event_value = plain::from_bytes::<nat_conn_event>(data);
         if let Ok(data) = nat_conn_event_value {
@@ -26,29 +29,30 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
         0
     };
 
-    let firewall = metric_service.firewall.clone();
+    let firewall = metric_service.connect_metric.clone();
     let firewall_callback = |data: &[u8]| -> i32 {
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let firewall_conn_event_value = plain::from_bytes::<firewall_conn_event>(data);
         if let Ok(data) = firewall_conn_event_value {
-            let mut event = FirewallEvent::from(data);
-            event.create_time += offset_time;
+            let mut event = ConnectInfo::from(data);
+            event.key.create_time = revise_time(event.key.create_time);
+            event.report_time = revise_time(event.report_time);
             // println!("event, {:#?}, time: {time}", event);
-            firewall.send_firewall_msg(FirewallMessage::Event(event));
+            firewall.send_connect_msg(ConnectMessage::Event(event));
         }
         0
     };
 
-    let firewall = metric_service.firewall.clone();
+    let firewall = metric_service.connect_metric.clone();
     let firewall_metric_callback = |data: &[u8]| -> i32 {
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let firewall_conn_event_value = plain::from_bytes::<firewall_conn_metric_event>(data);
         if let Ok(data) = firewall_conn_event_value {
-            let mut event = FirewallMetric::from(data);
-            event.create_time += offset_time;
-            event.time += offset_time;
+            let mut event = ConnectMetric::from(data);
+            event.key.create_time = revise_time(event.key.create_time);
+            event.report_time = revise_time(event.report_time);
             // println!("FirewallMetric, {:#?}, time: {time}", event);
-            firewall.send_firewall_msg(FirewallMessage::Metric(event));
+            firewall.send_connect_msg(ConnectMessage::Metric(event));
         }
         0
     };

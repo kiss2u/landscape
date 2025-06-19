@@ -112,6 +112,10 @@ hickory-client = "0.25.2"
 hickory-resolver = "0.25.2"
 hickory-proto = "0.25.2"
 
+# polars 
+polars = { version = "0.48.1", features = ["dtype-u16", "dtype-u8"] }
+
+
 [workspace.dependencies.uuid]
 version = "1.17.0"
 features = ["v4", "serde"]

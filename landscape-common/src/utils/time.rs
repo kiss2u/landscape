@@ -40,6 +40,21 @@ pub fn get_boot_time_ns() -> Result<u64, i32> {
     }
 }
 
+pub fn get_current_time_ns() -> Result<u64, i32> {
+    let mut ts: timespec = unsafe { std::mem::zeroed() };
+    let result = unsafe { clock_gettime(CLOCK_REALTIME, &mut ts) };
+
+    if result == 0 {
+        Ok((ts.tv_sec as u64) * 1_000_000_000 + (ts.tv_nsec as u64))
+    } else {
+        Err(unsafe { *libc::__errno_location() })
+    }
+}
+
+pub fn get_current_time_ms() -> Result<u64, i32> {
+    Ok(get_current_time_ns()? / 1_000_000)
+}
+
 pub fn get_relative_time_ns() -> Result<u64, i32> {
     unsafe {
         let mut realtime: timespec = std::mem::zeroed();
