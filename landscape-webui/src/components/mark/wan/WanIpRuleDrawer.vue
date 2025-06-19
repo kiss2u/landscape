@@ -26,9 +26,7 @@ const show = defineModel<boolean>("show", { required: true });
 
 const rules = ref<any>([]);
 async function read_rules() {
-  if (props.flow_id) {
-    rules.value = await get_flow_dst_ip_rules(props.flow_id);
-  }
+  rules.value = await get_flow_dst_ip_rules(props.flow_id);
 }
 
 const show_create_modal = ref(false);

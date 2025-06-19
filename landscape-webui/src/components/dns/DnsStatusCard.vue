@@ -1,22 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { ref } from "vue";
 
 import { DotMark } from "@vicons/carbon";
 import { useThemeVars } from "naive-ui";
 
-import {
-  get_dns_status,
-  start_dns_service,
-  stop_dns_service,
-} from "@/api/dns_service";
+import { start_dns_service, stop_dns_service } from "@/api/dns_service";
 import DnsRuleDrawer from "@/components/dns/DnsRuleDrawer.vue";
 import { useDnsStore } from "@/stores/status_dns";
-import { ServiceStatusType } from "@/lib/services";
 
 const dnsStore = useDnsStore();
 const themeVars = ref(useThemeVars());
 
 const show_rule_drawer = ref(false);
+const show_ip_rule = ref(false);
 
 async function start_dns() {
   await start_dns_service(53);
@@ -41,7 +37,10 @@ async function stop_dns() {
           size="small"
           @click="show_rule_drawer = true"
         >
-          域名解析规则
+          默认域名规则
+        </n-button>
+        <n-button :focusable="false" size="small" @click="show_ip_rule = true">
+          默认目标 IP 规则
         </n-button>
         <n-button
           :focusable="false"
@@ -68,5 +67,6 @@ async function stop_dns() {
     <!-- <template #footer> #footer </template>
     <template #action> #action </template> -->
     <DnsRuleDrawer v-model:show="show_rule_drawer" />
+    <WanIpRuleDrawer v-model:show="show_ip_rule" />
   </n-card>
 </template>
