@@ -98,8 +98,9 @@ impl ConfigController for DstIpRuleService {
 async fn update_flow_dst_ip_map(
     geo_ip_service: GeoIpService,
     flow_id: u32,
-    mut rules: Vec<WanIpRuleConfig>,
+    rules: Vec<WanIpRuleConfig>,
 ) {
+    let mut rules: Vec<WanIpRuleConfig> = rules.into_iter().filter(|r| r.enable).collect();
     rules.sort_by(|a, b| a.index.cmp(&b.index));
     tracing::info!("[flow_id: {flow_id}] update dst ip rules: {rules:?}");
     let result = geo_ip_service.convert_config_to_runtime_rule(rules).await;
