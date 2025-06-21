@@ -22,6 +22,7 @@ use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};
 use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
+use tokio::sync::RwLock;
 use tracing::instrument;
 
 const OFFER_VALID_TIME: u32 = 20;
@@ -72,11 +73,12 @@ async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Han
     }
 }
 
-#[instrument(skip(config, service_status))]
+#[instrument(skip(config, service_status, _assigned_ips))]
 pub async fn dhcp_v4_server(
     iface_name: String,
     config: DHCPv4ServerConfig,
     service_status: DHCPv4ServiceWatchStatus,
+    _assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
 
