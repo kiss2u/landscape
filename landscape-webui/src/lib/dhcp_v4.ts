@@ -1,5 +1,4 @@
 import { IPv4, IPv4CidrRange } from "ip-num";
-import { ServiceStatus } from "./services";
 
 export class DHCPv4ServiceConfig {
   iface_name: string;
@@ -66,20 +65,6 @@ export function get_dhcp_range(cidr: string): [string, string] {
   const nthIp = IPv4.fromNumber(nthIpValue);
 
   return [nthIp.toString(), range.getLast().toString()];
-}
-
-export class DHCPv4ServiceStatus {
-  status: ServiceStatus;
-  data?: DHCPv4OfferInfo;
-
-  constructor(obj?: { status: ServiceStatus; data?: DHCPv4OfferInfo }) {
-    this.status = new ServiceStatus(obj?.status);
-    this.data = obj?.data;
-  }
-
-  get_color(themeVars: any) {
-    return this.status.get_color(themeVars);
-  }
 }
 
 export type DHCPv4OfferInfo = {

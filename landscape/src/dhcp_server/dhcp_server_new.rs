@@ -15,8 +15,7 @@ use futures::TryStreamExt;
 use landscape_common::config::dhcp_v4_server::DHCPv4ServerConfig;
 use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
 use landscape_common::net::MacAddr;
-use landscape_common::service::dhcp::DHCPv4ServiceWatchStatus;
-use landscape_common::service::ServiceStatus;
+use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use landscape_common::LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME;
 use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};
@@ -77,7 +76,7 @@ async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Han
 pub async fn dhcp_v4_server(
     iface_name: String,
     config: DHCPv4ServerConfig,
-    service_status: DHCPv4ServiceWatchStatus,
+    service_status: DefaultWatchServiceStatus,
     assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);

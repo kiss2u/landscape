@@ -5,14 +5,13 @@ use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
 use landscape_common::dhcp::DHCPv4OfferInfo;
 use landscape_common::service::controller_service_v2::ControllerService;
+use landscape_common::service::DefaultServiceStatus;
+use landscape_common::service::DefaultWatchServiceStatus;
 use landscape_common::store::storev2::LandscapeStore;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig,
     observer::IfaceObserverAction,
-    service::{
-        dhcp::{DHCPv4ServiceStatus, DHCPv4ServiceWatchStatus},
-        service_manager_v2::{ServiceManager, ServiceStarterTrait},
-    },
+    service::service_manager_v2::{ServiceManager, ServiceStarterTrait},
 };
 use landscape_database::dhcp_v4_server::repository::DHCPv4ServerRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -37,11 +36,11 @@ impl DHCPv4ServerStarter {
 
 #[async_trait::async_trait]
 impl ServiceStarterTrait for DHCPv4ServerStarter {
-    type Status = DHCPv4ServiceStatus;
+    type Status = DefaultServiceStatus;
     type Config = DHCPv4ServiceConfig;
 
-    async fn start(&self, config: DHCPv4ServiceConfig) -> DHCPv4ServiceWatchStatus {
-        let service_status = DHCPv4ServiceWatchStatus::new();
+    async fn start(&self, config: DHCPv4ServiceConfig) -> DefaultWatchServiceStatus {
+        let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
             if let Some(_) = get_iface_by_name(&config.iface_name).await {

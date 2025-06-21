@@ -1,17 +1,14 @@
-import {
-  DHCPv4OfferInfo,
-  DHCPv4ServiceConfig,
-  DHCPv4ServiceStatus,
-} from "@/lib/dhcp_v4";
+import { DHCPv4OfferInfo, DHCPv4ServiceConfig } from "@/lib/dhcp_v4";
 import axiosService from ".";
+import { ServiceStatus } from "@/lib/services";
 
 export async function get_all_dhcp_v4_status(): Promise<
-  Map<string, DHCPv4ServiceStatus>
+  Map<string, ServiceStatus>
 > {
   let data = await axiosService.get(`services/dhcp_v4/status`);
-  let map = new Map<string, DHCPv4ServiceStatus>();
+  let map = new Map<string, ServiceStatus>();
   for (const [key, value] of Object.entries(data.data)) {
-    map.set(key, new DHCPv4ServiceStatus(value as any));
+    map.set(key, new ServiceStatus(value as any));
   }
   // console.log(map);
   return map;

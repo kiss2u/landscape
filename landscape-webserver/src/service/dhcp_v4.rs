@@ -9,7 +9,7 @@ use axum::{
 use landscape::service::dhcp_v4::DHCPv4ServerManagerService;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig, observer::IfaceObserverAction,
-    service::dhcp::DHCPv4ServiceWatchStatus,
+    service::DefaultWatchServiceStatus,
 };
 use landscape_common::{dhcp::DHCPv4OfferInfo, service::controller_service_v2::ControllerService};
 
@@ -88,6 +88,6 @@ async fn handle_service_config(
 async fn delete_and_stop_iface_service(
     State(state): State<DHCPv4ServerManagerService>,
     Path(iface_name): Path<String>,
-) -> Json<Option<DHCPv4ServiceWatchStatus>> {
+) -> Json<Option<DefaultWatchServiceStatus>> {
     Json(state.delete_and_stop_iface_service(iface_name).await)
 }

@@ -47,7 +47,7 @@ const columns = [
 ];
 
 const disable_popover = computed(() => {
-  return status.value?.status.t === ServiceStatusType.Running ? false : true;
+  return status.value?.t === ServiceStatusType.Running ? false : true;
 });
 
 const assigned_ips = ref<DHCPv4OfferInfo | null>(null);
@@ -60,7 +60,7 @@ async function read_assigned_ips() {
 
 <template>
   <StatusBtn
-    :status="status?.status"
+    :status="status"
     :disable_popover="disable_popover"
     @update:show="read_assigned_ips"
     @click="emit('click')"
