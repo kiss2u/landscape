@@ -5,10 +5,15 @@ import { H, NetworkEnterprise } from "@vicons/carbon";
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useDHCPv4ConfigStore } from "@/stores/status_dhcp_v4";
 import { NCountdown } from "naive-ui";
-import { computed, h } from "vue";
-import { DHCPv4OfferInfoShow, conver_to_show } from "@/lib/dhcp_v4";
+import { computed, h, ref } from "vue";
+import {
+  DHCPv4OfferInfo,
+  DHCPv4OfferInfoShow,
+  conver_to_show,
+} from "@/lib/dhcp_v4";
 import { ServiceStatusType } from "@/lib/services";
 import { IfaceZoneType } from "@/rust_bindings/common/iface";
+import { get_dhcp_v4_assigned_ips_by_iface_name } from "@/api/service_dhcp_v4";
 
 const dhcpv4ConfigStore = useDHCPv4ConfigStore();
 
@@ -44,12 +49,20 @@ const columns = [
 const disable_popover = computed(() => {
   return status.value?.status.t === ServiceStatusType.Running ? false : true;
 });
+
+const assigned_ips = ref<DHCPv4OfferInfo | null>(null);
+async function read_assigned_ips() {
+  assigned_ips.value = await get_dhcp_v4_assigned_ips_by_iface_name(
+    iface_info.iface_name
+  );
+}
 </script>
 
 <template>
   <StatusBtn
     :status="status?.status"
     :disable_popover="disable_popover"
+    @update:show="read_assigned_ips"
     @click="emit('click')"
   >
     <template #btn-icon>
@@ -62,7 +75,7 @@ const disable_popover = computed(() => {
       <!-- {{ status?.data }} -->
       <n-data-table
         :columns="columns"
-        :data="conver_to_show(status?.data)"
+        :data="conver_to_show(assigned_ips)"
         :bordered="false"
       />
     </template>

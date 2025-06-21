@@ -53,11 +53,16 @@ const control_show = computed(() => {
   return info;
 });
 
-const emit = defineEmits(["click", "hover"]);
+const emit = defineEmits(["click", "hover", "update:show"]);
 </script>
 
 <template>
-  <n-popover trigger="hover" :show-arrow="false" :disabled="popover_show">
+  <n-popover
+    trigger="hover"
+    :show-arrow="false"
+    @update:show="(show:boolean) => emit('update:show', show)"
+    :disabled="popover_show"
+  >
     <template #trigger>
       <n-button
         size="tiny"

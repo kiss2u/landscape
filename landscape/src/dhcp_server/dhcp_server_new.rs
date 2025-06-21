@@ -73,12 +73,12 @@ async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Han
     }
 }
 
-#[instrument(skip(config, service_status, _assigned_ips))]
+#[instrument(skip(config, service_status, assigned_ips))]
 pub async fn dhcp_v4_server(
     iface_name: String,
     config: DHCPv4ServerConfig,
     service_status: DHCPv4ServiceWatchStatus,
-    _assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>,
+    assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
 
@@ -152,7 +152,7 @@ pub async fn dhcp_v4_server(
                     Some(message) => {
                         let need_update_data = handle_dhcp_message(&mut dhcp_server, &send_socket, message).await;
                         if need_update_data {
-                            service_status.just_change_data(dhcp_server.get_offered_info());
+                            update_assign_info(assigned_ips.clone(), dhcp_server.get_offered_info()).await;
                         }
                     },
                     None => {
@@ -165,7 +165,7 @@ pub async fn dhcp_v4_server(
             _ = &mut timeout_timer => {
                 // dhcp_status.expire_check();
                 timeout_timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(IP_EXPIRE_INTERVAL));
-                service_status.just_change_data(dhcp_server.get_offered_info());
+                            update_assign_info(assigned_ips.clone(), dhcp_server.get_offered_info()).await;
             }
             // 处理外部关闭服务通知
             change_result = dhcp_server_service_status.changed() => {
@@ -481,6 +481,11 @@ impl DHCPv4Server {
         }
         DHCPv4OfferInfo { relative_boot_time, offered_ips }
     }
+}
+
+async fn update_assign_info(assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>, info: DHCPv4OfferInfo) {
+    let mut write_lock = assigned_ips.write().await;
+    *write_lock = info;
 }
 
 /// get offer

@@ -1,4 +1,8 @@
-import { DHCPv4ServiceConfig, DHCPv4ServiceStatus } from "@/lib/dhcp_v4";
+import {
+  DHCPv4OfferInfo,
+  DHCPv4ServiceConfig,
+  DHCPv4ServiceStatus,
+} from "@/lib/dhcp_v4";
 import axiosService from ".";
 
 export async function get_all_dhcp_v4_status(): Promise<
@@ -11,6 +15,22 @@ export async function get_all_dhcp_v4_status(): Promise<
   }
   // console.log(map);
   return map;
+}
+
+export async function get_dhcp_v4_assigned_ips(): Promise<
+  Map<string, DHCPv4OfferInfo>
+> {
+  let data = await axiosService.get(`services/dhcp_v4/assigned_ips`);
+  return data.data;
+}
+
+export async function get_dhcp_v4_assigned_ips_by_iface_name(
+  iface_name: string
+): Promise<DHCPv4OfferInfo | null> {
+  let data = await axiosService.get(
+    `services/dhcp_v4/${iface_name}/assigned_ips`
+  );
+  return data.data;
 }
 
 export async function get_iface_dhcp_v4_config(

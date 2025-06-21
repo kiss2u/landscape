@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     extract::{Path, State},
     routing::{get, post},
@@ -5,11 +7,11 @@ use axum::{
 };
 
 use landscape::service::dhcp_v4::DHCPv4ServerManagerService;
-use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig, observer::IfaceObserverAction,
     service::dhcp::DHCPv4ServiceWatchStatus,
 };
+use landscape_common::{dhcp::DHCPv4OfferInfo, service::controller_service_v2::ControllerService};
 
 use landscape_database::provider::LandscapeDBServiceProvider;
 use serde_json::Value;
@@ -26,12 +28,27 @@ pub async fn get_dhcp_v4_service_paths(
     Router::new()
         .route("/dhcp_v4/status", get(get_all_iface_service_status))
         .route("/dhcp_v4", post(handle_service_config))
+        .route("/dhcp_v4/assigned_ips", get(get_all_iface_assigned_ips))
         .route(
             "/dhcp_v4/:iface_name",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
+        .route("/dhcp_v4/:iface_name/assigned_ips", get(get_all_iface_assigned_ips_by_iface_name))
         // .route("/dhcp_v4/:iface_name/restart", post(restart_mark_service_status))
         .with_state(share_state)
+}
+
+async fn get_all_iface_assigned_ips(
+    State(state): State<DHCPv4ServerManagerService>,
+) -> Json<HashMap<String, DHCPv4OfferInfo>> {
+    Json(state.get_assigned_ips().await)
+}
+
+async fn get_all_iface_assigned_ips_by_iface_name(
+    State(state): State<DHCPv4ServerManagerService>,
+    Path(iface_name): Path<String>,
+) -> Json<Option<DHCPv4OfferInfo>> {
+    Json(state.get_assigned_ips_by_iface_name(iface_name).await)
 }
 
 async fn get_all_iface_service_status(

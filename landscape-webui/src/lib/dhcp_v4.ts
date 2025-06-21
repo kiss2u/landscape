@@ -99,7 +99,9 @@ export type DHCPv4OfferInfoItem = {
   expire_time: number;
 };
 
-export function conver_to_show(data?: DHCPv4OfferInfo): DHCPv4OfferInfoShow[] {
+export function conver_to_show(
+  data: DHCPv4OfferInfo | null
+): DHCPv4OfferInfoShow[] {
   if (data) {
     const result: DHCPv4OfferInfoShow[] = [];
     let relative_boot_time = data.relative_boot_time;

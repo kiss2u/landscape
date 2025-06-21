@@ -77,7 +77,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
 pub struct DHCPv4ServerManagerService {
     service: ServiceManager<DHCPv4ServerStarter>,
     store: DHCPv4ServerRepository,
-    server_booter: DHCPv4ServerStarter,
+    server_starter: DHCPv4ServerStarter,
 }
 
 impl ControllerService for DHCPv4ServerManagerService {
@@ -104,9 +104,9 @@ impl DHCPv4ServerManagerService {
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.dhcp_v4_server_store();
-        let server_booter = DHCPv4ServerStarter::new();
+        let server_starter = DHCPv4ServerStarter::new();
         let service =
-            ServiceManager::init(store.list().await.unwrap(), server_booter.clone()).await;
+            ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {
@@ -130,7 +130,7 @@ impl DHCPv4ServerManagerService {
         });
 
         let store = store_service.dhcp_v4_server_store();
-        Self { service, store, server_booter }
+        Self { service, store, server_starter }
     }
 
     pub async fn check_ip_range_conflict(
@@ -167,5 +167,37 @@ impl DHCPv4ServerManagerService {
         }
 
         Ok(())
+    }
+
+    pub async fn get_assigned_ips(&self) -> HashMap<String, DHCPv4OfferInfo> {
+        let mut result = HashMap::new();
+
+        let map = {
+            let read_lock = self.server_starter.iface_lease_map.read().await;
+            read_lock.clone()
+        };
+
+        for (iface_name, assigned_ips) in map {
+            if let Ok(read) = assigned_ips.try_read() {
+                result.insert(iface_name, read.clone());
+            }
+        }
+
+        result
+    }
+
+    pub async fn get_assigned_ips_by_iface_name(
+        &self,
+        iface_name: String,
+    ) -> Option<DHCPv4OfferInfo> {
+        let info = {
+            let read_lock = self.server_starter.iface_lease_map.read().await;
+            read_lock.get(&iface_name).map(Clone::clone)
+        };
+
+        let Some(offer_info) = info else { return None };
+
+        let data = offer_info.read().await.clone();
+        return Some(data);
     }
 }
