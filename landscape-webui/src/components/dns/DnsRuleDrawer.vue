@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import DnsRuleCard from "@/components/dns/DnsRuleCard.vue";
 import { get_flow_dns_rules, push_many_dns_rule } from "@/api/dns_rule";
 import {
@@ -58,6 +58,14 @@ async function import_rules() {
     await read_rules();
   } catch (e) {}
 }
+
+const title = computed(() => {
+  if (props.flow_id === 0) {
+    return "编辑 默认 DNS 规则";
+  } else {
+    return `编辑 Flow: ${props.flow_id} DNS 规则`;
+  }
+});
 </script>
 <template>
   <n-drawer
@@ -66,7 +74,7 @@ async function import_rules() {
     width="500px"
     placement="right"
   >
-    <n-drawer-content title="编辑 DNS 所使用规则" closable>
+    <n-drawer-content :title="title" closable>
       <n-flex style="height: 100%" vertical>
         <n-flex>
           <n-button style="flex: 1" @click="show_create_modal = true">

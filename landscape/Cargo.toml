@@ -58,8 +58,6 @@ tracing-appender = { workspace = true }
 dhcproto = { workspace = true }
 ts-rs = { workspace = true }
 
-polars = { workspace = true, features = ["lazy", "parquet"] }
-
 [dependencies.pnet]
 workspace = true
 

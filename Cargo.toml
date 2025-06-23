@@ -114,6 +114,8 @@ hickory-proto = "0.25.2"
 
 # polars 
 polars = { version = "0.48.1", features = ["dtype-u16", "dtype-u8"] }
+# duckdb
+duckdb = { version = "1.3.0", features = ["bundled"] }
 
 
 [workspace.dependencies.uuid]

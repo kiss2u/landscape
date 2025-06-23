@@ -40,7 +40,7 @@ async function stop_dns() {
           默认域名规则
         </n-button>
         <n-button :focusable="false" size="small" @click="show_ip_rule = true">
-          默认目标 IP 规则
+          默认 IP 规则
         </n-button>
         <n-button
           :focusable="false"

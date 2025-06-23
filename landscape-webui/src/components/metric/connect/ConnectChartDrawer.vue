@@ -12,7 +12,7 @@ import VueApexCharts from "vue3-apexcharts";
 const metricStore = useMetricStore();
 
 interface Props {
-  conn: ConnectKey;
+  conn: ConnectKey | null;
 }
 
 const props = defineProps<Props>();
@@ -22,25 +22,32 @@ const chart = ref<ConnectMetric[]>([]);
 const show = defineModel("show");
 
 const title = computed(() => {
-  return `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`;
+  if (props.conn == null) {
+    return "";
+  } else {
+    return `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`;
+  }
 });
 const interval_number = ref();
 async function start_fetch_data() {
-  metricStore.SET_ENABLE(false);
-  chart.value.splice(
-    0,
-    chart.value.length,
-    ...(await get_connect_metric_info(props.conn))
-  );
+  if (props.conn !== null && !interval_number.value) {
+    metricStore.SET_ENABLE(false);
+    chart.value = await get_connect_metric_info(props.conn);
 
-  interval_number.value = setInterval(async () => {
-    const newData = await get_connect_metric_info(props.conn);
-    chart.value.splice(0, chart.value.length, ...newData);
-  }, 5000);
+    interval_number.value = setInterval(async () => {
+      if (props.conn !== null) {
+        chart.value = await get_connect_metric_info(props.conn);
+      }
+    }, 5000);
+  }
 }
 async function stop_fetch_data() {
-  metricStore.SET_ENABLE(true);
-  clearInterval(interval_number.value);
+  if (props.conn !== null) {
+    metricStore.SET_ENABLE(true);
+    clearInterval(interval_number.value);
+    interval_number.value = null;
+    chart.value = [];
+  }
 }
 
 const categories = computed(() =>

@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use crate::metric::connect::ConnectMetricManager;
 
 pub mod connect;
+pub mod duckdb;
+pub mod polars;
 
 #[derive(Clone)]
 pub struct MetricData {
@@ -12,7 +14,7 @@ pub struct MetricData {
 impl MetricData {
     pub async fn new(home_path: PathBuf) -> Self {
         MetricData {
-            connect_metric: ConnectMetricManager::new(home_path),
+            connect_metric: ConnectMetricManager::new(home_path).await,
         }
     }
 }

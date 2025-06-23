@@ -19,8 +19,7 @@ function l4_proto(value: number): string {
   }
   return "Unknow";
 }
-
-const show_chart = ref(false);
+const emit = defineEmits(["show:key"]);
 </script>
 
 <template>
@@ -30,7 +29,7 @@ const show_chart = ref(false);
     </template>
 
     <template #header-extra>
-      <n-button text style="font-size: 16px" @click="show_chart = true">
+      <n-button text style="font-size: 16px" @click="emit('show:key', conn)">
         <n-icon>
           <ChartLine />
         </n-icon>
@@ -49,9 +48,5 @@ const show_chart = ref(false);
         </n-tag>
       </n-flex>
     </template>
-    <ConnectChartDrawer
-      v-model:show="show_chart"
-      :conn="conn"
-    ></ConnectChartDrawer>
   </n-card>
 </template>

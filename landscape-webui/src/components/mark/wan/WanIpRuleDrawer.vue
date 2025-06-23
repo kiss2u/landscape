@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import WanRuleEditModal from "./WanRuleEditModal.vue";
 import WanRuleCard from "./WanRuleCard.vue";
 import {
@@ -62,6 +62,14 @@ async function import_rules() {
     await read_rules();
   } catch (e) {}
 }
+
+const title = computed(() => {
+  if (props.flow_id === 0) {
+    return "编辑 默认 目标 IP 规则";
+  } else {
+    return `编辑 Flow: ${props.flow_id} 目标 IP 规则`;
+  }
+});
 </script>
 <template>
   <n-drawer
@@ -70,7 +78,7 @@ async function import_rules() {
     width="500px"
     placement="right"
   >
-    <n-drawer-content title="编辑 Wan 规则" closable>
+    <n-drawer-content :title="title" closable>
       <n-flex style="height: 100%" vertical>
         <n-flex>
           <n-button style="flex: 1" @click="show_create_modal = true">
