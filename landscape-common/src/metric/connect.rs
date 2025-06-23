@@ -194,7 +194,7 @@ impl ConnectMetricManager {
         result
     }
 
-    pub async fn connect_metric_in_a_min(&self, key: ConnectKey) -> Vec<ConnectMetric> {
-        self.metric_store.query_metric_last_min(key).await
+    pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
+        self.metric_store.query_metric_by_key(key).await
     }
 }

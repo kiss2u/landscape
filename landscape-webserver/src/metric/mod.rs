@@ -27,6 +27,6 @@ pub async fn get_connect_metric_info(
     State(state): State<LandscapeApp>,
     Json(key): Json<ConnectKey>,
 ) -> Json<Vec<ConnectMetric>> {
-    let data = state.metric_service.data.connect_metric.connect_metric_in_a_min(key).await;
+    let data = state.metric_service.data.connect_metric.query_metric_by_key(key).await;
     Json(data)
 }

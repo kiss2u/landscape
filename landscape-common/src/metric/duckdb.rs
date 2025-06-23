@@ -9,7 +9,7 @@ pub enum DBMessage {
     InsertConnectInfo(ConnectInfo),
     InsertMetric(ConnectMetric),
 
-    QueryMetricLastMin { key: ConnectKey, since_ms: u64, resp: oneshot::Sender<Vec<ConnectMetric>> },
+    QueryMetricByKey { key: ConnectKey, resp: oneshot::Sender<Vec<ConnectMetric>> },
     QueryCurrentActiveConnectKeys { resp: oneshot::Sender<Vec<ConnectKey>> },
 
     CollectAndCleanupOldMetrics { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectMetric>>> },
@@ -187,17 +187,13 @@ pub fn collect_and_cleanup_old_metrics(conn: &Connection, cutoff: u64) -> Box<Ve
     Box::new(metrics)
 }
 
-pub fn query_metric_last_min(
-    conn: &Connection,
-    key: &ConnectKey,
-    since_ms: u64,
-) -> Vec<ConnectMetric> {
+pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMetric> {
     let stmt = "
         SELECT report_time, ingress_bytes, ingress_packets, egress_bytes, egress_packets
         FROM metrics
         WHERE src_ip = ?1 AND dst_ip = ?2 AND src_port = ?3 AND dst_port = ?4
             AND l4_proto = ?5 AND l3_proto = ?6 AND flow_id = ?7 AND trace_id = ?8
-            AND create_time = ?9 AND report_time >= ?10
+            AND create_time = ?9
         ORDER BY report_time
     ";
 
@@ -215,7 +211,6 @@ pub fn query_metric_last_min(
                 key.flow_id as i64,
                 key.trace_id as i64,
                 key.create_time as i64,
-                since_ms as i64,
             ],
             |row| {
                 Ok(ConnectMetric {
@@ -279,8 +274,8 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>) {
             DBMessage::InsertMetric(metric) => {
                 insert_metric(&conn, &metric);
             }
-            DBMessage::QueryMetricLastMin { key, since_ms, resp } => {
-                let result = query_metric_last_min(&conn, &key, since_ms);
+            DBMessage::QueryMetricByKey { key, resp } => {
+                let result = query_metric_by_key(&conn, &key);
                 let _ = resp.send(result);
             }
             DBMessage::QueryCurrentActiveConnectKeys { resp } => {
@@ -317,11 +312,9 @@ impl DuckMetricStore {
         let _ = self.tx.send(DBMessage::InsertMetric(metric)).await;
     }
 
-    pub async fn query_metric_last_min(&self, key: ConnectKey) -> Vec<ConnectMetric> {
-        let now = chrono::Utc::now().timestamp_millis() as u64;
-        let since_ms = now - 60 * 1000;
+    pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
         let (resp, rx) = oneshot::channel();
-        let _ = self.tx.send(DBMessage::QueryMetricLastMin { key, since_ms, resp }).await;
+        let _ = self.tx.send(DBMessage::QueryMetricByKey { key, resp }).await;
 
         rx.await.unwrap()
     }
