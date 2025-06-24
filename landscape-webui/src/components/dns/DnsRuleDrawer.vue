@@ -113,7 +113,8 @@ const title = computed(() => {
 
       <DnsRuleEditModal
         v-model:show="show_create_modal"
-        :data="{ flow_id: props.flow_id }"
+        :flow_id="props.flow_id"
+        :rule_id="null"
         @refresh="read_rules()"
       ></DnsRuleEditModal>
       <CheckDomainDrawer

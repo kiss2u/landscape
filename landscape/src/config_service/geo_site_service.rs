@@ -1,7 +1,7 @@
 use landscape_common::{
     config::{
         dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
-        geo::{GeoDomainConfig, GeoFileCacheKey},
+        geo::{GeoDomainConfig, GeoFileCacheKey, GeoSiteFileConfig},
     },
     database::LandscapeDBTrait,
     service::controller_service::ConfigController,
@@ -81,8 +81,19 @@ impl GeoSiteService {
                     }
                     RuleSource::GeoKey(k) => {
                         let file_cache_key = k.get_file_cache_key();
+                        let predicate: Box<dyn Fn(&GeoSiteFileConfig) -> bool> =
+                            if let Some(attr) = k.attribute_key {
+                                let attr = attr.clone();
+                                Box::new(move |config: &GeoSiteFileConfig| {
+                                    config.attributes.contains(&attr)
+                                })
+                            } else {
+                                Box::new(move |_: &GeoSiteFileConfig| true)
+                            };
                         if let Some(domains) = lock.get(&file_cache_key) {
-                            source.extend(domains.values.into_iter().map(Into::into));
+                            source.extend(
+                                domains.values.into_iter().filter(predicate).map(Into::into),
+                            );
                         }
                         usage_keys.insert(file_cache_key);
                     }

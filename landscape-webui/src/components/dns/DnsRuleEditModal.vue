@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { push_dns_rule } from "@/api/dns_rule";
+import { get_dns_rule, push_dns_rule } from "@/api/dns_rule";
 import {
   DnsRule,
   get_dns_resolve_mode_options,
@@ -25,11 +25,8 @@ import {
 } from "@/lib/common";
 
 type Props = {
-  data:
-    | {
-        flow_id: number;
-      }
-    | DnsRule;
+  flow_id: number;
+  rule_id: string | null;
 };
 
 const props = defineProps<Props>();
@@ -49,8 +46,14 @@ const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
-function enter() {
-  rule.value = new DnsRule(props.data);
+async function enter() {
+  if (props.rule_id != null) {
+    rule.value = await get_dns_rule(props.rule_id);
+  } else {
+    rule.value = new DnsRule({
+      flow_id: props.flow_id,
+    });
+  }
   origin_rule_json.value = JSON.stringify(rule.value);
 }
 
@@ -308,6 +311,7 @@ async function import_rules() {
                 v-model:geo_key="value.key"
                 v-model:geo_name="value.name"
                 v-model:geo_inverse="value.inverse"
+                v-model:attr_key="value.attribute_key"
                 v-if="value.t === RuleSourceEnum.GeoKey"
               ></DnsGeoSelect>
               <n-flex v-else style="flex: 1">

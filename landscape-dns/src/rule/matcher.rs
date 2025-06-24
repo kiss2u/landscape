@@ -64,7 +64,7 @@ impl DomainMatcher {
         debug!("regex_domains {:?}", regex_domains.len());
         debug!("subdomain_trie {:?}", subdomain_trie_size);
 
-        debug!("dns match rule load time: {:?}s", timer.elapsed().as_secs());
+        tracing::info!("dns match rule load time: {:?}s", timer.elapsed().as_secs());
 
         // 返回构建好的 DomainMatcher 实例
         DomainMatcher {

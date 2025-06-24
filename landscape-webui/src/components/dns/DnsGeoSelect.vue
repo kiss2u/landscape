@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import {
-  delete_geo_site_config,
+  get_geo_site_cache_detail,
   get_geo_site_configs,
   search_geo_site_cache,
 } from "@/api/geo/site";
 import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import {
-  GeoDomainConfig,
-  GeoSiteSourceConfig,
-} from "@/rust_bindings/common/geo_site";
+import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
 import { computed, onMounted, ref } from "vue";
 
 const key = defineModel<string>("geo_key", {
@@ -21,18 +18,18 @@ const inverse = defineModel<boolean>("geo_inverse", {
   default: false,
 });
 
+const attribute_key = defineModel<string | null>("attr_key");
+
 const emit = defineEmits(["refresh"]);
 
-interface Prop {
-  geo_site: GeoDomainConfig;
-}
-const props = defineProps<Prop>();
 const loading_name = ref(false);
 const loading_key = ref(false);
+const loading_attrs = ref(false);
 
 onMounted(async () => {
   await typing_name_key("");
   await typing_key("");
+  await typing_attribute(name.value, key.value);
 });
 
 const configs = ref<GeoSiteSourceConfig[]>();
@@ -75,7 +72,7 @@ const geo_key_options = computed(() => {
   if (keys.value) {
     for (const each_key of keys.value) {
       result.push({
-        label: `${each_key.name}-${each_key.key}`,
+        label: `${each_key.key}-${each_key.name}`,
         value: each_key.key,
         data: each_key,
       });
@@ -84,10 +81,41 @@ const geo_key_options = computed(() => {
   return result;
 });
 
-function select_key(value: string, option: any) {
+async function select_key(value: string, option: any) {
   key.value = value;
   name.value = option.data.name;
+  attribute_key.value = null;
+  await typing_attribute(option.data.name, value);
 }
+
+const attributes = ref<Set<string> | null>(null);
+async function typing_attribute(name: string, key: string) {
+  try {
+    loading_attrs.value = true;
+    let config = await get_geo_site_cache_detail({
+      name,
+      key,
+    });
+    attributes.value = new Set(
+      config.values.flatMap((value) => value.attributes)
+    );
+  } finally {
+    loading_attrs.value = false;
+  }
+}
+
+const attribute_options = computed(() => {
+  let result = [];
+  if (attributes.value) {
+    for (const each_key of attributes.value) {
+      result.push({
+        label: each_key,
+        value: each_key,
+      });
+    }
+  }
+  return result;
+});
 </script>
 <template>
   <n-flex :wrap="false" align="center">
@@ -120,6 +148,16 @@ function select_key(value: string, option: any) {
         remote
         @update:value="select_key"
         @search="typing_key"
+      />
+
+      <n-select
+        :style="{ width: '100px' }"
+        v-model:value="attribute_key"
+        filterable
+        placeholder="筛选 attr"
+        :options="attribute_options"
+        :loading="loading_attrs"
+        clearable
       />
     </n-input-group>
   </n-flex>

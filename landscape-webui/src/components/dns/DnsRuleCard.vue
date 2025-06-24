@@ -54,7 +54,8 @@ async function del() {
     </n-card>
     <DnsRuleEditModal
       @refresh="emit('refresh')"
-      :data="rule"
+      :flow_id="rule.flow_id"
+      :rule_id="rule.id"
       v-model:show="show_edit_modal"
     ></DnsRuleEditModal>
   </n-flex>

@@ -159,6 +159,9 @@ pub struct ResolutionRule {
 
 impl ResolutionRule {
     pub fn new(config: DNSRuntimeRule, flow_id: u32) -> Self {
+        let span = tracing::info_span!("dns_rule", flow_id = flow_id);
+        let _ = span.enter();
+
         let matcher = DomainMatcher::new(config.source.clone());
 
         let resolver = ResolverType::new(&config, flow_id);
