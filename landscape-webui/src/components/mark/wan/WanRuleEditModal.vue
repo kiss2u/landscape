@@ -63,6 +63,7 @@ function changeCurrentRuleType(value: WanIPRuleSource, index: number) {
         name: "",
         key: "",
         inverse: false,
+        attribute_key: null,
       };
     } else {
       rule.value.source[index] = new_wan_rules({

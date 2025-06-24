@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import { delete_geo_site_config } from "@/api/geo/site";
-import {
-  GeoDomainConfig,
-  GeoSiteSourceConfig,
-} from "@/rust_bindings/common/geo_site";
+import { GeoDomainConfig } from "@/rust_bindings/common/geo_site";
 import { ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";

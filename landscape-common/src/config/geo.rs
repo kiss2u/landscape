@@ -1,15 +1,18 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
-    database::repository::LandscapeDBStore, ip_mark::IpConfig, store::storev3::LandscapeStoreTrait,
+    config::dns::{DomainConfig, DomainMatchType},
+    database::repository::LandscapeDBStore,
+    ip_mark::IpConfig,
+    store::storev3::LandscapeStoreTrait,
 };
 
-use super::dns::DomainConfig;
-
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
-#[ts(export, export_to = "common/geo_site.ts")]
+#[ts(export, export_to = "common/geo_site.d.ts")]
 pub struct GeoSiteSourceConfig {
     /// 用这个 ID 作为文件名称
     pub id: Option<Uuid>,
@@ -33,43 +36,70 @@ impl LandscapeDBStore<Uuid> for GeoSiteSourceConfig {
     }
 }
 
+/// 存储在 file cache 中
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "common/geo_site.ts")]
+#[ts(export, export_to = "common/geo_site.d.ts")]
 pub struct GeoDomainConfig {
     pub name: String,
     pub key: String,
-    pub values: Vec<DomainConfig>,
+    pub values: Vec<GeoSiteFileConfig>,
 }
 
 impl LandscapeStoreTrait for GeoDomainConfig {
-    type K = GeoConfigKey;
-    fn get_store_key(&self) -> GeoConfigKey {
-        GeoConfigKey {
-            name: self.name.clone(),
-            key: self.key.clone(),
-            inverse: false,
-        }
+    type K = GeoFileCacheKey;
+    fn get_store_key(&self) -> GeoFileCacheKey {
+        GeoFileCacheKey { name: self.name.clone(), key: self.key.clone() }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "common/geo_site.d.ts")]
+pub struct GeoSiteFileConfig {
+    pub match_type: DomainMatchType,
+    pub value: String,
+    #[serde(default)]
+    pub attributes: HashSet<String>,
+}
+
+impl Into<DomainConfig> for GeoSiteFileConfig {
+    fn into(self) -> DomainConfig {
+        DomainConfig { match_type: self.match_type, value: self.value }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
-#[ts(export, export_to = "common/geo.ts")]
+#[ts(export, export_to = "common/geo.d.ts")]
+pub struct GeoFileCacheKey {
+    pub name: String,
+    pub key: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "common/geo.d.ts")]
 pub struct GeoConfigKey {
     pub name: String,
     pub key: String,
     #[serde(default)]
     pub inverse: bool,
+    #[serde(default)]
+    pub attribute_key: Option<String>,
+}
+
+impl GeoConfigKey {
+    pub fn get_file_cache_key(&self) -> GeoFileCacheKey {
+        GeoFileCacheKey { name: self.name.clone(), key: self.key.clone() }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
-#[ts(export, export_to = "common/geo.ts")]
+#[ts(export, export_to = "common/geo.d.ts")]
 pub struct QueryGeoKey {
     pub name: Option<String>,
     pub key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq, TS)]
-#[ts(export, export_to = "common/geo_site.ts")]
+#[ts(export, export_to = "common/geo_site.d.ts")]
 pub struct QueryGeoDomainConfig {
     pub name: Option<String>,
 }
@@ -107,13 +137,9 @@ pub struct GeoIpConfig {
 }
 
 impl LandscapeStoreTrait for GeoIpConfig {
-    type K = GeoConfigKey;
-    fn get_store_key(&self) -> GeoConfigKey {
-        GeoConfigKey {
-            name: self.name.clone(),
-            key: self.key.clone(),
-            inverse: false,
-        }
+    type K = GeoFileCacheKey;
+    fn get_store_key(&self) -> GeoFileCacheKey {
+        GeoFileCacheKey { name: self.name.clone(), key: self.key.clone() }
     }
 }
 

@@ -60,6 +60,7 @@ function onCreate(): RuleSource {
     key: "",
     name: "",
     inverse: false,
+    attribute_key: null,
   };
 }
 

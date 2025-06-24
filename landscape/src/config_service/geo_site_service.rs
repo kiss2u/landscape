@@ -1,7 +1,7 @@
 use landscape_common::{
     config::{
         dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
-        geo::{GeoConfigKey, GeoDomainConfig},
+        geo::{GeoDomainConfig, GeoFileCacheKey},
     },
     database::LandscapeDBTrait,
     service::controller_service::ConfigController,
@@ -27,7 +27,7 @@ use tokio::sync::{mpsc, Mutex};
 
 const A_DAY: u64 = 60 * 60 * 24;
 
-pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoConfigKey, GeoDomainConfig>>>;
+pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoFileCacheKey, GeoDomainConfig>>>;
 
 #[derive(Clone)]
 pub struct GeoSiteService {
@@ -80,10 +80,11 @@ impl GeoSiteService {
                         inverse_keys.entry(k.name).or_default().insert(k.key);
                     }
                     RuleSource::GeoKey(k) => {
-                        if let Some(domains) = lock.get(&k) {
-                            source.extend(domains.values.into_iter());
+                        let file_cache_key = k.get_file_cache_key();
+                        if let Some(domains) = lock.get(&file_cache_key) {
+                            source.extend(domains.values.into_iter().map(Into::into));
                         }
-                        usage_keys.insert(k);
+                        usage_keys.insert(file_cache_key);
                     }
                     RuleSource::Config(c) => {
                         source.push(c);
@@ -101,7 +102,7 @@ impl GeoSiteService {
                             if let Some(domains) = lock.get(key) {
                                 if !usage_keys.contains(key) {
                                     usage_keys.insert(key.clone());
-                                    source.extend(domains.values.into_iter());
+                                    source.extend(domains.values.into_iter().map(Into::into));
                                 }
                             }
                             // } else {
@@ -189,12 +190,12 @@ impl GeoSiteService {
 }
 
 impl GeoSiteService {
-    pub async fn list_all_keys(&self) -> Vec<GeoConfigKey> {
+    pub async fn list_all_keys(&self) -> Vec<GeoFileCacheKey> {
         let lock = self.file_cache.lock().await;
         lock.keys()
     }
 
-    pub async fn get_cache_value_by_key(&self, key: &GeoConfigKey) -> Option<GeoDomainConfig> {
+    pub async fn get_cache_value_by_key(&self, key: &GeoFileCacheKey) -> Option<GeoDomainConfig> {
         let mut lock = self.file_cache.lock().await;
         lock.get(key)
     }
@@ -214,12 +215,5 @@ impl ConfigController for GeoSiteService {
 
     fn get_repository(&self) -> &Self::DatabseAction {
         &self.store
-    }
-
-    async fn after_update_config(
-        &self,
-        _new_configs: Vec<Self::Config>,
-        _old_configs: Vec<Self::Config>,
-    ) {
     }
 }

@@ -123,7 +123,7 @@ mod tests {
 
     use crate::rule::{DomainConfig, DomainMatchType};
     use landscape_common::{
-        config::geo::{GeoConfigKey, GeoDomainConfig},
+        config::geo::{GeoDomainConfig, GeoFileCacheKey},
         store::storev3::StoreFileManager,
         LANDSCAPE_GEO_CACHE_TMP_DIR,
     };
@@ -162,10 +162,11 @@ mod tests {
         println!("==== start ====");
         test_memory_usage();
 
-        let mut site_store: StoreFileManager<GeoConfigKey, GeoDomainConfig> = StoreFileManager::new(
-            PathBuf::from("/root/.landscape-router").join(LANDSCAPE_GEO_CACHE_TMP_DIR),
-            "site".to_string(),
-        );
+        let mut site_store: StoreFileManager<GeoFileCacheKey, GeoDomainConfig> =
+            StoreFileManager::new(
+                PathBuf::from("/root/.landscape-router").join(LANDSCAPE_GEO_CACHE_TMP_DIR),
+                "site".to_string(),
+            );
 
         println!("==== after StoreFileManager::new ====");
         test_memory_usage();
@@ -176,10 +177,10 @@ mod tests {
         println!("==== after list ====");
         test_memory_usage();
 
-        let mut config = vec![];
+        let mut config: Vec<DomainConfig> = vec![];
 
         for each in all.iter() {
-            config.extend_from_slice(&each.values);
+            config.extend(each.values.iter().map(|e| e.to_owned().into()));
         }
 
         println!("==== after config extend ====");

@@ -4,7 +4,9 @@ use axum::{
     Json, Router,
 };
 use landscape_common::config::{
-    geo::{GeoConfigKey, GeoDomainConfig, GeoSiteSourceConfig, QueryGeoDomainConfig, QueryGeoKey},
+    geo::{
+        GeoDomainConfig, GeoFileCacheKey, GeoSiteSourceConfig, QueryGeoDomainConfig, QueryGeoKey,
+    },
     ConfigId,
 };
 use landscape_common::service::controller_service::ConfigController;
@@ -26,7 +28,7 @@ pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
 
 async fn get_geo_site_cache_detail(
     State(state): State<LandscapeApp>,
-    Query(key): Query<GeoConfigKey>,
+    Query(key): Query<GeoFileCacheKey>,
 ) -> LandscapeResult<Json<GeoDomainConfig>> {
     let result = state.geo_site_service.get_cache_value_by_key(&key).await;
     if let Some(result) = result {
@@ -39,13 +41,13 @@ async fn get_geo_site_cache_detail(
 async fn search_geo_site_cache(
     State(state): State<LandscapeApp>,
     Query(query): Query<QueryGeoKey>,
-) -> Json<Vec<GeoConfigKey>> {
+) -> Json<Vec<GeoFileCacheKey>> {
     tracing::debug!("query: {:?}", query);
     let key = query.key.map(|k| k.to_ascii_uppercase());
     let name = query.name;
     tracing::debug!("name: {name:?}");
     tracing::debug!("key: {key:?}");
-    let result: Vec<GeoConfigKey> = state
+    let result: Vec<GeoFileCacheKey> = state
         .geo_site_service
         .list_all_keys()
         .await
@@ -58,7 +60,7 @@ async fn search_geo_site_cache(
     Json(result)
 }
 
-async fn get_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoConfigKey>> {
+async fn get_geo_site_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoFileCacheKey>> {
     let result = state.geo_site_service.list_all_keys().await;
     Json(result)
 }

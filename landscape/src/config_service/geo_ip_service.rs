@@ -1,5 +1,5 @@
 use landscape_common::{
-    config::geo::{GeoConfigKey, GeoIpConfig, GeoIpSourceConfig},
+    config::geo::{GeoFileCacheKey, GeoIpConfig, GeoIpSourceConfig},
     database::LandscapeDBTrait,
     ip_mark::{IpMarkInfo, WanIPRuleSource, WanIpRuleConfig},
     service::controller_service::ConfigController,
@@ -24,7 +24,7 @@ use tokio::sync::{mpsc, Mutex};
 
 const A_DAY: u64 = 60 * 60 * 24;
 
-pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoConfigKey, GeoIpConfig>>>;
+pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoFileCacheKey, GeoIpConfig>>>;
 
 #[derive(Clone)]
 pub struct GeoIpService {
@@ -70,7 +70,7 @@ impl GeoIpService {
             for each in config.source.iter() {
                 match each {
                     WanIPRuleSource::GeoKey(config_key) => {
-                        if let Some(ips) = lock.get(config_key) {
+                        if let Some(ips) = lock.get(&config_key.get_file_cache_key()) {
                             source.extend(ips.values.iter().cloned());
                         }
                     }
@@ -150,12 +150,12 @@ impl GeoIpService {
 }
 
 impl GeoIpService {
-    pub async fn list_all_keys(&self) -> Vec<GeoConfigKey> {
+    pub async fn list_all_keys(&self) -> Vec<GeoFileCacheKey> {
         let lock = self.file_cache.lock().await;
         lock.keys()
     }
 
-    pub async fn get_cache_value_by_key(&self, key: &GeoConfigKey) -> Option<GeoIpConfig> {
+    pub async fn get_cache_value_by_key(&self, key: &GeoFileCacheKey) -> Option<GeoIpConfig> {
         let mut lock = self.file_cache.lock().await;
         lock.get(key)
     }
