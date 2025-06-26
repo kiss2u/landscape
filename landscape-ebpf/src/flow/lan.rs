@@ -1,10 +1,10 @@
 use std::mem::MaybeUninit;
 
-mod flow_mark_bpf {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/flow_mark.skel.rs"));
+mod flow_lan_bpf {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/flow_lan.skel.rs"));
 }
 
-use flow_mark_bpf::*;
+use flow_lan_bpf::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     TC_EGRESS, TC_INGRESS,
@@ -22,7 +22,7 @@ pub fn attach_match_flow(
     service_status: oneshot::Receiver<()>,
 ) -> LdEbpfResult<()> {
     let mut open_object = MaybeUninit::zeroed();
-    let firewall_builder = FlowMarkSkelBuilder::default();
+    let firewall_builder = FlowLanSkelBuilder::default();
     let mut open_skel = firewall_builder.open(&mut open_object)?;
 
     // 检索匹配规则 MAP

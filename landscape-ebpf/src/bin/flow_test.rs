@@ -25,7 +25,7 @@ pub async fn main() {
 
     std::thread::spawn(move || {
         println!("启动 attach_match_flow 在 ifindex: {:?}", ifindex);
-        landscape_ebpf::flow::mark::attach_match_flow(ifindex, true, rx).unwrap();
+        landscape_ebpf::flow::lan::attach_match_flow(ifindex, true, rx).unwrap();
         println!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
     });
