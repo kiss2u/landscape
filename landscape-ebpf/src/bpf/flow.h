@@ -148,4 +148,27 @@ struct flow_ip_trie_value {
     u8 _pad[3];
 } __flow_ip_trie_value;
 
+struct lan_route_key {
+    __u32 prefixlen;
+    u8 l3_protocol;
+    u8 _pad[3];
+    struct in6_addr addr;
+};
+
+struct lan_route_info {
+    bool has_mac;
+    u8 mac_addr[6]; 
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __type(key, struct lan_route_key);
+    __type(value, struct lan_route_info);
+    __uint(max_entries, 1024);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} lan_route_map SEC(".maps");
+
+
+
 #endif /* __LD_FLOW_H__ */

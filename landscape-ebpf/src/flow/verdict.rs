@@ -36,6 +36,10 @@ pub fn attach_verdict_flow(
     open_skel.maps.flow_target_map.set_pin_path(&MAP_PATHS.flow_target_map)?;
     open_skel.maps.flow_target_map.reuse_pinned_map(&MAP_PATHS.flow_target_map)?;
 
+    // LAN IP Map
+    open_skel.maps.lan_route_map.set_pin_path(&MAP_PATHS.lan_route_map)?;
+    open_skel.maps.lan_route_map.reuse_pinned_map(&MAP_PATHS.lan_route_map)?;
+
     if !has_mac {
         open_skel.maps.rodata_data.current_eth_net_offset = 0;
     }

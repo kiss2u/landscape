@@ -28,6 +28,7 @@ pub mod iface;
 pub mod metric;
 pub mod observer;
 pub mod pppoe_client;
+pub mod route;
 pub mod routerstatus;
 pub mod service;
 pub mod sys_service;

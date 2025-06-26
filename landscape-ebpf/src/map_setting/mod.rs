@@ -54,6 +54,8 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
         .set_pin_path(&paths.firewall_conn_metric_events)
         .unwrap();
 
+    landscape_open.maps.lan_route_map.set_pin_path(&paths.lan_route_map).unwrap();
+
     let _landscape_skel = landscape_open.load().unwrap();
 }
 

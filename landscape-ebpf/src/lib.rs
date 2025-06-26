@@ -46,6 +46,9 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
             "{}/firewall_conn_metric_events",
             ebpf_map_path
         )),
+
+        // route
+        lan_route_map: PathBuf::from(format!("{}/lan_route_map", ebpf_map_path)),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
@@ -77,6 +80,9 @@ pub(crate) struct LandscapeMapPath {
     /// firewall
     pub firewall_conn_events: PathBuf,
     pub firewall_conn_metric_events: PathBuf,
+
+    /// route - LAN
+    pub lan_route_map: PathBuf,
 }
 
 // pppoe -> Fire wall -> nat
