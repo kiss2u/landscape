@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use crate::metric::connect::ConnectMetricManager;
 
 pub mod connect;
+#[cfg(feature = "duckdb")]
 pub mod duckdb;
+#[cfg(feature = "polars")]
 pub mod polars;
 
 #[derive(Clone)]
