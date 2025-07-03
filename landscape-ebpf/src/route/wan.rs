@@ -7,16 +7,15 @@ mod flow_lan_bpf {
 use flow_lan_bpf::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    // TC_EGRESS,
     TC_INGRESS,
 };
 use tokio::sync::oneshot;
 
 use crate::{
-    bpf_error::LdEbpfResult, landscape::TcHookProxy, LAN_ROUTE_INGRESS_PRIORITY, MAP_PATHS,
+    bpf_error::LdEbpfResult, landscape::TcHookProxy, MAP_PATHS, WAN_ROUTE_INGRESS_PRIORITY,
 };
 
-pub fn attach_match_flow(
+pub fn wan_route_attach(
     ifindex: u32,
     has_mac: bool,
     service_status: oneshot::Receiver<()>,
@@ -44,14 +43,14 @@ pub fn attach_match_flow(
     }
 
     let skel = open_skel.load()?;
-    let lan_route_ingress = skel.progs.lan_route_ingress;
+    let lan_route_ingress = skel.progs.wan_route_ingress;
     // let flow_egress = skel.progs.flow_egress;
 
     let mut flow_ingress_hook = TcHookProxy::new(
         &lan_route_ingress,
         ifindex as i32,
         TC_INGRESS,
-        LAN_ROUTE_INGRESS_PRIORITY,
+        WAN_ROUTE_INGRESS_PRIORITY,
     );
 
     // let mut flow_egress_hook =

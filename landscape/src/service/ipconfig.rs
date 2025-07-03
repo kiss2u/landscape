@@ -1,12 +1,15 @@
+use std::net::IpAddr;
+
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
+use landscape_common::route::WanRouteInfo;
 use landscape_common::{
     args::LAND_HOSTNAME,
     config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
     observer::IfaceObserverAction,
     service::{
-        controller_service::ControllerService,
-        service_manager::{ServiceHandler, ServiceManager},
+        controller_service_v2::ControllerService,
+        service_manager_v2::{ServiceManager, ServiceStarterTrait},
         DefaultServiceStatus, DefaultWatchServiceStatus, ServiceStatus,
     },
 };
@@ -15,24 +18,37 @@ use landscape_database::{
 };
 use tokio::sync::broadcast;
 
+use crate::route::IpRouteService;
 use crate::{dev::LandscapeInterface, iface::get_iface_by_name};
 
 #[derive(Clone)]
-pub struct IPConfigService;
+#[allow(dead_code)]
+pub struct IPConfigService {
+    route_service: IpRouteService,
+}
 
-impl ServiceHandler for IPConfigService {
+impl IPConfigService {
+    pub fn new(route_service: IpRouteService) -> Self {
+        IPConfigService { route_service }
+    }
+}
+#[async_trait::async_trait]
+impl ServiceStarterTrait for IPConfigService {
     type Status = DefaultServiceStatus;
 
     type Config = IfaceIpServiceConfig;
 
-    async fn initialize(config: IfaceIpServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: IfaceIpServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();
+
+                let route_service = self.route_service.clone();
                 tokio::spawn(async move {
-                    init_service_from_config(iface, config.ip_model, status_clone).await
+                    init_service_from_config(iface, config.ip_model, status_clone, route_service)
+                        .await
                 });
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
@@ -47,6 +63,7 @@ async fn init_service_from_config(
     iface: LandscapeInterface,
     service_config: IfaceIpModelConfig,
     service_status: DefaultWatchServiceStatus,
+    route_service: IpRouteService,
 ) {
     match service_config {
         IfaceIpModelConfig::Nothing => {}
@@ -62,25 +79,36 @@ async fn init_service_from_config(
                     .args(&["addr", "add", &format!("{}/{}", ipv4, ipv4_mask), "dev", &iface_name])
                     .output();
                 tracing::debug!("start setting");
-                landscape_ebpf::map_setting::add_wan_ip(iface.index, ipv4);
-                if default_router {
-                    if let Some(default_router_ip) = default_router_ip {
-                        if !default_router_ip.is_broadcast()
-                            && !default_router_ip.is_unspecified()
-                            && !default_router_ip.is_loopback()
-                        {
+                landscape_ebpf::map_setting::add_wan_ip(iface.index, ipv4.clone());
+                if let Some(default_router_ip) = default_router_ip {
+                    if !default_router_ip.is_broadcast()
+                        && !default_router_ip.is_unspecified()
+                        && !default_router_ip.is_loopback()
+                    {
+                        if default_router {
                             tracing::info!("setting default route: {:?}", default_router_ip);
                             LD_ALL_ROUTERS
                                 .add_route(RouteInfo {
                                     iface_name: iface_name.clone(),
                                     weight: 1,
-                                    route: RouteType::Ipv4(default_router_ip),
+                                    route: RouteType::Ipv4(default_router_ip.clone()),
                                 })
                                 .await;
+                        } else {
+                            LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                         }
+
+                        let info = WanRouteInfo {
+                            ifindex: iface.index,
+                            weight: 1,
+                            has_mac: iface.mac.is_some(),
+                            iface_name: iface_name.clone(),
+                            iface_ip: IpAddr::V4(ipv4),
+                            default_route: default_router,
+                            gateway_ip: IpAddr::V4(default_router_ip),
+                        };
+                        route_service.insert_wan_route(&iface_name, info).await;
                     }
-                } else {
-                    LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                 }
 
                 service_status.just_change_status(ServiceStatus::Running);
@@ -92,6 +120,7 @@ async fn init_service_from_config(
                 if default_router {
                     LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                 }
+                route_service.remove_wan_route(&iface_name).await;
                 landscape_ebpf::map_setting::del_wan_ip(iface.index);
                 service_status.just_change_status(ServiceStatus::Stop);
             }
@@ -128,6 +157,7 @@ async fn init_service_from_config(
                     service_status,
                     hostname,
                     default_router,
+                    route_service,
                 )
                 .await;
             } else {
@@ -160,11 +190,14 @@ impl ControllerService for IfaceIpServiceManagerService {
 
 impl IfaceIpServiceManagerService {
     pub async fn new(
+        route_service: IpRouteService,
         store_service: LandscapeDBServiceProvider,
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.iface_ip_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let server_starter = IPConfigService::new(route_service);
+        let service =
+            ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {

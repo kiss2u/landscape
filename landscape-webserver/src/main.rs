@@ -18,6 +18,8 @@ use landscape::{
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
     metric::MetricService,
+    route::IpRouteService,
+    service::{dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService},
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
@@ -50,7 +52,7 @@ use service::{
 use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
 use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
-use tracing::{error, info};
+use tracing::info;
 
 use crate::sys_service::config_service::get_config_paths;
 
@@ -68,8 +70,16 @@ pub struct LandscapeApp {
     pub geo_ip_service: GeoIpService,
     pub config_service: LandscapeConfigService,
 
+    pub dhcp_v4_server_service: DHCPv4ServerManagerService,
+
     /// Metric
     pub metric_service: MetricService,
+
+    /// Route
+    pub route_service: IpRouteService,
+
+    /// Iface IP Service
+    wan_ip_service: IfaceIpServiceManagerService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -98,6 +108,8 @@ async fn main() -> LdResult<()> {
     db_store_provider.truncate_and_fit_from(need_init_config).await;
 
     // 初始化 App
+
+    let dev_obs = landscape::observer::dev_observer().await;
 
     let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
     let geo_site_service =
@@ -128,6 +140,21 @@ async fn main() -> LdResult<()> {
 
     let metric_service = MetricService::new(home_path.clone()).await;
 
+    let route_service = IpRouteService::new();
+    let dhcp_v4_server_service = DHCPv4ServerManagerService::new(
+        route_service.clone(),
+        db_store_provider.clone(),
+        dev_obs.resubscribe(),
+    )
+    .await;
+
+    let wan_ip_service = IfaceIpServiceManagerService::new(
+        route_service.clone(),
+        db_store_provider.clone(),
+        dev_obs.resubscribe(),
+    )
+    .await;
+
     metric_service.start_service().await;
     let landscape_app_status = LandscapeApp {
         dns_service,
@@ -139,41 +166,42 @@ async fn main() -> LdResult<()> {
         geo_ip_service,
         config_service,
         metric_service,
+        route_service,
+        dhcp_v4_server_service,
+        wan_ip_service,
     };
     // 初始化结束
-
-    let dev_obs = landscape::observer::dev_observer().await;
 
     let tls_config = load_or_generate_cert(home_path.clone()).await;
     // let tls_config = Arc::new(tls_config);
     // let acceptor = TlsAcceptor::from(tls_config);
 
     // need iproute2
-    if let Err(e) =
-        std::process::Command::new("iptables").args(["-A", "FORWARD", "-j", "ACCEPT"]).output()
-    {
-        error!("iptables cmd exec err: {e:#?}");
-    }
+    // if let Err(e) =
+    //     std::process::Command::new("iptables").args(["-A", "FORWARD", "-j", "ACCEPT"]).output()
+    // {
+    //     error!("iptables cmd exec err: {e:#?}");
+    // }
 
     // need procps
-    if let Err(e) =
-        std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output()
-    {
-        error!("sysctl cmd exec err: {e:#?}");
-    }
+    // if let Err(e) =
+    //     std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output()
+    // {
+    //     error!("sysctl cmd exec err: {e:#?}");
+    // }
 
-    if let Err(e) =
-        std::process::Command::new("sysctl").args(["-w", "net.ipv6.conf.all.forwarding=1"]).output()
-    {
-        error!("sysctl cmd exec err: {e:#?}");
-    }
+    // if let Err(e) =
+    //     std::process::Command::new("sysctl").args(["-w", "net.ipv6.conf.all.forwarding=1"]).output()
+    // {
+    //     error!("sysctl cmd exec err: {e:#?}");
+    // }
 
-    if let Err(e) = std::process::Command::new("sysctl")
-        .args(["-w", "net.ipv6.conf.default.forwarding=1"])
-        .output()
-    {
-        error!("sysctl cmd exec err: {e:#?}");
-    }
+    // if let Err(e) = std::process::Command::new("sysctl")
+    //     .args(["-w", "net.ipv6.conf.default.forwarding=1"])
+    //     .output()
+    // {
+    //     error!("sysctl cmd exec err: {e:#?}");
+    // }
 
     let addr = SocketAddr::from((config.web.address, config.web.https_port));
     // spawn a second server to redirect http requests to this server
@@ -220,14 +248,8 @@ async fn main() -> LdResult<()> {
                     get_firewall_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,
                 )
-                .merge(
-                    get_iface_ipconfig_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
-                .merge(
-                    get_dhcp_v4_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
+                .merge(get_iface_ipconfig_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_dhcp_v4_service_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_wifi_service_paths(db_store_provider.clone()).await)
                 .merge(get_iface_pppd_paths(db_store_provider.clone()).await)
                 .merge(

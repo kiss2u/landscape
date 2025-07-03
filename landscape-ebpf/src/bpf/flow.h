@@ -158,6 +158,7 @@ struct lan_route_key {
 struct lan_route_info {
     bool has_mac;
     u8 mac_addr[6]; 
+    u32 ifindex;
 };
 
 struct {
@@ -167,8 +168,27 @@ struct {
     __uint(max_entries, 1024);
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
-} lan_route_map SEC(".maps");
+} rt_lan_map SEC(".maps");
+
+struct wan_route_key {
+    __u32 flow_id;
+    u8 l3_protocol;
+    u8 _pad[3];
+};
 
 
+struct wan_route_info {
+    u32 ifindex;
+    struct in6_addr gate_addr;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct wan_route_key);
+    __type(value, struct wan_route_info);
+    __uint(max_entries, 1024);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} rt_wan_map SEC(".maps");
 
 #endif /* __LD_FLOW_H__ */

@@ -8,15 +8,18 @@ use std::{
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, time::Instant};
 
-use crate::dump::udp_packet::dhcp::{
-    options::{DhcpOptionMessageType, DhcpOptions},
-    DhcpEthFrame, DhcpOptionFrame,
+use crate::{
+    dump::udp_packet::dhcp::{
+        options::{DhcpOptionMessageType, DhcpOptions},
+        DhcpEthFrame, DhcpOptionFrame,
+    },
+    route::IpRouteService,
 };
-use landscape_common::net::MacAddr;
 use landscape_common::{
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
+use landscape_common::{net::MacAddr, route::WanRouteInfo};
 
 pub const DEFAULT_TIME_OUT: u64 = 4;
 
@@ -147,7 +150,14 @@ impl DhcpState {
     }
 }
 
-#[tracing::instrument(skip(ifindex, mac_addr, client_port, service_status, hostname))]
+#[tracing::instrument(skip(
+    ifindex,
+    mac_addr,
+    client_port,
+    service_status,
+    hostname,
+    route_service
+))]
 pub async fn dhcp_v4_client(
     ifindex: u32,
     iface_name: String,
@@ -156,6 +166,7 @@ pub async fn dhcp_v4_client(
     service_status: DefaultWatchServiceStatus,
     hostname: String,
     default_router: bool,
+    route_service: IpRouteService,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
 
@@ -262,7 +273,7 @@ pub async fn dhcp_v4_client(
                     Some(data) => {
                         let need_reset_time =
                             handle_packet(&mut status, data,
-                            &mut ip_arg, default_router, &iface_name, ifindex).await;
+                            &mut ip_arg, default_router, &iface_name, ifindex, &route_service).await;
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                             // current_timeout_time = t2;
@@ -297,6 +308,7 @@ pub async fn dhcp_v4_client(
     if default_router {
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
+    route_service.remove_wan_route(&iface_name).await;
 
     if !service_status.is_stop() {
         service_status.just_change_status(ServiceStatus::Stop);
@@ -528,6 +540,7 @@ async fn handle_packet(
     default_router: bool,
     iface_name: &str,
     ifindex: u32,
+    route_service: &IpRouteService,
 ) -> bool {
     let dhcp = DhcpEthFrame::new(&msg);
     let Some(dhcp) = dhcp else {
@@ -619,6 +632,7 @@ async fn handle_packet(
                             default_router,
                             iface_name,
                             ifindex,
+                            route_service,
                         )
                         .await;
 
@@ -662,6 +676,7 @@ async fn bind_ipv4(
     default_router: bool,
     iface_name: &str,
     ifindex: u32,
+    route_service: &IpRouteService,
 ) -> DhcpState {
     landscape_ebpf::map_setting::add_wan_ip(ifindex, new_yiaddr.clone());
     if let Some(args) = ip_arg.take() {
@@ -695,8 +710,22 @@ async fn bind_ipv4(
         *ip_arg = Some(args);
     }
 
-    if default_router {
-        if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
+    if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
+        route_service
+            .insert_wan_route(
+                &iface_name,
+                WanRouteInfo {
+                    ifindex: ifindex,
+                    weight: 1,
+                    has_mac: true,
+                    default_route: default_router,
+                    iface_name: iface_name.to_string(),
+                    iface_ip: IpAddr::V4(new_yiaddr),
+                    gateway_ip: IpAddr::V4(router_ip.clone()),
+                },
+            )
+            .await;
+        if default_router {
             LD_ALL_ROUTERS
                 .add_route(RouteInfo {
                     iface_name: iface_name.to_string(),
@@ -704,9 +733,9 @@ async fn bind_ipv4(
                     route: RouteType::Ipv4(router_ip),
                 })
                 .await;
+        } else {
+            LD_ALL_ROUTERS.del_route_by_iface(iface_name).await;
         }
-    } else {
-        LD_ALL_ROUTERS.del_route_by_iface(iface_name).await;
     }
 
     let renew_time = tokio::time::Instant::now() + Duration::from_secs(renew_time);

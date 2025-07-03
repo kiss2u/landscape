@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use landscape::{dhcp_client::v4::dhcp_v4_client, iface::get_iface_by_name};
+use landscape::{dhcp_client::v4::dhcp_v4_client, iface::get_iface_by_name, route::IpRouteService};
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 
 use clap::Parser;
@@ -47,6 +47,7 @@ async fn main() {
                     status,
                     "TEST-PC".to_string(),
                     false,
+                    IpRouteService::new(),
                 )
                 .await;
             }

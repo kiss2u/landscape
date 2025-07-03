@@ -19,6 +19,7 @@ pub mod flow_dns;
 pub mod flow_target;
 pub mod flow_wanip;
 pub mod metric;
+pub mod route;
 
 pub(crate) fn init_path(paths: LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
@@ -54,7 +55,8 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
         .set_pin_path(&paths.firewall_conn_metric_events)
         .unwrap();
 
-    landscape_open.maps.lan_route_map.set_pin_path(&paths.lan_route_map).unwrap();
+    landscape_open.maps.rt_lan_map.set_pin_path(&paths.rt_lan_map).unwrap();
+    landscape_open.maps.rt_wan_map.set_pin_path(&paths.rt_wan_map).unwrap();
 
     let _landscape_skel = landscape_open.load().unwrap();
 }
