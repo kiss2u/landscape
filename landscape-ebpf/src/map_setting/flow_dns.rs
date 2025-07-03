@@ -61,6 +61,7 @@ pub fn update_flow_dns_rule(flow_id: u32, data: Vec<FlowDnsMarkInfo>) {
     let key_value = unsafe { plain::as_bytes(&flow_id) };
     if let Ok(Some(fd_id_arr)) = flow_dns_match_map.lookup(key_value, MapFlags::ANY) {
         if let Ok(fd) = plain::from_bytes::<i32>(&fd_id_arr) {
+            // Note: Sometimes it crashes
             let map = libbpf_rs::MapHandle::from_map_id(*fd as u32).unwrap();
             update_flow_dns_rules(&map, data).unwrap();
         }

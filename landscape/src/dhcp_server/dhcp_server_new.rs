@@ -245,23 +245,25 @@ async fn handle_dhcp_message(
                     }
                     return true;
                 }
-                DhcpOptionMessageType::Decline => todo!(),
-                DhcpOptionMessageType::Ack => todo!(),
-                DhcpOptionMessageType::Nak => todo!(),
+                // DhcpOptionMessageType::Decline => todo!(),
+                // DhcpOptionMessageType::Ack => todo!(),
+                // DhcpOptionMessageType::Nak => todo!(),
                 DhcpOptionMessageType::Release => {
-                    tracing::info!("{dhcp:?}");
+                    tracing::info!("req: Release, {dhcp:?}");
                 }
-                DhcpOptionMessageType::Inform => todo!(),
-                DhcpOptionMessageType::ForceRenew => todo!(),
-                DhcpOptionMessageType::LeaseQuery => todo!(),
-                DhcpOptionMessageType::LeaseUnassigned => todo!(),
-                DhcpOptionMessageType::LeaseUnknown => todo!(),
-                DhcpOptionMessageType::LeaseActive => todo!(),
-                DhcpOptionMessageType::BulkLeaseQuery => todo!(),
-                DhcpOptionMessageType::LeaseQueryDone => todo!(),
-                DhcpOptionMessageType::ActiveLeaseQuery => todo!(),
-                DhcpOptionMessageType::LeaseQueryStatus => todo!(),
-                DhcpOptionMessageType::Tls => todo!(),
+                DhcpOptionMessageType::Inform => {
+                    tracing::info!("req: Inform, {dhcp:?}");
+                }
+                // DhcpOptionMessageType::ForceRenew => todo!(),
+                // DhcpOptionMessageType::LeaseQuery => todo!(),
+                // DhcpOptionMessageType::LeaseUnassigned => todo!(),
+                // DhcpOptionMessageType::LeaseUnknown => todo!(),
+                // DhcpOptionMessageType::LeaseActive => todo!(),
+                // DhcpOptionMessageType::BulkLeaseQuery => todo!(),
+                // DhcpOptionMessageType::LeaseQueryDone => todo!(),
+                // DhcpOptionMessageType::ActiveLeaseQuery => todo!(),
+                // DhcpOptionMessageType::LeaseQueryStatus => todo!(),
+                // DhcpOptionMessageType::Tls => todo!(),
                 _ => {}
             },
             2 => {}
@@ -504,8 +506,14 @@ impl DHCPv4Server {
 }
 
 async fn update_assign_info(assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>, info: DHCPv4OfferInfo) {
-    let mut write_lock = assigned_ips.write().await;
-    *write_lock = info;
+    match tokio::time::timeout(tokio::time::Duration::from_secs(5), assigned_ips.write()).await {
+        Ok(mut write_lock) => {
+            *write_lock = info;
+        }
+        Err(_) => {
+            eprintln!("Failed to acquire write lock within timeout");
+        }
+    }
 }
 
 /// get offer
