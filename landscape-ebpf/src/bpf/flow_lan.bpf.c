@@ -177,7 +177,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
 
             // PRINT_MAC_ADDR(ethhdr);
             // PRINT_MAC_ADDR(ethhdr + 6);
-            
+
             if (is_ipv4) {
                 ethhdr[12] = 0x08;
                 ethhdr[13] = 0x00;
@@ -185,7 +185,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
                 ethhdr[12] = 0x86;
                 ethhdr[13] = 0xdd;
             }
-            
+
             if (bpf_skb_change_head(skb, 14, 0)) return TC_ACT_SHOT;
 
             if (bpf_skb_store_bytes(skb, 0, ethhdr, sizeof(ethhdr), 0)) return TC_ACT_SHOT;
@@ -239,7 +239,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     cache_key.match_key.l3_protocol = context->l3_protocol;
     COPY_ADDR_FROM(cache_key.match_key.src_addr.all, context->saddr.in6_u.u6_addr32);
     COPY_ADDR_FROM(cache_key.dst_addr.all, context->daddr.in6_u.u6_addr32);
-    
+
     // 获得 flow_id
     u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
 
@@ -335,6 +335,79 @@ keep_going:
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
+                                                           int current_eth_net_offset,
+                                                           struct route_context *context,
+                                                           u32 *flow_id) {
+#define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id"
+
+    int ret;
+    struct route_target_key wan_key = {0};
+
+    wan_key.flow_id = *flow_id;
+    wan_key.l3_protocol = context->l3_protocol;
+
+    struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
+
+    // 找不到转发的 target 按照原有计划进行处理
+    if (target_info == NULL) {
+        //     bpf_log_info("wan_route_info l3_protocol: %d", wan_key.l3_protocol);
+        //     bpf_log_info("wan_route_info flow_id: %d", wan_key.flow_id);
+        return TC_ACT_UNSPEC;
+    }
+
+    // 依据配置发往具体的网卡， 检查 MAC 地址
+    if (current_eth_net_offset == 0 && target_info->has_mac) {
+        // 当前数据包没有 mac 目标网卡有 mac
+        if (prepend_dummy_mac(skb) != 0) {
+            bpf_log_error("add dummy_mac fail");
+            return TC_ACT_SHOT;
+        }
+
+    // 使用 bpf_redirect_neigh 转发时无需进行缩减 mac, docker 时有 mac, 所以也无需缩减 mac 地址
+    // } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
+    //     // 当前有, 目标网卡没有
+    //     int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
+    //     if (ret < 0) {
+    //         return TC_ACT_SHOT;
+    // }
+    }
+
+    if (target_info->is_docker) {
+        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
+        if (ret) {
+            bpf_log_info("bpf_skb_vlan_push error");
+        }
+        ret = bpf_redirect(target_info->ifindex, 0);
+        if (ret != 7) {
+            bpf_log_info("bpf_redirect docker error: %d", ret);
+        }
+        return ret;
+    }
+
+    // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
+    // bpf_log_info("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
+
+    struct bpf_redir_neigh param;
+    if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        param.nh_family = AF_INET;
+    } else {
+        param.nh_family = AF_INET6;
+    }
+
+    COPY_ADDR_FROM(param.ipv6_nh, target_info->gate_addr.in6_u.u6_addr32);
+    ret = bpf_redirect_neigh(target_info->ifindex, &param, sizeof(param), 0);
+    if (ret != 7) {
+        bpf_log_info("bpf_redirect_neigh error: %d", ret);
+    }
+    return ret;
+
+#undef BPF_LOG_TOPIC
+}
+
+// ================================
+// LAN Route Egress
+// ================================
 SEC("tc/egress")
 int lan_route_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">> lan_route_egress"
@@ -401,6 +474,9 @@ int lan_route_egress(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
+// ================================
+// LAN Route Ingress
+// ================================
 SEC("tc/ingress")
 int lan_route_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "lan_route_ingress"
@@ -441,71 +517,15 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    // bpf_log_info("FLOW ID: %d", flow_id);
-
-    struct route_target_key wan_key = {0};
-    wan_key.flow_id = flow_id;
-    //
-    struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
-    wan_key.l3_protocol = context.l3_protocol;
-
-    // 找不到转发的 target 按照原有计划进行处理
-    if (target_info == NULL) {
-        //     bpf_log_info("wan_route_info l3_protocol: %d", wan_key.l3_protocol);
-        //     bpf_log_info("wan_route_info flow_id: %d", wan_key.flow_id);
-        return TC_ACT_UNSPEC;
-    }
-
-    // 依据配置发往具体的网卡， 检查 MAC 地址
-    if (current_eth_net_offset == 0 && target_info->has_mac) {
-        // 当前数据包没有 mac 目标网卡有 mac
-        if (prepend_dummy_mac(skb) != 0) {
-            bpf_log_error("add dummy_mac fail");
-            return TC_ACT_SHOT;
-        }
-
-    } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
-        // 当前有, 目标网卡没有
-        // int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
-        // if (ret < 0) {
-        //     return TC_ACT_SHOT;
-        // }
-    }
-
-    if (target_info->is_docker) {
-        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
-        if (ret) {
-            bpf_log_info("bpf_skb_vlan_push error");
-        }
-        ret = bpf_redirect(target_info->ifindex, 0);
-        if (ret != 7) {
-            bpf_log_info("bpf_redirect docker error: %d", ret);
-        }
-        return ret;
-    }
-
-    // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
-    // bpf_log_info("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
-
-    // bpf_map_update_elem(&ip_mac_tab, );
-
-    struct bpf_redir_neigh param;
-    if (context.l3_protocol == LANDSCAPE_IPV4_TYPE) {
-        param.nh_family = AF_INET;
-    } else {
-        param.nh_family = AF_INET6;
-    }
-
-    COPY_ADDR_FROM(param.ipv6_nh, target_info->gate_addr.in6_u.u6_addr32);
-    ret = bpf_redirect_neigh(target_info->ifindex, &param, sizeof(param), 0);
-    if (ret != 7) {
-        bpf_log_info("bpf_redirect_neigh error: %d", ret);
-    }
+    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, &flow_id);
     return ret;
-
+    
 #undef BPF_LOG_TOPIC
 }
 
+// ================================
+// WAN Route Ingress
+// ================================
 SEC("tc/ingress")
 int wan_route_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_ingress"
@@ -527,6 +547,49 @@ int wan_route_ingress(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) {
         return ret;
     }
+
+    return TC_ACT_UNSPEC;
+#undef BPF_LOG_TOPIC
+}
+
+// ================================
+// WAN Route Egress
+// ================================
+SEC("tc/egress")
+int wan_route_egress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "wan_route_egress"
+    int ret;
+    u32 flow_id = 0;
+    struct route_context context = {0};
+
+    ret = is_broadcast_mac(skb);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    if (skb->ingress_ifindex != 0) {
+        // 端口转发数据, 相对于是已经决定使用这个出口, 所以直接发送
+        return TC_ACT_UNSPEC;
+    }
+
+    ret = get_route_context(skb, current_eth_net_offset, &context);
+    if (ret != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+
+    // ret = lan_redirect_check(skb, current_eth_net_offset, &context);
+    // if (ret != TC_ACT_OK) {
+    //     return ret;
+    // }
+
+    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_id);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, &flow_id);
+    return ret;
+    
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
