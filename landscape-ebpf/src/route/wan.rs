@@ -35,8 +35,8 @@ pub fn wan_route_attach(
     open_skel.maps.rt_lan_map.set_pin_path(&MAP_PATHS.rt_lan_map)?;
     open_skel.maps.rt_lan_map.reuse_pinned_map(&MAP_PATHS.rt_lan_map)?;
 
-    open_skel.maps.rt_wan_map.set_pin_path(&MAP_PATHS.rt_wan_map)?;
-    open_skel.maps.rt_wan_map.reuse_pinned_map(&MAP_PATHS.rt_wan_map)?;
+    open_skel.maps.rt_target_map.set_pin_path(&MAP_PATHS.rt_target_map)?;
+    open_skel.maps.rt_target_map.reuse_pinned_map(&MAP_PATHS.rt_target_map)?;
 
     if !has_mac {
         open_skel.maps.rodata_data.current_eth_net_offset = 0;

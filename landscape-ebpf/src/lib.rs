@@ -50,7 +50,7 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
 
         // route
         rt_lan_map: PathBuf::from(format!("{}/rt_lan_map", ebpf_map_path)),
-        rt_wan_map: PathBuf::from(format!("{}/rt_wan_map", ebpf_map_path)),
+        rt_target_map: PathBuf::from(format!("{}/rt_target_map", ebpf_map_path)),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
@@ -85,7 +85,7 @@ pub(crate) struct LandscapeMapPath {
 
     /// route - LAN
     pub rt_lan_map: PathBuf,
-    pub rt_wan_map: PathBuf,
+    pub rt_target_map: PathBuf,
 }
 
 // pppoe -> Fire wall -> nat -> route
@@ -109,7 +109,7 @@ const PPPOE_EGRESS_PRIORITY: u32 = 8;
 // lAN PRIORITY
 const LAN_ROUTE_INGRESS_PRIORITY: u32 = 2;
 
-// const LAN_ROUTE_EGRESS_PRIORITY: u32 = 2;
+const LAN_ROUTE_EGRESS_PRIORITY: u32 = 2;
 
 const LANDSCAPE_IPV4_TYPE: u8 = 0;
 const LANDSCAPE_IPV6_TYPE: u8 = 1;

@@ -19,7 +19,7 @@ use landscape_common::{
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
-use landscape_common::{net::MacAddr, route::WanRouteInfo};
+use landscape_common::{net::MacAddr, route::RouteTargetInfo};
 
 pub const DEFAULT_TIME_OUT: u64 = 4;
 
@@ -714,10 +714,11 @@ async fn bind_ipv4(
         route_service
             .insert_wan_route(
                 &iface_name,
-                WanRouteInfo {
+                RouteTargetInfo {
                     ifindex: ifindex,
                     weight: 1,
                     has_mac: true,
+                    is_docker: false,
                     default_route: default_router,
                     iface_name: iface_name.to_string(),
                     iface_ip: IpAddr::V4(new_yiaddr),

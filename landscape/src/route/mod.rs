@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
-use landscape_common::route::{LanRouteInfo, WanRouteInfo};
+use landscape_common::route::{LanRouteInfo, RouteTargetInfo};
 use landscape_ebpf::map_setting::route::{add_lan_route, add_wan_route, del_lan_route};
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct IpRouteService {
-    wan_ifaces: Arc<RwLock<HashMap<String, WanRouteInfo>>>,
+    wan_ifaces: Arc<RwLock<HashMap<String, RouteTargetInfo>>>,
     lan_ifaces: Arc<RwLock<HashMap<String, LanRouteInfo>>>,
 }
 
@@ -32,7 +32,7 @@ impl IpRouteService {
         }
     }
 
-    pub async fn insert_wan_route(&self, key: &str, info: WanRouteInfo) {
+    pub async fn insert_wan_route(&self, key: &str, info: RouteTargetInfo) {
         let mut lock = self.wan_ifaces.write().await;
         add_wan_route(0, info.clone());
         lock.insert(key.to_string(), info);

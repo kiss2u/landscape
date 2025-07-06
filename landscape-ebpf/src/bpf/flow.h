@@ -148,6 +148,25 @@ struct flow_ip_trie_value {
     u8 _pad[3];
 } __flow_ip_trie_value;
 
+// 每个流中特定的 目标 IP 规则
+struct each_flow_ip_trie {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __type(key, struct flow_ip_trie_key);
+    __type(value, struct flow_ip_trie_value);
+    __uint(max_entries, 65536);
+} each_flow_ip_map SEC(".maps");
+
+// flow <-> 对应规则 map
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
+    __type(key, u32);
+    __uint(max_entries, 512);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+    __array(values, struct each_flow_ip_trie);
+} flow_v_ip_map SEC(".maps");
+
+
 struct lan_route_key {
     __u32 prefixlen;
     u8 l3_protocol;
@@ -170,25 +189,39 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rt_lan_map SEC(".maps");
 
-struct wan_route_key {
+struct route_target_key {
     __u32 flow_id;
     u8 l3_protocol;
     u8 _pad[3];
 };
 
 
-struct wan_route_info {
+struct route_target_info {
     u32 ifindex;
     struct in6_addr gate_addr;
+    // 是否有 mac
+    bool has_mac;
+    bool is_docker;
 };
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct wan_route_key);
-    __type(value, struct wan_route_info);
+    __type(key, struct route_target_key);
+    __type(value, struct route_target_info);
     __uint(max_entries, 1024);
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
-} rt_wan_map SEC(".maps");
+} rt_target_map SEC(".maps");
+
+struct lan_mac_cache {
+    u8 mac[6];
+};
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
+    __type(key, struct in6_addr);
+    __type(value, struct lan_mac_cache);
+    __uint(max_entries, 65535);
+    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
+} ip_mac_table SEC(".maps");
 
 #endif /* __LD_FLOW_H__ */

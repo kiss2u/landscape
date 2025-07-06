@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
-use landscape_common::route::WanRouteInfo;
+use landscape_common::route::RouteTargetInfo;
 use landscape_common::{
     args::LAND_HOSTNAME,
     config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
@@ -98,10 +98,11 @@ async fn init_service_from_config(
                             LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                         }
 
-                        let info = WanRouteInfo {
+                        let info = RouteTargetInfo {
                             ifindex: iface.index,
                             weight: 1,
                             has_mac: iface.mac.is_some(),
+                            is_docker: false,
                             iface_name: iface_name.clone(),
                             iface_ip: IpAddr::V4(ipv4),
                             default_route: default_router,

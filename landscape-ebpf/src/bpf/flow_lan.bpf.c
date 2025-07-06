@@ -22,7 +22,7 @@ struct {
 } flow_cache_map SEC(".maps");
 
 static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
-   u8 mac[6];
+    u8 mac[6];
 
     // 从 skb 中 offset = 0 处读取 6 字节目的 MAC 地址
     if (bpf_skb_load_bytes(skb, 0, mac, 6) < 0) {
@@ -30,13 +30,13 @@ static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
     }
 
     // 判断是否是广播地址 ff:ff:ff:ff:ff:ff
-    bool is_broadcast = mac[0] == 0xff && mac[1] == 0xff && mac[2] == 0xff &&
-                        mac[3] == 0xff && mac[4] == 0xff && mac[5] == 0xff;
+    bool is_broadcast = mac[0] == 0xff && mac[1] == 0xff && mac[2] == 0xff && mac[3] == 0xff &&
+                        mac[4] == 0xff && mac[5] == 0xff;
 
     if (is_broadcast) {
         return TC_ACT_UNSPEC;
     } else {
-        return TC_ACT_OK; 
+        return TC_ACT_OK;
     }
 }
 
@@ -74,25 +74,11 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_e
     return TC_ACT_OK;
 }
 
-SEC("tc/ingress")
-int lan_route_ingress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "lan_route_ingress"
-    bool is_ipv4;
-
-    int ret;
-
-    ret = is_broadcast_mac(skb);
-    if (ret != TC_ACT_OK) {
-        return ret;
-    }
-
+static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current_eth_net_offset,
+                                              bool is_ipv4) {
+#define BPF_LOG_TOPIC "lan_redirect_check"
     struct lan_route_key lan_search_key = {0};
-    struct in6_addr dst_addr = {0};
-
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
-        return TC_ACT_UNSPEC;
-    }
-
+    int ret;
     if (is_ipv4) {
         struct iphdr iph;
 
@@ -105,7 +91,6 @@ int lan_route_ingress(struct __sk_buff *skb) {
         // 填充协议与地址
         lan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
         lan_search_key.addr.in6_u.u6_addr32[0] = iph.daddr;
-        dst_addr.in6_u.u6_addr32[0] = iph.saddr;
     } else {
         struct ipv6hdr ip6h;
 
@@ -119,7 +104,6 @@ int lan_route_ingress(struct __sk_buff *skb) {
         // 填充协议与地址
         lan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
         COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, ip6h.daddr.in6_u.u6_addr32);
-        COPY_ADDR_FROM(dst_addr.in6_u.u6_addr8, ip6h.saddr.in6_u.u6_addr32);
     }
 
     lan_search_key.prefixlen = 160;
@@ -132,16 +116,43 @@ int lan_route_ingress(struct __sk_buff *skb) {
             return TC_ACT_UNSPEC;
         }
 
-        struct bpf_redir_neigh param;
-        if (is_ipv4) {
-            param.nh_family = AF_INET;
+        if (current_eth_net_offset == 0 && lan_info->has_mac) {
+            // u8 *mac[] = &lan_info->mac_addr;
+            // 当前数据包没有 mac 目标网卡有 mac
+            char mac[] = {//
+                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                          //
+                          0x00, 0x11, 0x11, 0x11, 0x11, 0x11,
+                          // IPV4
+                          0x08, 0x00};
+
+            if (bpf_skb_change_head(skb, 14, 0)) return TC_ACT_SHOT;
+
+            if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return TC_ACT_SHOT;
+
+            skb->mark = 1;
+            ret = bpf_redirect(lan_info->ifindex, 0);
+            if (ret != 7) {
+                bpf_log_info("bpf_redirect_neigh error: %d", ret);
+            }
         } else {
-            param.nh_family = AF_INET6;
+            struct bpf_redir_neigh param;
+            if (is_ipv4) {
+                param.nh_family = AF_INET;
+            } else {
+                param.nh_family = AF_INET6;
+            }
+
+            COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
+            ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
+            // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
+            // bpf_log_info("is_ipv4:  %d", is_ipv4);
+            // bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
+            if (ret != 7) {
+                bpf_log_info("bpf_redirect_neigh error: %d", ret);
+            }
         }
 
-        COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
-        ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
-        // bpf_log_info("bpf_redirect_neigh result: %d", ret);
         return ret;
     }
 
@@ -152,55 +163,21 @@ int lan_route_ingress(struct __sk_buff *skb) {
     // bpf_log_info("lan_info l3_protocol: %d", lan_search_key.l3_protocol);
     // bpf_log_info("lan_info ip: %pI4", lan_search_key.addr.in6_u.u6_addr8);
 
-    struct wan_route_key wan_key = {0};
-    //
-    struct wan_route_info *wan_info = bpf_map_lookup_elem(&rt_wan_map, &wan_key);
-
-    if (is_ipv4) {
-        wan_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-    } else {
-        wan_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-    }
-    if (wan_info != NULL) {
-        // bpf_log_info("wan_route_info ip: %pI4 ", wan_info->gate_addr.in6_u.u6_addr8);
-        // bpf_log_info("wan_route_info wan_info->ifindex: %d ",wan_info->ifindex);
-        struct bpf_redir_neigh param;
-        if (is_ipv4) {
-            param.nh_family = AF_INET;
-        } else {
-            param.nh_family = AF_INET6;
-        }
-
-        COPY_ADDR_FROM(param.ipv6_nh, wan_info->gate_addr.in6_u.u6_addr32);
-        ret = bpf_redirect_neigh(wan_info->ifindex, &param, sizeof(param), 0);
-        // bpf_log_info("bpf_redirect_neigh result: %d", ret);
-        return ret;
-    // } else {
-    //     bpf_log_info("wan_route_info l3_protocol: %d", wan_key.l3_protocol);
-    //     bpf_log_info("wan_route_info flow_id: %d", wan_key.flow_id);
-    }
-
-    return TC_ACT_UNSPEC;
+    return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
 
-SEC("tc/ingress")
-int wan_route_ingress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "wan_route_ingress"
-    bool is_ipv4;
+static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_net_offset,
+                                        bool is_ipv4, u32 *flow_id_) {
+#define BPF_LOG_TOPIC "lan_redirect_check"
 
+    struct flow_ip_cache_key cache_key = {0};
     int ret;
-
-    struct lan_route_key lan_search_key = {0};
-    struct in6_addr dst_addr = {0};
-
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
-        return TC_ACT_UNSPEC;
-    }
 
     if (is_ipv4) {
         struct iphdr iph;
 
+        // 读取 IPv4 头部
         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
         if (ret) {
             bpf_log_info("ipv4 bpf_skb_load_bytes error");
@@ -208,9 +185,10 @@ int wan_route_ingress(struct __sk_buff *skb) {
         }
 
         // 填充协议与地址
-        lan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-        lan_search_key.addr.in6_u.u6_addr32[0] = iph.daddr;
-        dst_addr.in6_u.u6_addr32[0] = iph.saddr;
+        // cache_key.match_key.l4_protocol = iph.protocol;  // 暂时不区分协议
+        cache_key.match_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+        cache_key.match_key.src_addr.ip = iph.saddr;
+        cache_key.dst_addr.ip = iph.daddr;
     } else {
         struct ipv6hdr ip6h;
 
@@ -222,31 +200,279 @@ int wan_route_ingress(struct __sk_buff *skb) {
         }
 
         // 填充协议与地址
-        lan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-        COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, ip6h.daddr.in6_u.u6_addr32);
-        COPY_ADDR_FROM(dst_addr.in6_u.u6_addr8, ip6h.saddr.in6_u.u6_addr32);
+        // cache_key.match_key.l4_protocol = ip6h.nexthdr; // 暂时不区分协议
+        cache_key.match_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
+        COPY_ADDR_FROM(cache_key.match_key.src_addr.all, ip6h.saddr.in6_u.u6_addr32);
+        COPY_ADDR_FROM(cache_key.dst_addr.all, ip6h.daddr.in6_u.u6_addr32);
     }
 
-    lan_search_key.prefixlen = 160;
-    struct lan_route_info *lan_info = bpf_map_lookup_elem(&rt_lan_map, &lan_search_key);
+    // 获得 flow_id
+    u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
 
-    if (lan_info != NULL) {
-        // is LAN Packet, redirect to lan
-        if (lan_info->ifindex == skb->ifindex) {
-            // current iface
-            return TC_ACT_OK;
+    volatile u32 flow_id;
+    if (flow_id_ptr == NULL) {
+        // 查不到 flow 配置, 如果按照原逻辑直接放行 会导致默认流中, 设置了转发 DNS 查询生效
+        // 但是 访问时 IP 在进行到此处时 被直接发送 就导致行为不一致
+        // if (skb->ingress_ifindex != 0) {
+        //     // 因为不是本机流量, 放行数据包
+        //     return TC_ACT_UNSPEC;
+        // }
+        // 是本机路由流量 ( DNS 中的 MARK 需要按照对应的 流去处理)
+        flow_id = skb->mark;
+    } else {
+        flow_id = *flow_id_ptr;
+    }
+
+    u8 flow_id_u8 = flow_id & 0xff;
+
+    // bpf_log_info("find flow_id: %d, ip: %pI4", flow_id, cache_key.match_key.src_addr.all);
+
+    volatile u32 flow_mark_action = 0;
+
+    struct flow_ip_trie_key ip_trie_key = {0};
+    ip_trie_key.prefixlen = is_ipv4 ? 64 : 160;
+    ip_trie_key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
+    COPY_ADDR_FROM(ip_trie_key.addr, cache_key.dst_addr.all);
+    struct flow_ip_trie_value *ip_flow_mark;
+    void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
+    if (ip_rules_map != NULL) {
+        ip_flow_mark = bpf_map_lookup_elem(ip_rules_map, &ip_trie_key);
+        if (ip_flow_mark != NULL) {
+            flow_mark_action = ip_flow_mark->mark;
+            // bpf_log_info("find ip map mark: %d", flow_mark_action);
+            if (ip_flow_mark->override_dns == 1) {
+                goto apply_action;
+            }
         }
+    } else {
+        // bpf_log_info("flow_id: %d, ip map is empty", *flow_id_ptr);
+    }
 
-        struct bpf_redir_neigh param;
-        if (is_ipv4) {
-            param.nh_family = AF_INET;
+    struct flow_dns_match_key key = {0};
+    key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
+    COPY_ADDR_FROM(key.addr.all, cache_key.dst_addr.all);
+
+    // 查询 DNS 配置信息，查看是否有转发流的配置
+    void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
+    if (dns_rules_map != NULL) {
+        u32 *dns_flow_mark = bpf_map_lookup_elem(dns_rules_map, &key);
+        if (dns_flow_mark != NULL) {
+            flow_mark_action = *dns_flow_mark;
+            // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action,
+            // &cache_key.dst_addr.ip);
         } else {
-            param.nh_family = AF_INET6;
+            // bpf_log_info("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
+        }
+    } else {
+        // bpf_log_info("flow_id: %d, dns map is empty", *flow_id_ptr);
+    }
+
+    // bpf_log_info("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
+    u8 flow_action, dns_flow_id;
+    struct flow_target_info *target_info;
+apply_action:
+
+    skb->mark = replace_flow_id(flow_mark_action, flow_id_u8);
+
+    flow_action = get_flow_action(flow_mark_action);
+    dns_flow_id = get_flow_id(flow_mark_action);
+    // bpf_log_info("dns_flow_id %d, flow_action: %d ", dns_flow_id, flow_action);
+    if (flow_action == FLOW_KEEP_GOING) {
+        // 无动作
+        // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", cache_key.dst_addr.all);
+    } else if (flow_action == FLOW_DIRECT) {
+        // bpf_log_info("FLOW_DIRECT ip: %pI4", cache_key.dst_addr.all);
+        return TC_ACT_UNSPEC;
+    } else if (flow_action == FLOW_DROP) {
+        // bpf_log_info("FLOW_DROP ip: %pI4", cache_key.dst_addr.all);
+        return TC_ACT_SHOT;
+    } else if (flow_action == FLOW_REDIRECT) {
+        // bpf_log_info("FLOW_REDIRECT ip: %pI4, flow_id: %d", cache_key.dst_addr.all,
+        //              dns_flow_id);
+        flow_id = dns_flow_id;
+    } else if (flow_action == FLOW_ALLOW_REUSE) {
+        // 无动作
+    }
+
+keep_going:
+    *flow_id_ = flow_id;
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
+SEC("tc/egress")
+int lan_route_egress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC ">> lan_route_egress"
+
+    struct lan_route_key lan_search_key = {0};
+    int ret;
+    bool is_ipv4;
+
+    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+
+    if (skb->ingress_ifindex != 0) {
+        // bpf_log_info("mark: %d", skb->mark);
+        // bpf_log_info("ifindex: %d", skb->ifindex);
+        // bpf_log_info("ingress_ifindex: %d", skb->ingress_ifindex);
+        // if (skb->mark == 1) {
+        //     if (is_ipv4) {
+        //         struct iphdr iph;
+
+        //         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
+        //         if (ret) {
+        //             bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        //             return TC_ACT_SHOT;
+        //         }
+
+        //         // 填充协议与地址
+        //         lan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+        //         lan_search_key.addr.in6_u.u6_addr32[0] = iph.daddr;
+        //     } else {
+        //         struct ipv6hdr ip6h;
+
+        //         // 读取 IPv6 头部
+        //         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
+        //         if (ret) {
+        //             bpf_log_info("ipv6 bpf_skb_load_bytes error");
+        //             return TC_ACT_SHOT;
+        //         }
+
+        //         // 填充协议与地址
+        //         lan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
+        //         COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, ip6h.daddr.in6_u.u6_addr32);
+        //     }
+
+        //     struct bpf_redir_neigh param;
+        //     if (is_ipv4) {
+        //         param.nh_family = AF_INET;
+        //     } else {
+        //         param.nh_family = AF_INET6;
+        //     }
+
+        //     COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
+        //     ret = bpf_redirect_neigh(skb->ifindex, &param, sizeof(param), 0);
+        //     bpf_log_info("is_ipv4:  %d", is_ipv4);
+        //     bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
+        //     if (ret != 7) {
+        //         bpf_log_info("bpf_redirect_neigh error: %d", ret);
+        //     }
+        //     return ret;
+        // }
+    }
+
+    return TC_ACT_UNSPEC;
+#undef BPF_LOG_TOPIC
+}
+
+SEC("tc/ingress")
+int lan_route_ingress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "lan_route_ingress"
+    bool is_ipv4;
+
+    int ret;
+    u32 flow_id = 0;
+
+    ret = is_broadcast_mac(skb);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+
+    ret = lan_redirect_check(skb, current_eth_net_offset, is_ipv4);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    ret = flow_verdict(skb, current_eth_net_offset, is_ipv4, &flow_id);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    // bpf_log_info("FLOW ID: %d", flow_id);
+
+    struct route_target_key wan_key = {0};
+    wan_key.flow_id = flow_id;
+    //
+    struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
+
+    if (is_ipv4) {
+        wan_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+    } else {
+        wan_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
+    }
+
+    // 找不到转发的 target 按照原有计划进行处理
+    if (target_info == NULL) {
+        //     bpf_log_info("wan_route_info l3_protocol: %d", wan_key.l3_protocol);
+        //     bpf_log_info("wan_route_info flow_id: %d", wan_key.flow_id);
+        return TC_ACT_UNSPEC;
+    }
+
+    // 依据配置发往具体的网卡， 检查 MAC 地址
+    if (current_eth_net_offset == 0 && target_info->has_mac) {
+        // 当前数据包没有 mac 目标网卡有 mac
+        if (prepend_dummy_mac(skb) != 0) {
+            bpf_log_error("add dummy_mac fail");
+            return TC_ACT_SHOT;
         }
 
-        COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
-        ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
-        // bpf_log_info("bpf_redirect_neigh result: %d", ret);
+    } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
+        // 当前有, 目标网卡没有
+        // int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
+        // if (ret < 0) {
+        //     return TC_ACT_SHOT;
+        // }
+    }
+
+    if (target_info->is_docker) {
+        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
+        if (ret) {
+            bpf_log_info("bpf_skb_vlan_push error");
+        }
+        ret = bpf_redirect(target_info->ifindex, 0);
+        if (ret != 7) {
+            bpf_log_info("bpf_redirect docker error: %d", ret);
+        }
+        return ret;
+    }
+
+    // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
+    // bpf_log_info("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
+
+    struct bpf_redir_neigh param;
+    if (is_ipv4) {
+        param.nh_family = AF_INET;
+    } else {
+        param.nh_family = AF_INET6;
+    }
+
+    COPY_ADDR_FROM(param.ipv6_nh, target_info->gate_addr.in6_u.u6_addr32);
+    ret = bpf_redirect_neigh(target_info->ifindex, &param, sizeof(param), 0);
+    if (ret != 7) {
+        bpf_log_info("bpf_redirect_neigh error: %d", ret);
+    }
+    return ret;
+
+#undef BPF_LOG_TOPIC
+}
+
+SEC("tc/ingress")
+int wan_route_ingress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "wan_route_ingress"
+    bool is_ipv4;
+    int ret;
+
+    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+
+    ret = lan_redirect_check(skb, current_eth_net_offset, is_ipv4);
+    if (ret != TC_ACT_OK) {
         return ret;
     }
 

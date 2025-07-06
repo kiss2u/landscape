@@ -1,11 +1,13 @@
 use landscape_common::{
     config::FlowId,
-    route::{LanRouteInfo, WanRouteInfo},
+    route::{LanRouteInfo, RouteTargetInfo},
 };
 use libbpf_rs::{MapCore, MapFlags};
 
 use crate::{
-    map_setting::share_map::types::{lan_route_info, lan_route_key, wan_route_info, wan_route_key},
+    map_setting::share_map::types::{
+        lan_route_info, lan_route_key, route_target_info, route_target_key,
+    },
     LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
 };
 
@@ -27,6 +29,12 @@ pub fn add_lan_route(lan_info: LanRouteInfo) {
 
     let mut value = lan_route_info::default();
     value.ifindex = lan_info.ifindex;
+    if let Some(mac) = lan_info.mac {
+        value.mac_addr = mac.octets();
+        value.has_mac = std::mem::MaybeUninit::new(true);
+    } else {
+        value.has_mac = std::mem::MaybeUninit::new(false);
+    }
     let value = unsafe { plain::as_bytes(&value) };
 
     if let Err(e) = rt_lan_map.update(&key, &value, MapFlags::ANY) {
@@ -55,14 +63,17 @@ pub fn del_lan_route(lan_info: LanRouteInfo) {
     }
 }
 
-pub fn add_wan_route(flow_id: FlowId, wan_info: WanRouteInfo) {
-    let rt_wan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_wan_map).unwrap();
+pub fn add_wan_route(flow_id: FlowId, wan_info: RouteTargetInfo) {
+    let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_target_map).unwrap();
 
-    let mut key = wan_route_key::default();
+    let mut key = route_target_key::default();
     key.flow_id = flow_id;
 
-    let mut value = wan_route_info::default();
+    let mut value = route_target_info::default();
     value.ifindex = wan_info.ifindex;
+    value.has_mac = std::mem::MaybeUninit::new(wan_info.has_mac);
+    value.is_docker = std::mem::MaybeUninit::new(wan_info.is_docker);
+
     match wan_info.gateway_ip {
         std::net::IpAddr::V4(ipv4_addr) => {
             key.l3_protocol = LANDSCAPE_IPV4_TYPE;
@@ -77,7 +88,7 @@ pub fn add_wan_route(flow_id: FlowId, wan_info: WanRouteInfo) {
     let key = unsafe { plain::as_bytes(&key) };
     let value = unsafe { plain::as_bytes(&value) };
 
-    if let Err(e) = rt_wan_map.update(&key, &value, MapFlags::ANY) {
+    if let Err(e) = rt_target_map.update(&key, &value, MapFlags::ANY) {
         tracing::error!("add lan config error:{e:?}");
     }
 }

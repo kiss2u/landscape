@@ -7,13 +7,13 @@ mod flow_lan_bpf {
 use flow_lan_bpf::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    // TC_EGRESS,
-    TC_INGRESS,
+    TC_EGRESS, TC_INGRESS,
 };
 use tokio::sync::oneshot;
 
 use crate::{
-    bpf_error::LdEbpfResult, landscape::TcHookProxy, LAN_ROUTE_INGRESS_PRIORITY, MAP_PATHS,
+    bpf_error::LdEbpfResult, landscape::TcHookProxy, LAN_ROUTE_EGRESS_PRIORITY,
+    LAN_ROUTE_INGRESS_PRIORITY, MAP_PATHS,
 };
 
 pub fn attach_match_flow(
@@ -36,8 +36,8 @@ pub fn attach_match_flow(
     open_skel.maps.rt_lan_map.set_pin_path(&MAP_PATHS.rt_lan_map)?;
     open_skel.maps.rt_lan_map.reuse_pinned_map(&MAP_PATHS.rt_lan_map)?;
 
-    open_skel.maps.rt_wan_map.set_pin_path(&MAP_PATHS.rt_wan_map)?;
-    open_skel.maps.rt_wan_map.reuse_pinned_map(&MAP_PATHS.rt_wan_map)?;
+    open_skel.maps.rt_target_map.set_pin_path(&MAP_PATHS.rt_target_map)?;
+    open_skel.maps.rt_target_map.reuse_pinned_map(&MAP_PATHS.rt_target_map)?;
 
     if !has_mac {
         open_skel.maps.rodata_data.current_eth_net_offset = 0;
@@ -45,7 +45,7 @@ pub fn attach_match_flow(
 
     let skel = open_skel.load()?;
     let lan_route_ingress = skel.progs.lan_route_ingress;
-    // let flow_egress = skel.progs.flow_egress;
+    let lan_route_egress = skel.progs.lan_route_egress;
 
     let mut flow_ingress_hook = TcHookProxy::new(
         &lan_route_ingress,
@@ -54,13 +54,13 @@ pub fn attach_match_flow(
         LAN_ROUTE_INGRESS_PRIORITY,
     );
 
-    // let mut flow_egress_hook =
-    //     TcHookProxy::new(&flow_egress, ifindex as i32, TC_EGRESS, LAN_ROUTE_EGRESS_PRIORITY);
+    let mut lan_route_egress_hook =
+        TcHookProxy::new(&lan_route_egress, ifindex as i32, TC_EGRESS, LAN_ROUTE_EGRESS_PRIORITY);
 
     flow_ingress_hook.attach();
-    // flow_egress_hook.attach();
+    lan_route_egress_hook.attach();
     let _ = service_status.blocking_recv();
     drop(flow_ingress_hook);
-    // drop(flow_egress_hook);
+    drop(lan_route_egress_hook);
     Ok(())
 }

@@ -63,6 +63,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                     let info = LanRouteInfo {
                         ifindex: iface.index,
                         iface_name: config.iface_name.clone(),
+                        mac: iface.mac,
                         iface_ip: std::net::IpAddr::V4(config.config.server_ip_addr.clone()),
                         prefix: config.config.network_mask,
                     };
