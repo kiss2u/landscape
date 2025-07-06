@@ -40,6 +40,72 @@ static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
     }
 }
 
+static __always_inline int get_route_context(struct __sk_buff *skb, int current_eth_net_offset,
+                                             struct route_context *context) {
+#define BPF_LOG_TOPIC "get_route_context"
+    bool is_ipv4;
+    int ret;
+    if (current_eth_net_offset != 0) {
+        struct ethhdr *eth;
+        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+            return TC_ACT_UNSPEC;
+        }
+
+        // copy mac
+        COPY_ADDR_FROM(context->smac, eth->h_source);
+
+        if (eth->h_proto == ETH_IPV4) {
+            is_ipv4 = true;
+        } else if (eth->h_proto == ETH_IPV6) {
+            is_ipv4 = false;
+        } else {
+            return TC_ACT_UNSPEC;
+        }
+    } else {
+        u8 *p_version;
+        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
+            return TC_ACT_UNSPEC;
+        }
+        u8 ip_version = (*p_version) >> 4;
+        if (ip_version == 4) {
+            is_ipv4 = true;
+        } else if (ip_version == 6) {
+            is_ipv4 = false;
+        } else {
+            return TC_ACT_UNSPEC;
+        }
+    }
+
+    if (is_ipv4) {
+        struct iphdr iph;
+
+        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
+        if (ret) {
+            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            return TC_ACT_SHOT;
+        }
+        context->l3_protocol = LANDSCAPE_IPV4_TYPE;
+        context->l4_protocol = iph.protocol;
+        context->daddr.in6_u.u6_addr32[0] = iph.daddr;
+        context->saddr.in6_u.u6_addr32[0] = iph.saddr;
+    } else {
+        struct ipv6hdr ip6h;
+        // 读取 IPv6 头部
+        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
+        if (ret) {
+            bpf_log_info("ipv6 bpf_skb_load_bytes error");
+            return TC_ACT_SHOT;
+        }
+        context->l3_protocol = LANDSCAPE_IPV6_TYPE;
+        // l4 proto
+        // context->l4_protocol
+        COPY_ADDR_FROM(context->saddr.in6_u.u6_addr32, ip6h.saddr.in6_u.u6_addr32);
+        COPY_ADDR_FROM(context->daddr.in6_u.u6_addr32, ip6h.daddr.in6_u.u6_addr32);
+    }
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
 static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_eth_net_offset,
                                             bool *is_ipv4_) {
     bool is_ipv4;
@@ -75,38 +141,16 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_e
 }
 
 static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current_eth_net_offset,
-                                              bool is_ipv4) {
+                                              struct route_context *context) {
 #define BPF_LOG_TOPIC "lan_redirect_check"
-    struct lan_route_key lan_search_key = {0};
+
     int ret;
-    if (is_ipv4) {
-        struct iphdr iph;
-
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
-        if (ret) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
-            return TC_ACT_SHOT;
-        }
-
-        // 填充协议与地址
-        lan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-        lan_search_key.addr.in6_u.u6_addr32[0] = iph.daddr;
-    } else {
-        struct ipv6hdr ip6h;
-
-        // 读取 IPv6 头部
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
-        if (ret) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
-            return TC_ACT_SHOT;
-        }
-
-        // 填充协议与地址
-        lan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-        COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, ip6h.daddr.in6_u.u6_addr32);
-    }
+    struct lan_route_key lan_search_key = {0};
 
     lan_search_key.prefixlen = 160;
+    lan_search_key.l3_protocol = context->l3_protocol;
+    COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, context->daddr.in6_u.u6_addr32);
+
     struct lan_route_info *lan_info = bpf_map_lookup_elem(&rt_lan_map, &lan_search_key);
 
     if (lan_info != NULL) {
@@ -117,27 +161,44 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
         }
 
         if (current_eth_net_offset == 0 && lan_info->has_mac) {
-            // u8 *mac[] = &lan_info->mac_addr;
-            // 当前数据包没有 mac 目标网卡有 mac
-            char mac[] = {//
-                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                          //
-                          0x00, 0x11, 0x11, 0x11, 0x11, 0x11,
-                          // IPV4
-                          0x08, 0x00};
+            struct lan_mac_cache_key daddr = {0};
+            COPY_ADDR_FROM(daddr.ip, context->daddr.in6_u.u6_addr8);
+            u8 *smac = &lan_info->mac_addr;
+            struct lan_mac_cache *dmac = bpf_map_lookup_elem(&ip_mac_tab, &daddr);
+            bool is_ipv4 = context->l3_protocol == LANDSCAPE_IPV4_TYPE;
+            if (dmac == NULL) {
+                bpf_log_info("use ip: %pI6, to find mac error", &context->daddr.in6_u.u6_addr8);
+                return TC_ACT_SHOT;
+            }
 
+            unsigned char ethhdr[14];
+            __builtin_memcpy(ethhdr, dmac->mac, 6);
+            __builtin_memcpy(ethhdr + 6, smac, 6);
+
+            // PRINT_MAC_ADDR(ethhdr);
+            // PRINT_MAC_ADDR(ethhdr + 6);
+            
+            if (is_ipv4) {
+                ethhdr[12] = 0x08;
+                ethhdr[13] = 0x00;
+            } else {
+                ethhdr[12] = 0x86;
+                ethhdr[13] = 0xdd;
+            }
+            
             if (bpf_skb_change_head(skb, 14, 0)) return TC_ACT_SHOT;
 
-            if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return TC_ACT_SHOT;
+            if (bpf_skb_store_bytes(skb, 0, ethhdr, sizeof(ethhdr), 0)) return TC_ACT_SHOT;
 
             skb->mark = 1;
             ret = bpf_redirect(lan_info->ifindex, 0);
             if (ret != 7) {
                 bpf_log_info("bpf_redirect_neigh error: %d", ret);
             }
+
         } else {
             struct bpf_redir_neigh param;
-            if (is_ipv4) {
+            if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
                 param.nh_family = AF_INET;
             } else {
                 param.nh_family = AF_INET6;
@@ -168,44 +229,17 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
 }
 
 static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_net_offset,
-                                        bool is_ipv4, u32 *flow_id_) {
-#define BPF_LOG_TOPIC "lan_redirect_check"
+                                        struct route_context *context, u32 *flow_id_) {
+#define BPF_LOG_TOPIC "flow_verdict"
 
     struct flow_ip_cache_key cache_key = {0};
     int ret;
 
-    if (is_ipv4) {
-        struct iphdr iph;
-
-        // 读取 IPv4 头部
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
-        if (ret) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
-            return TC_ACT_SHOT;
-        }
-
-        // 填充协议与地址
-        // cache_key.match_key.l4_protocol = iph.protocol;  // 暂时不区分协议
-        cache_key.match_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-        cache_key.match_key.src_addr.ip = iph.saddr;
-        cache_key.dst_addr.ip = iph.daddr;
-    } else {
-        struct ipv6hdr ip6h;
-
-        // 读取 IPv6 头部
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
-        if (ret) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
-            return TC_ACT_SHOT;
-        }
-
-        // 填充协议与地址
-        // cache_key.match_key.l4_protocol = ip6h.nexthdr; // 暂时不区分协议
-        cache_key.match_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-        COPY_ADDR_FROM(cache_key.match_key.src_addr.all, ip6h.saddr.in6_u.u6_addr32);
-        COPY_ADDR_FROM(cache_key.dst_addr.all, ip6h.daddr.in6_u.u6_addr32);
-    }
-
+    // cache_key.match_key.l4_protocol; // 暂时不区分协议
+    cache_key.match_key.l3_protocol = context->l3_protocol;
+    COPY_ADDR_FROM(cache_key.match_key.src_addr.all, context->saddr.in6_u.u6_addr32);
+    COPY_ADDR_FROM(cache_key.dst_addr.all, context->daddr.in6_u.u6_addr32);
+    
     // 获得 flow_id
     u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
 
@@ -230,8 +264,9 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     volatile u32 flow_mark_action = 0;
 
     struct flow_ip_trie_key ip_trie_key = {0};
-    ip_trie_key.prefixlen = is_ipv4 ? 64 : 160;
-    ip_trie_key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
+    ip_trie_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 64 : 160;
+    ip_trie_key.l3_protocol = context->l3_protocol;
+
     COPY_ADDR_FROM(ip_trie_key.addr, cache_key.dst_addr.all);
     struct flow_ip_trie_value *ip_flow_mark;
     void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
@@ -249,7 +284,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     }
 
     struct flow_dns_match_key key = {0};
-    key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
+    key.l3_protocol = context->l3_protocol;
     COPY_ADDR_FROM(key.addr.all, cache_key.dst_addr.all);
 
     // 查询 DNS 配置信息，查看是否有转发流的配置
@@ -369,26 +404,39 @@ int lan_route_egress(struct __sk_buff *skb) {
 SEC("tc/ingress")
 int lan_route_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "lan_route_ingress"
-    bool is_ipv4;
+    // bool is_ipv4;
 
     int ret;
     u32 flow_id = 0;
+    struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+    ret = get_route_context(skb, current_eth_net_offset, &context);
+    if (ret != TC_ACT_OK) {
+        bpf_log_info("read context error:  %d", ret);
         return TC_ACT_UNSPEC;
     }
 
-    ret = lan_redirect_check(skb, current_eth_net_offset, is_ipv4);
+    struct lan_mac_cache_key saddr = {0};
+    struct lan_mac_cache cache_mac = {0};
+    COPY_ADDR_FROM(&saddr.ip, context.saddr.in6_u.u6_addr8);
+    COPY_ADDR_FROM(&cache_mac.mac, context.smac);
+    bpf_map_update_elem(&ip_mac_tab, &saddr, &cache_mac, BPF_ANY);
+
+    // if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+    //     return TC_ACT_UNSPEC;
+    // }
+
+    ret = lan_redirect_check(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    ret = flow_verdict(skb, current_eth_net_offset, is_ipv4, &flow_id);
+    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_id);
     if (ret != TC_ACT_OK) {
         return ret;
     }
@@ -399,12 +447,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
     wan_key.flow_id = flow_id;
     //
     struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
-
-    if (is_ipv4) {
-        wan_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-    } else {
-        wan_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-    }
+    wan_key.l3_protocol = context.l3_protocol;
 
     // 找不到转发的 target 按照原有计划进行处理
     if (target_info == NULL) {
@@ -444,8 +487,10 @@ int lan_route_ingress(struct __sk_buff *skb) {
     // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
     // bpf_log_info("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
 
+    // bpf_map_update_elem(&ip_mac_tab, );
+
     struct bpf_redir_neigh param;
-    if (is_ipv4) {
+    if (context.l3_protocol == LANDSCAPE_IPV4_TYPE) {
         param.nh_family = AF_INET;
     } else {
         param.nh_family = AF_INET6;
@@ -466,12 +511,19 @@ int wan_route_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_ingress"
     bool is_ipv4;
     int ret;
+    struct route_context context = {0};
 
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+    ret = is_broadcast_mac(skb);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    ret = get_route_context(skb, current_eth_net_offset, &context);
+    if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
-    ret = lan_redirect_check(skb, current_eth_net_offset, is_ipv4);
+    ret = lan_redirect_check(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }

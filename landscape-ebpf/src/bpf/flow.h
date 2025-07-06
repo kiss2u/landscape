@@ -195,6 +195,18 @@ struct route_target_key {
     u8 _pad[3];
 };
 
+struct route_context {
+    struct in6_addr saddr;
+    struct in6_addr daddr;
+    // IP 协议: IPv4 Ipv6, LANDSCAPE_IPV4_TYPE | LANDSCAPE_IPV6_TYPE
+    u8 l3_protocol;
+    // IP 层协议: TCP / UDP
+    u8 l4_protocol;
+    // tos value
+    u8 tos;
+    u8 smac[6];
+    u8 _pad[3];
+};
 
 struct route_target_info {
     u32 ifindex;
@@ -213,15 +225,22 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rt_target_map SEC(".maps");
 
+struct lan_mac_cache_key {
+    u8 ip[16];
+};
+
 struct lan_mac_cache {
     u8 mac[6];
+    u8 _pad[2];
 };
+
 struct {
-    __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
-    __type(key, struct in6_addr);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
+    __type(key, struct lan_mac_cache_key);
     __type(value, struct lan_mac_cache);
     __uint(max_entries, 65535);
-    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
-} ip_mac_table SEC(".maps");
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} ip_mac_tab SEC(".maps");
 
 #endif /* __LD_FLOW_H__ */
