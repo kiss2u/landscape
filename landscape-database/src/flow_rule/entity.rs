@@ -51,8 +51,7 @@ impl From<Model> for FlowConfig {
             enable: entity.enable,
             flow_id: entity.flow_id,
             flow_match_rules: serde_json::from_value(entity.flow_match_rules).unwrap(),
-            packet_handle_iface_name: serde_json::from_value(entity.packet_handle_iface_name)
-                .unwrap(),
+            flow_targets: serde_json::from_value(entity.packet_handle_iface_name).unwrap(),
             remark: entity.remark,
             update_at: entity.update_at,
         }
@@ -76,7 +75,7 @@ impl UpdateActiveModel<ActiveModel> for FlowConfig {
         active.flow_id = Set(self.flow_id);
         active.flow_match_rules = Set(serde_json::to_value(self.flow_match_rules).unwrap().into());
         active.packet_handle_iface_name =
-            Set(serde_json::to_value(self.packet_handle_iface_name).unwrap().into());
+            Set(serde_json::to_value(self.flow_targets).unwrap().into());
         active.remark = Set(self.remark);
         active.update_at = Set(self.update_at);
     }

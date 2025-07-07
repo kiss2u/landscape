@@ -40,6 +40,13 @@ impl LandscapeDBServiceProvider {
         Self { database }
     }
 
+    pub async fn mem_test_db() -> Self {
+        let database =
+            Database::connect("sqlite::memory:").await.expect("Database connection failed");
+        Migrator::up(&database, None).await.unwrap();
+        Self { database }
+    }
+
     /// 清空数据并且从配置从初始化
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
         tracing::info!("init config: {config:?}");

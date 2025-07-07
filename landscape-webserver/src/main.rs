@@ -148,7 +148,7 @@ async fn main() -> LdResult<()> {
 
     let metric_service = MetricService::new(home_path.clone()).await;
 
-    let route_service = IpRouteService::new();
+    let route_service = IpRouteService::new(db_store_provider.flow_rule_store());
     let dhcp_v4_server_service = DHCPv4ServerManagerService::new(
         route_service.clone(),
         db_store_provider.clone(),

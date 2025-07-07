@@ -10,6 +10,7 @@ use landscape::{dhcp_client::v4::dhcp_v4_client, iface::get_iface_by_name, route
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 
 use clap::Parser;
+use landscape_database::provider::LandscapeDBServiceProvider;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -24,6 +25,9 @@ async fn main() {
 
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
+
+    let db_store_provider = LandscapeDBServiceProvider::mem_test_db().await;
+    let flow_repo = db_store_provider.flow_rule_store();
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -47,7 +51,7 @@ async fn main() {
                     status,
                     "TEST-PC".to_string(),
                     false,
-                    IpRouteService::new(),
+                    IpRouteService::new(flow_repo),
                 )
                 .await;
             }
