@@ -37,7 +37,7 @@ impl ServiceStarterTrait for RouteWanService {
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();
                 tokio::spawn(async move {
-                    create_route_lan_service(iface.index, iface.mac.is_some(), status_clone).await
+                    create_route_wan_service(iface.index, iface.mac.is_some(), status_clone).await
                 });
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
@@ -48,7 +48,7 @@ impl ServiceStarterTrait for RouteWanService {
     }
 }
 
-pub async fn create_route_lan_service(
+pub async fn create_route_wan_service(
     ifindex: u32,
     has_mac: bool,
     service_status: DefaultWatchServiceStatus,
@@ -68,7 +68,7 @@ pub async fn create_route_lan_service(
     });
     std::thread::spawn(move || {
         tracing::info!("start attach_match_flow at ifindex: {:?}", ifindex);
-        landscape_ebpf::flow::lan::attach_match_flow(ifindex, has_mac, rx).unwrap();
+        landscape_ebpf::route::wan::wan_route_attach(ifindex, has_mac, rx).unwrap();
         tracing::info!("Send an unblocking signal to an external thread");
         let _ = other_tx.send(());
     });

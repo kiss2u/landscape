@@ -42,8 +42,8 @@ pub async fn main() {
         let _ = other_tx.send(());
     });
 
-    let route_index = 15;
-    let has_mac = false;
+    let route_index = 2;
+    let has_mac = true;
     landscape_ebpf::map_setting::route::add_wan_route(
         0,
         RouteTargetInfo {
@@ -54,7 +54,8 @@ pub async fn main() {
             has_mac,
             is_docker: false,
             default_route: false,
-            gateway_ip: IpAddr::V4(Ipv4Addr::new(172, 17, 0, 2)),
+            // gateway_ip: IpAddr::V4(Ipv4Addr::new(172, 17, 0, 2)),
+            gateway_ip: IpAddr::V4(Ipv4Addr::new(10, 1, 1, 10)),
         },
     );
 

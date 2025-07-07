@@ -251,13 +251,13 @@ async fn main() -> LdResult<()> {
                 .merge(get_geo_site_config_paths().await)
                 .merge(get_geo_ip_config_paths().await)
                 .merge(get_dst_ip_rule_config_paths().await)
-                .merge(get_route_wan_paths().await)
-                .merge(get_route_lan_paths().await)
                 .with_state(landscape_app_status.clone()),
         )
         .nest(
             "/services",
             Router::new()
+                .merge(get_route_wan_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_route_lan_paths().await.with_state(landscape_app_status.clone()))
                 .merge(
                     get_mss_clamp_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,

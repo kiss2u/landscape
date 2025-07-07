@@ -42,6 +42,8 @@ export class ServiceExhibitSwitch {
   station: boolean;
   dhcp_v4: boolean;
   mss_clamp: boolean;
+  route_lan: boolean;
+  route_wan: boolean;
 
   constructor(dev: NetDev) {
     this.carrier = true;
@@ -58,6 +60,9 @@ export class ServiceExhibitSwitch {
     this.station = false;
     this.dhcp_v4 = false;
     this.mss_clamp = false;
+
+    this.route_lan = false;
+    this.route_wan = false;
 
     if (dev.wifi_info !== undefined) {
       if (dev.wifi_info.wifi_type.t == WLANTypeTag.Station) {
@@ -76,6 +81,7 @@ export class ServiceExhibitSwitch {
       this.enable_in_boot = false;
       this.ip_config = false;
     }
+
     if (dev.dev_type === "ppp") {
       this.enable_in_boot = false;
       this.ip_config = false;
@@ -85,6 +91,7 @@ export class ServiceExhibitSwitch {
       this.ipv6pd = true;
       this.firewall = true;
       this.mss_clamp = true;
+      this.route_wan = true;
     } else if (dev.name === "docker0") {
       this.zone_type = false;
       this.ip_config = false;
@@ -93,6 +100,7 @@ export class ServiceExhibitSwitch {
       this.dhcp_v4 = true;
       this.ip_config = false;
       this.icmpv6ra = true;
+      this.route_lan = true;
     } else if (dev.zone_type === ZoneType.Wan) {
       this.pppd = true;
       this.ip_config = true;
@@ -101,6 +109,7 @@ export class ServiceExhibitSwitch {
       this.ipv6pd = true;
       this.firewall = true;
       this.mss_clamp = true;
+      this.route_wan = true;
     }
   }
 }

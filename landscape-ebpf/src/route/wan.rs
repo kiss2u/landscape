@@ -7,12 +7,13 @@ mod flow_lan_bpf {
 use flow_lan_bpf::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    TC_INGRESS,
+    TC_EGRESS, TC_INGRESS,
 };
 use tokio::sync::oneshot;
 
 use crate::{
-    bpf_error::LdEbpfResult, landscape::TcHookProxy, MAP_PATHS, WAN_ROUTE_INGRESS_PRIORITY,
+    bpf_error::LdEbpfResult, landscape::TcHookProxy, MAP_PATHS, WAN_ROUTE_EGRESS_PRIORITY,
+    WAN_ROUTE_INGRESS_PRIORITY,
 };
 
 pub fn wan_route_attach(
@@ -52,23 +53,26 @@ pub fn wan_route_attach(
     }
 
     let skel = open_skel.load()?;
-    let lan_route_ingress = skel.progs.wan_route_ingress;
-    // let flow_egress = skel.progs.flow_egress;
 
-    let mut flow_ingress_hook = TcHookProxy::new(
-        &lan_route_ingress,
+    let wan_route_ingress = skel.progs.wan_route_ingress;
+    let wan_route_egress = skel.progs.wan_route_egress;
+
+    let mut wan_route_ingress_hook = TcHookProxy::new(
+        &wan_route_ingress,
         ifindex as i32,
         TC_INGRESS,
         WAN_ROUTE_INGRESS_PRIORITY,
     );
 
-    // let mut flow_egress_hook =
-    //     TcHookProxy::new(&flow_egress, ifindex as i32, TC_EGRESS, LAN_ROUTE_EGRESS_PRIORITY);
+    let mut wan_route_egress_hook =
+        TcHookProxy::new(&wan_route_egress, ifindex as i32, TC_EGRESS, WAN_ROUTE_EGRESS_PRIORITY);
 
-    flow_ingress_hook.attach();
-    // flow_egress_hook.attach();
+    wan_route_ingress_hook.attach();
+    wan_route_egress_hook.attach();
+
     let _ = service_status.blocking_recv();
-    drop(flow_ingress_hook);
-    // drop(flow_egress_hook);
+
+    drop(wan_route_ingress_hook);
+    drop(wan_route_egress_hook);
     Ok(())
 }

@@ -336,9 +336,9 @@ keep_going:
 }
 
 static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
-                                                           int current_eth_net_offset,
-                                                           struct route_context *context,
-                                                           u32 *flow_id) {
+                                                        int current_eth_net_offset,
+                                                        struct route_context *context,
+                                                        u32 *flow_id) {
 #define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id"
 
     int ret;
@@ -353,6 +353,18 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
     if (target_info == NULL) {
         //     bpf_log_info("wan_route_info l3_protocol: %d", wan_key.l3_protocol);
         //     bpf_log_info("wan_route_info flow_id: %d", wan_key.flow_id);
+
+        if (wan_key.flow_id == 0) {
+            // Default flow PASS
+            return TC_ACT_UNSPEC;
+        } else {
+            // Other DROP
+            return TC_ACT_SHOT;
+        }
+    }
+
+    if (target_info->ifindex == skb->ifindex) {
+        // Belongs to the current ifindex No redirection required
         return TC_ACT_UNSPEC;
     }
 
@@ -364,13 +376,13 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
             return TC_ACT_SHOT;
         }
 
-    // 使用 bpf_redirect_neigh 转发时无需进行缩减 mac, docker 时有 mac, 所以也无需缩减 mac 地址
-    // } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
-    //     // 当前有, 目标网卡没有
-    //     int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
-    //     if (ret < 0) {
-    //         return TC_ACT_SHOT;
-    // }
+        // 使用 bpf_redirect_neigh 转发时无需进行缩减 mac, docker 时有 mac, 所以也无需缩减 mac 地址
+        // } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
+        //     // 当前有, 目标网卡没有
+        //     int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
+        //     if (ret < 0) {
+        //         return TC_ACT_SHOT;
+        // }
     }
 
     if (target_info->is_docker) {
@@ -418,56 +430,6 @@ int lan_route_egress(struct __sk_buff *skb) {
 
     if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
-    }
-
-    if (skb->ingress_ifindex != 0) {
-        // bpf_log_info("mark: %d", skb->mark);
-        // bpf_log_info("ifindex: %d", skb->ifindex);
-        // bpf_log_info("ingress_ifindex: %d", skb->ingress_ifindex);
-        // if (skb->mark == 1) {
-        //     if (is_ipv4) {
-        //         struct iphdr iph;
-
-        //         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
-        //         if (ret) {
-        //             bpf_log_info("ipv4 bpf_skb_load_bytes error");
-        //             return TC_ACT_SHOT;
-        //         }
-
-        //         // 填充协议与地址
-        //         lan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-        //         lan_search_key.addr.in6_u.u6_addr32[0] = iph.daddr;
-        //     } else {
-        //         struct ipv6hdr ip6h;
-
-        //         // 读取 IPv6 头部
-        //         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
-        //         if (ret) {
-        //             bpf_log_info("ipv6 bpf_skb_load_bytes error");
-        //             return TC_ACT_SHOT;
-        //         }
-
-        //         // 填充协议与地址
-        //         lan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-        //         COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, ip6h.daddr.in6_u.u6_addr32);
-        //     }
-
-        //     struct bpf_redir_neigh param;
-        //     if (is_ipv4) {
-        //         param.nh_family = AF_INET;
-        //     } else {
-        //         param.nh_family = AF_INET6;
-        //     }
-
-        //     COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
-        //     ret = bpf_redirect_neigh(skb->ifindex, &param, sizeof(param), 0);
-        //     bpf_log_info("is_ipv4:  %d", is_ipv4);
-        //     bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
-        //     if (ret != 7) {
-        //         bpf_log_info("bpf_redirect_neigh error: %d", ret);
-        //     }
-        //     return ret;
-        // }
     }
 
     return TC_ACT_UNSPEC;
@@ -518,7 +480,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
 
     ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, &flow_id);
     return ret;
-    
+
 #undef BPF_LOG_TOPIC
 }
 
@@ -588,7 +550,6 @@ int wan_route_egress(struct __sk_buff *skb) {
 
     ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, &flow_id);
     return ret;
-    
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

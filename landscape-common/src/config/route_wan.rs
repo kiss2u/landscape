@@ -5,7 +5,7 @@ use crate::utils::time::get_f64_timestamp;
 use crate::{database::repository::LandscapeDBStore, store::storev2::LandscapeStore};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "common/flow.d.ts")]
+#[ts(export, export_to = "common/route.d.ts")]
 pub struct RouteWanServiceConfig {
     pub iface_name: String,
     pub enable: bool,
