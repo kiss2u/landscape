@@ -22,7 +22,7 @@ export type FlowConfig = {
    * 处理流量目标网卡, 目前只取第一个
    * 暂定, 可能会移动到具体的网卡上进行设置
    */
-  packet_handle_iface_name: Array<FlowTarget>;
+  flow_targets: Array<FlowTarget>;
   /**
    * 备注
    */

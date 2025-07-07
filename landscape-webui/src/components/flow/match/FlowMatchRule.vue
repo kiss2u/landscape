@@ -18,7 +18,7 @@ function onCreate(): PacketMatchMark {
 
 <template>
   <n-dynamic-input v-model:value="match_rules" :on-create="onCreate">
-    <template #create-button-default> 增加一条匹配 </template>
+    <template #create-button-default> 增加一条入口匹配规则 </template>
     <template #default="{ value, index }">
       <n-input-group>
         <n-input-number

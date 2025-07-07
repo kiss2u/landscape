@@ -11,6 +11,7 @@ use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 
 use clap::Parser;
 use landscape_database::provider::LandscapeDBServiceProvider;
+use tokio::sync::mpsc;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -40,6 +41,7 @@ async fn main() {
 
     let status = service_status.clone();
 
+    let (_, route_rx) = mpsc::channel(1);
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.iface_name).await {
             if let Some(mac) = iface.mac {
@@ -51,7 +53,7 @@ async fn main() {
                     status,
                     "TEST-PC".to_string(),
                     false,
-                    IpRouteService::new(flow_repo),
+                    IpRouteService::new(route_rx, flow_repo),
                 )
                 .await;
             }

@@ -5,6 +5,7 @@ use crate::metric::connect::{ConnectInfo, ConnectMetric};
 
 pub mod dns;
 pub mod nat;
+pub mod route;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum LandscapeEvent {

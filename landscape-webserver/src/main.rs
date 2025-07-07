@@ -64,6 +64,7 @@ use crate::{
 
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;
 const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
+const ROUTE_EVENT_CHANNEL_SIZE: usize = 128;
 
 #[derive(Clone)]
 pub struct LandscapeApp {
@@ -120,12 +121,20 @@ async fn main() -> LdResult<()> {
     let dev_obs = landscape::observer::dev_observer().await;
 
     let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
+    let (route_service_tx, route_service_rx) = mpsc::channel(ROUTE_EVENT_CHANNEL_SIZE);
+    let (dst_ip_service_tx, dst_ip_service_rx) = mpsc::channel(DST_IP_EVENT_CHANNEL_SIZE);
+
     let geo_site_service =
         GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_rule_service =
         DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
-    let flow_rule_service =
-        FlowRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let flow_rule_service = FlowRuleService::new(
+        db_store_provider.clone(),
+        dns_service_tx.clone(),
+        route_service_tx.clone(),
+    )
+    .await;
+
     let dns_service = LandscapeDnsService::new(
         dns_service_rx,
         dns_rule_service.clone(),
@@ -134,8 +143,6 @@ async fn main() -> LdResult<()> {
     )
     .await;
     let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
-
-    let (dst_ip_service_tx, dst_ip_service_rx) = mpsc::channel(DST_IP_EVENT_CHANNEL_SIZE);
 
     let geo_ip_service =
         GeoIpService::new(db_store_provider.clone(), dst_ip_service_tx.clone()).await;
@@ -148,7 +155,7 @@ async fn main() -> LdResult<()> {
 
     let metric_service = MetricService::new(home_path.clone()).await;
 
-    let route_service = IpRouteService::new(db_store_provider.flow_rule_store());
+    let route_service = IpRouteService::new(route_service_rx, db_store_provider.flow_rule_store());
     let dhcp_v4_server_service = DHCPv4ServerManagerService::new(
         route_service.clone(),
         db_store_provider.clone(),

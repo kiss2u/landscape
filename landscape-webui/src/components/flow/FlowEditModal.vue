@@ -102,16 +102,20 @@ function switch_target() {}
           </n-switch>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="2" label="备注">
+        <n-form-item-gi :span="5" label="备注">
           <n-input
             :type="frontEndStore.presentation_mode ? 'password' : 'text'"
             v-model:value="rule.remark"
           />
         </n-form-item-gi>
       </n-grid>
-      <n-form-item label="流匹配规则">
+      <n-form-item label="分流入口匹配规则">
         <FlowMatchRule v-model:match_rules="rule.flow_match_rules">
         </FlowMatchRule>
+      </n-form-item>
+      <n-form-item label="分流出口规则 ( 当前仅支持一个出口 )">
+        <FlowTargetRule v-model:target_rules="rule.flow_targets">
+        </FlowTargetRule>
       </n-form-item>
     </n-form>
     <template #footer>
