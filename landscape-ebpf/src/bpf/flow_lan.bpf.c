@@ -493,7 +493,6 @@ int lan_route_ingress(struct __sk_buff *skb) {
 
     ret = get_route_context(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {
-        bpf_log_info("read context error:  %d", ret);
         return TC_ACT_UNSPEC;
     }
 

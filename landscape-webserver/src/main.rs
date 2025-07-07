@@ -19,7 +19,10 @@ use landscape::{
     },
     metric::MetricService,
     route::IpRouteService,
-    service::{dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService},
+    service::{
+        dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService,
+        route_lan::RouteLanServiceManagerService, route_wan::RouteWanServiceManagerService,
+    },
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
@@ -54,7 +57,10 @@ use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_path
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::info;
 
-use crate::sys_service::config_service::get_config_paths;
+use crate::{
+    service::{route_lan::get_route_lan_paths, route_wan::get_route_wan_paths},
+    sys_service::config_service::get_config_paths,
+};
 
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;
 const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
@@ -77,6 +83,8 @@ pub struct LandscapeApp {
 
     /// Route
     pub route_service: IpRouteService,
+    pub route_lan_service: RouteLanServiceManagerService,
+    pub route_wan_service: RouteWanServiceManagerService,
 
     /// Iface IP Service
     wan_ip_service: IfaceIpServiceManagerService,
@@ -155,6 +163,11 @@ async fn main() -> LdResult<()> {
     )
     .await;
 
+    let route_lan_service =
+        RouteLanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+    let route_wan_service =
+        RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
     metric_service.start_service().await;
     let landscape_app_status = LandscapeApp {
         dns_service,
@@ -169,6 +182,9 @@ async fn main() -> LdResult<()> {
         route_service,
         dhcp_v4_server_service,
         wan_ip_service,
+
+        route_lan_service,
+        route_wan_service,
     };
     // 初始化结束
 
@@ -235,6 +251,8 @@ async fn main() -> LdResult<()> {
                 .merge(get_geo_site_config_paths().await)
                 .merge(get_geo_ip_config_paths().await)
                 .merge(get_dst_ip_rule_config_paths().await)
+                .merge(get_route_wan_paths().await)
+                .merge(get_route_lan_paths().await)
                 .with_state(landscape_app_status.clone()),
         )
         .nest(

@@ -6,3 +6,6 @@ pub mod mss_clamp;
 pub mod nat_service;
 pub mod pppd_service;
 pub mod ra;
+
+pub mod route_lan;
+pub mod route_wan;
