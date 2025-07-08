@@ -17,6 +17,7 @@ use crate::{
 };
 use landscape_common::{
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
+    route::LanRouteInfo,
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
 use landscape_common::{net::MacAddr, route::RouteTargetInfo};
@@ -273,7 +274,7 @@ pub async fn dhcp_v4_client(
                     Some(data) => {
                         let need_reset_time =
                             handle_packet(&mut status, data,
-                            &mut ip_arg, default_router, &iface_name, ifindex, &route_service).await;
+                            &mut ip_arg, default_router, &iface_name, ifindex, &route_service, &mac_addr).await;
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                             // current_timeout_time = t2;
@@ -309,6 +310,7 @@ pub async fn dhcp_v4_client(
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
     route_service.remove_wan_route(&iface_name).await;
+    route_service.remove_lan_route(&iface_name).await;
 
     if !service_status.is_stop() {
         service_status.just_change_status(ServiceStatus::Stop);
@@ -541,6 +543,7 @@ async fn handle_packet(
     iface_name: &str,
     ifindex: u32,
     route_service: &IpRouteService,
+    mac_addr: &MacAddr,
 ) -> bool {
     let dhcp = DhcpEthFrame::new(&msg);
     let Some(dhcp) = dhcp else {
@@ -633,6 +636,7 @@ async fn handle_packet(
                             iface_name,
                             ifindex,
                             route_service,
+                            mac_addr,
                         )
                         .await;
 
@@ -677,6 +681,7 @@ async fn bind_ipv4(
     iface_name: &str,
     ifindex: u32,
     route_service: &IpRouteService,
+    mac_addr: &MacAddr,
 ) -> DhcpState {
     landscape_ebpf::map_setting::add_wan_ip(ifindex, new_yiaddr.clone());
     if let Some(args) = ip_arg.take() {
@@ -726,6 +731,14 @@ async fn bind_ipv4(
                 },
             )
             .await;
+        let lan_info = LanRouteInfo {
+            ifindex: ifindex,
+            iface_name: iface_name.to_string(),
+            iface_ip: IpAddr::V4(new_yiaddr),
+            mac: Some(mac_addr.clone()),
+            prefix: mask as u8,
+        };
+        route_service.insert_lan_route(&iface_name, lan_info).await;
         if default_router {
             LD_ALL_ROUTERS
                 .add_route(RouteInfo {

@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
-use landscape_common::route::RouteTargetInfo;
+use landscape_common::route::{LanRouteInfo, RouteTargetInfo};
 use landscape_common::{
     args::LAND_HOSTNAME,
     config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
@@ -109,6 +109,15 @@ async fn init_service_from_config(
                             gateway_ip: IpAddr::V4(default_router_ip),
                         };
                         route_service.insert_wan_route(&iface_name, info).await;
+
+                        let lan_info = LanRouteInfo {
+                            ifindex: iface.index,
+                            iface_name: iface_name.clone(),
+                            iface_ip: IpAddr::V4(ipv4),
+                            mac: iface.mac,
+                            prefix: ipv4_mask,
+                        };
+                        route_service.insert_lan_route(&iface_name, lan_info).await;
                     }
                 }
 
@@ -122,6 +131,7 @@ async fn init_service_from_config(
                     LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                 }
                 route_service.remove_wan_route(&iface_name).await;
+                route_service.remove_lan_route(&iface_name).await;
                 landscape_ebpf::map_setting::del_wan_ip(iface.index);
                 service_status.just_change_status(ServiceStatus::Stop);
             }

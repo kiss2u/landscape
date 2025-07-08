@@ -78,11 +78,17 @@ impl IpRouteService {
     }
 
     pub async fn insert_wan_route(&self, key: &str, info: RouteTargetInfo) {
+        let mut refresh_default_router = info.default_route;
         let target = info.get_flow_target();
         let mut lock = self.wan_ifaces.write().await;
-        lock.insert(key.to_string(), info);
+        if let Some(old_info) = lock.insert(key.to_string(), info) {
+            refresh_default_router = refresh_default_router || old_info.default_route;
+        }
         drop(lock);
         self.refreash_target_map(target).await;
+        if refresh_default_router {
+            self.refresh_default_router().await;
+        }
     }
 
     pub async fn remove_wan_route(&self, key: &str) {
@@ -91,6 +97,18 @@ impl IpRouteService {
         drop(lock);
         if let Some(info) = result {
             self.refreash_target_map(info.get_flow_target()).await;
+            if info.default_route {
+                self.refresh_default_router().await;
+            }
+        }
+    }
+
+    pub async fn refresh_default_router(&self) {
+        let wan_ifaces: tokio::sync::RwLockReadGuard<'_, HashMap<String, RouteTargetInfo>> =
+            self.wan_ifaces.read().await;
+        let route = wan_ifaces.values().find(|e| e.default_route);
+        if let Some(route) = route {
+            landscape_ebpf::map_setting::route::add_wan_route(0, route.clone());
         }
     }
 
