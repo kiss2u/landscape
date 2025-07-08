@@ -6,9 +6,9 @@ use axum::{
 use bollard::{image::ListImagesOptions, secret::ImageSummary, Docker};
 use serde_json::Value;
 
-use crate::SimpleResult;
+use crate::{LandscapeApp, SimpleResult};
 
-pub async fn get_docker_images_paths() -> Router {
+pub async fn get_docker_images_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/", get(get_all_images))
         .route("/:image_name", post(pull_image_by_image_name))

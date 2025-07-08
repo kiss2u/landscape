@@ -9,6 +9,9 @@ use std::{
 use bollard::Docker;
 
 use landscape::docker::create_docker_event_spawn;
+use landscape::route::IpRouteService;
+use landscape_database::provider::LandscapeDBServiceProvider;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() {
@@ -19,7 +22,13 @@ async fn main() {
     println!();
     println!("{:?}", docker.info().await);
     println!();
-    create_docker_event_spawn().await;
+
+    let db_store_provider = LandscapeDBServiceProvider::mem_test_db().await;
+    let flow_repo = db_store_provider.flow_rule_store();
+    let (_, route_rx) = mpsc::channel(1);
+    let route_service = IpRouteService::new(route_rx, flow_repo);
+
+    create_docker_event_spawn(route_service).await;
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {

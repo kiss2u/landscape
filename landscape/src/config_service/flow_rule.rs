@@ -43,6 +43,22 @@ impl ConfigController for FlowRuleService {
         &self.store
     }
 
+    async fn update_one_config(&self, config: Self::Config) {
+        let _ = self
+            .route_events_tx
+            .send(RouteEvent::FlowRuleUpdate { flow_id: Some(config.flow_id) })
+            .await;
+    }
+    async fn delete_one_config(&self, config: Self::Config) {
+        let _ = self
+            .route_events_tx
+            .send(RouteEvent::FlowRuleUpdate { flow_id: Some(config.flow_id) })
+            .await;
+    }
+    async fn update_many_config(&self, _configs: Vec<Self::Config>) {
+        let _ = self.route_events_tx.send(RouteEvent::FlowRuleUpdate { flow_id: None }).await;
+    }
+
     async fn after_update_config(
         &self,
         new_configs: Vec<Self::Config>,
@@ -50,6 +66,5 @@ impl ConfigController for FlowRuleService {
     ) {
         update_flow_matchs(new_configs, old_configs).await;
         let _ = self.dns_events_tx.send(DnsEvent::FlowUpdated).await;
-        let _ = self.route_events_tx.send(RouteEvent::FlowRuleUpdate { flow_id: None }).await;
     }
 }

@@ -3,11 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use landscape_common::{
     config::FlowId,
     event::route::RouteEvent,
-    flow::FlowConfig,
+    flow::{FlowConfig, FlowTarget},
     route::{LanRouteInfo, RouteTargetInfo},
 };
 use landscape_database::flow_rule::repository::FlowConfigRepository;
-use landscape_ebpf::map_setting::route::{add_lan_route, add_wan_route, del_lan_route};
+use landscape_ebpf::map_setting::route::{add_lan_route, del_lan_route};
 use tokio::sync::{mpsc, RwLock};
 
 use landscape_common::database::LandscapeDBTrait;
@@ -34,8 +34,26 @@ impl IpRouteService {
             while let Some(event) = route_event_sender.recv().await {
                 //
                 match event {
-                    RouteEvent::FlowRuleUpdate { flow_id } => {
-                        route_service.refreash_target_map(flow_id).await;
+                    RouteEvent::FlowRuleUpdate { flow_id: Some(flow_id) } => {
+                        if let Ok(Some(flow_config)) =
+                            route_service.flow_repo.find_by_flow_id(flow_id).await
+                        {
+                            let wan_infos = {
+                                let read_lock = route_service.wan_ifaces.read().await;
+                                read_lock.clone()
+                            };
+
+                            refresh_target_bpf_map(vec![flow_config], wan_infos);
+                        }
+                    }
+                    RouteEvent::FlowRuleUpdate { flow_id: None } => {
+                        let flow_configs = route_service.flow_repo.list().await.unwrap_or_default();
+                        let wan_infos = {
+                            let read_lock = route_service.wan_ifaces.read().await;
+                            read_lock.clone()
+                        };
+
+                        refresh_target_bpf_map(flow_configs, wan_infos);
                     }
                 }
             }
@@ -60,27 +78,24 @@ impl IpRouteService {
     }
 
     pub async fn insert_wan_route(&self, key: &str, info: RouteTargetInfo) {
+        let target = info.get_flow_target();
         let mut lock = self.wan_ifaces.write().await;
         lock.insert(key.to_string(), info);
         drop(lock);
-        self.refreash_target_map(None).await;
+        self.refreash_target_map(target).await;
     }
 
     pub async fn remove_wan_route(&self, key: &str) {
         let mut lock = self.wan_ifaces.write().await;
         let result = lock.remove(key);
         drop(lock);
-        if let Some(_) = result {
-            self.refreash_target_map(None).await;
+        if let Some(info) = result {
+            self.refreash_target_map(info.get_flow_target()).await;
         }
     }
 
-    pub async fn refreash_target_map(&self, flow_id: Option<FlowId>) {
-        let mut flow_configs = self.flow_repo.list().await.unwrap_or_default();
-        if let Some(flow_id) = flow_id {
-            flow_configs =
-                flow_configs.into_iter().filter(|flow| flow.flow_id == flow_id).collect();
-        }
+    pub async fn refreash_target_map(&self, t: FlowTarget) {
+        let flow_configs = self.flow_repo.find_by_target(t).await.unwrap_or_default();
 
         let wan_infos = {
             let read_lock = self.wan_ifaces.read().await;
@@ -120,7 +135,9 @@ pub fn refresh_target_bpf_map(
     tracing::info!("flow target refresh resule: {:#?}", result);
     for (flow_id, configes) in result {
         if let Some(info) = configes.get(0) {
-            add_wan_route(flow_id, info.clone());
+            landscape_ebpf::map_setting::route::add_wan_route(flow_id, info.clone());
+        } else {
+            landscape_ebpf::map_setting::route::del_wan_route(flow_id);
         }
     }
 }

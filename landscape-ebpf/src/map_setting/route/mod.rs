@@ -92,3 +92,15 @@ pub fn add_wan_route(flow_id: FlowId, wan_info: RouteTargetInfo) {
         tracing::error!("add lan config error:{e:?}");
     }
 }
+
+pub fn del_wan_route(flow_id: FlowId) {
+    let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_target_map).unwrap();
+    let mut key = route_target_key::default();
+    key.flow_id = flow_id;
+
+    let key = unsafe { plain::as_bytes(&key) };
+
+    if let Err(e) = rt_target_map.delete(&key) {
+        tracing::error!("del wan config error:{e:?}");
+    }
+}

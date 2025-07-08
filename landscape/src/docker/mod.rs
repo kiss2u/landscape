@@ -1,10 +1,10 @@
 use landscape_common::{
-    flow::target::{FlowTargetPair, TargetInterfaceInfo},
+    route::RouteTargetInfo,
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
 use regex::Regex;
 use serde::Serialize;
-use std::{fs::File, io::BufRead, path::PathBuf};
+use std::{fs::File, io::BufRead};
 
 use bollard::{
     secret::{EventActor, EventMessageTypeEnum},
@@ -12,29 +12,29 @@ use bollard::{
 };
 use tokio_stream::StreamExt;
 
-use crate::get_all_devices;
+use crate::{get_all_devices, route::IpRouteService};
 
 pub mod network;
 
-const REDIRECT_ID_LABEL_NAME: &str = "ld_red_id";
-
 /// docker 监听服务的状态结构体
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Clone)]
 pub struct LandscapeDockerService {
     pub status: DefaultWatchServiceStatus,
-    pub data_path: PathBuf,
+    #[serde(skip)]
+    route_service: IpRouteService,
 }
 
 impl LandscapeDockerService {
-    pub fn new(data_path: PathBuf) -> Self {
+    pub fn new(route_service: IpRouteService) -> Self {
         let status = DefaultWatchServiceStatus::new();
-        LandscapeDockerService { status, data_path }
+        LandscapeDockerService { status, route_service }
     }
 
     pub async fn start_to_listen_event(&self) {
         // 检测是否已经启动了
         self.status.wait_stop().await;
         let status = self.status.clone();
+        let route_service = self.route_service.clone();
         tokio::spawn(async move {
             status.just_change_status(ServiceStatus::Staring);
             let docker = Docker::connect_with_socket_defaults();
@@ -49,7 +49,7 @@ impl LandscapeDockerService {
                     event_msg = event_stream.next() => {
                         if let Some(e) = event_msg {
                             if let Ok(msg) = e {
-                                handle_event(&docker, msg).await;
+                                handle_event(&route_service ,&docker, msg).await;
                             } else {
                                 tracing::error!("err event loop: event_msg");
                             }
@@ -93,7 +93,11 @@ impl LandscapeDockerService {
     }
 }
 
-pub async fn handle_event(docker: &Docker, emsg: bollard::secret::EventMessage) {
+pub async fn handle_event(
+    ip_route_service: &IpRouteService,
+    docker: &Docker,
+    emsg: bollard::secret::EventMessage,
+) {
     match emsg.typ {
         Some(EventMessageTypeEnum::CONTAINER) => {
             //
@@ -102,7 +106,7 @@ pub async fn handle_event(docker: &Docker, emsg: bollard::secret::EventMessage) 
                 match action.as_str() {
                     "start" => {
                         if let Some(actor) = emsg.actor {
-                            handle_redirect_id_set(&docker, actor).await;
+                            handle_redirect_id_set(ip_route_service, docker, actor).await;
                         }
                     }
                     _ => {}
@@ -114,7 +118,7 @@ pub async fn handle_event(docker: &Docker, emsg: bollard::secret::EventMessage) 
         }
     }
 }
-pub async fn create_docker_event_spawn() {
+pub async fn create_docker_event_spawn(ip_route_service: IpRouteService) {
     let docker = Docker::connect_with_socket_defaults();
     let docker = docker.unwrap();
 
@@ -123,7 +127,7 @@ pub async fn create_docker_event_spawn() {
 
         while let Some(e) = event_stream.next().await {
             if let Ok(msg) = e {
-                handle_event(&docker, msg).await;
+                handle_event(&ip_route_service, &docker, msg).await;
             }
         }
     });
@@ -142,13 +146,16 @@ pub async fn create_docker_event_spawn() {
 
 // type ConfigStore = Arc<Mutex<StoreFileManager>>;
 
-pub async fn handle_redirect_id_set(docker: &Docker, actor: EventActor) {
+pub async fn handle_redirect_id_set(
+    ip_route_service: &IpRouteService,
+    docker: &Docker,
+    actor: EventActor,
+) {
     if let Some(attr) = actor.attributes {
         //
-
-        match (attr.get(REDIRECT_ID_LABEL_NAME), attr.get("name")) {
-            (Some(redirect_id), Some(name)) => {
-                let redirect_id = redirect_id.parse::<u8>().unwrap();
+        match attr.get("name") {
+            Some(name) => {
+                // let redirect_id = redirect_id.parse::<u8>().unwrap();
                 let result = docker.inspect_container(name, None).await.unwrap();
                 if let Some(state) = result.state {
                     if let Some(pid) = state.pid {
@@ -160,14 +167,20 @@ pub async fn handle_redirect_id_set(docker: &Docker, actor: EventActor) {
                             for dev in devs {
                                 if let Some(peer_id) = dev.peer_link_id {
                                     if if_id == peer_id {
-                                        let info = FlowTargetPair {
-                                            key: redirect_id as u32,
-                                            value: TargetInterfaceInfo::new_docker(dev.index),
-                                        };
-                                        landscape_ebpf::map_setting::flow_target::add_flow_target_info(
-                                            info
-                                        );
-                                        tracing::debug!("peer_id is :{:?}", dev.index);
+                                        ip_route_service
+                                            .insert_wan_route(
+                                                name,
+                                                RouteTargetInfo::docker_new(dev.index, name),
+                                            )
+                                            .await;
+                                        // let info = FlowTargetPair {
+                                        //     key: redirect_id as u32,
+                                        //     value: TargetInterfaceInfo::new_docker(dev.index),
+                                        // };
+                                        // landscape_ebpf::map_setting::flow_target::add_flow_target_info(
+                                        //     info
+                                        // );
+                                        // tracing::debug!("peer_id is :{:?}", dev.index);
                                     }
                                 }
                             }

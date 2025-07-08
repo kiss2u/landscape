@@ -17,6 +17,7 @@ use landscape::{
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
+    docker::LandscapeDockerService,
     metric::MetricService,
     route::IpRouteService,
     service::{
@@ -89,6 +90,7 @@ pub struct LandscapeApp {
 
     /// Iface IP Service
     wan_ip_service: IfaceIpServiceManagerService,
+    docker_service: LandscapeDockerService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -175,6 +177,10 @@ async fn main() -> LdResult<()> {
     let route_wan_service =
         RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
 
+    let docker_service = LandscapeDockerService::new(route_service.clone());
+
+    docker_service.start_to_listen_event().await;
+
     metric_service.start_service().await;
     let landscape_app_status = LandscapeApp {
         dns_service,
@@ -192,6 +198,8 @@ async fn main() -> LdResult<()> {
 
         route_lan_service,
         route_wan_service,
+
+        docker_service,
     };
     // 初始化结束
 
@@ -236,7 +244,6 @@ async fn main() -> LdResult<()> {
     let auth_share = Arc::new(config.auth.clone());
     auth::output_sys_token(&config.auth).await;
     let source_route = Router::new()
-        .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest(
             "/metric",
@@ -247,6 +254,7 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_dns_paths().await)
                 .merge(get_config_paths().await)
+                .nest("/docker", docker::get_docker_paths().await)
                 .with_state(landscape_app_status.clone()),
         )
         .nest(
