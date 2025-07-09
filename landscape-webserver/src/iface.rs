@@ -4,10 +4,13 @@ use axum::{
     Json, Router,
 };
 use landscape::iface::IfaceManagerService;
-use landscape_common::{config::iface::IfaceCpuSoftBalance, iface::BridgeCreate};
 use landscape_common::{
     config::iface::WifiMode,
     iface::{AddController, ChangeZone},
+};
+use landscape_common::{
+    config::iface::{IfaceCpuSoftBalance, NetworkIfaceConfig},
+    iface::BridgeCreate,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use serde_json::Value;
@@ -18,6 +21,7 @@ pub async fn get_network_paths(store: LandscapeDBServiceProvider) -> Router {
     let share_state = IfaceManagerService::new(store).await;
     Router::new()
         .route("/", get(get_ifaces))
+        .route("/wan_configs", get(get_wan_ifaces))
         .route("/manage/:iface_name", post(manage_ifaces))
         .route("/bridge", post(create_bridge))
         .route("/controller", post(set_controller))
@@ -26,6 +30,11 @@ pub async fn get_network_paths(store: LandscapeDBServiceProvider) -> Router {
         .route("/:iface_name/wifi_mode/:mode", post(change_wifi_mode))
         .route("/:iface_name/cpu_balance", get(get_cpu_balance).post(set_cpu_balance))
         .with_state(share_state)
+}
+
+async fn get_wan_ifaces(State(state): State<IfaceManagerService>) -> Json<Vec<NetworkIfaceConfig>> {
+    let result = state.get_all_wan_iface_config().await;
+    Json(result)
 }
 
 async fn manage_ifaces(

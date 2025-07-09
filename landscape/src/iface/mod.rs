@@ -10,6 +10,7 @@ use landscape_common::{
     error::LdResult,
     iface::{AddController, BridgeCreate, ChangeZone},
 };
+use landscape_database::iface::repository::NetIfaceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use rtnetlink::new_connection;
 use serde::Serialize;
@@ -51,6 +52,8 @@ pub async fn get_iface_by_name(name: &str) -> Option<LandscapeInterface> {
 pub struct IfaceManagerService {
     /// 配置存储
     pub store_service: LandscapeDBServiceProvider,
+
+    pub iface_store: NetIfaceRepository,
 }
 
 impl IfaceManagerService {
@@ -58,7 +61,10 @@ impl IfaceManagerService {
         let store = store_service.iface_store();
         crate::init_devs(store.list_all().await.unwrap()).await;
         drop(store);
-        Self { store_service }
+        Self {
+            iface_store: store_service.iface_store(),
+            store_service,
+        }
     }
 
     pub async fn manage_dev(&self, dev_name: String) {
@@ -266,6 +272,10 @@ impl IfaceManagerService {
     async fn get_iface_configs(&self) -> Vec<NetworkIfaceConfig> {
         let store = self.store_service.iface_store();
         store.list().await.unwrap()
+    }
+
+    pub async fn get_all_wan_iface_config(&self) -> Vec<NetworkIfaceConfig> {
+        self.iface_store.get_all_wan_iface().await.unwrap_or_default()
     }
 }
 

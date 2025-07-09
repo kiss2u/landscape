@@ -13,11 +13,10 @@ export async function get_all_pppd_status(): Promise<
   return map;
 }
 
-export async function get_all_iface_pppd_config(
-  iface_name: string
-): Promise<PPPDServiceConfig> {
-  let data = await axiosService.get(`services/pppds/${iface_name}`);
-  console.log(data.data);
+export async function get_all_iface_pppd_config(): Promise<
+  PPPDServiceConfig[]
+> {
+  let data = await axiosService.get(`services/pppds`);
   return data.data;
 }
 

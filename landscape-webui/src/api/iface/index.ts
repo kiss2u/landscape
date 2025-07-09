@@ -1,9 +1,19 @@
 import axiosService from "@/api";
-import { IfaceCpuSoftBalance } from "@/rust_bindings/common/iface";
+import {
+  IfaceCpuSoftBalance,
+  NetworkIfaceConfig,
+} from "@/rust_bindings/common/iface";
 import { IfacesInfo } from "@/rust_bindings/iface";
 
 export async function ifaces(): Promise<IfacesInfo> {
   let data = await axiosService.get("iface");
+  // console.log(data.data);
+  return data.data;
+}
+
+// TODO: Fix type
+export async function get_wan_ifaces(): Promise<any[]> {
+  let data = await axiosService.get("iface/wan_configs");
   // console.log(data.data);
   return data.data;
 }
