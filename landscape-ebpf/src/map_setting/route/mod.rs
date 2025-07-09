@@ -14,20 +14,23 @@ use crate::{
 pub fn add_lan_route(lan_info: LanRouteInfo) {
     let rt_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_lan_map).unwrap();
     let mut key = lan_route_key::default();
+    let mut value = lan_route_info::default();
+
     key.prefixlen = lan_info.prefix as u32 + 32;
     match lan_info.iface_ip {
         std::net::IpAddr::V4(ipv4_addr) => {
             key.l3_protocol = LANDSCAPE_IPV4_TYPE;
             unsafe { key.addr.in6_u.u6_addr32[0] = ipv4_addr.to_bits().to_be() };
+            unsafe { value.addr.in6_u.u6_addr32[0] = ipv4_addr.to_bits().to_be() };
         }
         std::net::IpAddr::V6(ipv6_addr) => {
             key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-            key.addr.in6_u.u6_addr8 = ipv6_addr.to_bits().to_be_bytes()
+            key.addr.in6_u.u6_addr8 = ipv6_addr.to_bits().to_be_bytes();
+            value.addr.in6_u.u6_addr8 = ipv6_addr.to_bits().to_be_bytes();
         }
     }
     let key = unsafe { plain::as_bytes(&key) };
 
-    let mut value = lan_route_info::default();
     value.ifindex = lan_info.ifindex;
     if let Some(mac) = lan_info.mac {
         value.mac_addr = mac.octets();

@@ -160,6 +160,10 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
             return TC_ACT_UNSPEC;
         }
 
+        if (ip_addr_equal(&lan_info->addr, &context->daddr)) {
+            return TC_ACT_UNSPEC;
+        }
+
         if (current_eth_net_offset == 0 && lan_info->has_mac) {
             struct lan_mac_cache_key daddr = {0};
             COPY_ADDR_FROM(daddr.ip, context->daddr.in6_u.u6_addr8);

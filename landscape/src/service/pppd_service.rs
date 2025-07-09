@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::process::Command;
 use std::process::Stdio;
 
+use landscape_common::route::RouteTargetInfo;
 use tokio::sync::{oneshot, watch};
 
 use landscape_common::config::ppp::PPPDConfig;
@@ -10,27 +11,40 @@ use landscape_common::database::LandscapeDBTrait;
 use landscape_common::global_const::default_router::RouteInfo;
 use landscape_common::global_const::default_router::RouteType;
 use landscape_common::global_const::default_router::LD_ALL_ROUTERS;
-use landscape_common::service::controller_service::ControllerService;
-use landscape_common::service::service_manager::ServiceManager;
+use landscape_common::service::controller_service_v2::ControllerService;
+use landscape_common::service::service_manager_v2::ServiceManager;
 use landscape_common::service::ServiceStatus;
 use landscape_common::{
     config::ppp::PPPDServiceConfig,
-    service::{service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus},
+    service::{
+        service_manager_v2::ServiceStarterTrait, DefaultServiceStatus, DefaultWatchServiceStatus,
+    },
 };
 use landscape_database::pppd::repository::PPPDServiceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 
 use crate::iface::get_iface_by_name;
+use crate::route::IpRouteService;
 
 #[derive(Clone)]
-pub struct PPPDService;
+pub struct PPPDService {
+    route_service: IpRouteService,
+}
 
-impl ServiceHandler for PPPDService {
+impl PPPDService {
+    pub fn new(route_service: IpRouteService) -> Self {
+        PPPDService { route_service }
+    }
+}
+
+#[async_trait::async_trait]
+impl ServiceStarterTrait for PPPDService {
     type Status = DefaultServiceStatus;
     type Config = PPPDServiceConfig;
 
-    async fn initialize(config: PPPDServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: PPPDServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
+        let route_service = self.route_service.clone();
         if config.enable {
             if let Some(_) = get_iface_by_name(&config.attach_iface_name).await {
                 let status_clone = service_status.clone();
@@ -41,6 +55,7 @@ impl ServiceHandler for PPPDService {
                         config.iface_name,
                         config.pppd_config,
                         status_clone,
+                        route_service,
                     )
                     .await
                 });
@@ -58,6 +73,7 @@ pub async fn create_pppd_thread(
     ppp_iface_name: String,
     pppd_conf: PPPDConfig,
     service_status: DefaultWatchServiceStatus,
+    route_service: IpRouteService,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
 
@@ -86,14 +102,26 @@ pub async fn create_pppd_thread(
     let (updata_ip, mut updata_ip_rx) = watch::channel(());
     let ppp_iface_name_clone = ppp_iface_name.clone();
     tokio::spawn(async move {
-        let mut ip4addr: Option<(u32, HashSet<Ipv4Addr>)> = None;
+        let mut ip4addr: Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)> = None;
         while let Ok(_) = updata_ip_rx.changed().await {
-            let new_ip4addr = crate::get_address(&ppp_iface_name_clone).await;
+            let new_ip4addr = crate::get_ppp_address(&ppp_iface_name_clone).await;
             if let Some(new_ip4addr) = new_ip4addr {
                 let update = if let Some(data) = ip4addr { data != new_ip4addr } else { true };
                 if update {
-                    for ip in new_ip4addr.1.iter() {
+                    if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
                         landscape_ebpf::map_setting::add_wan_ip(new_ip4addr.0, ip.clone());
+
+                        let info = RouteTargetInfo {
+                            ifindex: new_ip4addr.0,
+                            weight: 1,
+                            has_mac: false,
+                            is_docker: false,
+                            iface_name: ppp_iface_name_clone.clone(),
+                            iface_ip: IpAddr::V4(ip.clone()),
+                            default_route: as_router,
+                            gateway_ip: IpAddr::V4(peer_ip),
+                        };
+                        route_service.insert_wan_route(&ppp_iface_name_clone, info).await;
 
                         if as_router {
                             LD_ALL_ROUTERS
@@ -196,9 +224,13 @@ impl ControllerService for PPPDServiceConfigManagerService {
 }
 
 impl PPPDServiceConfigManagerService {
-    pub async fn new(store_service: LandscapeDBServiceProvider) -> Self {
+    pub async fn new(
+        store_service: LandscapeDBServiceProvider,
+        route_service: IpRouteService,
+    ) -> Self {
         let store = store_service.pppd_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let server_starter = PPPDService::new(route_service);
+        let service = ServiceManager::init(store.list().await.unwrap(), server_starter).await;
 
         Self { service, store }
     }

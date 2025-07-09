@@ -22,7 +22,8 @@ use landscape::{
     route::IpRouteService,
     service::{
         dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService,
-        route_lan::RouteLanServiceManagerService, route_wan::RouteWanServiceManagerService,
+        pppd_service::PPPDServiceConfigManagerService, route_lan::RouteLanServiceManagerService,
+        route_wan::RouteWanServiceManagerService,
     },
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
@@ -91,6 +92,9 @@ pub struct LandscapeApp {
     /// Iface IP Service
     wan_ip_service: IfaceIpServiceManagerService,
     docker_service: LandscapeDockerService,
+
+    /// pppd service
+    pppd_service: PPPDServiceConfigManagerService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -179,6 +183,10 @@ async fn main() -> LdResult<()> {
 
     let docker_service = LandscapeDockerService::new(route_service.clone());
 
+    let pppd_service =
+        PPPDServiceConfigManagerService::new(db_store_provider.clone(), route_service.clone())
+            .await;
+
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;
@@ -200,6 +208,8 @@ async fn main() -> LdResult<()> {
         route_wan_service,
 
         docker_service,
+
+        pppd_service,
     };
     // 初始化结束
 
@@ -283,8 +293,8 @@ async fn main() -> LdResult<()> {
                 )
                 .merge(get_iface_ipconfig_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_dhcp_v4_service_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_iface_pppd_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_wifi_service_paths(db_store_provider.clone()).await)
-                .merge(get_iface_pppd_paths(db_store_provider.clone()).await)
                 .merge(
                     get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,

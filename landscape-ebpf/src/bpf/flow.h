@@ -176,8 +176,10 @@ struct lan_route_key {
 
 struct lan_route_info {
     bool has_mac;
-    u8 mac_addr[6]; 
+    u8 mac_addr[6];
+    u8 _pad[2];
     u32 ifindex;
+    struct in6_addr addr;
 };
 
 struct {
