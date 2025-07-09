@@ -16,6 +16,8 @@ import { useDHCPv4ConfigStore } from "./status_dhcp_v4";
 import { useTopologyStore } from "./topology";
 import { useMetricStore } from "./status_metric";
 import { useMSSClampConfigStore } from "./status_mss_clamp";
+import { useRouteLanConfigStore } from "./status_route_lan";
+import { useRouteWanConfigStore } from "./status_route_wan";
 
 export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const sysinfo = useSysInfo();
@@ -33,6 +35,8 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const topologyStore = useTopologyStore();
   const metricStore = useMetricStore();
   const mssclampConfigStore = useMSSClampConfigStore();
+  const routeLanConfigStore = useRouteLanConfigStore();
+  const routeWanConfigStore = useRouteWanConfigStore();
 
   const interval_function = async () => {
     if (start_count_down_callback.value !== undefined) {
@@ -54,6 +58,9 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
       await dhcpv4ConfigStore.UPDATE_INFO();
       await metricStore.UPDATE_INFO();
       await mssclampConfigStore.UPDATE_INFO();
+
+      await routeLanConfigStore.UPDATE_INFO();
+      await routeWanConfigStore.UPDATE_INFO();
     } catch (error) {
       // console.log("1111");
       enable_interval.value = false;

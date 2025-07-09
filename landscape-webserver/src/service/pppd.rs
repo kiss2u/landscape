@@ -1,49 +1,51 @@
 use axum::{
     extract::{Path, State},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
-use landscape::service::pppd_service::PPPDServiceConfigManagerService;
-use landscape_common::service::controller_service::ControllerService;
+use landscape_common::database::LandscapeDBTrait;
+use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::{config::ppp::PPPDServiceConfig, service::DefaultWatchServiceStatus};
-use landscape_database::provider::LandscapeDBServiceProvider;
+
 use serde_json::Value;
 
-use crate::{error::LandscapeApiError, SimpleResult};
+use crate::{error::LandscapeApiError, LandscapeApp, SimpleResult};
 
-pub async fn get_iface_pppd_paths(store: LandscapeDBServiceProvider) -> Router {
-    let share_state = PPPDServiceConfigManagerService::new(store).await;
+pub async fn get_iface_pppd_paths() -> Router<LandscapeApp> {
     Router::new()
+        .route("/pppds", get(get_all_pppd_configs).post(handle_iface_pppd_config))
+        .route("/pppds/:iface_name", get(get_iface_pppd_conifg).delete(delete_and_stop_iface_pppd))
         .route("/pppds/status", get(get_all_pppd_status))
-        .route("/pppds", post(handle_iface_pppd_config))
         .route(
             "/pppds/attach/:iface_name",
             get(get_iface_pppd_conifg_by_attach_iface_name)
                 .delete(delete_and_stop_iface_pppd_by_attach_iface_name),
         )
-        .route("/pppds/:iface_name", get(get_iface_pppd_conifg).delete(delete_and_stop_iface_pppd))
-        .with_state(share_state)
 }
 
-async fn get_all_pppd_status(State(state): State<PPPDServiceConfigManagerService>) -> Json<Value> {
-    let result = serde_json::to_value(state.get_all_status().await);
+async fn get_all_pppd_configs(State(state): State<LandscapeApp>) -> Json<Vec<PPPDServiceConfig>> {
+    Json(state.pppd_service.get_repository().list().await.unwrap_or_default())
+}
+
+async fn get_all_pppd_status(State(state): State<LandscapeApp>) -> Json<Value> {
+    let result = serde_json::to_value(state.pppd_service.get_all_status().await);
     Json(result.unwrap())
 }
 
 async fn get_iface_pppd_conifg_by_attach_iface_name(
-    State(state): State<PPPDServiceConfigManagerService>,
+    State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
 ) -> Result<Json<Vec<PPPDServiceConfig>>, LandscapeApiError> {
-    let configs = state.get_pppd_configs_by_attach_iface_name(iface_name).await;
+    let configs = state.pppd_service.get_pppd_configs_by_attach_iface_name(iface_name).await;
 
     Ok(Json(configs))
 }
 
 async fn get_iface_pppd_conifg(
-    State(state): State<PPPDServiceConfigManagerService>,
+    State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
 ) -> Result<Json<PPPDServiceConfig>, LandscapeApiError> {
-    if let Some(iface_config) = state.get_config_by_name(iface_name).await {
+    if let Some(iface_config) = state.pppd_service.get_config_by_name(iface_name).await {
         Ok(Json(iface_config))
     } else {
         Err(LandscapeApiError::NotFound("can not find".into()))
@@ -51,25 +53,25 @@ async fn get_iface_pppd_conifg(
 }
 
 async fn handle_iface_pppd_config(
-    State(state): State<PPPDServiceConfigManagerService>,
+    State(state): State<LandscapeApp>,
     Json(config): Json<PPPDServiceConfig>,
 ) -> Json<SimpleResult> {
     let result = SimpleResult { success: true };
-    state.handle_service_config(config).await;
+    state.pppd_service.handle_service_config(config).await;
     Json(result)
 }
 
 async fn delete_and_stop_iface_pppd_by_attach_iface_name(
-    State(state): State<PPPDServiceConfigManagerService>,
+    State(state): State<LandscapeApp>,
     Path(attach_name): Path<String>,
 ) -> Json<SimpleResult> {
-    state.stop_pppds_by_attach_iface_name(attach_name).await;
+    state.pppd_service.stop_pppds_by_attach_iface_name(attach_name).await;
     Json(SimpleResult { success: true })
 }
 
 async fn delete_and_stop_iface_pppd(
-    State(state): State<PPPDServiceConfigManagerService>,
+    State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
 ) -> Json<Option<DefaultWatchServiceStatus>> {
-    Json(state.delete_and_stop_iface_service(iface_name).await)
+    Json(state.pppd_service.delete_and_stop_iface_service(iface_name).await)
 }

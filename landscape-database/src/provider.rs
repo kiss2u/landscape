@@ -18,7 +18,8 @@ use crate::{
     iface::repository::NetIfaceRepository, iface_ip::repository::IfaceIpServiceRepository,
     mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
     pppd::repository::PPPDServiceRepository, ra::repository::IPV6RAServiceRepository,
-    wifi::repository::WifiServiceRepository,
+    route_lan::repository::RouteLanServiceRepository,
+    route_wan::repository::RouteWanServiceRepository, wifi::repository::WifiServiceRepository,
 };
 
 /// 存储提供者  
@@ -39,10 +40,18 @@ impl LandscapeDBServiceProvider {
         Self { database }
     }
 
+    pub async fn mem_test_db() -> Self {
+        let database =
+            Database::connect("sqlite::memory:").await.expect("Database connection failed");
+        Migrator::up(&database, None).await.unwrap();
+        Self { database }
+    }
+
     /// 清空数据并且从配置从初始化
     pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
         tracing::info!("init config: {config:?}");
         if let Some(InitConfig {
+            config: _,
             ifaces,
             ipconfigs,
             nats,
@@ -60,7 +69,8 @@ impl LandscapeDBServiceProvider {
             dhcpv4_services,
             geo_ips,
             geo_sites,
-            ..
+            route_lans,
+            route_wans,
         }) = config
         {
             let iface_store = self.iface_store();
@@ -164,6 +174,18 @@ impl LandscapeDBServiceProvider {
             for each_config in geo_sites {
                 geo_site_store.set_model(each_config).await.unwrap();
             }
+
+            let rooute_lan_store = self.route_lan_service_store();
+            rooute_lan_store.truncate_table().await.unwrap();
+            for each_config in route_lans {
+                rooute_lan_store.set_model(each_config).await.unwrap();
+            }
+
+            let rooute_wan_store = self.route_wan_service_store();
+            rooute_wan_store.truncate_table().await.unwrap();
+            for each_config in route_wans {
+                rooute_wan_store.set_model(each_config).await.unwrap();
+            }
         }
     }
 
@@ -237,6 +259,14 @@ impl LandscapeDBServiceProvider {
 
     pub fn wifi_service_store(&self) -> WifiServiceRepository {
         WifiServiceRepository::new(self.database.clone())
+    }
+
+    pub fn route_wan_service_store(&self) -> RouteWanServiceRepository {
+        RouteWanServiceRepository::new(self.database.clone())
+    }
+
+    pub fn route_lan_service_store(&self) -> RouteLanServiceRepository {
+        RouteLanServiceRepository::new(self.database.clone())
     }
 }
 

@@ -51,6 +51,8 @@ const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
 const show_zone_change = ref(false);
 const show_pppd_drawer = ref(false);
+const show_route_lan_drawer = ref(false);
+const show_route_wan_drawer = ref(false);
 
 const show_cpu_balance_btn = ref(false);
 function handleUpdateShow(show: boolean) {
@@ -291,12 +293,12 @@ const show_switch = computed(() => {
         :zone="node.zone_type"
       />
       <!-- 标记服务配置按钮 -->
-      <PacketMarkStatusBtn
+      <!-- <PacketMarkStatusBtn
         v-if="show_switch.mark_config"
         @click="iface_mark_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
-      />
+      /> -->
       <!-- IPV6PD 配置按钮 -->
       <IPv6PDStatusBtn
         v-if="show_switch.ipv6pd"
@@ -316,6 +318,22 @@ const show_switch = computed(() => {
       <WifiStatusBtn
         v-if="show_switch.wifi"
         @click="iface_wifi_edit_show = true"
+        :iface_name="node.name"
+        :zone="node.zone_type"
+      />
+
+      <!-- RouteLan -->
+      <RouteLanStatusBtn
+        v-if="show_switch.route_lan"
+        @click="show_route_lan_drawer = true"
+        :iface_name="node.name"
+        :zone="node.zone_type"
+      />
+
+      <!-- RouteWan -->
+      <RouteWanStatusBtn
+        v-if="show_switch.route_wan"
+        @click="show_route_wan_drawer = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
@@ -409,6 +427,19 @@ const show_switch = computed(() => {
     :iface_name="node.name"
   >
   </MSSClampServiceEditModal>
+
+  <RouteLanServiceEditModal
+    v-model:show="show_route_lan_drawer"
+    :iface_name="node.name"
+    @refresh="refresh"
+  />
+
+  <RouteWanServiceEditModal
+    v-model:show="show_route_wan_drawer"
+    :zone="node.zone_type"
+    :iface_name="node.name"
+    @refresh="refresh"
+  />
 </template>
 
 <style scoped>

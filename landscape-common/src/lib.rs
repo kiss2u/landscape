@@ -19,6 +19,7 @@ pub mod net;
 pub mod net_proto;
 pub mod network;
 pub mod observer;
+pub mod route;
 pub mod service;
 pub mod store;
 pub mod test;

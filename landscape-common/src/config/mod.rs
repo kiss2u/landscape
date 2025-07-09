@@ -12,6 +12,9 @@ pub mod ppp;
 pub mod ra;
 pub mod wifi;
 
+pub mod route_lan;
+pub mod route_wan;
+
 use std::{
     net::{IpAddr, Ipv6Addr},
     path::PathBuf,
@@ -35,7 +38,11 @@ use wifi::WifiServiceConfig;
 
 use crate::{
     args::WebCommArgs,
-    config::geo::{GeoIpSourceConfig, GeoSiteSourceConfig},
+    config::{
+        geo::{GeoIpSourceConfig, GeoSiteSourceConfig},
+        route_lan::RouteLanServiceConfig,
+        route_wan::RouteWanServiceConfig,
+    },
     firewall::FirewallRuleConfig,
     flow::FlowConfig,
     ip_mark::WanIpRuleConfig,
@@ -92,6 +99,11 @@ pub struct InitConfig {
     pub geo_ips: Vec<GeoIpSourceConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub geo_sites: Vec<GeoSiteSourceConfig>,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub route_lans: Vec<RouteLanServiceConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub route_wans: Vec<RouteWanServiceConfig>,
 }
 
 /// auth realte config

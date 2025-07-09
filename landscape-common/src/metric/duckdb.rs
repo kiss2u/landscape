@@ -259,9 +259,13 @@ pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
     rows.filter_map(Result::ok).collect()
 }
 
-pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>) {
+pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
     // Create a single-threaded DuckDB connection
-    let conn = Connection::open_in_memory().unwrap();
+    // let conn = Connection::open_in_memory().unwrap();
+    std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
+
+    let db_path = base_path.join("metrics.duckdb");
+    let conn = Connection::open(db_path).unwrap();
 
     create_connect_table(&conn).unwrap();
     create_metrics_table(&conn).unwrap();
@@ -295,10 +299,10 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>) {
 }
 
 impl DuckMetricStore {
-    pub async fn new(_base_path: PathBuf) -> Self {
+    pub async fn new(base_path: PathBuf) -> Self {
         let (tx, rx) = mpsc::channel::<DBMessage>(1024);
         thread::spawn(move || {
-            start_db_thread(rx);
+            start_db_thread(rx, base_path);
         });
 
         DuckMetricStore { tx }

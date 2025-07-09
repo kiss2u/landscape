@@ -1,8 +1,11 @@
 use landscape_common::{
-    config::iface::NetworkIfaceConfig,
+    config::iface::{IfaceZoneType, NetworkIfaceConfig},
     database::{repository::Repository, LandscapeDBTrait, LandscapeServiceDBTrait},
+    error::LdError,
 };
-use sea_orm::DatabaseConnection;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+
+use crate::iface::entity::Column;
 
 use super::entity::{NetIfaceConfigActiveModel, NetIfaceConfigEntity, NetIfaceConfigModel};
 
@@ -20,6 +23,15 @@ impl LandscapeDBTrait for NetIfaceRepository {}
 impl NetIfaceRepository {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    pub async fn get_all_wan_iface(&self) -> Result<Vec<NetworkIfaceConfig>, LdError> {
+        let result = NetIfaceConfigEntity::find()
+            .filter(Column::ZoneType.eq(IfaceZoneType::Wan))
+            .all(&self.db)
+            .await?;
+
+        Ok(result.into_iter().map(From::from).collect())
     }
 }
 

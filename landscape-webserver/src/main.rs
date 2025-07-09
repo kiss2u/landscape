@@ -17,7 +17,14 @@ use landscape::{
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
     },
+    docker::LandscapeDockerService,
     metric::MetricService,
+    route::IpRouteService,
+    service::{
+        dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService,
+        pppd_service::PPPDServiceConfigManagerService, route_lan::RouteLanServiceManagerService,
+        route_wan::RouteWanServiceManagerService,
+    },
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
@@ -50,12 +57,16 @@ use service::{
 use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
 use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
-use tracing::{error, info};
+use tracing::info;
 
-use crate::sys_service::config_service::get_config_paths;
+use crate::{
+    service::{route_lan::get_route_lan_paths, route_wan::get_route_wan_paths},
+    sys_service::config_service::get_config_paths,
+};
 
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;
 const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
+const ROUTE_EVENT_CHANNEL_SIZE: usize = 128;
 
 #[derive(Clone)]
 pub struct LandscapeApp {
@@ -68,8 +79,22 @@ pub struct LandscapeApp {
     pub geo_ip_service: GeoIpService,
     pub config_service: LandscapeConfigService,
 
+    pub dhcp_v4_server_service: DHCPv4ServerManagerService,
+
     /// Metric
     pub metric_service: MetricService,
+
+    /// Route
+    pub route_service: IpRouteService,
+    pub route_lan_service: RouteLanServiceManagerService,
+    pub route_wan_service: RouteWanServiceManagerService,
+
+    /// Iface IP Service
+    wan_ip_service: IfaceIpServiceManagerService,
+    docker_service: LandscapeDockerService,
+
+    /// pppd service
+    pppd_service: PPPDServiceConfigManagerService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -99,13 +124,23 @@ async fn main() -> LdResult<()> {
 
     // 初始化 App
 
+    let dev_obs = landscape::observer::dev_observer().await;
+
     let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
+    let (route_service_tx, route_service_rx) = mpsc::channel(ROUTE_EVENT_CHANNEL_SIZE);
+    let (dst_ip_service_tx, dst_ip_service_rx) = mpsc::channel(DST_IP_EVENT_CHANNEL_SIZE);
+
     let geo_site_service =
         GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
     let dns_rule_service =
         DNSRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
-    let flow_rule_service =
-        FlowRuleService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let flow_rule_service = FlowRuleService::new(
+        db_store_provider.clone(),
+        dns_service_tx.clone(),
+        route_service_tx.clone(),
+    )
+    .await;
+
     let dns_service = LandscapeDnsService::new(
         dns_service_rx,
         dns_rule_service.clone(),
@@ -114,8 +149,6 @@ async fn main() -> LdResult<()> {
     )
     .await;
     let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
-
-    let (dst_ip_service_tx, dst_ip_service_rx) = mpsc::channel(DST_IP_EVENT_CHANNEL_SIZE);
 
     let geo_ip_service =
         GeoIpService::new(db_store_provider.clone(), dst_ip_service_tx.clone()).await;
@@ -128,6 +161,34 @@ async fn main() -> LdResult<()> {
 
     let metric_service = MetricService::new(home_path.clone()).await;
 
+    let route_service = IpRouteService::new(route_service_rx, db_store_provider.flow_rule_store());
+    let dhcp_v4_server_service = DHCPv4ServerManagerService::new(
+        route_service.clone(),
+        db_store_provider.clone(),
+        dev_obs.resubscribe(),
+    )
+    .await;
+
+    let wan_ip_service = IfaceIpServiceManagerService::new(
+        route_service.clone(),
+        db_store_provider.clone(),
+        dev_obs.resubscribe(),
+    )
+    .await;
+
+    let route_lan_service =
+        RouteLanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+    let route_wan_service =
+        RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let docker_service = LandscapeDockerService::new(route_service.clone());
+
+    let pppd_service =
+        PPPDServiceConfigManagerService::new(db_store_provider.clone(), route_service.clone())
+            .await;
+
+    docker_service.start_to_listen_event().await;
+
     metric_service.start_service().await;
     let landscape_app_status = LandscapeApp {
         dns_service,
@@ -139,41 +200,49 @@ async fn main() -> LdResult<()> {
         geo_ip_service,
         config_service,
         metric_service,
+        route_service,
+        dhcp_v4_server_service,
+        wan_ip_service,
+
+        route_lan_service,
+        route_wan_service,
+
+        docker_service,
+
+        pppd_service,
     };
     // 初始化结束
-
-    let dev_obs = landscape::observer::dev_observer().await;
 
     let tls_config = load_or_generate_cert(home_path.clone()).await;
     // let tls_config = Arc::new(tls_config);
     // let acceptor = TlsAcceptor::from(tls_config);
 
     // need iproute2
-    if let Err(e) =
-        std::process::Command::new("iptables").args(["-A", "FORWARD", "-j", "ACCEPT"]).output()
-    {
-        error!("iptables cmd exec err: {e:#?}");
-    }
+    // if let Err(e) =
+    //     std::process::Command::new("iptables").args(["-A", "FORWARD", "-j", "ACCEPT"]).output()
+    // {
+    //     error!("iptables cmd exec err: {e:#?}");
+    // }
 
     // need procps
-    if let Err(e) =
-        std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output()
-    {
-        error!("sysctl cmd exec err: {e:#?}");
-    }
+    // if let Err(e) =
+    //     std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output()
+    // {
+    //     error!("sysctl cmd exec err: {e:#?}");
+    // }
 
-    if let Err(e) =
-        std::process::Command::new("sysctl").args(["-w", "net.ipv6.conf.all.forwarding=1"]).output()
-    {
-        error!("sysctl cmd exec err: {e:#?}");
-    }
+    // if let Err(e) =
+    //     std::process::Command::new("sysctl").args(["-w", "net.ipv6.conf.all.forwarding=1"]).output()
+    // {
+    //     error!("sysctl cmd exec err: {e:#?}");
+    // }
 
-    if let Err(e) = std::process::Command::new("sysctl")
-        .args(["-w", "net.ipv6.conf.default.forwarding=1"])
-        .output()
-    {
-        error!("sysctl cmd exec err: {e:#?}");
-    }
+    // if let Err(e) = std::process::Command::new("sysctl")
+    //     .args(["-w", "net.ipv6.conf.default.forwarding=1"])
+    //     .output()
+    // {
+    //     error!("sysctl cmd exec err: {e:#?}");
+    // }
 
     let addr = SocketAddr::from((config.web.address, config.web.https_port));
     // spawn a second server to redirect http requests to this server
@@ -185,7 +254,6 @@ async fn main() -> LdResult<()> {
     let auth_share = Arc::new(config.auth.clone());
     auth::output_sys_token(&config.auth).await;
     let source_route = Router::new()
-        .nest("/docker", docker::get_docker_paths(home_path.clone()).await)
         .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
         .nest(
             "/metric",
@@ -196,6 +264,7 @@ async fn main() -> LdResult<()> {
             Router::new()
                 .merge(get_dns_paths().await)
                 .merge(get_config_paths().await)
+                .nest("/docker", docker::get_docker_paths().await)
                 .with_state(landscape_app_status.clone()),
         )
         .nest(
@@ -212,6 +281,8 @@ async fn main() -> LdResult<()> {
         .nest(
             "/services",
             Router::new()
+                .merge(get_route_wan_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_route_lan_paths().await.with_state(landscape_app_status.clone()))
                 .merge(
                     get_mss_clamp_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,
@@ -220,16 +291,10 @@ async fn main() -> LdResult<()> {
                     get_firewall_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,
                 )
-                .merge(
-                    get_iface_ipconfig_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
-                .merge(
-                    get_dhcp_v4_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
+                .merge(get_iface_ipconfig_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_dhcp_v4_service_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_iface_pppd_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_wifi_service_paths(db_store_provider.clone()).await)
-                .merge(get_iface_pppd_paths(db_store_provider.clone()).await)
                 .merge(
                     get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
                         .await,

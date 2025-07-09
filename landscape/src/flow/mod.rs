@@ -1,11 +1,6 @@
 use std::collections::HashMap;
 
-use landscape_common::flow::{
-    target::{FlowTargetPair, TargetInterfaceInfo},
-    FlowConfig, FlowMathPair, FlowTarget, PacketMatchMark,
-};
-
-use crate::iface::get_iface_by_name;
+use landscape_common::flow::{FlowConfig, FlowMathPair, PacketMatchMark};
 
 fn convert_mark_map_to_vec_mark(value: HashMap<PacketMatchMark, u32>) -> Vec<FlowMathPair> {
     let mut result = Vec::with_capacity(value.len());
@@ -16,14 +11,14 @@ fn convert_mark_map_to_vec_mark(value: HashMap<PacketMatchMark, u32>) -> Vec<Flo
 }
 
 pub async fn update_flow_matchs(rules: Vec<FlowConfig>, old_rules: Vec<FlowConfig>) {
-    let net_ifindexs: Vec<(u32, String)> = rules
-        .iter()
-        .map(|e| (e.flow_id, e.packet_handle_iface_name.get(0)))
-        .filter_map(|e| match e.1 {
-            Some(FlowTarget::Interface { name }) => Some((e.0, name.clone())),
-            _ => None,
-        })
-        .collect();
+    // let net_ifindexs: Vec<(u32, String)> = rules
+    //     .iter()
+    //     .map(|e| (e.flow_id, e.packet_handle_iface_name.get(0)))
+    //     .filter_map(|e| match e.1 {
+    //         Some(FlowTarget::Interface { name }) => Some((e.0, name.clone())),
+    //         _ => None,
+    //     })
+    //     .collect();
     let mut rules = flow_rule_into_hash(rules);
     let old_rules = flow_rule_into_hash(old_rules);
     tracing::debug!("rules: {:?}", rules);
@@ -37,15 +32,15 @@ pub async fn update_flow_matchs(rules: Vec<FlowConfig>, old_rules: Vec<FlowConfi
     landscape_ebpf::map_setting::flow::del_flow_match_rule(delete_keys);
 
     // TODO: 移动到网卡启动时处理, 并且把配置也单独移出, 使用数据库进行配置
-    for (flow_id, ifindex_name) in net_ifindexs {
-        if let Some(iface) = get_iface_by_name(&ifindex_name).await {
-            let info = FlowTargetPair {
-                key: flow_id,
-                value: TargetInterfaceInfo::new_net_iface(iface.index, iface.mac.is_some()),
-            };
-            landscape_ebpf::map_setting::flow_target::add_flow_target_info(info);
-        }
-    }
+    // for (flow_id, ifindex_name) in net_ifindexs {
+    //     if let Some(iface) = get_iface_by_name(&ifindex_name).await {
+    //         let info = FlowTargetPair {
+    //             key: flow_id,
+    //             value: TargetInterfaceInfo::new_net_iface(iface.index, iface.mac.is_some()),
+    //         };
+    //         landscape_ebpf::map_setting::flow_target::add_flow_target_info(info);
+    //     }
+    // }
 }
 
 fn flow_rule_into_hash(rules: Vec<FlowConfig>) -> HashMap<PacketMatchMark, u32> {

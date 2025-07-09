@@ -86,7 +86,13 @@ export function new_wan_rules(e: any): WanIPRuleSource {
   if (e.t == "config") {
     return { t: "config", ip: e.ip, prefix: e.prefix };
   } else {
-    return { t: "geo_key", key: e.key, name: e.name, inverse: false };
+    return {
+      t: "geo_key",
+      key: e.key,
+      name: e.name,
+      inverse: false,
+      attribute_key: null,
+    };
   }
 }
 

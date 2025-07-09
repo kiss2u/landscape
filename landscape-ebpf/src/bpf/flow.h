@@ -148,4 +148,101 @@ struct flow_ip_trie_value {
     u8 _pad[3];
 } __flow_ip_trie_value;
 
+// 每个流中特定的 目标 IP 规则
+struct each_flow_ip_trie {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __type(key, struct flow_ip_trie_key);
+    __type(value, struct flow_ip_trie_value);
+    __uint(max_entries, 65536);
+} each_flow_ip_map SEC(".maps");
+
+// flow <-> 对应规则 map
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
+    __type(key, u32);
+    __uint(max_entries, 512);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+    __array(values, struct each_flow_ip_trie);
+} flow_v_ip_map SEC(".maps");
+
+
+struct lan_route_key {
+    __u32 prefixlen;
+    u8 l3_protocol;
+    u8 _pad[3];
+    struct in6_addr addr;
+};
+
+struct lan_route_info {
+    bool has_mac;
+    u8 mac_addr[6];
+    u8 _pad[2];
+    u32 ifindex;
+    struct in6_addr addr;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+    __type(key, struct lan_route_key);
+    __type(value, struct lan_route_info);
+    __uint(max_entries, 1024);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} rt_lan_map SEC(".maps");
+
+struct route_target_key {
+    __u32 flow_id;
+    u8 l3_protocol;
+    u8 _pad[3];
+};
+
+struct route_context {
+    struct in6_addr saddr;
+    struct in6_addr daddr;
+    // IP 协议: IPv4 Ipv6, LANDSCAPE_IPV4_TYPE | LANDSCAPE_IPV6_TYPE
+    u8 l3_protocol;
+    // IP 层协议: TCP / UDP
+    u8 l4_protocol;
+    // tos value
+    u8 tos;
+    u8 smac[6];
+    u8 _pad[3];
+};
+
+struct route_target_info {
+    u32 ifindex;
+    struct in6_addr gate_addr;
+    // 是否有 mac
+    bool has_mac;
+    bool is_docker;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct route_target_key);
+    __type(value, struct route_target_info);
+    __uint(max_entries, 1024);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} rt_target_map SEC(".maps");
+
+struct lan_mac_cache_key {
+    u8 ip[16];
+};
+
+struct lan_mac_cache {
+    u8 mac[6];
+    u8 _pad[2];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
+    __type(key, struct lan_mac_cache_key);
+    __type(value, struct lan_mac_cache);
+    __uint(max_entries, 65535);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} ip_mac_tab SEC(".maps");
+
 #endif /* __LD_FLOW_H__ */

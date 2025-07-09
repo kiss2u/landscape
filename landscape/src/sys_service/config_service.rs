@@ -33,6 +33,8 @@ impl LandscapeConfigService {
             mss_clamps: self.store.mss_clamp_service_store().list().await.unwrap(),
             geo_ips: self.store.geo_ip_rule_store().list().await.unwrap(),
             geo_sites: self.store.geo_site_rule_store().list().await.unwrap(),
+            route_lans: self.store.route_lan_service_store().list().await.unwrap(),
+            route_wans: self.store.route_wan_service_store().list().await.unwrap(),
         }
     }
 }

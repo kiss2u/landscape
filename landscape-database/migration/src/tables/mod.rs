@@ -16,3 +16,5 @@ pub mod firewall_rule;
 pub mod flow_rule;
 
 pub mod geo;
+
+pub mod route;

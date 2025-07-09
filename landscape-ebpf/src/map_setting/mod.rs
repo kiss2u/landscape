@@ -19,6 +19,7 @@ pub mod flow_dns;
 pub mod flow_target;
 pub mod flow_wanip;
 pub mod metric;
+pub mod route;
 
 pub(crate) fn init_path(paths: LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
@@ -53,6 +54,12 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
         .firewall_conn_metric_events
         .set_pin_path(&paths.firewall_conn_metric_events)
         .unwrap();
+
+    landscape_open.maps.rt_lan_map.set_pin_path(&paths.rt_lan_map).unwrap();
+    landscape_open.maps.rt_target_map.set_pin_path(&paths.rt_target_map).unwrap();
+
+    // route ip mac cache table
+    landscape_open.maps.ip_mac_tab.set_pin_path(&paths.ip_mac_tab).unwrap();
 
     let _landscape_skel = landscape_open.load().unwrap();
 }

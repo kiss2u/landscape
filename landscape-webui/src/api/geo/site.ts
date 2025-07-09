@@ -1,5 +1,9 @@
 import axiosService from "@/api";
-import { GeoConfigKey, QueryGeoKey } from "@/rust_bindings/common/geo";
+import {
+  GeoConfigKey,
+  GeoFileCacheKey,
+  QueryGeoKey,
+} from "@/rust_bindings/common/geo";
 import {
   GeoDomainConfig,
   GeoSiteSourceConfig,
@@ -64,7 +68,7 @@ export async function search_geo_site_cache(
 }
 
 export async function get_geo_site_cache_detail(
-  key: GeoConfigKey
+  key: GeoFileCacheKey
 ): Promise<GeoDomainConfig> {
   let data = await axiosService.get(`config/geo_sites/cache/detail`, {
     params: {

@@ -3,7 +3,9 @@ use axum::{routing::get, Json, Router};
 use landscape::docker::network::inspect_all_networks;
 use serde_json::Value;
 
-pub async fn get_docker_networks_paths() -> Router {
+use crate::LandscapeApp;
+
+pub async fn get_docker_networks_paths() -> Router<LandscapeApp> {
     Router::new().route("/", get(get_all_networks))
 }
 

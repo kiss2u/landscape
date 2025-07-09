@@ -5,7 +5,7 @@ use std::{
 };
 
 use landscape_common::{
-    config::dns::{DomainConfig, DomainMatchType},
+    config::{dns::DomainMatchType, geo::GeoSiteFileConfig},
     ip_mark::IpConfig,
 };
 use protos::geo::{mod_Domain::Type, Domain, GeoIPListOwned, GeoSiteListOwned};
@@ -14,7 +14,7 @@ mod protos;
 
 pub async fn read_geo_sites_from_bytes(
     contents: impl Into<Vec<u8>>,
-) -> HashMap<String, Vec<DomainConfig>> {
+) -> HashMap<String, Vec<GeoSiteFileConfig>> {
     let mut result = HashMap::new();
     let list = GeoSiteListOwned::try_from(contents.into()).unwrap();
 
@@ -27,7 +27,7 @@ pub async fn read_geo_sites_from_bytes(
 
 pub async fn read_geo_sites<T: AsRef<Path>>(
     geo_file_path: T,
-) -> HashMap<String, Vec<DomainConfig>> {
+) -> HashMap<String, Vec<GeoSiteFileConfig>> {
     let mut result = HashMap::new();
     let data = tokio::fs::read(geo_file_path).await.unwrap();
     let list = GeoSiteListOwned::try_from(data).unwrap();
@@ -48,10 +48,11 @@ pub fn convert_match_type_from_proto(value: Type) -> DomainMatchType {
     }
 }
 
-pub fn convert_domain_from_proto(value: &Domain) -> DomainConfig {
-    DomainConfig {
+pub fn convert_domain_from_proto(value: &Domain) -> GeoSiteFileConfig {
+    GeoSiteFileConfig {
         match_type: convert_match_type_from_proto(value.type_pb),
         value: value.value.to_lowercase(),
+        attributes: value.attribute.iter().map(|e| e.key.to_string()).collect(),
     }
 }
 
@@ -107,7 +108,10 @@ mod tests {
 
     use jemalloc_ctl::{epoch, stats};
 
-    use crate::{protos::geo::GeoIPListOwned, read_geo_sites};
+    use crate::{
+        protos::geo::{GeoIPListOwned, GeoSiteListOwned},
+        read_geo_sites,
+    };
 
     fn test_memory_usage() {
         epoch::advance().unwrap();
@@ -117,6 +121,21 @@ mod tests {
 
         println!("Allocated memory: {} kbytes", allocated / 1024);
         println!("Active memory: {} kbytes", active / 1024);
+    }
+    #[tokio::test]
+    async fn read_raw() {
+        test_memory_usage();
+
+        let data = tokio::fs::read("/root/.landscape-router/geosite.dat1").await.unwrap();
+        let list = GeoSiteListOwned::try_from(data).unwrap();
+
+        for entry in list.proto().entry.iter() {
+            if entry.country_code == "STEAM" {
+                for domain_config in entry.domain.iter() {
+                    println!("{:?}: {:?}", entry.country_code, domain_config);
+                }
+            }
+        }
     }
 
     #[tokio::test]

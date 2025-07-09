@@ -24,7 +24,7 @@ pub struct FlowConfig {
     pub flow_match_rules: Vec<PacketMatchMark>,
     /// 处理流量目标网卡, 目前只取第一个
     /// 暂定, 可能会移动到具体的网卡上进行设置
-    pub packet_handle_iface_name: Vec<FlowTarget>,
+    pub flow_targets: Vec<FlowTarget>,
     /// 备注
     pub remark: String,
     #[serde(default = "get_f64_timestamp")]

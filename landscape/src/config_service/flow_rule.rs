@@ -1,5 +1,5 @@
 use landscape_common::{
-    event::dns::DnsEvent,
+    event::{dns::DnsEvent, route::RouteEvent},
     flow::FlowConfig,
     service::controller_service::{ConfigController, FlowConfigController},
 };
@@ -15,15 +15,17 @@ use crate::flow::update_flow_matchs;
 pub struct FlowRuleService {
     store: FlowConfigRepository,
     dns_events_tx: mpsc::Sender<DnsEvent>,
+    route_events_tx: mpsc::Sender<RouteEvent>,
 }
 
 impl FlowRuleService {
     pub async fn new(
         store: LandscapeDBServiceProvider,
         dns_events_tx: mpsc::Sender<DnsEvent>,
+        route_events_tx: mpsc::Sender<RouteEvent>,
     ) -> Self {
         let store = store.flow_rule_store();
-        let result = Self { store, dns_events_tx };
+        let result = Self { store, dns_events_tx, route_events_tx };
         result.after_update_config(result.list().await, vec![]).await;
         result
     }
@@ -39,6 +41,22 @@ impl ConfigController for FlowRuleService {
 
     fn get_repository(&self) -> &Self::DatabseAction {
         &self.store
+    }
+
+    async fn update_one_config(&self, config: Self::Config) {
+        let _ = self
+            .route_events_tx
+            .send(RouteEvent::FlowRuleUpdate { flow_id: Some(config.flow_id) })
+            .await;
+    }
+    async fn delete_one_config(&self, config: Self::Config) {
+        let _ = self
+            .route_events_tx
+            .send(RouteEvent::FlowRuleUpdate { flow_id: Some(config.flow_id) })
+            .await;
+    }
+    async fn update_many_config(&self, _configs: Vec<Self::Config>) {
+        let _ = self.route_events_tx.send(RouteEvent::FlowRuleUpdate { flow_id: None }).await;
     }
 
     async fn after_update_config(

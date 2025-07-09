@@ -245,23 +245,25 @@ async fn handle_dhcp_message(
                     }
                     return true;
                 }
-                DhcpOptionMessageType::Decline => todo!(),
-                DhcpOptionMessageType::Ack => todo!(),
-                DhcpOptionMessageType::Nak => todo!(),
+                // DhcpOptionMessageType::Decline => todo!(),
+                // DhcpOptionMessageType::Ack => todo!(),
+                // DhcpOptionMessageType::Nak => todo!(),
                 DhcpOptionMessageType::Release => {
-                    tracing::info!("{dhcp:?}");
+                    tracing::info!("req: Release, {dhcp:?}");
                 }
-                DhcpOptionMessageType::Inform => todo!(),
-                DhcpOptionMessageType::ForceRenew => todo!(),
-                DhcpOptionMessageType::LeaseQuery => todo!(),
-                DhcpOptionMessageType::LeaseUnassigned => todo!(),
-                DhcpOptionMessageType::LeaseUnknown => todo!(),
-                DhcpOptionMessageType::LeaseActive => todo!(),
-                DhcpOptionMessageType::BulkLeaseQuery => todo!(),
-                DhcpOptionMessageType::LeaseQueryDone => todo!(),
-                DhcpOptionMessageType::ActiveLeaseQuery => todo!(),
-                DhcpOptionMessageType::LeaseQueryStatus => todo!(),
-                DhcpOptionMessageType::Tls => todo!(),
+                DhcpOptionMessageType::Inform => {
+                    tracing::info!("req: Inform, {dhcp:?}");
+                }
+                // DhcpOptionMessageType::ForceRenew => todo!(),
+                // DhcpOptionMessageType::LeaseQuery => todo!(),
+                // DhcpOptionMessageType::LeaseUnassigned => todo!(),
+                // DhcpOptionMessageType::LeaseUnknown => todo!(),
+                // DhcpOptionMessageType::LeaseActive => todo!(),
+                // DhcpOptionMessageType::BulkLeaseQuery => todo!(),
+                // DhcpOptionMessageType::LeaseQueryDone => todo!(),
+                // DhcpOptionMessageType::ActiveLeaseQuery => todo!(),
+                // DhcpOptionMessageType::LeaseQueryStatus => todo!(),
+                // DhcpOptionMessageType::Tls => todo!(),
                 _ => {}
             },
             2 => {}
@@ -332,13 +334,17 @@ impl DHCPv4Server {
         // tracing::debug!("{:?}", cidr.is_host_address());
         // tracing::debug!("{:?}", cidr.last_address());
 
+        let broadcast_u32 = u32::from(config.server_ip_addr) | !u32::from(cidr.mask());
+
         let mut options = vec![];
         options.push(DhcpOptions::SubnetMask(cidr.mask()));
         options.push(DhcpOptions::Router(config.server_ip_addr));
         options.push(DhcpOptions::ServerIdentifier(config.server_ip_addr));
         options.push(DhcpOptions::DomainNameServer(vec![config.server_ip_addr]));
+        options.push(DhcpOptions::BroadcastAddr(Ipv4Addr::from(broadcast_u32)));
         // options_map.push(DhcpOptions::AddressLeaseTime(LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME));
 
+        tracing::debug!("dhcp v4 server options: {:#?}", options);
         // TODO
         let mut options_map = HashMap::new();
         for each in options.iter() {
@@ -458,10 +464,27 @@ impl DHCPv4Server {
                 )
             }
         } else {
-            tracing::error!("can not find this request offer record client: {mac_addr:?} request ip: {ip_addr:?}")
-        }
+            if self.allocated_host.contains(&ip_addr) {
+                tracing::error!(
+                    "Requested IP {ip_addr:?} is already allocated to another client, request by {mac_addr:?}"
+                );
+                return false;
+            }
 
-        // TODO: 检查此 IP 是否未被 offered, 没有被 offered 那就可以被分配
+            let lease_cache = DHCPv4ServerOfferedCache {
+                ip: ip_addr,
+                is_static: false,
+                valid_time: self.address_lease_time,
+                relative_offer_time: self.relative_boot_time.elapsed().as_secs(),
+            };
+
+            self.offered_ip.insert(*mac_addr, lease_cache);
+            self.allocated_host.insert(ip_addr);
+
+            tracing::info!("Assigned unoffered IP {ip_addr:?} to client {mac_addr:?}");
+
+            return true;
+        }
         false
     }
 
@@ -483,8 +506,14 @@ impl DHCPv4Server {
 }
 
 async fn update_assign_info(assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>, info: DHCPv4OfferInfo) {
-    let mut write_lock = assigned_ips.write().await;
-    *write_lock = info;
+    match tokio::time::timeout(tokio::time::Duration::from_secs(5), assigned_ips.write()).await {
+        Ok(mut write_lock) => {
+            *write_lock = info;
+        }
+        Err(_) => {
+            eprintln!("Failed to acquire write lock within timeout");
+        }
+    }
 }
 
 /// get offer

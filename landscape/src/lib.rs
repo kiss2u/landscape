@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     net::{IpAddr, Ipv4Addr},
 };
 
@@ -28,6 +28,7 @@ pub mod iface;
 pub mod metric;
 pub mod observer;
 pub mod pppoe_client;
+pub mod route;
 pub mod routerstatus;
 pub mod service;
 pub mod sys_service;
@@ -210,13 +211,16 @@ pub async fn get_all_devices() -> Vec<LandscapeInterface> {
     result
 }
 
-pub async fn get_address(iface_name: &str) -> Option<(u32, HashSet<Ipv4Addr>)> {
+pub async fn get_ppp_address(
+    iface_name: &str,
+) -> Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)> {
     let (connection, handle, _) = new_connection().unwrap();
     tokio::spawn(connection);
     let mut links = handle.link().get().match_name(iface_name.to_string()).execute();
 
     if let Ok(Some(link)) = links.try_next().await {
-        let mut out_addr: HashSet<Ipv4Addr> = HashSet::new();
+        let mut out_addr: Option<Ipv4Addr> = None;
+        let mut peer_addr: Option<Ipv4Addr> = None;
         let mut addresses =
             handle.address().get().set_link_index_filter(link.header.index).execute();
         while let Ok(Some(msg)) = addresses.try_next().await {
@@ -225,7 +229,12 @@ pub async fn get_address(iface_name: &str) -> Option<(u32, HashSet<Ipv4Addr>)> {
                     match attr {
                         netlink_packet_route::address::AddressAttribute::Local(addr) => {
                             if let IpAddr::V4(addr) = addr {
-                                out_addr.insert(addr.clone());
+                                out_addr = Some(addr.clone());
+                            }
+                        }
+                        netlink_packet_route::address::AddressAttribute::Address(addr) => {
+                            if let IpAddr::V4(addr) = addr {
+                                peer_addr = Some(addr.clone());
                             }
                         }
                         _ => {}
@@ -234,7 +243,7 @@ pub async fn get_address(iface_name: &str) -> Option<(u32, HashSet<Ipv4Addr>)> {
             }
         }
 
-        Some((link.header.index, out_addr))
+        Some((link.header.index, out_addr, peer_addr))
     } else {
         None
     }

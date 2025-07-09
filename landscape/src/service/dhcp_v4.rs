@@ -4,6 +4,7 @@ use std::sync::Arc;
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
 use landscape_common::dhcp::DHCPv4OfferInfo;
+use landscape_common::route::LanRouteInfo;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::DefaultServiceStatus;
 use landscape_common::service::DefaultWatchServiceStatus;
@@ -19,16 +20,19 @@ use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
 use crate::iface::get_iface_by_name;
+use crate::route::IpRouteService;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct DHCPv4ServerStarter {
-    // TODO: 例如 Router Service
-    pub iface_lease_map: Arc<RwLock<HashMap<String, Arc<RwLock<DHCPv4OfferInfo>>>>>,
+    iface_lease_map: Arc<RwLock<HashMap<String, Arc<RwLock<DHCPv4OfferInfo>>>>>,
+    route_service: IpRouteService,
 }
 
 impl DHCPv4ServerStarter {
-    pub fn new() -> DHCPv4ServerStarter {
+    pub fn new(route_service: IpRouteService) -> DHCPv4ServerStarter {
         DHCPv4ServerStarter {
+            route_service,
             iface_lease_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -43,7 +47,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
-            if let Some(_) = get_iface_by_name(&config.iface_name).await {
+            if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let assigned_ips = {
                     let mut write = self.iface_lease_map.write().await;
                     let key = config.get_store_key();
@@ -52,8 +56,19 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                         .or_insert_with(|| Arc::new(RwLock::new(DHCPv4OfferInfo::default())))
                         .clone()
                 };
+
+                let route_service = self.route_service.clone();
                 let status = service_status.clone();
                 tokio::spawn(async move {
+                    let info = LanRouteInfo {
+                        ifindex: iface.index,
+                        iface_name: config.iface_name.clone(),
+                        mac: iface.mac,
+                        iface_ip: std::net::IpAddr::V4(config.config.server_ip_addr.clone()),
+                        prefix: config.config.network_mask,
+                    };
+                    let iface_name = config.iface_name.clone();
+                    route_service.insert_lan_route(&iface_name, info.clone()).await;
                     crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
                         config.iface_name,
                         config.config,
@@ -61,6 +76,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                         assigned_ips,
                     )
                     .await;
+                    route_service.remove_lan_route(&iface_name).await;
                 });
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
@@ -99,11 +115,12 @@ impl ControllerService for DHCPv4ServerManagerService {
 
 impl DHCPv4ServerManagerService {
     pub async fn new(
+        route_service: IpRouteService,
         store_service: LandscapeDBServiceProvider,
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.dhcp_v4_server_store();
-        let server_starter = DHCPv4ServerStarter::new();
+        let server_starter = DHCPv4ServerStarter::new(route_service);
         let service =
             ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 

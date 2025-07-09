@@ -7,12 +7,14 @@ use tokio::sync::{mpsc, RwLock};
 use ts_rs::TS;
 
 use crate::event::ConnectMessage;
+#[cfg(feature = "duckdb")]
 use crate::metric::duckdb::DuckMetricStore;
 
+#[allow(dead_code)]
 #[cfg(debug_assertions)]
 const CLEAR_INTERVAL: u64 = 60;
 #[cfg(not(debug_assertions))]
-const CLEAR_INTERVAL: u64 = 60 * 20;
+const CLEAR_INTERVAL: u64 = 60 * 10;
 
 ///
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
@@ -111,17 +113,23 @@ pub struct ConnectMetricManager {
     /// 存储所有连接事件：创建、销毁
     active_connects: Arc<RwLock<HashSet<ConnectKey>>>,
     msg_channel: mpsc::Sender<ConnectMessage>,
+    #[cfg(feature = "duckdb")]
     metric_store: DuckMetricStore,
 }
 
+#[allow(unused_variables)]
 impl ConnectMetricManager {
     pub async fn new(base_path: PathBuf) -> Self {
         let active_connects = Arc::new(RwLock::new(HashSet::new()));
         let active_connects_clone = active_connects.clone();
 
+        #[cfg(feature = "duckdb")]
         let metric_store = DuckMetricStore::new(base_path).await;
 
+        #[cfg(feature = "duckdb")]
         let metric_store_clone = metric_store.clone();
+
+        #[cfg(feature = "duckdb")]
         tokio::spawn(async move {
             // 定时清理
             let mut interval =
@@ -160,6 +168,7 @@ impl ConnectMetricManager {
             }
         });
 
+        #[cfg(feature = "duckdb")]
         let metric_store_clone = metric_store.clone();
         let (msg_channel, mut message_rx) = mpsc::channel(1024);
         tokio::spawn(async move {
@@ -167,9 +176,11 @@ impl ConnectMetricManager {
                 match msg {
                     ConnectMessage::Event(info) => {
                         let _ = conn_tx.send(info.clone()).await;
+                        #[cfg(feature = "duckdb")]
                         metric_store_clone.insert_connect_info(info).await;
                     }
                     ConnectMessage::Metric(metric) => {
+                        #[cfg(feature = "duckdb")]
                         metric_store_clone.insert_metric(metric).await;
                     }
                 }
@@ -178,7 +189,12 @@ impl ConnectMetricManager {
             tracing::info!("connect metric exit");
         });
 
-        ConnectMetricManager { active_connects, msg_channel, metric_store }
+        ConnectMetricManager {
+            active_connects,
+            msg_channel,
+            #[cfg(feature = "duckdb")]
+            metric_store,
+        }
     }
 
     pub fn send_connect_msg(&self, msg: ConnectMessage) {
@@ -195,6 +211,15 @@ impl ConnectMetricManager {
     }
 
     pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
-        self.metric_store.query_metric_by_key(key).await
+        #[cfg(any(feature = "duckdb", feature = "polars"))]
+        {
+            self.metric_store.query_metric_by_key(key).await
+        }
+
+        #[cfg(not(any(feature = "duckdb", feature = "polars")))]
+        {
+            let _ = key;
+            Vec::new()
+        }
     }
 }

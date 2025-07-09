@@ -10,20 +10,16 @@ use bollard::container::{
 use bollard::{container::ListContainersOptions, secret::ContainerSummary, Docker};
 
 use image::get_docker_images_paths;
-use landscape::docker::LandscapeDockerService;
 use network::get_docker_networks_paths;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
 
-use crate::SimpleResult;
+use crate::{LandscapeApp, SimpleResult};
 
 mod image;
 mod network;
 
-pub async fn get_docker_paths(home_path: PathBuf) -> Router {
-    let docker_service = LandscapeDockerService::new(home_path.join("docker_info"));
-    docker_service.start_to_listen_event().await;
+pub async fn get_docker_paths() -> Router<LandscapeApp> {
     Router::new()
         .route(
             "/status",
@@ -35,25 +31,24 @@ pub async fn get_docker_paths(home_path: PathBuf) -> Router {
         .route("/start/:container_name", post(start_container))
         .route("/stop/:container_name", post(stop_container))
         .route("/remove/:container_name", post(remove_container))
-        .with_state(docker_service)
         .nest("/images", get_docker_images_paths().await)
         .nest("/networks", get_docker_networks_paths().await)
 }
 
-async fn get_docker_status(State(state): State<LandscapeDockerService>) -> Json<Value> {
-    let result = serde_json::to_value(&state.status);
+async fn get_docker_status(State(state): State<LandscapeApp>) -> Json<Value> {
+    let result = serde_json::to_value(&state.docker_service.status);
     Json(result.unwrap())
 }
 
-async fn start_docker_status(State(state): State<LandscapeDockerService>) -> Json<Value> {
-    state.start_to_listen_event().await;
-    let result = serde_json::to_value(&state.status);
+async fn start_docker_status(State(state): State<LandscapeApp>) -> Json<Value> {
+    state.docker_service.start_to_listen_event().await;
+    let result = serde_json::to_value(&state.docker_service.status);
     Json(result.unwrap())
 }
 
-async fn stop_docker_status(State(state): State<LandscapeDockerService>) -> Json<Value> {
-    state.status.wait_stop().await;
-    let result = serde_json::to_value(&state.status);
+async fn stop_docker_status(State(state): State<LandscapeApp>) -> Json<Value> {
+    state.docker_service.status.wait_stop().await;
+    let result = serde_json::to_value(&state.docker_service.status);
     Json(result.unwrap())
 }
 

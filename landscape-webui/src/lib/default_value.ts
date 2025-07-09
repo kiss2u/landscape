@@ -6,7 +6,7 @@ export function flow_config_default(): FlowConfig {
     enable: true,
     flow_id: -1,
     flow_match_rules: [],
-    packet_handle_iface_name: [],
+    flow_targets: [],
     remark: "",
     update_at: new Date().getTime(),
   };

@@ -13,6 +13,7 @@ pub mod mss_clamp;
 pub mod nat;
 pub mod ns_proxy;
 pub mod pppoe;
+pub mod route;
 pub mod tproxy;
 
 static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
@@ -46,6 +47,13 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
             "{}/firewall_conn_metric_events",
             ebpf_map_path
         )),
+
+        // route
+        rt_lan_map: PathBuf::from(format!("{}/rt_lan_map", ebpf_map_path)),
+        rt_target_map: PathBuf::from(format!("{}/rt_target_map", ebpf_map_path)),
+
+        // route ip mac cache table
+        ip_mac_tab: PathBuf::from(format!("{}/ip_mac_tab", ebpf_map_path)),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(paths.clone());
@@ -77,27 +85,37 @@ pub(crate) struct LandscapeMapPath {
     /// firewall
     pub firewall_conn_events: PathBuf,
     pub firewall_conn_metric_events: PathBuf,
+
+    /// route - LAN
+    pub rt_lan_map: PathBuf,
+    pub rt_target_map: PathBuf,
+
+    /// route ip mac cache table
+    pub ip_mac_tab: PathBuf,
 }
 
-// pppoe -> Fire wall -> nat
+// pppoe -> Fire wall -> nat -> route
 const MSS_CLAMP_INGRESS_PRIORITY: u32 = 2;
 const PPPOE_INGRESS_PRIORITY: u32 = 3;
 const FIREWALL_INGRESS_PRIORITY: u32 = 4;
 // const MARK_INGRESS_PRIORITY: u32 = 5;
 const NAT_INGRESS_PRIORITY: u32 = 6;
+const WAN_ROUTE_INGRESS_PRIORITY: u32 = 7;
 
 // Fire wall -> nat -> pppoe
 // const PPPOE_MTU_FILTER_EGRESS_PRIORITY: u32 = 1;
-const FLOW_EGRESS_PRIORITY: u32 = 2;
-const MSS_CLAMP_EGRESS_PRIORITY: u32 = 3;
-const NAT_EGRESS_PRIORITY: u32 = 4;
-const FIREWALL_EGRESS_PRIORITY: u32 = 5;
-const PPPOE_EGRESS_PRIORITY: u32 = 7;
+const WAN_ROUTE_EGRESS_PRIORITY: u32 = 3;
 
-// MARK ->
-const LAN_FLOW_MARK_INGRESS_PRIORITY: u32 = 2;
-// MARK ->
-const LAN_FLOW_MARK_EGRESS_PRIORITY: u32 = 2;
+const FLOW_EGRESS_PRIORITY: u32 = 4;
+const MSS_CLAMP_EGRESS_PRIORITY: u32 = 5;
+const NAT_EGRESS_PRIORITY: u32 = 6;
+const FIREWALL_EGRESS_PRIORITY: u32 = 7;
+const PPPOE_EGRESS_PRIORITY: u32 = 8;
+
+// lAN PRIORITY
+const LAN_ROUTE_INGRESS_PRIORITY: u32 = 2;
+
+const LAN_ROUTE_EGRESS_PRIORITY: u32 = 2;
 
 const LANDSCAPE_IPV4_TYPE: u8 = 0;
 const LANDSCAPE_IPV6_TYPE: u8 = 1;
