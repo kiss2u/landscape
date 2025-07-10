@@ -5,6 +5,7 @@ use landscape_common::{
     },
     database::LandscapeDBTrait,
     service::controller_service::ConfigController,
+    store::storev3::LandscapeStoreTrait,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
 };
 use uuid::Uuid;
@@ -147,10 +148,6 @@ impl GeoSiteService {
         if !force {
             let now = get_f64_timestamp();
             configs = configs.into_iter().filter(|e| e.next_update_at < now).collect();
-        } else {
-            let mut file_cache_lock = self.file_cache.lock().await;
-            file_cache_lock.truncate();
-            drop(file_cache_lock);
         }
 
         let client = Client::new();
@@ -167,13 +164,26 @@ impl GeoSiteService {
                         // tracing::debug!("get response file: {:?}", result);
 
                         let mut file_cache_lock = self.file_cache.lock().await;
+                        let mut exist_keys = file_cache_lock
+                            .keys()
+                            .into_iter()
+                            .filter(|k| k.key == config.name)
+                            .collect::<HashSet<GeoFileCacheKey>>();
+
                         for (key, values) in result {
-                            file_cache_lock.set(GeoDomainConfig {
+                            let info = GeoDomainConfig {
                                 name: config.name.clone(),
                                 key: key.to_ascii_uppercase(),
                                 values,
-                            });
+                            };
+                            exist_keys.remove(&info.get_store_key());
+                            file_cache_lock.set(info);
                         }
+
+                        for key in exist_keys {
+                            file_cache_lock.del(&key);
+                        }
+
                         drop(file_cache_lock);
 
                         config.next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
