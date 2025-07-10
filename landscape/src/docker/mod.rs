@@ -167,12 +167,10 @@ pub async fn handle_redirect_id_set(
                             for dev in devs {
                                 if let Some(peer_id) = dev.peer_link_id {
                                     if if_id == peer_id {
-                                        ip_route_service
-                                            .insert_wan_route(
-                                                name,
-                                                RouteTargetInfo::docker_new(dev.index, name),
-                                            )
-                                            .await;
+                                        let (ipv4, ipv6) =
+                                            RouteTargetInfo::docker_new(dev.index, name);
+                                        ip_route_service.insert_ipv4_wan_route(name, ipv4).await;
+                                        ip_route_service.insert_ipv6_wan_route(name, ipv6).await;
                                         // let info = FlowTargetPair {
                                         //     key: redirect_id as u32,
                                         //     value: TargetInterfaceInfo::new_docker(dev.index),

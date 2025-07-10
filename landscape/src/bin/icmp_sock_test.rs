@@ -1,4 +1,5 @@
 use std::{
+    net::{IpAddr, Ipv6Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -11,6 +12,7 @@ use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name};
 use landscape_common::{
     config::ra::IPV6RAConfig,
     global_const::{LDIAPrefix, LD_PD_WATCHES},
+    route::LanRouteInfo,
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
 use tracing::Level;
@@ -58,12 +60,19 @@ async fn main() {
 
     let status = service_status.clone();
 
+    let (_, ip_route) = landscape::route::test_used_ip_route().await;
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.iface_name).await {
             if let Some(mac) = iface.mac {
                 let config = IPV6RAConfig::new(args.depend_iface.clone());
-
-                icmp_ra_server(config, mac, iface.name, status).await.unwrap();
+                let lan_info = LanRouteInfo {
+                    ifindex: iface.index,
+                    iface_name: iface.name.clone(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                    mac: Some(mac.clone()),
+                    prefix: 128,
+                };
+                icmp_ra_server(config, mac, iface.name, status, lan_info, ip_route).await.unwrap();
             }
         }
     });

@@ -22,7 +22,8 @@ use landscape::{
     route::IpRouteService,
     service::{
         dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService,
-        pppd_service::PPPDServiceConfigManagerService, route_lan::RouteLanServiceManagerService,
+        ipv6pd::DHCPv6ClientManagerService, pppd_service::PPPDServiceConfigManagerService,
+        ra::IPV6RAManagerService, route_lan::RouteLanServiceManagerService,
         route_wan::RouteWanServiceManagerService,
     },
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
@@ -95,6 +96,10 @@ pub struct LandscapeApp {
 
     /// pppd service
     pppd_service: PPPDServiceConfigManagerService,
+
+    /// ipv6
+    ipv6_pd_service: DHCPv6ClientManagerService,
+    ipv6_ra_service: IPV6RAManagerService,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -187,6 +192,19 @@ async fn main() -> LdResult<()> {
         PPPDServiceConfigManagerService::new(db_store_provider.clone(), route_service.clone())
             .await;
 
+    let ipv6_pd_service = DHCPv6ClientManagerService::new(
+        db_store_provider.clone(),
+        dev_obs.resubscribe(),
+        route_service.clone(),
+    )
+    .await;
+    let ipv6_ra_service = IPV6RAManagerService::new(
+        db_store_provider.clone(),
+        dev_obs.resubscribe(),
+        route_service.clone(),
+    )
+    .await;
+
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;
@@ -210,6 +228,10 @@ async fn main() -> LdResult<()> {
         docker_service,
 
         pppd_service,
+
+        // IPV6
+        ipv6_pd_service,
+        ipv6_ra_service,
     };
     // 初始化结束
 
@@ -295,14 +317,8 @@ async fn main() -> LdResult<()> {
                 .merge(get_dhcp_v4_service_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_iface_pppd_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_wifi_service_paths(db_store_provider.clone()).await)
-                .merge(
-                    get_iface_pdclient_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
-                .merge(
-                    get_iface_icmpv6ra_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
+                .merge(get_iface_pdclient_paths().await.with_state(landscape_app_status.clone()))
+                .merge(get_iface_icmpv6ra_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_iface_nat_paths(db_store_provider.clone(), dev_obs.resubscribe()).await)
                 .merge(get_iface_flow_wan_paths(db_store_provider.clone(), dev_obs).await),
         )

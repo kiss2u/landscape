@@ -68,7 +68,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                         prefix: config.config.network_mask,
                     };
                     let iface_name = config.iface_name.clone();
-                    route_service.insert_lan_route(&iface_name, info.clone()).await;
+                    route_service.insert_ipv4_lan_route(&iface_name, info.clone()).await;
                     crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
                         config.iface_name,
                         config.config,
@@ -76,7 +76,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                         assigned_ips,
                     )
                     .await;
-                    route_service.remove_lan_route(&iface_name).await;
+                    route_service.remove_ipv4_lan_route(&iface_name).await;
                 });
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);

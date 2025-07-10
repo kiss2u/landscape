@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use crate::{flow::FlowTarget, net::MacAddr};
 
@@ -17,17 +17,29 @@ pub struct RouteTargetInfo {
 }
 
 impl RouteTargetInfo {
-    pub fn docker_new(ifindex: u32, iface_name: &str) -> Self {
-        RouteTargetInfo {
-            weight: 0,
-            ifindex,
-            has_mac: true,
-            default_route: false,
-            is_docker: true,
-            iface_name: iface_name.to_string(),
-            iface_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            gateway_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        }
+    pub fn docker_new(ifindex: u32, iface_name: &str) -> (Self, Self) {
+        (
+            RouteTargetInfo {
+                weight: 0,
+                ifindex,
+                has_mac: true,
+                default_route: false,
+                is_docker: true,
+                iface_name: iface_name.to_string(),
+                iface_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                gateway_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            },
+            RouteTargetInfo {
+                weight: 0,
+                ifindex,
+                has_mac: true,
+                default_route: false,
+                is_docker: true,
+                iface_name: iface_name.to_string(),
+                iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+            },
+        )
     }
 
     pub fn get_flow_target(&self) -> FlowTarget {

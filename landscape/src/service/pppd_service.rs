@@ -101,6 +101,7 @@ pub async fn create_pppd_thread(
 
     let (updata_ip, mut updata_ip_rx) = watch::channel(());
     let ppp_iface_name_clone = ppp_iface_name.clone();
+    let route_service_clone = route_service.clone();
     tokio::spawn(async move {
         let mut ip4addr: Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)> = None;
         while let Ok(_) = updata_ip_rx.changed().await {
@@ -121,7 +122,9 @@ pub async fn create_pppd_thread(
                             default_route: as_router,
                             gateway_ip: IpAddr::V4(peer_ip),
                         };
-                        route_service.insert_wan_route(&ppp_iface_name_clone, info).await;
+                        route_service_clone
+                            .insert_ipv4_wan_route(&ppp_iface_name_clone, info)
+                            .await;
 
                         if as_router {
                             LD_ALL_ROUTERS
@@ -199,6 +202,7 @@ pub async fn create_pppd_thread(
     if as_router {
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
+    route_service.remove_ipv4_wan_route(&iface_name).await;
     service_status.just_change_status(ServiceStatus::Stop);
 }
 

@@ -13,7 +13,7 @@ pub mod target;
 
 /// 流控配置结构体
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
-#[ts(export, export_to = "common/flow.ts")]
+#[ts(export, export_to = "common/flow.d.ts")]
 pub struct FlowConfig {
     pub id: Option<Uuid>,
     /// 是否启用
@@ -45,7 +45,7 @@ impl LandscapeDBStore<Uuid> for FlowConfig {
 
 /// 数据包匹配该流控标志
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, TS)]
-#[ts(export, export_to = "common/flow.ts")]
+#[ts(export, export_to = "common/flow.d.ts")]
 pub struct PacketMatchMark {
     pub ip: IpAddr,
     pub vlan_id: Option<u32>,
@@ -53,7 +53,7 @@ pub struct PacketMatchMark {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
-#[ts(export, export_to = "common/flow.ts")]
+#[ts(export, export_to = "common/flow.d.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "snake_case")]
 pub enum FlowTarget {

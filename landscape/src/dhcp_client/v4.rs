@@ -309,8 +309,8 @@ pub async fn dhcp_v4_client(
     if default_router {
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
-    route_service.remove_wan_route(&iface_name).await;
-    route_service.remove_lan_route(&iface_name).await;
+    route_service.remove_ipv4_wan_route(&iface_name).await;
+    route_service.remove_ipv4_lan_route(&iface_name).await;
 
     if !service_status.is_stop() {
         service_status.just_change_status(ServiceStatus::Stop);
@@ -717,7 +717,7 @@ async fn bind_ipv4(
 
     if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
         route_service
-            .insert_wan_route(
+            .insert_ipv4_wan_route(
                 &iface_name,
                 RouteTargetInfo {
                     ifindex: ifindex,
@@ -738,7 +738,7 @@ async fn bind_ipv4(
             mac: Some(mac_addr.clone()),
             prefix: mask as u8,
         };
-        route_service.insert_lan_route(&iface_name, lan_info).await;
+        route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
         if default_router {
             LD_ALL_ROUTERS
                 .add_route(RouteInfo {

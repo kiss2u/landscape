@@ -13,14 +13,14 @@ use dhcproto::{
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, time::Instant};
 
-use crate::dump::udp_packet::dhcp_v6::get_solicit_options;
+use crate::{dump::udp_packet::dhcp_v6::get_solicit_options, route::IpRouteService};
 
-use landscape_common::net::MacAddr;
 use landscape_common::{
     global_const::LD_PD_WATCHES,
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_SERVER_PORT,
 };
+use landscape_common::{net::MacAddr, route::RouteTargetInfo};
 
 pub const IPV6_TIMEOUT_DEFAULT_DURACTION: u64 = 10;
 pub const IPV6_TIMEOUT_RENEW_DURACTION: u64 = 10;
@@ -175,6 +175,8 @@ pub async fn dhcp_v6_pd_client(
     mac_addr: MacAddr,
     client_port: u16,
     service_status: DefaultWatchServiceStatus,
+    wan_route_info: RouteTargetInfo,
+    route_service: IpRouteService,
 ) {
     LD_PD_WATCHES.init(&iface_name).await;
     let client_id = gen_client_id(mac_addr);
@@ -293,7 +295,7 @@ pub async fn dhcp_v6_pd_client(
                 // 处理接收到的数据包
                 match message_result {
                     Some(data) => {
-                        let need_reset_time = handle_packet(&iface_name, &client_id, &mut status, data, ).await;
+                        let need_reset_time = handle_packet(&iface_name, &client_id, &mut status, data, &wan_route_info, &route_service).await;
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                             // current_timeout_time = t2;
@@ -324,6 +326,8 @@ pub async fn dhcp_v6_pd_client(
             }
         }
     }
+
+    route_service.remove_ipv6_wan_route(&iface_name).await;
     tracing::info!("DHCP V6 Client Stop: {:#?}", service_status);
 
     if !service_status.is_stop() {
@@ -524,6 +528,8 @@ async fn handle_packet(
     my_client_id: &[u8],
     current_status: &mut IpV6PdState,
     (msg, msg_addr): (Vec<u8>, SocketAddr),
+    wan_route_info: &RouteTargetInfo,
+    route_service: &IpRouteService,
 ) -> bool {
     let IpAddr::V6(ipv6addr) = msg_addr.ip() else {
         tracing::error!("unexpected IPV4 packet");
@@ -648,6 +654,11 @@ async fn handle_packet(
                                 iapd: iapd.clone(),
                                 bound_time: Instant::now(),
                             };
+
+                            let mut info = wan_route_info.clone();
+                            // info.iface_ip =
+                            info.gateway_ip = IpAddr::V6(ipv6addr.clone());
+                            route_service.insert_ipv6_wan_route(&iface_name, info).await;
                             replace_ip_route(&ia_prefix, ipv6addr, iface_name);
                             // setting IA prefix to IAPrefixMap
                             LD_PD_WATCHES

@@ -33,7 +33,46 @@ static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
     bool is_broadcast = mac[0] == 0xff && mac[1] == 0xff && mac[2] == 0xff && mac[3] == 0xff &&
                         mac[4] == 0xff && mac[5] == 0xff;
 
-    if (is_broadcast) {
+    bool is_ipv6_broadcast = mac[0] == 0x33 && mac[1] == 0x33;
+
+    if (is_broadcast || is_ipv6_broadcast) {
+        return TC_ACT_UNSPEC;
+    } else {
+        return TC_ACT_OK;
+    }
+}
+
+static __always_inline int is_broadcast_ip(const struct route_context *context) {
+    bool is_ipv6_broadcast = false;
+    bool is_ipv6_locallink = false;
+    bool is_ipv4_broadcast = false;
+
+    if (context->l3_protocol == LANDSCAPE_IPV6_TYPE) {
+        __u8 first_byte = context->daddr.in6_u.u6_addr8[0];
+
+        // IPv6 multicast ff00::/8
+        if (first_byte == 0xff) {
+            is_ipv6_broadcast = true;
+        }
+
+        // IPv6 link-local fe80::/10
+        if (first_byte == 0xfe) {
+            __u8 second_byte = context->daddr.in6_u.u6_addr8[1];
+            if ((second_byte & 0xc0) == 0x80) {  // top 2 bits == 10
+                is_ipv6_locallink = true;
+            }
+        }
+
+    } else if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        __be32 dst = context->daddr.in6_u.u6_addr32[0];
+
+        // 255.255.255.255 or 0.0.0.0 (network byte order)
+        if (dst == bpf_htonl(0xffffffff) || dst == 0) {
+            is_ipv4_broadcast = true;
+        }
+    }
+
+    if (is_ipv4_broadcast || is_ipv6_broadcast || is_ipv6_locallink) {
         return TC_ACT_UNSPEC;
     } else {
         return TC_ACT_OK;
@@ -462,6 +501,11 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
+    ret = is_broadcast_ip(&context);
+    if (ret != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+
     struct lan_mac_cache_key saddr = {0};
     struct lan_mac_cache cache_mac = {0};
     COPY_ADDR_FROM(&saddr.ip, context.saddr.in6_u.u6_addr8);
@@ -504,6 +548,11 @@ int wan_route_ingress(struct __sk_buff *skb) {
     }
 
     ret = get_route_context(skb, current_eth_net_offset, &context);
+    if (ret != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+
+    ret = is_broadcast_ip(&context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }

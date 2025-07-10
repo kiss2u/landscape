@@ -108,7 +108,7 @@ async fn init_service_from_config(
                             default_route: default_router,
                             gateway_ip: IpAddr::V4(default_router_ip),
                         };
-                        route_service.insert_wan_route(&iface_name, info).await;
+                        route_service.insert_ipv4_wan_route(&iface_name, info).await;
 
                         let lan_info = LanRouteInfo {
                             ifindex: iface.index,
@@ -117,7 +117,7 @@ async fn init_service_from_config(
                             mac: iface.mac,
                             prefix: ipv4_mask,
                         };
-                        route_service.insert_lan_route(&iface_name, lan_info).await;
+                        route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
                     }
                 }
 
@@ -130,8 +130,8 @@ async fn init_service_from_config(
                 if default_router {
                     LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
                 }
-                route_service.remove_wan_route(&iface_name).await;
-                route_service.remove_lan_route(&iface_name).await;
+                route_service.remove_ipv4_wan_route(&iface_name).await;
+                route_service.remove_ipv4_lan_route(&iface_name).await;
                 landscape_ebpf::map_setting::del_wan_ip(iface.index);
                 service_status.just_change_status(ServiceStatus::Stop);
             }

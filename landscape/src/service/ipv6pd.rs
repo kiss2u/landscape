@@ -1,3 +1,8 @@
+use std::net::IpAddr;
+use std::net::Ipv6Addr;
+
+use landscape_common::route::RouteTargetInfo;
+use landscape_common::service::service_manager_v2::ServiceStarterTrait;
 use tokio::sync::broadcast;
 
 use landscape_common::database::LandscapeDBTrait;
@@ -6,8 +11,7 @@ use landscape_common::{
     config::dhcp_v6_client::IPV6PDServiceConfig,
     observer::IfaceObserverAction,
     service::{
-        controller_service::ControllerService,
-        service_manager::{ServiceHandler, ServiceManager},
+        controller_service_v2::ControllerService, service_manager_v2::ServiceManager,
         DefaultServiceStatus, DefaultWatchServiceStatus,
     },
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
@@ -17,18 +21,39 @@ use landscape_database::{
 };
 
 use crate::iface::get_iface_by_name;
+use crate::route::IpRouteService;
 
 #[derive(Clone)]
-pub struct IPV6PDService;
+pub struct IPV6PDService {
+    route_service: IpRouteService,
+}
 
-impl ServiceHandler for IPV6PDService {
+impl IPV6PDService {
+    pub fn new(route_service: IpRouteService) -> Self {
+        Self { route_service }
+    }
+}
+
+#[async_trait::async_trait]
+impl ServiceStarterTrait for IPV6PDService {
     type Status = DefaultServiceStatus;
     type Config = IPV6PDServiceConfig;
 
-    async fn initialize(config: IPV6PDServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: IPV6PDServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
+        let route_service = self.route_service.clone();
         if config.enable {
-            if let Some(_) = get_iface_by_name(&config.iface_name).await {
+            if let Some(iface) = get_iface_by_name(&config.iface_name).await {
+                let route_info = RouteTargetInfo {
+                    ifindex: iface.index,
+                    weight: 1,
+                    has_mac: iface.mac.is_some(),
+                    is_docker: false,
+                    iface_name: iface.name.clone(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                    default_route: true,
+                    gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                };
                 let status_clone = service_status.clone();
                 tokio::spawn(async move {
                     crate::dhcp_client::v6::dhcp_v6_pd_client(
@@ -36,6 +61,8 @@ impl ServiceHandler for IPV6PDService {
                         config.config.mac,
                         LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
                         status_clone,
+                        route_info,
+                        route_service,
                     )
                     .await;
                 });
@@ -73,9 +100,11 @@ impl DHCPv6ClientManagerService {
     pub async fn new(
         store_service: LandscapeDBServiceProvider,
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
+        route_service: IpRouteService,
     ) -> Self {
         let store = store_service.dhcp_v6_client_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let server_starter = IPV6PDService::new(route_service);
+        let service = ServiceManager::init(store.list().await.unwrap(), server_starter).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {

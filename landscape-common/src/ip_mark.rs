@@ -8,7 +8,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
-#[ts(export, export_to = "common/flow.ts")]
+#[ts(export, export_to = "common/flow.d.ts")]
 /// 对于外部 IP 规则
 pub struct WanIpRuleConfig {
     pub id: Option<Uuid>,

@@ -1,4 +1,5 @@
 use std::{
+    net::{IpAddr, Ipv6Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -10,7 +11,11 @@ use clap::Parser;
 use landscape::{
     dhcp_client::v6::dhcp_v6_pd_client, icmp::v6::icmp_ra_server, iface::get_iface_by_name,
 };
-use landscape_common::{config::ra::IPV6RAConfig, net::MacAddr};
+use landscape_common::{
+    config::ra::IPV6RAConfig,
+    net::MacAddr,
+    route::{LanRouteInfo, RouteTargetInfo},
+};
 use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
@@ -51,23 +56,46 @@ async fn main() {
 
     let config = IPV6RAConfig::new(args.dhcp_client_iface.clone());
 
+    let (_, ip_route) = landscape::route::test_used_ip_route().await;
     let status = dhcp_service_status.clone();
+    let ip_route_service = ip_route.clone();
     tokio::spawn(async move {
+        let route_info = RouteTargetInfo {
+            ifindex: 6,
+            weight: 1,
+            has_mac: true,
+            is_docker: false,
+            iface_name: "test".to_string(),
+            iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+            default_route: true,
+            gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+        };
         dhcp_v6_pd_client(
             args.dhcp_client_iface,
             mac_addr,
             LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
             status,
+            route_info,
+            ip_route_service,
         )
         .await;
     });
     let icmp_service_status = DefaultWatchServiceStatus::new();
-
+    let ip_route_service = ip_route.clone();
     let status = icmp_service_status.clone();
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.icmp_ra_iface).await {
             if let Some(mac) = iface.mac {
-                icmp_ra_server(config, mac, iface.name, status).await.unwrap();
+                let lan_info = LanRouteInfo {
+                    ifindex: iface.index,
+                    iface_name: iface.name.clone(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                    mac: Some(mac.clone()),
+                    prefix: 128,
+                };
+                icmp_ra_server(config, mac, iface.name, status, lan_info, ip_route_service)
+                    .await
+                    .unwrap();
             }
         }
     });

@@ -1,4 +1,5 @@
 use std::{
+    net::{IpAddr, Ipv6Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -8,7 +9,7 @@ use std::{
 
 use clap::Parser;
 use landscape::dhcp_client::v6::dhcp_v6_pd_client;
-use landscape_common::net::MacAddr;
+use landscape_common::{net::MacAddr, route::RouteTargetInfo};
 use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
@@ -43,11 +44,28 @@ async fn main() {
         return;
     };
     let service_status = DefaultWatchServiceStatus::new();
-
+    let (_, ip_route) = landscape::route::test_used_ip_route().await;
     let status = service_status.clone();
     tokio::spawn(async move {
-        dhcp_v6_pd_client(args.iface_name, mac_addr, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT, status)
-            .await;
+        let route_info = RouteTargetInfo {
+            ifindex: 6,
+            weight: 1,
+            has_mac: true,
+            is_docker: false,
+            iface_name: "test".to_string(),
+            iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+            default_route: true,
+            gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+        };
+        dhcp_v6_pd_client(
+            args.iface_name,
+            mac_addr,
+            LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+            status,
+            route_info,
+            ip_route,
+        )
+        .await;
     });
 
     while running.load(Ordering::SeqCst) {

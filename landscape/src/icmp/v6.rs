@@ -2,12 +2,14 @@ use dhcproto::{Decodable, Decoder, Encodable, Encoder};
 use landscape_common::config::ra::{IPV6RAConfig, RouterFlags};
 use landscape_common::error::LdResult;
 use landscape_common::global_const::{LDIAPrefix, LD_PD_WATCHES};
+use landscape_common::route::LanRouteInfo;
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use tokio::net::UdpSocket;
 use tokio::time::Instant;
 
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
 use crate::iface::ip::addresses_by_iface_name;
+use crate::route::IpRouteService;
 use landscape_common::net::MacAddr;
 use landscape_common::net_proto::icmpv6::options::{
     IcmpV6Option, IcmpV6Options, PrefixInformation, RouteInformation,
@@ -35,6 +37,8 @@ pub async fn icmp_ra_server(
     // RA 通告要发送的 网卡名称
     iface_name: String,
     service_status: DefaultWatchServiceStatus,
+    lan_info: LanRouteInfo,
+    route_service: IpRouteService,
 ) -> LdResult<()> {
     let IPV6RAConfig {
         subnet_prefix,
@@ -149,6 +153,8 @@ pub async fn icmp_ra_server(
                 subnet_prefix,
                 subnet_index,
                 expire_time.as_mut(),
+                &lan_info,
+                &route_service,
             )
             .await,
         );
@@ -214,7 +220,9 @@ pub async fn icmp_ra_server(
                             ia_prefix,
                             subnet_prefix,
                             subnet_index,
-                            expire_time.as_mut()
+                            expire_time.as_mut(),
+                            &lan_info,
+                            &route_service,
                         ).await
                     );
                 }
@@ -238,6 +246,7 @@ pub async fn icmp_ra_server(
         }
     }
 
+    route_service.remove_ipv6_lan_route(&iface_name).await;
     tracing::info!("ICMP v6 RA Server Stop: {:#?}", service_status);
     if !service_status.is_stop() {
         service_status.just_change_status(ServiceStatus::Stop);
@@ -251,9 +260,16 @@ async fn update_current_info(
     subnet_prefix: u8,
     subnet_index: u32,
     mut expire_time: Pin<&mut tokio::time::Sleep>,
+    lan_info: &LanRouteInfo,
+    route_service: &IpRouteService,
 ) -> ICMPv6ConfigInfo {
     expire_time.set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
     let (subnet, route) = allocate_subnet(&ia_prefix, subnet_prefix, subnet_index as u128);
+
+    let mut lan_info = lan_info.clone();
+    lan_info.iface_ip = IpAddr::V6(route.clone());
+    lan_info.prefix = subnet_prefix;
+    route_service.insert_ipv6_lan_route(&iface_name, lan_info).await;
 
     add_route(subnet, subnet_prefix, iface_name, ia_prefix.valid_lifetime);
     set_iface_ip(

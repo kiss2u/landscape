@@ -96,10 +96,19 @@ pub fn add_wan_route(flow_id: FlowId, wan_info: RouteTargetInfo) {
     }
 }
 
-pub fn del_wan_route(flow_id: FlowId) {
+pub fn del_ipv6_wan_route(flow_id: FlowId) {
+    del_wan_route(flow_id, LANDSCAPE_IPV6_TYPE)
+}
+
+pub fn del_ipv4_wan_route(flow_id: FlowId) {
+    del_wan_route(flow_id, LANDSCAPE_IPV4_TYPE)
+}
+
+fn del_wan_route(flow_id: FlowId, l3_protocol: u8) {
     let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_target_map).unwrap();
     let mut key = route_target_key::default();
     key.flow_id = flow_id;
+    key.l3_protocol = l3_protocol;
 
     let key = unsafe { plain::as_bytes(&key) };
 

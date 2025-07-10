@@ -197,7 +197,7 @@ mod tests {
         }
         println!("elpase: {}", time.elapsed().as_micros());
 
-        println!("==== after first matcher.is_match ====");
+        println!("==== after first matcher ====");
         test_memory_usage();
     }
 
