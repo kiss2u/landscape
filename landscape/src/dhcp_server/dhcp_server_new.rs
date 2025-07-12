@@ -1,6 +1,6 @@
 use std::time::Instant;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
@@ -245,7 +245,12 @@ async fn handle_dhcp_message(
                     }
                     return true;
                 }
-                // DhcpOptionMessageType::Decline => todo!(),
+                DhcpOptionMessageType::Decline => {
+                    let options = dhcp.options;
+                    if let Some(DhcpOptions::RequestedIpAddress(ip)) = options.has_option(50) {
+                        dhcp_server.add_decline_ip(ip);
+                    }
+                }
                 // DhcpOptionMessageType::Ack => todo!(),
                 // DhcpOptionMessageType::Nak => todo!(),
                 DhcpOptionMessageType::Release => {
@@ -298,8 +303,8 @@ pub struct DHCPv4Server {
     ip_range_start: Ipv4Inet,
     /// 总容量
     range_capacity: u32,
-    /// 已分配的 IP 列表
-    allocated_host: HashSet<Ipv4Addr>,
+    /// 已分配的 IP 列表, True 表示是本次分配的
+    allocated_host: HashMap<Ipv4Addr, bool>,
     /// 已分配的 IP
     offered_ip: HashMap<MacAddr, DHCPv4ServerOfferedCache>,
 
@@ -351,10 +356,10 @@ impl DHCPv4Server {
             options_map.insert(each.get_index(), each.clone());
         }
 
-        let mut allocated_host = HashSet::new();
+        let mut allocated_host = HashMap::new();
         let mut offered_ip = HashMap::new();
         for each in config.mac_binding_records {
-            allocated_host.insert(each.ip);
+            allocated_host.insert(each.ip, true);
             offered_ip.insert(
                 each.mac,
                 DHCPv4ServerOfferedCache {
@@ -381,6 +386,12 @@ impl DHCPv4Server {
         }
     }
 
+    fn add_decline_ip(&mut self, ip: Ipv4Addr) {
+        if !self.allocated_host.contains_key(&ip) {
+            self.allocated_host.insert(ip, false);
+        }
+    }
+
     ///
     fn offer_ip(&mut self, mac_addr: &MacAddr) -> Option<Ipv4Addr> {
         if let Some(DHCPv4ServerOfferedCache { ip, .. }) = self.offered_ip.get(mac_addr) {
@@ -399,7 +410,7 @@ impl DHCPv4Server {
             let index = seed % self.range_capacity;
             let (client_addr, _overflow) = self.ip_range_start.overflowing_add_u32(index);
             let address = client_addr.address();
-            if self.allocated_host.contains(&address) {
+            if self.allocated_host.contains_key(&address) {
                 seed += 1;
             } else {
                 self.offered_ip.insert(
@@ -411,7 +422,7 @@ impl DHCPv4Server {
                         is_static: false,
                     },
                 );
-                self.allocated_host.insert(address);
+                self.allocated_host.insert(address, true);
                 return Some(address);
             }
         }
@@ -439,9 +450,12 @@ impl DHCPv4Server {
             }
         });
 
+        self.allocated_host.retain(|_key, is_allocated_this_round| *is_allocated_this_round);
+
         for key in remove_keys.iter() {
-            self.allocated_host.remove(&key);
+            self.allocated_host.remove(key);
         }
+
         tracing::info!("DHCPv4 server cleans up these IPs: {remove_keys:?}");
         !remove_keys.is_empty()
     }
@@ -464,7 +478,7 @@ impl DHCPv4Server {
                 )
             }
         } else {
-            if self.allocated_host.contains(&ip_addr) {
+            if self.allocated_host.contains_key(&ip_addr) {
                 tracing::error!(
                     "Requested IP {ip_addr:?} is already allocated to another client, request by {mac_addr:?}"
                 );
@@ -479,7 +493,7 @@ impl DHCPv4Server {
             };
 
             self.offered_ip.insert(*mac_addr, lease_cache);
-            self.allocated_host.insert(ip_addr);
+            self.allocated_host.insert(ip_addr, true);
 
             tracing::info!("Assigned unoffered IP {ip_addr:?} to client {mac_addr:?}");
 

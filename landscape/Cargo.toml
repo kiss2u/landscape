@@ -2,7 +2,6 @@
 name = "landscape"
 version.workspace = true
 edition.workspace = true
-default-run = "test"
 
 [dependencies]
 landscape-ebpf = { path = "../landscape-ebpf" }
@@ -60,23 +59,3 @@ ts-rs = { workspace = true }
 
 [dependencies.pnet]
 workspace = true
-
-
-[[bin]]
-name = "tap"
-path = "src/bin/tap.rs"
-# path = "src/bin/ttt.rs"
-
-
-[[bin]]
-name = "pppoe_test"
-path = "src/bin/pppoe_test.rs"
-
-
-[[bin]]
-name = "link_listen"
-path = "src/bin/link_listen.rs"
-
-[[bin]]
-name = "dhcp_client_test"
-path = "src/bin/dhcp_client_test.rs"
