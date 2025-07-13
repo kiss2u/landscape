@@ -102,6 +102,7 @@ struct flow_mark {
 struct flow_dns_match_key {
     union u_inet_addr addr;
     u8 l3_protocol;
+    // TODO: Add priority
     u8 _pad[3];
 } __flow_dns_match_key;
 
@@ -144,6 +145,7 @@ struct flow_ip_trie_key {
 
 struct flow_ip_trie_value {
     u32 mark;
+    // TODO: Rename priority
     u8 override_dns;
     u8 _pad[3];
 } __flow_ip_trie_value;
@@ -229,6 +231,8 @@ struct {
 
 struct lan_mac_cache_key {
     u8 ip[16];
+    u8 l3_protocol;
+    u8 _pad[3];
 };
 
 struct lan_mac_cache {
@@ -242,7 +246,6 @@ struct {
     __type(key, struct lan_mac_cache_key);
     __type(value, struct lan_mac_cache);
     __uint(max_entries, 65535);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } ip_mac_tab SEC(".maps");
 
 #endif /* __LD_FLOW_H__ */

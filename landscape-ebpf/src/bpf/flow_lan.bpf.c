@@ -188,7 +188,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
 
     lan_search_key.prefixlen = 160;
     lan_search_key.l3_protocol = context->l3_protocol;
-    COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, context->daddr.in6_u.u6_addr32);
+    COPY_ADDR_FROM(lan_search_key.addr.in6_u.u6_addr8, context->daddr.in6_u.u6_addr8);
 
     struct lan_route_info *lan_info = bpf_map_lookup_elem(&rt_lan_map, &lan_search_key);
 
@@ -205,6 +205,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
 
         if (current_eth_net_offset == 0 && lan_info->has_mac) {
             struct lan_mac_cache_key daddr = {0};
+            daddr.l3_protocol = context->l3_protocol;
             COPY_ADDR_FROM(daddr.ip, context->daddr.in6_u.u6_addr8);
             u8 *smac = &lan_info->mac_addr;
             struct lan_mac_cache *dmac = bpf_map_lookup_elem(&ip_mac_tab, &daddr);
@@ -508,13 +509,14 @@ int lan_route_ingress(struct __sk_buff *skb) {
 
     struct lan_mac_cache_key saddr = {0};
     struct lan_mac_cache cache_mac = {0};
-    COPY_ADDR_FROM(&saddr.ip, context.saddr.in6_u.u6_addr8);
-    COPY_ADDR_FROM(&cache_mac.mac, context.smac);
-    bpf_map_update_elem(&ip_mac_tab, &saddr, &cache_mac, BPF_ANY);
+    saddr.l3_protocol = context.l3_protocol;
+    COPY_ADDR_FROM(saddr.ip, context.saddr.in6_u.u6_addr8);
+    COPY_ADDR_FROM(cache_mac.mac, context.smac);
+    ret = bpf_map_update_elem(&ip_mac_tab, &saddr, &cache_mac, BPF_ANY);
 
-    // if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
-    //     return TC_ACT_UNSPEC;
-    // }
+    if (ret != 0) {
+        bpf_log_info("cache ip: %pI6 mac error", ret);
+    }
 
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {
