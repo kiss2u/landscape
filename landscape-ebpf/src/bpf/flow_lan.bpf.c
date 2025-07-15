@@ -370,7 +370,8 @@ apply_action:
         // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", cache_key.dst_addr.all);
     } else if (flow_action == FLOW_DIRECT) {
         // bpf_log_info("FLOW_DIRECT ip: %pI4", cache_key.dst_addr.all);
-        return TC_ACT_UNSPEC;
+        // RESET Flow ID
+        flow_id = 0;
     } else if (flow_action == FLOW_DROP) {
         // bpf_log_info("FLOW_DROP ip: %pI4", cache_key.dst_addr.all);
         return TC_ACT_SHOT;
