@@ -93,12 +93,12 @@ where
     let mut values = vec![];
 
     let count = ips.len() as u32;
-    for IpMarkInfo { mark, cidr, override_dns } in ips.into_iter() {
+    for IpMarkInfo { mark, cidr, priority } in ips.into_iter() {
         let mark: u32 = mark.into();
         let mut value = flow_ip_trie_value::default();
 
         value.mark = mark;
-        value.override_dns = if override_dns { 1 } else { 0 };
+        value.priority = priority;
 
         // TODO: 抽取转换逻辑
         let mut key = flow_ip_trie_key::default();

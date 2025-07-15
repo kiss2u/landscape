@@ -306,37 +306,46 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     // bpf_log_info("find flow_id: %d, ip: %pI4", flow_id, cache_key.match_key.src_addr.all);
 
     volatile u32 flow_mark_action = 0;
+    volatile u16 priority = 0;
 
     struct flow_ip_trie_key ip_trie_key = {0};
     ip_trie_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 64 : 160;
     ip_trie_key.l3_protocol = context->l3_protocol;
 
     COPY_ADDR_FROM(ip_trie_key.addr, cache_key.dst_addr.all);
-    struct flow_ip_trie_value *ip_flow_mark;
+    struct flow_ip_trie_value *ip_flow_mark_value = NULL;
     void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
     if (ip_rules_map != NULL) {
-        ip_flow_mark = bpf_map_lookup_elem(ip_rules_map, &ip_trie_key);
-        if (ip_flow_mark != NULL) {
-            flow_mark_action = ip_flow_mark->mark;
+        ip_flow_mark_value = bpf_map_lookup_elem(ip_rules_map, &ip_trie_key);
+        if (ip_flow_mark_value != NULL) {
+            flow_mark_action = ip_flow_mark_value->mark;
+            priority = ip_flow_mark_value->priority;
             // bpf_log_info("find ip map mark: %d", flow_mark_action);
-            if (ip_flow_mark->override_dns == 1) {
-                goto apply_action;
-            }
+            // if (ip_flow_mark->override_dns == 1) {
+            //     goto apply_action;
+            // }
         }
     } else {
         // bpf_log_info("flow_id: %d, ip map is empty", *flow_id_ptr);
     }
-
+    
     struct flow_dns_match_key key = {0};
+    struct flow_dns_match_value *dns_rule_value = NULL;
     key.l3_protocol = context->l3_protocol;
     COPY_ADDR_FROM(key.addr.all, cache_key.dst_addr.all);
 
     // 查询 DNS 配置信息，查看是否有转发流的配置
     void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
     if (dns_rules_map != NULL) {
-        u32 *dns_flow_mark = bpf_map_lookup_elem(dns_rules_map, &key);
-        if (dns_flow_mark != NULL) {
-            flow_mark_action = *dns_flow_mark;
+    }
+
+    if (dns_rules_map != NULL) {
+        dns_rule_value = bpf_map_lookup_elem(dns_rules_map, &key);
+        if (dns_rule_value != NULL) {
+            if (dns_rule_value->priority > priority) {
+                flow_mark_action = dns_rule_value->mark;
+                priority = dns_rule_value->priority;
+            }
             // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action,
             // &cache_key.dst_addr.ip);
         } else {

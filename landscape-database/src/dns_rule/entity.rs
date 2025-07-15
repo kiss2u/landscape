@@ -11,6 +11,7 @@ use crate::{DBId, DBJson, DBTimestamp};
 pub type DNSRuleConfigModel = Model;
 pub type DNSRuleConfigEntity = Entity;
 pub type DNSRuleConfigActiveModel = ActiveModel;
+pub type DNSRuleConfigColumn = Column;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "dns_rule_configs")]

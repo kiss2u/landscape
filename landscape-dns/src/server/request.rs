@@ -23,7 +23,7 @@ use tokio::sync::Mutex;
 use crate::{diff_server::CheckDnsResult, rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
     config::dns::{DNSRuntimeRule, FilterResult},
-    flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
+    flow::{DnsRuntimeMarkInfo, FlowDnsMarkInfo},
 };
 
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
@@ -109,8 +109,8 @@ impl LandscapeDnsRequestHandle {
                         for cache_item in value.iter() {
                             // 新配置是 NoMark 的排除
                             match (
-                                cache_item.mark.need_insert_in_ebpf_map(),
-                                new_mark.need_insert_in_ebpf_map(),
+                                cache_item.mark.mark.need_insert_in_ebpf_map(),
+                                new_mark.mark.need_insert_in_ebpf_map(),
                             ) {
                                 (true, true) => {
                                     // 规则更新前后都需要写入 ebpf map
@@ -135,8 +135,8 @@ impl LandscapeDnsRequestHandle {
                             }
 
                             let mut new_record = cache_item.clone();
-                            new_record.mark = new_mark;
-                            new_record.filter = resolver.config.filter.clone();
+                            new_record.mark = new_mark.clone();
+                            new_record.filter = resolver.filter_mode();
                             cache_items.push(new_record);
                         }
                         if !cache_items.is_empty() {
@@ -170,7 +170,7 @@ impl LandscapeDnsRequestHandle {
 
         for (_index, resolver) in self.resolves.iter() {
             if resolver.is_match(&domain) {
-                result.config = Some(resolver.config.clone());
+                result.config = Some(resolver.get_runtime_config());
                 match tokio::time::timeout(
                     tokio::time::Duration::from_secs(5),
                     resolver.lookup(&domain, query_type),
@@ -242,7 +242,7 @@ impl LandscapeDnsRequestHandle {
         domain: &str,
         query_type: RecordType,
         rdata_ttl_vec: Vec<Record>,
-        mark: &FlowDnsMark,
+        mark: &DnsRuntimeMarkInfo,
         filter: FilterResult,
     ) {
         let cache_item = CacheDNSItem {
@@ -257,7 +257,7 @@ impl LandscapeDnsRequestHandle {
         cache.put((domain.to_string(), query_type), vec![cache_item]);
         drop(cache);
         // 将 mark 写入 mark ebpf map
-        if mark.need_insert_in_ebpf_map() {
+        if mark.mark.need_insert_in_ebpf_map() {
             tracing::info!("setting ips: {:?}, Mark: {:?}", update_dns_mark_list, mark);
             // TODO: 如果写入错误 返回错误后 向客户端返回查询错误
             landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
@@ -318,11 +318,11 @@ impl RequestHandler for LandscapeDnsRequestHandle {
                                     query_type,
                                     rdata_vec.clone(),
                                     resolver.mark(),
-                                    resolver.config.filter.clone(),
+                                    resolver.filter_mode(),
                                 )
                                 .await;
                             }
-                            fiter_result(rdata_vec, &resolver.config.filter)
+                            fiter_result(rdata_vec, &resolver.filter_mode())
                         }
                         Err(error_code) => {
                             // 构建并返回错误响应

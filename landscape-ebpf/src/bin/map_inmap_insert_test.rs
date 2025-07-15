@@ -13,6 +13,7 @@ pub fn main() {
         vec![FlowDnsMarkInfo {
             mark: FlowDnsMark::KeepGoing.into(),
             ip: std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
+            priority: 0,
         }],
     );
 
@@ -21,6 +22,7 @@ pub fn main() {
         vec![FlowDnsMarkInfo {
             mark: FlowDnsMark::KeepGoing.into(),
             ip: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
+            priority: 1,
         }],
     );
 

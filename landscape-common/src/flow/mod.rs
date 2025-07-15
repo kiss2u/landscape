@@ -5,6 +5,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
+use crate::flow::mark::FlowDnsMark;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
 
@@ -72,4 +73,11 @@ pub struct FlowMathPair {
 pub struct FlowDnsMarkInfo {
     pub ip: IpAddr,
     pub mark: u32,
+    pub priority: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct DnsRuntimeMarkInfo {
+    pub mark: FlowDnsMark,
+    pub priority: u16,
 }

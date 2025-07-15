@@ -9,6 +9,7 @@ use crate::{DBId, DBJson, DBTimestamp};
 pub type DstIpRuleConfigModel = Model;
 pub type DstIpRuleConfigEntity = Entity;
 pub type DstIpRuleConfigActiveModel = ActiveModel;
+pub type DstIpRuleConfigColumn = Column;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "dst_ip_rule_configs")]

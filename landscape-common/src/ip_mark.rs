@@ -67,5 +67,6 @@ pub struct IpConfig {
 pub struct IpMarkInfo {
     pub mark: FlowDnsMark,
     pub cidr: IpConfig,
-    pub override_dns: bool,
+    // pub override_dns: bool,
+    pub priority: u16,
 }

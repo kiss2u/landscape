@@ -111,7 +111,6 @@ int flow_verdict_egress(struct __sk_buff *skb) {
         COPY_ADDR_FROM(cache_key.dst_addr.all, ip6h.daddr.in6_u.u6_addr32);
     }
 
-
     // 获得 flow_id
     u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
 
@@ -143,33 +142,47 @@ int flow_verdict_egress(struct __sk_buff *skb) {
     void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
     if (ip_rules_map != NULL) {
         ip_flow_mark = bpf_map_lookup_elem(ip_rules_map, &ip_trie_key);
-        if (ip_flow_mark != NULL) {
-            flow_mark_action = ip_flow_mark->mark;
-            // bpf_log_info("find ip map mark: %d", flow_mark_action);
-            if (ip_flow_mark->override_dns == 1) {
-                goto apply_action;
-            }
-        }
+        // if (ip_flow_mark != NULL) {
+        //     flow_mark_action = ip_flow_mark->mark;
+        //     // bpf_log_info("find ip map mark: %d", flow_mark_action);
+        //     if (ip_flow_mark->override_dns == 1) {
+        //         goto apply_action;
+        //     }
+        // }
     } else {
         // bpf_log_info("flow_id: %d, ip map is empty", *flow_id_ptr);
     }
 
     struct flow_dns_match_key key = {0};
+    struct flow_dns_match_value *dns_rule_value;
     key.l3_protocol = is_ipv4 ? LANDSCAPE_IPV4_TYPE : LANDSCAPE_IPV6_TYPE;
     COPY_ADDR_FROM(key.addr.all, cache_key.dst_addr.all);
 
     // 查询 DNS 配置信息，查看是否有转发流的配置
     void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
     if (dns_rules_map != NULL) {
-        u32 *dns_flow_mark = bpf_map_lookup_elem(dns_rules_map, &key);
-        if (dns_flow_mark != NULL) {
-            flow_mark_action = *dns_flow_mark;
-            // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action, &cache_key.dst_addr.ip);
-        } else {
-            // bpf_log_info("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
-        }
+        dns_rule_value = bpf_map_lookup_elem(dns_rules_map, &key);
+        // if (dns_flow_mark != NULL) {
+        //     flow_mark_action = *dns_flow_mark;
+        //     // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action,
+        //     &cache_key.dst_addr.ip);
+        // } else {
+        //     // bpf_log_info("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
+        // }
     } else {
         // bpf_log_info("flow_id: %d, dns map is empty", *flow_id_ptr);
+    }
+
+    if (ip_flow_mark != NULL && dns_rule_value != NULL) {
+        if (ip_flow_mark->priority > dns_rule_value->priority) {
+            flow_mark_action = ip_flow_mark->mark;
+        } else {
+            flow_mark_action = dns_rule_value->mark;
+        }
+    } else if (dns_rule_value != NULL) {
+        flow_mark_action = dns_rule_value->mark;
+    } else if (ip_flow_mark != NULL) {
+        flow_mark_action = ip_flow_mark->mark;
     }
 
     // bpf_log_info("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
@@ -201,11 +214,10 @@ apply_action:
 
 keep_going:
 
-
     // 如果是本机的流量, 并且没有改变 flow_id 或者丢弃
     // 还是继续发送, 其余情况就必须发往 flow target
     if (flow_id == 0) {
-    // if (skb->ingress_ifindex == 0 && flow_id == 0) {
+        // if (skb->ingress_ifindex == 0 && flow_id == 0) {
         return TC_ACT_UNSPEC;
     }
 

@@ -10,8 +10,11 @@ use hickory_resolver::{
     Resolver,
 };
 use landscape_common::{
-    config::dns::{DNSResolveMode, DNSRuntimeRule, DnsUpstreamType, DomainConfig, DomainMatchType},
-    flow::mark::FlowDnsMark,
+    config::dns::{
+        DNSResolveMode, DNSRuntimeRule, DnsUpstreamType, DomainConfig, DomainMatchType,
+        FilterResult,
+    },
+    flow::{mark::FlowDnsMark, DnsRuntimeMarkInfo},
 };
 use matcher::DomainMatcher;
 use std::net::IpAddr;
@@ -152,7 +155,9 @@ pub struct ResolutionRule {
     // 启动之后配置的 matcher
     matcher: DomainMatcher,
     //
-    pub config: DNSRuntimeRule,
+    config: DNSRuntimeRule,
+
+    mark: DnsRuntimeMarkInfo,
 
     resolver: ResolverType,
 }
@@ -166,11 +171,23 @@ impl ResolutionRule {
 
         let resolver = ResolverType::new(&config, flow_id);
 
-        ResolutionRule { matcher, config, resolver }
+        let mark = DnsRuntimeMarkInfo {
+            mark: config.mark.clone(),
+            priority: config.index as u16,
+        };
+        ResolutionRule { matcher, config, resolver, mark }
     }
 
-    pub fn mark(&self) -> &FlowDnsMark {
-        &self.config.mark
+    pub fn mark(&self) -> &DnsRuntimeMarkInfo {
+        &self.mark
+    }
+
+    pub fn filter_mode(&self) -> FilterResult {
+        self.config.filter.clone()
+    }
+
+    pub fn get_runtime_config(&self) -> DNSRuntimeRule {
+        self.config.clone()
     }
 
     /// 确定是不是当前规则进行处理

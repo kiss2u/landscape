@@ -85,7 +85,7 @@ impl GeoIpService {
             let ip_marks = source.into_iter().map(|cidr| IpMarkInfo {
                 mark: config.mark,
                 cidr,
-                override_dns: config.override_dns,
+                priority: config.index as u16,
             });
             result.extend(ip_marks);
         }

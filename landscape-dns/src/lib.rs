@@ -1,7 +1,7 @@
 use hickory_proto::rr::{Record, RecordType};
 use landscape_common::{
     config::dns::FilterResult,
-    flow::{mark::FlowDnsMark, FlowDnsMarkInfo},
+    flow::{DnsRuntimeMarkInfo, FlowDnsMarkInfo},
 };
 use lru::LruCache;
 use std::{collections::HashSet, time::Instant};
@@ -16,7 +16,7 @@ pub mod socket;
 pub struct CacheDNSItem {
     rdatas: Vec<Record>,
     insert_time: Instant,
-    mark: FlowDnsMark,
+    mark: DnsRuntimeMarkInfo,
     filter: FilterResult,
 }
 
@@ -25,23 +25,25 @@ impl CacheDNSItem {
         self.get_update_rules_with_mark(&self.mark)
     }
 
-    fn get_update_rules_with_mark(&self, mark: &FlowDnsMark) -> HashSet<FlowDnsMarkInfo> {
+    fn get_update_rules_with_mark(&self, info: &DnsRuntimeMarkInfo) -> HashSet<FlowDnsMarkInfo> {
         let mut result = HashSet::new();
         for rdata in self.rdatas.iter() {
             match rdata.data() {
                 hickory_proto::rr::RData::A(a) => {
-                    if mark.need_insert_in_ebpf_map() {
+                    if info.mark.need_insert_in_ebpf_map() {
                         result.insert(FlowDnsMarkInfo {
-                            mark: mark.clone().into(),
+                            mark: info.mark.clone().into(),
                             ip: std::net::IpAddr::V4(a.0),
+                            priority: info.priority,
                         });
                     }
                 }
                 hickory_proto::rr::RData::AAAA(a) => {
-                    if mark.need_insert_in_ebpf_map() {
+                    if info.mark.need_insert_in_ebpf_map() {
                         result.insert(FlowDnsMarkInfo {
-                            mark: mark.clone().into(),
+                            mark: info.mark.clone().into(),
                             ip: std::net::IpAddr::V6(a.0),
+                            priority: info.priority,
                         });
                     }
                 }

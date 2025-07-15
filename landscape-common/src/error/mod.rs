@@ -18,6 +18,12 @@ pub enum LdError {
 
     #[error("Database error: {0}")]
     DatabaseError(#[from] DbErr),
+
+    #[error("data is expired")]
+    DataIsExpired,
+
+    #[error("Database error: {0}")]
+    DbMsg(String),
 }
 
 pub type LdResult<T> = Result<T, LdError>;

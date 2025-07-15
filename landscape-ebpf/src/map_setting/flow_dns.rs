@@ -4,8 +4,8 @@ use landscape_common::flow::FlowDnsMarkInfo;
 use libbpf_rs::{libbpf_sys, MapCore, MapFlags, MapHandle, MapType};
 
 use crate::{
-    map_setting::share_map::types::flow_dns_match_key, LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE,
-    MAP_PATHS,
+    map_setting::share_map::types::{flow_dns_match_key, flow_dns_match_value},
+    LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
 };
 
 use super::share_map::types::u_inet_addr;
@@ -82,9 +82,11 @@ where
     let mut values = vec![];
     let count = ips.len() as u32;
 
-    for FlowDnsMarkInfo { ip, mark } in ips.into_iter() {
-        let mark: u32 = mark.into();
+    for FlowDnsMarkInfo { ip, mark, priority } in ips.into_iter() {
         let mut key = flow_dns_match_key::default();
+        let mut value = flow_dns_match_value::default();
+        value.mark = mark;
+        value.priority = priority;
         match ip {
             std::net::IpAddr::V4(ipv4_addr) => {
                 key.addr.ip = ipv4_addr.to_bits().to_be();
@@ -97,7 +99,7 @@ where
         };
 
         keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
-        values.extend_from_slice(unsafe { plain::as_bytes(&mark) });
+        values.extend_from_slice(unsafe { plain::as_bytes(&value) });
     }
 
     map.update_batch(&keys, &values, count, MapFlags::ANY, MapFlags::ANY)

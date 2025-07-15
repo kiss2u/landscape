@@ -102,9 +102,14 @@ struct flow_mark {
 struct flow_dns_match_key {
     union u_inet_addr addr;
     u8 l3_protocol;
-    // TODO: Add priority
     u8 _pad[3];
 } __flow_dns_match_key;
+
+struct flow_dns_match_value {
+    u32 mark;
+    u16 priority;
+    u8 _pad[2];
+} __flow_dns_match_value;
 
 // 每个流中特定的 DNS 规则
 struct each_flow_dns {
@@ -112,7 +117,7 @@ struct each_flow_dns {
     // __uint(key_size, 16);
     // __uint(map_flags, BPF_F_NO_COMMON_LRU);
     __type(key, struct flow_dns_match_key);
-    __type(value, u32);
+    __type(value, struct flow_dns_match_value);
     __uint(max_entries, 2048);
 } each_flow_dns_map SEC(".maps");
 
@@ -125,16 +130,6 @@ struct {
     __array(values, struct each_flow_dns);
 } flow_v_dns_map SEC(".maps");
 
-
-
-// struct {
-//     __uint(type, BPF_MAP_TYPE_HASH);
-//     __type(key, struct flow_dns_match_key);
-//     __uint(max_entries, 65536);
-//     __uint(pinning, LIBBPF_PIN_BY_NAME);
-//     __type(value, u32);
-// } flow_v_dns_map SEC(".maps");
-
 // 
 struct flow_ip_trie_key {
     __u32 prefixlen;
@@ -145,9 +140,8 @@ struct flow_ip_trie_key {
 
 struct flow_ip_trie_value {
     u32 mark;
-    // TODO: Rename priority
-    u8 override_dns;
-    u8 _pad[3];
+    u16 priority;
+    u8 _pad[2];
 } __flow_ip_trie_value;
 
 // 每个流中特定的 目标 IP 规则
