@@ -8,13 +8,7 @@ use axum::extract::State;
 use axum::routing::post;
 use axum::Json;
 use axum::Router;
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
-use jsonwebtoken::TokenData;
+use axum::{extract::Request, middleware::Next, response::Response};
 use landscape_common::args::LAND_HOME_PATH;
 use landscape_common::config::AuthRuntimeConfig;
 use landscape_common::LANDSCAPE_SYS_TOKEN_FILE_ANME;
@@ -25,6 +19,13 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
+
+use crate::api::LandscapeApiResp;
+use crate::auth::error::AuthError;
+use crate::error::LandscapeApiError;
+use crate::error::LandscapeApiResult;
+
+pub mod error;
 
 const SECRET_KEY_LENGTH: usize = 20;
 const DEFAULT_EXPIRE_TIME: usize = 60 * 60 * 1;
@@ -69,40 +70,42 @@ struct Claims {
     exp: usize,
 }
 
-fn create_jwt(user_id: &str, expiration: usize) -> Result<String, jsonwebtoken::errors::Error> {
+fn create_jwt(user_id: &str, expiration: usize) -> Result<String, AuthError> {
     // 设置过期时间
     let expiration =
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize + expiration;
     let claims = Claims { sub: user_id.to_owned(), exp: expiration };
     // 使用一个足够复杂的密钥来签名
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(SECRET_KEY.as_bytes()))
+    Ok(encode(&Header::default(), &claims, &EncodingKey::from_secret(SECRET_KEY.as_bytes()))?)
 }
 
 pub async fn auth_handler(
     State(auth): State<Arc<AuthRuntimeConfig>>,
     req: Request<axum::body::Body>,
     next: Next,
-) -> Result<Response, Response> {
-    let auth_header = req
-        .headers()
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| {
-            (StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response()
-        })?;
+) -> Result<Response, LandscapeApiError> {
+    let Some(auth_header) =
+        req.headers().get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok())
+    else {
+        return Err(AuthError::MissingAuthorizationHeader)?;
+    };
 
-    let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
-        (StatusCode::UNAUTHORIZED, "Invalid Authorization header format").into_response()
-    })?;
+    let Some(token) = auth_header.strip_prefix("Bearer ") else {
+        return Err(AuthError::InvalidAuthorizationHeaderFormat)?;
+    };
 
-    let token_data: TokenData<Claims> =
-        decode(token, &DecodingKey::from_secret(SECRET_KEY.as_bytes()), &Validation::default())
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token").into_response())?;
+    let Ok(token_data) = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(SECRET_KEY.as_bytes()),
+        &Validation::default(),
+    ) else {
+        return Err(AuthError::InvalidToken)?;
+    };
 
     if token_data.claims.sub == auth.admin_user {
         Ok(next.run(req).await)
     } else {
-        Err((StatusCode::UNAUTHORIZED, "Invalid token").into_response())
+        Err(AuthError::UnauthorizedUser)?
     }
 }
 
@@ -113,15 +116,15 @@ pub fn get_auth_route(auth: Arc<AuthRuntimeConfig>) -> Router {
 async fn login_handler(
     State(auth): State<Arc<AuthRuntimeConfig>>,
     Json(LoginInfo { username, password }): Json<LoginInfo>,
-) -> Result<impl IntoResponse, Response> {
+) -> LandscapeApiResult<LoginResult> {
     let mut result = LoginResult { success: false, token: "".to_string() };
     if username == auth.admin_user && password == auth.admin_pass {
         result.success = true;
-        result.token = create_jwt(&username, DEFAULT_EXPIRE_TIME).unwrap();
+        result.token = create_jwt(&username, DEFAULT_EXPIRE_TIME)?;
     } else {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid username or password").into_response());
+        return Err(AuthError::InvalidUsernameOrPassword)?;
     }
-    Ok(Json(result))
+    LandscapeApiResp::success(result)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

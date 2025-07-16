@@ -34,11 +34,11 @@ use landscape_common::{
     error::LdResult,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
-use serde::{Deserialize, Serialize};
 use sys_service::dns_service::get_dns_paths;
 use tokio::sync::mpsc;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
+mod api;
 mod auth;
 mod config_service;
 mod docker;
@@ -100,11 +100,6 @@ pub struct LandscapeApp {
     /// ipv6
     ipv6_pd_service: DHCPv6ClientManagerService,
     ipv6_ra_service: IPV6RAManagerService,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct SimpleResult {
-    success: bool,
 }
 
 #[tokio::main]

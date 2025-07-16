@@ -1,12 +1,14 @@
 use axum::{
     extract::{Query, State},
     routing::get,
-    Json, Router,
+    Router,
 };
 use landscape_common::service::DefaultWatchServiceStatus;
 use landscape_dns::diff_server::{CheckDnsReq, CheckDnsResult};
 
 use crate::LandscapeApp;
+
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 pub async fn get_dns_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -16,8 +18,8 @@ pub async fn get_dns_paths() -> Router<LandscapeApp> {
 
 async fn get_dns_service_status(
     State(state): State<LandscapeApp>,
-) -> Json<DefaultWatchServiceStatus> {
-    Json(state.dns_service.get_status().await)
+) -> LandscapeApiResult<DefaultWatchServiceStatus> {
+    LandscapeApiResp::success(state.dns_service.get_status().await)
 }
 
 async fn start_dns_service(State(state): State<LandscapeApp>) {
@@ -31,6 +33,6 @@ async fn stop_dns_service(State(state): State<LandscapeApp>) {
 async fn check_domain(
     State(state): State<LandscapeApp>,
     Query(req): Query<CheckDnsReq>,
-) -> Json<CheckDnsResult> {
-    Json(state.dns_service.check_domain(req).await)
+) -> LandscapeApiResult<CheckDnsResult> {
+    LandscapeApiResp::success(state.dns_service.check_domain(req).await)
 }

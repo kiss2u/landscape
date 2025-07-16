@@ -1,12 +1,13 @@
 use axum::{
     extract::Path,
     routing::{delete, get, post},
-    Json, Router,
+    Router,
 };
 use bollard::{image::ListImagesOptions, secret::ImageSummary, Docker};
-use serde_json::Value;
 
-use crate::{LandscapeApp, SimpleResult};
+use crate::LandscapeApp;
+
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 pub async fn get_docker_images_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -15,7 +16,7 @@ pub async fn get_docker_images_paths() -> Router<LandscapeApp> {
         .route("/id/:image_id", delete(delete_image_by_id))
 }
 
-async fn get_all_images() -> Json<Value> {
+async fn get_all_images() -> LandscapeApiResult<Vec<ImageSummary>> {
     let mut summarys: Vec<ImageSummary> = vec![];
     let docker = Docker::connect_with_socket_defaults();
 
@@ -26,42 +27,33 @@ async fn get_all_images() -> Json<Value> {
         }
     }
 
-    let result = serde_json::to_value(&summarys);
-    Json(result.unwrap())
+    LandscapeApiResp::success(summarys)
 }
 
-async fn pull_image_by_image_name(Path(image_name): Path<String>) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
-
+async fn pull_image_by_image_name(Path(image_name): Path<String>) -> LandscapeApiResult<()> {
     let command = ["docker", "pull", &image_name];
     if let Ok(status) = tokio::process::Command::new(&command[0]).args(&command[1..]).status().await
     {
         if status.success() {
-            result.success = true;
             tracing::info!("Docker command executed successfully.");
         } else {
             tracing::error!("Docker command failed with status: {:?}", status);
         }
     }
 
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+    LandscapeApiResp::success(())
 }
 
-async fn delete_image_by_id(Path(image_id): Path<String>) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
-
+async fn delete_image_by_id(Path(image_id): Path<String>) -> LandscapeApiResult<()> {
     let command = ["docker", "rmi", &image_id];
     if let Ok(status) = tokio::process::Command::new(&command[0]).args(&command[1..]).status().await
     {
         if status.success() {
-            result.success = true;
             tracing::info!("Docker command executed successfully.");
         } else {
             tracing::error!("Docker command failed with status: {:?}", status);
         }
     }
 
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+    LandscapeApiResp::success(())
 }

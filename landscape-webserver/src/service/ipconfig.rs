@@ -1,16 +1,18 @@
+use std::collections::HashMap;
+
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
 use landscape_common::service::controller_service_v2::ControllerService;
-use serde_json::Value;
 
 use landscape_common::{
     config::iface_ip::IfaceIpServiceConfig, service::DefaultWatchServiceStatus,
 };
 
-use crate::{error::LandscapeApiError, LandscapeApp, SimpleResult};
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+use crate::{error::LandscapeApiError, LandscapeApp};
 
 pub async fn get_iface_ipconfig_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -23,17 +25,18 @@ pub async fn get_iface_ipconfig_paths() -> Router<LandscapeApp> {
     // .route("/ipconfigs/:iface_name/status", get(get_iface_service_status))
 }
 
-async fn get_all_ipconfig_status(State(state): State<LandscapeApp>) -> Json<Value> {
-    let result = serde_json::to_value(state.wan_ip_service.get_all_status().await);
-    Json(result.unwrap())
+async fn get_all_ipconfig_status(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<HashMap<String, DefaultWatchServiceStatus>> {
+    LandscapeApiResp::success(state.wan_ip_service.get_all_status().await)
 }
 
 async fn get_iface_service_conifg(
     State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
-) -> Result<Json<IfaceIpServiceConfig>, LandscapeApiError> {
+) -> LandscapeApiResult<IfaceIpServiceConfig> {
     if let Some(iface_config) = state.wan_ip_service.get_config_by_name(iface_name).await {
-        Ok(Json(iface_config))
+        LandscapeApiResp::success(iface_config)
     } else {
         Err(LandscapeApiError::NotFound("can not find".into()))
     }
@@ -56,15 +59,14 @@ async fn get_iface_service_conifg(
 async fn handle_iface_service_status(
     State(state): State<LandscapeApp>,
     Json(config): Json<IfaceIpServiceConfig>,
-) -> Json<SimpleResult> {
-    let result = SimpleResult { success: true };
+) -> LandscapeApiResult<()> {
     state.wan_ip_service.handle_service_config(config).await;
-    Json(result)
+    LandscapeApiResp::success(())
 }
 
 async fn delete_and_stop_iface_service(
     State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
-) -> Json<Option<DefaultWatchServiceStatus>> {
-    Json(state.wan_ip_service.delete_and_stop_iface_service(iface_name).await)
+) -> LandscapeApiResult<Option<DefaultWatchServiceStatus>> {
+    LandscapeApiResp::success(state.wan_ip_service.delete_and_stop_iface_service(iface_name).await)
 }

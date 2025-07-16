@@ -3,6 +3,7 @@ import router from "@/router";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 
 const base_url = import.meta.env.VITE_AXIOS_BASE_URL;
+
 const axiosService = axios.create({
   baseURL: `${base_url}/src`,
   timeout: 10000,
@@ -23,9 +24,11 @@ axiosService.interceptors.request.use(
 );
 
 axiosService.interceptors.response.use(
-  (response) => response,
+  (response) => response.data,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    const code = error.response.status;
+    const msg = error.response.data.message;
+    if (code === 401) {
       // 清除本地存储中的认证信息
       localStorage.removeItem("token");
 
@@ -35,7 +38,11 @@ axiosService.interceptors.response.use(
         // query: { redirect: router.currentRoute }, // 登录成功后重定向回原页面
       });
     }
-    return Promise.reject(error);
+
+    if (msg && window.$message) {
+      window.$message.error(msg);
+    }
+    return Promise.reject(error.response.data);
   }
 );
 

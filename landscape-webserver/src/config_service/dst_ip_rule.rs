@@ -9,10 +9,8 @@ use landscape_common::{
     ip_mark::WanIpRuleConfig,
 };
 
-use crate::{
-    error::{LandscapeApiError, LandscapeResult},
-    LandscapeApp, SimpleResult,
-};
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+use crate::{error::LandscapeApiError, LandscapeApp};
 
 pub async fn get_dst_ip_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -25,27 +23,29 @@ pub async fn get_dst_ip_rule_config_paths() -> Router<LandscapeApp> {
         .route("/dst_ip_rules/flow/:flow_id", get(get_flow_dst_ip_rules))
 }
 
-async fn get_dst_ip_rules(State(state): State<LandscapeApp>) -> Json<Vec<WanIpRuleConfig>> {
+async fn get_dst_ip_rules(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<WanIpRuleConfig>> {
     let result = state.dst_ip_rule_service.list().await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn get_flow_dst_ip_rules(
     State(state): State<LandscapeApp>,
     Path(id): Path<FlowId>,
-) -> Json<Vec<WanIpRuleConfig>> {
+) -> LandscapeApiResult<Vec<WanIpRuleConfig>> {
     let mut result = state.dst_ip_rule_service.list_flow_configs(id).await;
     result.sort_by(|a, b| a.index.cmp(&b.index));
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn get_dst_ip_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> LandscapeResult<Json<WanIpRuleConfig>> {
+) -> LandscapeApiResult<WanIpRuleConfig> {
     let result = state.dst_ip_rule_service.find_by_id(id).await;
     if let Some(config) = result {
-        Ok(Json(config))
+        LandscapeApiResp::success(config)
     } else {
         Err(LandscapeApiError::NotFound(format!("DstIpRule id: {:?}", id)))
     }
@@ -55,31 +55,31 @@ async fn modify_dst_ip_rules(
     State(state): State<LandscapeApp>,
     Path(_id): Path<ConfigId>,
     Json(rule): Json<WanIpRuleConfig>,
-) -> Json<WanIpRuleConfig> {
+) -> LandscapeApiResult<WanIpRuleConfig> {
     let result = state.dst_ip_rule_service.set(rule).await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn add_dst_ip_rules(
     State(state): State<LandscapeApp>,
     Json(rule): Json<WanIpRuleConfig>,
-) -> Json<WanIpRuleConfig> {
+) -> LandscapeApiResult<WanIpRuleConfig> {
     let result = state.dst_ip_rule_service.set(rule).await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn add_many_dst_ip_rules(
     State(state): State<LandscapeApp>,
     Json(rules): Json<Vec<WanIpRuleConfig>>,
-) -> Json<SimpleResult> {
+) -> LandscapeApiResult<()> {
     state.dst_ip_rule_service.set_list(rules).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }
 
 async fn del_dst_ip_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> Json<SimpleResult> {
+) -> LandscapeApiResult<()> {
     state.dst_ip_rule_service.delete(id).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }

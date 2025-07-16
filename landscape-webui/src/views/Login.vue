@@ -16,19 +16,16 @@ const uiStore = useUiStore();
 const message = useMessage();
 
 async function login() {
-  try {
-    localStorage.removeItem(LANDSCAPE_TOKEN_KEY);
-    let result = await do_login(login_info.value);
-    if (result.success) {
-      localStorage.setItem(LANDSCAPE_TOKEN_KEY, result.token);
-    }
-    uiStore.INSERT_USERNAME(login_info.value.username);
-    router.push({
-      path: "/",
-    });
-  } catch (e: any) {
-    message.warning(`${e.response.data}`);
+  localStorage.removeItem(LANDSCAPE_TOKEN_KEY);
+  let result = await do_login(login_info.value);
+  if (result.success) {
+    localStorage.setItem(LANDSCAPE_TOKEN_KEY, result.token);
   }
+  uiStore.INSERT_USERNAME(login_info.value.username);
+  router.push({
+    path: "/",
+  });
+  message.success(`欢迎, ${login_info.value.username}`);
 }
 </script>
 

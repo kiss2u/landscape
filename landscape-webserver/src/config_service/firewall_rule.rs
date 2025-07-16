@@ -6,10 +6,9 @@ use axum::{
 use landscape_common::service::controller_service::ConfigController;
 use landscape_common::{config::ConfigId, firewall::FirewallRuleConfig};
 
-use crate::{
-    error::{LandscapeApiError, LandscapeResult},
-    LandscapeApp, SimpleResult,
-};
+use crate::{error::LandscapeApiError, LandscapeApp};
+
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 pub async fn get_firewall_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -17,19 +16,21 @@ pub async fn get_firewall_rule_config_paths() -> Router<LandscapeApp> {
         .route("/firewall_rules/:id", get(get_firewall_rule).delete(del_firewall_rule))
 }
 
-async fn get_firewall_rules(State(state): State<LandscapeApp>) -> Json<Vec<FirewallRuleConfig>> {
+async fn get_firewall_rules(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<FirewallRuleConfig>> {
     let mut result = state.fire_wall_rule_service.list().await;
     result.sort_by(|a, b| a.index.cmp(&b.index));
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn get_firewall_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> LandscapeResult<Json<FirewallRuleConfig>> {
+) -> LandscapeApiResult<FirewallRuleConfig> {
     let result = state.fire_wall_rule_service.find_by_id(id).await;
     if let Some(config) = result {
-        Ok(Json(config))
+        LandscapeApiResp::success(config)
     } else {
         Err(LandscapeApiError::NotFound(format!("Firewall Rule id: {:?}", id)))
     }
@@ -38,15 +39,15 @@ async fn get_firewall_rule(
 async fn add_firewall_rule(
     State(state): State<LandscapeApp>,
     Json(firewall_rule): Json<FirewallRuleConfig>,
-) -> Json<FirewallRuleConfig> {
+) -> LandscapeApiResult<FirewallRuleConfig> {
     let result = state.fire_wall_rule_service.set(firewall_rule).await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn del_firewall_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> Json<SimpleResult> {
+) -> LandscapeApiResult<()> {
     state.fire_wall_rule_service.delete(id).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }

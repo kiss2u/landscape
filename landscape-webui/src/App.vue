@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { darkTheme } from "naive-ui";
 import { dateZhCN, zhCN } from "naive-ui";
+
+import Env from "@/components/Env.vue";
 </script>
 
 <template>
@@ -13,6 +15,7 @@ import { dateZhCN, zhCN } from "naive-ui";
   >
     <n-message-provider>
       <n-notification-provider>
+        <Env></Env>
         <RouterView />
       </n-notification-provider>
     </n-message-provider>

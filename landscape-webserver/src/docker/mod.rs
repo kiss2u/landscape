@@ -10,12 +10,14 @@ use bollard::container::{
 use bollard::{container::ListContainersOptions, secret::ContainerSummary, Docker};
 
 use image::get_docker_images_paths;
+use landscape_common::service::DefaultWatchServiceStatus;
 use network::get_docker_networks_paths;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::{LandscapeApp, SimpleResult};
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+use crate::{docker::error::DockerError, LandscapeApp};
 
+pub mod error;
 mod image;
 mod network;
 
@@ -35,24 +37,27 @@ pub async fn get_docker_paths() -> Router<LandscapeApp> {
         .nest("/networks", get_docker_networks_paths().await)
 }
 
-async fn get_docker_status(State(state): State<LandscapeApp>) -> Json<Value> {
-    let result = serde_json::to_value(&state.docker_service.status);
-    Json(result.unwrap())
+async fn get_docker_status(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<DefaultWatchServiceStatus> {
+    LandscapeApiResp::success(state.docker_service.status)
 }
 
-async fn start_docker_status(State(state): State<LandscapeApp>) -> Json<Value> {
+async fn start_docker_status(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<DefaultWatchServiceStatus> {
     state.docker_service.start_to_listen_event().await;
-    let result = serde_json::to_value(&state.docker_service.status);
-    Json(result.unwrap())
+    LandscapeApiResp::success(state.docker_service.status)
 }
 
-async fn stop_docker_status(State(state): State<LandscapeApp>) -> Json<Value> {
+async fn stop_docker_status(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<DefaultWatchServiceStatus> {
     state.docker_service.status.wait_stop().await;
-    let result = serde_json::to_value(&state.docker_service.status);
-    Json(result.unwrap())
+    LandscapeApiResp::success(state.docker_service.status)
 }
 
-async fn get_all_container_summarys() -> Json<Value> {
+async fn get_all_container_summarys() -> LandscapeApiResult<Vec<ContainerSummary>> {
     let mut container_summarys: Vec<ContainerSummary> = vec![];
     let docker = Docker::connect_with_socket_defaults();
 
@@ -63,15 +68,13 @@ async fn get_all_container_summarys() -> Json<Value> {
         }
     }
 
-    let result = serde_json::to_value(&container_summarys);
-    Json(result.unwrap())
+    LandscapeApiResp::success(container_summarys)
 }
 
 async fn run_container(
     Path(container_name): Path<String>,
     Json(container_config): Json<Config<String>>,
-) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
+) -> LandscapeApiResult<()> {
     let docker = Docker::connect_with_socket_defaults().unwrap();
     if let Err(e) = &docker
         .create_container(
@@ -80,79 +83,60 @@ async fn run_container(
         )
         .await
     {
-        result.success = false;
-        tracing::error!("create_container error: {:?}", e);
+        tracing::error!("{:?}", e);
+        return Err(DockerError::CreateContainerError)?;
     } else {
         if let Err(e) =
             &docker.start_container(&container_name, None::<StartContainerOptions<String>>).await
         {
-            result.success = false;
-            tracing::info!("start_container error: {:?}", e);
-        } else {
-            result.success = true;
+            tracing::error!("{:?}", e);
+            return Err(DockerError::StartContainerError)?;
         }
     }
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+    LandscapeApiResp::success(())
 }
 
-async fn start_container(Path(container_name): Path<String>) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
+async fn start_container(Path(container_name): Path<String>) -> LandscapeApiResult<()> {
     let docker = Docker::connect_with_socket_defaults().unwrap();
 
     if let Err(e) =
         &docker.start_container(&container_name, None::<StartContainerOptions<String>>).await
     {
-        result.success = false;
-        tracing::error!("start_container error: {:?}", e);
-    } else {
-        result.success = true;
+        tracing::error!("{:?}", e);
+        return Err(DockerError::StartContainerError)?;
     }
 
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+    LandscapeApiResp::success(())
 }
 
-async fn stop_container(Path(container_name): Path<String>) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
+async fn stop_container(Path(container_name): Path<String>) -> LandscapeApiResult<()> {
     let docker = Docker::connect_with_socket_defaults().unwrap();
 
     if let Err(e) = &docker.stop_container(&container_name, None::<StopContainerOptions>).await {
-        result.success = false;
-        tracing::error!("stop_container error: {:?}", e);
-    } else {
-        result.success = true;
+        tracing::error!("{:?}", e);
+        return Err(DockerError::StopContainerError)?;
     }
 
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+    LandscapeApiResp::success(())
 }
 
-async fn remove_container(Path(container_name): Path<String>) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
+async fn remove_container(Path(container_name): Path<String>) -> LandscapeApiResult<()> {
     let docker = Docker::connect_with_socket_defaults().unwrap();
 
     let config = RemoveContainerOptions { force: true, v: false, link: false };
     if let Err(e) = &docker.remove_container(&container_name, Some(config)).await {
-        result.success = false;
-        tracing::error!("remove_container error: {:?}", e);
-    } else {
-        result.success = true;
+        tracing::error!("{:?}", e);
+        return Err(DockerError::FailToRemoveContainer)?;
     }
 
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+    LandscapeApiResp::success(())
 }
 
-async fn run_cmd_container(Json(docker_cmd): Json<DockerCmd>) -> Json<Value> {
-    let mut result = SimpleResult { success: false };
-    if let Err(e) = docker_cmd.execute_docker_command().await {
-        tracing::error!("error: {:?}", e);
-    } else {
-        result.success = true;
-    };
-    let result = serde_json::to_value(&result);
-    Json(result.unwrap())
+async fn run_cmd_container(Json(docker_cmd): Json<DockerCmd>) -> LandscapeApiResult<()> {
+    if let Err(_) = docker_cmd.execute_docker_command().await {
+        return Err(DockerError::FailToRunContainerByCmd)?;
+    }
+    LandscapeApiResp::success(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

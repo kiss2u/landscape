@@ -26,4 +26,35 @@ pub enum LdError {
     DbMsg(String),
 }
 
+impl LandscapeErrRespTrait for LdError {
+    fn get_code(&self) -> u32 {
+        match self {
+            LdError::Boot(_) => 101_500,
+            LdError::Io(_) => 102_500,
+            LdError::HomeError(_) => 103_500,
+            LdError::SettingCpuBalanceError(_) => 104_500,
+            LdError::DatabaseError(_) => 105_500,
+        }
+    }
+}
+
 pub type LdResult<T> = Result<T, LdError>;
+
+pub trait LandscapeErrRespTrait
+where
+    Self: std::fmt::Display,
+{
+    fn get_code(&self) -> u32;
+
+    fn get_message(&self) -> String {
+        self.to_string()
+    }
+
+    // fn error_to_response(&self) -> (u16, String) {
+    //     let code = self.get_code();
+    //     let http_code = code % 1000; // 取后三位作为 HTTP code
+    //     let msg = self.get_message();
+
+    //     (http_code as u16, msg)
+    // }
+}

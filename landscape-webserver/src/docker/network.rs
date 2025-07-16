@@ -1,17 +1,17 @@
-use axum::{routing::get, Json, Router};
+use axum::{routing::get, Router};
 
 use landscape::docker::network::inspect_all_networks;
-use serde_json::Value;
+use landscape_common::docker::network::LandscapeDockerNetwork;
 
 use crate::LandscapeApp;
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 pub async fn get_docker_networks_paths() -> Router<LandscapeApp> {
     Router::new().route("/", get(get_all_networks))
 }
 
-async fn get_all_networks() -> Json<Value> {
+async fn get_all_networks() -> LandscapeApiResult<Vec<LandscapeDockerNetwork>> {
     let networks = inspect_all_networks().await;
 
-    let result = serde_json::to_value(&networks);
-    Json(result.unwrap())
+    LandscapeApiResp::success(networks)
 }

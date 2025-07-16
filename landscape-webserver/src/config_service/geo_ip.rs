@@ -9,10 +9,9 @@ use landscape_common::config::{
 };
 use landscape_common::service::controller_service::ConfigController;
 
-use crate::{
-    error::{LandscapeApiError, LandscapeResult},
-    LandscapeApp, SimpleResult,
-};
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+
+use crate::{error::LandscapeApiError, LandscapeApp};
 
 pub async fn get_geo_ip_config_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -27,10 +26,10 @@ pub async fn get_geo_ip_config_paths() -> Router<LandscapeApp> {
 async fn get_geo_ip_cache_detail(
     State(state): State<LandscapeApp>,
     Query(key): Query<GeoFileCacheKey>,
-) -> LandscapeResult<Json<GeoIpConfig>> {
+) -> LandscapeApiResult<GeoIpConfig> {
     let result = state.geo_ip_service.get_cache_value_by_key(&key).await;
     if let Some(result) = result {
-        Ok(Json(result))
+        LandscapeApiResp::success(result)
     } else {
         Err(LandscapeApiError::NotFound(format!("{key:?}")))
     }
@@ -39,7 +38,7 @@ async fn get_geo_ip_cache_detail(
 async fn search_geo_ip_cache(
     State(state): State<LandscapeApp>,
     Query(query): Query<QueryGeoKey>,
-) -> Json<Vec<GeoFileCacheKey>> {
+) -> LandscapeApiResult<Vec<GeoFileCacheKey>> {
     tracing::debug!("query: {:?}", query);
     let key = query.key.map(|k| k.to_ascii_uppercase());
     let name = query.name;
@@ -55,34 +54,36 @@ async fn search_geo_ip_cache(
         .collect();
 
     tracing::debug!("keys len: {}", result.len());
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
-async fn get_geo_ip_cache(State(state): State<LandscapeApp>) -> Json<Vec<GeoFileCacheKey>> {
+async fn get_geo_ip_cache(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<GeoFileCacheKey>> {
     let result = state.geo_ip_service.list_all_keys().await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
-async fn refresh_geo_ip_cache(State(state): State<LandscapeApp>) -> Json<SimpleResult> {
+async fn refresh_geo_ip_cache(State(state): State<LandscapeApp>) -> LandscapeApiResult<()> {
     state.geo_ip_service.refresh(true).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }
 
 async fn get_geo_ips(
     State(state): State<LandscapeApp>,
     Query(q): Query<QueryGeoIpConfig>,
-) -> Json<Vec<GeoIpSourceConfig>> {
+) -> LandscapeApiResult<Vec<GeoIpSourceConfig>> {
     let result = state.geo_ip_service.query_geo_by_name(q.name).await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn get_geo_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> LandscapeResult<Json<GeoIpSourceConfig>> {
+) -> LandscapeApiResult<GeoIpSourceConfig> {
     let result = state.geo_ip_service.find_by_id(id).await;
     if let Some(config) = result {
-        Ok(Json(config))
+        LandscapeApiResp::success(config)
     } else {
         Err(LandscapeApiError::NotFound(format!("Geo id: {:?}", id)))
     }
@@ -91,23 +92,23 @@ async fn get_geo_rule(
 async fn add_geo_ip(
     State(state): State<LandscapeApp>,
     Json(dns_rule): Json<GeoIpSourceConfig>,
-) -> Json<GeoIpSourceConfig> {
+) -> LandscapeApiResult<GeoIpSourceConfig> {
     let result = state.geo_ip_service.set(dns_rule).await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn add_many_geo_ips(
     State(state): State<LandscapeApp>,
     Json(rules): Json<Vec<GeoIpSourceConfig>>,
-) -> Json<SimpleResult> {
+) -> LandscapeApiResult<()> {
     state.geo_ip_service.set_list(rules).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }
 
 async fn del_geo_ip(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> Json<SimpleResult> {
+) -> LandscapeApiResult<()> {
     state.geo_ip_service.delete(id).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }

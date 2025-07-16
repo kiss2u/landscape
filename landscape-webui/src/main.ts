@@ -12,6 +12,14 @@ import "vfonts/FiraCode.css";
 import "./style.css";
 
 import App from "./App.vue";
+import { useMessage } from "naive-ui";
+
+declare global {
+  interface Window {
+    $message: ReturnType<typeof useMessage>;
+  }
+}
+
 const pinia = createPinia();
 pinia.use(piniaPluginPersistedstate);
 

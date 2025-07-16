@@ -6,10 +6,9 @@ use axum::{
 use landscape_common::service::controller_service::ConfigController;
 use landscape_common::{config::ConfigId, flow::FlowConfig};
 
-use crate::{
-    error::{LandscapeApiError, LandscapeResult},
-    LandscapeApp, SimpleResult,
-};
+use crate::{error::LandscapeApiError, LandscapeApp};
+
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 pub async fn get_flow_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
@@ -17,18 +16,18 @@ pub async fn get_flow_rule_config_paths() -> Router<LandscapeApp> {
         .route("/flow_rules/:id", get(get_flow_rule).delete(del_flow_rule))
 }
 
-async fn get_flow_rules(State(state): State<LandscapeApp>) -> Json<Vec<FlowConfig>> {
+async fn get_flow_rules(State(state): State<LandscapeApp>) -> LandscapeApiResult<Vec<FlowConfig>> {
     let result = state.flow_rule_service.list().await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn get_flow_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> LandscapeResult<Json<FlowConfig>> {
+) -> LandscapeApiResult<FlowConfig> {
     let result = state.flow_rule_service.find_by_id(id).await;
     if let Some(config) = result {
-        Ok(Json(config))
+        LandscapeApiResp::success(config)
     } else {
         Err(LandscapeApiError::NotFound(format!("Flow rule id: {:?}", id)))
     }
@@ -37,15 +36,15 @@ async fn get_flow_rule(
 async fn add_flow_rule(
     State(state): State<LandscapeApp>,
     Json(flow_rule): Json<FlowConfig>,
-) -> Json<FlowConfig> {
+) -> LandscapeApiResult<FlowConfig> {
     let result = state.flow_rule_service.set(flow_rule).await;
-    Json(result)
+    LandscapeApiResp::success(result)
 }
 
 async fn del_flow_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
-) -> Json<SimpleResult> {
+) -> LandscapeApiResult<()> {
     state.flow_rule_service.delete(id).await;
-    Json(SimpleResult { success: true })
+    LandscapeApiResp::success(())
 }
