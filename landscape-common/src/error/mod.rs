@@ -26,18 +26,6 @@ pub enum LdError {
     DbMsg(String),
 }
 
-impl LandscapeErrRespTrait for LdError {
-    fn get_code(&self) -> u32 {
-        match self {
-            LdError::Boot(_) => 101_500,
-            LdError::Io(_) => 102_500,
-            LdError::HomeError(_) => 103_500,
-            LdError::SettingCpuBalanceError(_) => 104_500,
-            LdError::DatabaseError(_) => 105_500,
-        }
-    }
-}
-
 pub type LdResult<T> = Result<T, LdError>;
 
 pub trait LandscapeErrRespTrait

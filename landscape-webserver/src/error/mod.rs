@@ -31,7 +31,7 @@ impl LandscapeErrRespTrait for LandscapeApiError {
             LandscapeApiError::NotFound(_) => 201_404,
             LandscapeApiError::AuthError(err) => err.get_code(),
             LandscapeApiError::DockerError(err) => err.get_code(),
-            LandscapeApiError::LdError(ld_error) => ld_error.get_code(),
+            LandscapeApiError::LdError(_) => 500,
             LandscapeApiError::DHCPConflict(_) => 301_400,
         }
     }

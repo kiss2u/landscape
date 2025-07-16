@@ -34,7 +34,12 @@ async function del() {
 </script>
 
 <template>
-  <n-card size="small" :title="`ID: ${config.flow_id}`" :hoverable="true">
+  <n-card
+    style="min-height: 224px"
+    size="small"
+    :title="`ID: ${config.flow_id}`"
+    :hoverable="true"
+  >
     <template #header-extra>
       <n-flex>
         <n-button secondary @click="show_edit = true" size="small">
