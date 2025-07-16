@@ -48,7 +48,8 @@ export function mask_string(value: string | undefined | null): string {
   } else if (length <= 10) {
     return value.substring(0, 3) + "*****";
   } else {
-    return value.substring(0, 5) + "*******";
+    const start = Math.floor((length - 5) / 2);
+    return "*****" + value.substring(start, start + 5) + "*****";
   }
 }
 

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ConnectKey } from "@/rust_bindings/common/metric/connect";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { ChartLine } from "@vicons/carbon";
-import { ref } from "vue";
+import { mask_string } from "@/lib/common";
+
+const frontEndStore = useFrontEndStore();
 
 interface Props {
   conn: ConnectKey;
@@ -36,7 +39,13 @@ const emit = defineEmits(["show:key"]);
       </n-button>
     </template>
 
-    {{ `${conn.src_ip}:${conn.src_port} => ${conn.dst_ip}:${conn.dst_port}` }}
+    {{
+      `${
+        frontEndStore.presentation_mode ? mask_string(conn.src_ip) : conn.src_ip
+      }:${conn.src_port} => ${
+        frontEndStore.presentation_mode ? mask_string(conn.dst_ip) : conn.dst_ip
+      }:${conn.dst_port}`
+    }}
 
     <template #action>
       <n-flex>

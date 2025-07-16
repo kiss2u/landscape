@@ -13,6 +13,8 @@ use crate::metric::duckdb::DuckMetricStore;
 #[allow(dead_code)]
 #[cfg(debug_assertions)]
 const CLEAR_INTERVAL: u64 = 60;
+
+#[allow(dead_code)]
 #[cfg(not(debug_assertions))]
 const CLEAR_INTERVAL: u64 = 60 * 10;
 
