@@ -102,8 +102,10 @@ impl GeoIpService {
         }
 
         let client = Client::new();
+        let mut config_names = HashSet::new();
         for mut config in configs {
             let url = config.url.clone();
+            config_names.insert(config.name.clone());
 
             tracing::debug!("download file: {}", url);
             let time = Instant::now();
@@ -118,7 +120,7 @@ impl GeoIpService {
                         let mut exist_keys = file_cache_lock
                             .keys()
                             .into_iter()
-                            .filter(|k| k.key == config.name)
+                            .filter(|k| k.name == config.name)
                             .collect::<HashSet<GeoFileCacheKey>>();
 
                         for (key, values) in result {
@@ -157,6 +159,18 @@ impl GeoIpService {
                 }
             }
         }
+
+        if force {
+            let mut file_cache_lock = self.file_cache.lock().await;
+            let need_to_remove = file_cache_lock
+                .keys()
+                .into_iter()
+                .filter(|k| !config_names.contains(&k.name))
+                .collect::<HashSet<GeoFileCacheKey>>();
+            for key in need_to_remove {
+                file_cache_lock.del(&key);
+            }
+        }
     }
 }
 
@@ -193,5 +207,28 @@ impl ConfigController for GeoIpService {
         _new_configs: Vec<Self::Config>,
         _old_configs: Vec<Self::Config>,
     ) {
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use landscape_common::{
+        config::geo::{GeoFileCacheKey, GeoIpConfig},
+        store::storev3::StoreFileManager,
+        LANDSCAPE_GEO_CACHE_TMP_DIR,
+    };
+    use std::path::PathBuf;
+
+    // cargo test --package landscape --lib -- config_service::geo_ip_service::tests --show-output
+    #[test]
+    fn load_test() {
+        let file_cache: StoreFileManager<GeoFileCacheKey, GeoIpConfig> = StoreFileManager::new(
+            PathBuf::from("/root/.landscape-router").join(LANDSCAPE_GEO_CACHE_TMP_DIR),
+            "ip".to_string(),
+        );
+
+        let keys = file_cache.keys();
+        println!("keys: {:?}", keys.len())
     }
 }

@@ -151,8 +151,10 @@ impl GeoSiteService {
         }
 
         let client = Client::new();
+        let mut config_names = HashSet::new();
         for mut config in configs {
             let url = config.url.clone();
+            config_names.insert(config.name.clone());
 
             tracing::debug!("download file: {}", url);
             let time = Instant::now();
@@ -167,7 +169,7 @@ impl GeoSiteService {
                         let mut exist_keys = file_cache_lock
                             .keys()
                             .into_iter()
-                            .filter(|k| k.key == config.name)
+                            .filter(|k| k.name == config.name)
                             .collect::<HashSet<GeoFileCacheKey>>();
 
                         for (key, values) in result {
@@ -205,6 +207,18 @@ impl GeoSiteService {
                 Err(e) => {
                     tracing::error!("request {} error: {}", url, e);
                 }
+            }
+        }
+
+        if force {
+            let mut file_cache_lock = self.file_cache.lock().await;
+            let need_to_remove = file_cache_lock
+                .keys()
+                .into_iter()
+                .filter(|k| !config_names.contains(&k.name))
+                .collect::<HashSet<GeoFileCacheKey>>();
+            for key in need_to_remove {
+                file_cache_lock.del(&key);
             }
         }
     }
