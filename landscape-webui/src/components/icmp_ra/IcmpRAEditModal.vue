@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useMessage } from "naive-ui";
+import { computed, onActivated, onMounted, ref, watch } from "vue";
+import { FormInst, useMessage } from "naive-ui";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { useIPv6PDStore } from "@/stores/status_ipv6pd";
 import { IPV6RAServiceConfig } from "@/lib/icmpv6ra";
@@ -8,12 +8,15 @@ import {
   get_iface_icmpv6ra_config,
   update_icmpv6ra_config,
 } from "@/api/service_icmpv6ra";
+import { get_all_ipv6pd_status } from "@/api/service_ipv6pd";
+import { ServiceStatus } from "@/lib/services";
 
 let ipv6PDStore = useIPv6PDStore();
 const message = useMessage();
 
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
+const formRef = ref<FormInst | null>(null);
 
 const iface_info = defineProps<{
   iface_name: string;
@@ -33,6 +36,7 @@ async function on_modal_enter() {
     console.log(config);
     // iface_service_type.value = config.t;
     service_config.value = config;
+    await search_ipv6_pd();
   } catch (e) {
     new IPV6RAServiceConfig({
       iface_name: iface_info.iface_name,
@@ -41,10 +45,40 @@ async function on_modal_enter() {
 }
 
 async function save_config() {
-  let config = await update_icmpv6ra_config(service_config.value);
-  await ipv6PDStore.UPDATE_INFO();
-  show_model.value = false;
+  try {
+    await formRef.value?.validate();
+    let config = await update_icmpv6ra_config(service_config.value);
+    await ipv6PDStore.UPDATE_INFO();
+    show_model.value = false;
+  } catch (err) {
+    message.warning(`表单校验未通过`);
+  }
 }
+
+const ipv6_pd_ifaces = ref<Map<string, ServiceStatus>>(new Map());
+const loading_search_ipv6pd = ref(false);
+
+const ipv6_pd_options = computed(() => {
+  const result = [];
+  for (const [key, value] of ipv6_pd_ifaces.value) {
+    result.push({ value: key, label: `${key} - ${value.t}` });
+  }
+  return result;
+});
+
+async function search_ipv6_pd() {
+  ipv6_pd_ifaces.value = await get_all_ipv6pd_status();
+}
+
+const formRules = {
+  config: {
+    depend_iface: {
+      required: true,
+      message: "请选择用于申请前缀的网卡",
+      trigger: ["blur", "change"],
+    },
+  },
+};
 </script>
 
 <template>
@@ -64,7 +98,7 @@ async function save_config() {
       @close="show_model = false"
     >
       <!-- {{ service_config }} -->
-      <n-form :model="service_config">
+      <n-form ref="formRef" :model="service_config" :rules="formRules">
         <n-grid :x-gap="12" :y-gap="8" cols="4" item-responsive>
           <n-form-item-gi span="4 m:4 l:4" label="是否启用">
             <n-switch v-model:value="service_config.enable">
@@ -76,12 +110,24 @@ async function save_config() {
           <n-form-item-gi
             span="4 m:4 l:4"
             label="所关联的网卡 (须对应网卡开启 DHCPv6-PD)"
+            path="config.depend_iface"
           >
-            <n-input
+            <n-select
+              v-model:value="service_config.config.depend_iface"
+              filterable
+              placeholder="选择进行前缀申请的网卡"
+              :options="ipv6_pd_options"
+              :loading="loading_search_ipv6pd"
+              clearable
+              remote
+              @search="search_ipv6_pd"
+            />
+
+            <!-- <n-input
               style="flex: 1"
               v-model:value="service_config.config.depend_iface"
               clearable
-            />
+            /> -->
           </n-form-item-gi>
 
           <n-form-item-gi span="2 m:2 l:2" label="子网索引">
