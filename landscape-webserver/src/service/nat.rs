@@ -44,7 +44,7 @@ async fn get_iface_nat_conifg(
     if let Some(iface_config) = state.get_config_by_name(iface_name).await {
         LandscapeApiResp::success(iface_config)
     } else {
-        Err(LandscapeApiError::NotFound("can not find".into()))
+        Err(LandscapeApiError::NotFound("Nat Service Config".into()))
     }
 }
 
