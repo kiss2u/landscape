@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, net::Ipv6Addr};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
@@ -94,6 +94,32 @@ impl MacAddr {
         }
 
         Some(MacAddr::new(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]))
+    }
+
+    pub fn to_ipv6_link_local(&self) -> Ipv6Addr {
+        let MacAddr(a, b, c, d, e, f) = *self;
+
+        let eui64 = [
+            a ^ 0x02, // 翻转第 7 位
+            b,
+            c,
+            0xff,
+            0xfe,
+            d,
+            e,
+            f,
+        ];
+
+        Ipv6Addr::new(
+            0xfe80,
+            0,
+            0,
+            0,
+            ((eui64[0] as u16) << 8) | eui64[1] as u16,
+            ((eui64[2] as u16) << 8) | eui64[3] as u16,
+            ((eui64[4] as u16) << 8) | eui64[5] as u16,
+            ((eui64[6] as u16) << 8) | eui64[7] as u16,
+        )
     }
 }
 
