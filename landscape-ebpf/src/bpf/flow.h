@@ -118,7 +118,7 @@ struct each_flow_dns {
     // __uint(map_flags, BPF_F_NO_COMMON_LRU);
     __type(key, struct flow_dns_match_key);
     __type(value, struct flow_dns_match_value);
-    __uint(max_entries, 2048);
+    __uint(max_entries, 4096);
 } each_flow_dns_map SEC(".maps");
 
 // flow <-> 对应规则 map

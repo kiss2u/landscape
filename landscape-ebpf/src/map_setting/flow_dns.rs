@@ -10,7 +10,7 @@ use crate::{
 
 use super::share_map::types::u_inet_addr;
 
-const DNS_MATCH_MAX_ENTRIES: u32 = 2048;
+const DNS_MATCH_MAX_ENTRIES: u32 = 4096;
 
 /// 相当于刷新现有的所有记录
 pub fn create_flow_dns_inner_map(flow_id: u32, data: Vec<FlowDnsMarkInfo>) {
@@ -22,7 +22,7 @@ pub fn create_flow_dns_inner_map(flow_id: u32, data: Vec<FlowDnsMarkInfo>) {
     };
 
     let key_size = size_of::<flow_dns_match_key>() as u32;
-    let value_size = size_of::<u32>() as u32;
+    let value_size = size_of::<flow_dns_match_value>() as u32;
 
     let map = MapHandle::create(
         MapType::LruHash,
