@@ -64,12 +64,8 @@ async fn handle_service_config(
     State(state): State<LandscapeApp>,
     Json(config): Json<DHCPv4ServiceConfig>,
 ) -> LandscapeApiResult<()> {
-    if config.enable {
-        if let Err(conflict_msg) =
-            state.dhcp_v4_server_service.check_ip_range_conflict(&config).await
-        {
-            return Err(LandscapeApiError::DHCPConflict(conflict_msg));
-        }
+    if let Err(conflict_msg) = state.dhcp_v4_server_service.check_ip_range_conflict(&config).await {
+        return Err(LandscapeApiError::DHCPConflict(conflict_msg));
     }
 
     state.dhcp_v4_server_service.handle_service_config(config).await;

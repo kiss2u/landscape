@@ -164,11 +164,6 @@ impl DHCPv4ServerManagerService {
                 continue;
             }
 
-            // 只检查启用的配置
-            if !existing_config.enable {
-                continue;
-            }
-
             // 检查IP范围是否重叠
             if new_config.config.has_ip_range_overlap(&existing_config.config) {
                 return Err(format!(
