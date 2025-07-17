@@ -303,7 +303,9 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
 
     u8 flow_id_u8 = flow_id & 0xff;
 
-    // bpf_log_info("find flow_id: %d, ip: %pI4", flow_id, cache_key.match_key.src_addr.all);
+    // if (flow_id != 0) {
+    //     bpf_log_info("find flow_id: %d, ip: %pI4", flow_id, cache_key.match_key.src_addr.all);
+    // }
 
     volatile u32 flow_mark_action = 0;
     volatile u16 priority = 0;
@@ -392,26 +394,26 @@ keep_going:
 static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
                                                         int current_eth_net_offset,
                                                         struct route_context *context,
-                                                        u32 *flow_id) {
+                                                        u32 flow_id) {
 #define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id"
 
     int ret;
     struct route_target_key wan_key = {0};
 
-    wan_key.flow_id = *flow_id;
+    wan_key.flow_id = flow_id;
     wan_key.l3_protocol = context->l3_protocol;
 
     struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
 
     // 找不到转发的 target 按照原有计划进行处理
     if (target_info == NULL) {
-        //     bpf_log_info("wan_route_info l3_protocol: %d", wan_key.l3_protocol);
-        //     bpf_log_info("wan_route_info flow_id: %d", wan_key.flow_id);
 
         if (wan_key.flow_id == 0) {
             // Default flow PASS
             return TC_ACT_UNSPEC;
         } else {
+            bpf_log_info("DROP l3_protocol: %d", wan_key.l3_protocol);
+            bpf_log_info("DROP flow_id: %d", wan_key.flow_id);
             // Other DROP
             return TC_ACT_SHOT;
         }
@@ -538,7 +540,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, &flow_id);
+    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_id);
     return ret;
 
 #undef BPF_LOG_TOPIC
@@ -613,7 +615,7 @@ int wan_route_egress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, &flow_id);
+    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_id);
     return ret;
 
     return TC_ACT_UNSPEC;
