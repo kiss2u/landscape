@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::{fs::File, io::BufRead};
 
 use bollard::{
-    secret::{EventActor, EventMessageTypeEnum},
+    secret::{ContainerSummary, EventMessageTypeEnum},
     Docker,
 };
 use tokio_stream::StreamExt;
@@ -39,6 +39,10 @@ impl LandscapeDockerService {
             status.just_change_status(ServiceStatus::Staring);
             let docker = Docker::connect_with_socket_defaults();
             let docker = docker.unwrap();
+
+            route_service.remove_all_wan_docker().await;
+            scan_and_set_all_docker(&route_service, &docker).await;
+
             let mut event_stream = docker.events::<String>(None);
             let mut receiver = status.subscribe();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
@@ -93,6 +97,28 @@ impl LandscapeDockerService {
     }
 }
 
+pub async fn scan_and_set_all_docker(ip_route: &IpRouteService, docker: &Docker) {
+    let containers = get_docker_continer_summary(&docker).await;
+
+    // tracing::info!("containers: {containers:?}");
+    for container in containers {
+        if let Some(name) = container.names.and_then(|d| d.get(0).cloned()) {
+            if let Some(name) = name.strip_prefix("/") {
+                inspect_container_and_set_route(&name, ip_route, docker).await;
+            }
+        }
+    }
+    ip_route.print_wan_ifaces().await;
+}
+
+pub async fn get_docker_continer_summary(docker: &Docker) -> Vec<ContainerSummary> {
+    let mut container_summarys: Vec<ContainerSummary> = vec![];
+    if let Ok(containers) = docker.list_containers::<String>(None).await {
+        container_summarys = containers;
+    }
+    container_summarys
+}
+
 pub async fn handle_event(
     ip_route_service: &IpRouteService,
     docker: &Docker,
@@ -106,7 +132,26 @@ pub async fn handle_event(
                 match action.as_str() {
                     "start" => {
                         if let Some(actor) = emsg.actor {
-                            handle_redirect_id_set(ip_route_service, docker, actor).await;
+                            if let Some(attr) = actor.attributes {
+                                //
+                                if let Some(name) = attr.get("name") {
+                                    inspect_container_and_set_route(name, ip_route_service, docker)
+                                        .await;
+                                }
+                            }
+                        }
+                    }
+                    "stop" => {
+                        // tracing::info!("docker stop");
+                        if let Some(actor) = emsg.actor {
+                            if let Some(attr) = actor.attributes {
+                                //
+                                if let Some(name) = attr.get("name") {
+                                    // tracing::info!("docker stop name: {name}");
+                                    ip_route_service.remove_ipv4_wan_route(name).await;
+                                    ip_route_service.remove_ipv6_wan_route(name).await;
+                                }
+                            }
                         }
                     }
                     _ => {}
@@ -146,47 +191,40 @@ pub async fn create_docker_event_spawn(ip_route_service: IpRouteService) {
 
 // type ConfigStore = Arc<Mutex<StoreFileManager>>;
 
-pub async fn handle_redirect_id_set(
+async fn inspect_container_and_set_route(
+    name: &str,
     ip_route_service: &IpRouteService,
     docker: &Docker,
-    actor: EventActor,
 ) {
-    if let Some(attr) = actor.attributes {
-        //
-        match attr.get("name") {
-            Some(name) => {
-                // let redirect_id = redirect_id.parse::<u8>().unwrap();
-                let result = docker.inspect_container(name, None).await.unwrap();
-                if let Some(state) = result.state {
-                    if let Some(pid) = state.pid {
-                        let file_path = format!("/proc/{:?}/net/igmp", pid);
-                        if let Ok(Some(if_id)) = read_igmp_index(&file_path) {
-                            tracing::debug!("inner if id: {if_id:?}");
+    let Ok(container_info) = docker.inspect_container(name, None).await else {
+        tracing::error!("can not inspect container: {name}");
+        return;
+    };
+    if let Some(state) = container_info.state {
+        if let Some(pid) = state.pid {
+            let file_path = format!("/proc/{:?}/net/igmp", pid);
+            if let Ok(Some(if_id)) = read_igmp_index(&file_path) {
+                tracing::debug!("inner if id: {if_id:?}");
 
-                            let devs = get_all_devices().await;
-                            for dev in devs {
-                                if let Some(peer_id) = dev.peer_link_id {
-                                    if if_id == peer_id {
-                                        let (ipv4, ipv6) =
-                                            RouteTargetInfo::docker_new(dev.index, name);
-                                        ip_route_service.insert_ipv4_wan_route(name, ipv4).await;
-                                        ip_route_service.insert_ipv6_wan_route(name, ipv6).await;
-                                        // let info = FlowTargetPair {
-                                        //     key: redirect_id as u32,
-                                        //     value: TargetInterfaceInfo::new_docker(dev.index),
-                                        // };
-                                        // landscape_ebpf::map_setting::flow_target::add_flow_target_info(
-                                        //     info
-                                        // );
-                                        // tracing::debug!("peer_id is :{:?}", dev.index);
-                                    }
-                                }
-                            }
+                let devs = get_all_devices().await;
+                for dev in devs {
+                    if let Some(peer_id) = dev.peer_link_id {
+                        if if_id == peer_id {
+                            let (ipv4, ipv6) = RouteTargetInfo::docker_new(dev.index, name);
+                            ip_route_service.insert_ipv4_wan_route(name, ipv4).await;
+                            ip_route_service.insert_ipv6_wan_route(name, ipv6).await;
+                            // let info = FlowTargetPair {
+                            //     key: redirect_id as u32,
+                            //     value: TargetInterfaceInfo::new_docker(dev.index),
+                            // };
+                            // landscape_ebpf::map_setting::flow_target::add_flow_target_info(
+                            //     info
+                            // );
+                            // tracing::debug!("peer_id is :{:?}", dev.index);
                         }
                     }
                 }
             }
-            _ => {}
         }
     }
 }

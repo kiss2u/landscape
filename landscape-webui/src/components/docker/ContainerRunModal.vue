@@ -125,20 +125,20 @@ const show_add_redirect_id_btn = computed(() => {
           />
         </n-form-item>
         <n-form-item label="标签">
-          <n-flex style="flex: 1" vertical>
+          <!-- <n-flex style="flex: 1" vertical>
             <n-button
               :disabled="show_add_redirect_id_btn"
               @click="add_redirect_id"
               >添加处理转发 ID
             </n-button>
-            <n-dynamic-input
-              v-model:value="formModel.labels"
-              preset="pair"
-              separator=":"
-              key-placeholder="key"
-              value-placeholder="value"
-            />
-          </n-flex>
+          </n-flex> -->
+          <n-dynamic-input
+            v-model:value="formModel.labels"
+            preset="pair"
+            separator=":"
+            key-placeholder="key"
+            value-placeholder="value"
+          />
         </n-form-item>
       </n-form>
       <template #footer>

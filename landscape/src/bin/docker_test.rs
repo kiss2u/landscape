@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() {
+    landscape_common::init_tracing!();
     let docker = Docker::connect_with_socket_defaults();
     let docker = docker.unwrap();
     println!();

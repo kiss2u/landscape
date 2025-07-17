@@ -83,6 +83,30 @@ impl IpRouteService {
         service
     }
 
+    pub async fn remove_all_wan_docker(&self) {
+        {
+            let mut lock = self.ipv4_wan_ifaces.write().await;
+            lock.retain(|_, value| !value.is_docker);
+        }
+
+        {
+            let mut lock = self.ipv6_wan_ifaces.write().await;
+            lock.retain(|_, value| !value.is_docker);
+        }
+    }
+
+    pub async fn print_wan_ifaces(&self) {
+        {
+            let lock = self.ipv4_wan_ifaces.read().await;
+            tracing::info!("ipv4 wan ifaces: {:?}", lock)
+        }
+
+        {
+            let lock = self.ipv6_wan_ifaces.read().await;
+            tracing::info!("ipv6 wan ifaces: {:?}", lock)
+        }
+    }
+
     pub async fn insert_ipv6_lan_route(&self, key: &str, info: LanRouteInfo) {
         let mut lock = self.ipv6_lan_ifaces.write().await;
         add_lan_route(info.clone());
