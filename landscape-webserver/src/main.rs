@@ -53,7 +53,7 @@ mod sysinfo;
 
 use service::{
     dhcp_v4::get_dhcp_v4_service_paths, firewall::get_firewall_service_paths,
-    flow_wan::get_iface_flow_wan_paths, mss_clamp::get_mss_clamp_service_paths,
+    mss_clamp::get_mss_clamp_service_paths,
 };
 use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
 use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
@@ -314,8 +314,7 @@ async fn main() -> LdResult<()> {
                 .merge(get_wifi_service_paths(db_store_provider.clone()).await)
                 .merge(get_iface_pdclient_paths().await.with_state(landscape_app_status.clone()))
                 .merge(get_iface_icmpv6ra_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_iface_nat_paths(db_store_provider.clone(), dev_obs.resubscribe()).await)
-                .merge(get_iface_flow_wan_paths(db_store_provider.clone(), dev_obs).await),
+                .merge(get_iface_nat_paths(db_store_provider.clone(), dev_obs.resubscribe()).await),
         )
         .nest("/sysinfo", sysinfo::get_sys_info_route())
         .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler));

@@ -249,7 +249,7 @@ pub fn refresh_target_bpf_map(
         result.insert(each_flow_config.flow_id, targets);
     }
 
-    tracing::info!("ipv4 flow target refresh resule: {:#?}", result);
+    tracing::info!("ipv4 flow target refresh result: {:#?}", result);
     for (flow_id, configes) in result {
         if let Some(info) = configes.get(0) {
             landscape_ebpf::map_setting::route::add_wan_route(flow_id, info.clone());
@@ -281,7 +281,7 @@ pub fn refresh_target_bpf_map(
         result.insert(each_flow_config.flow_id, targets);
     }
 
-    tracing::info!("ipv6 flow target refresh resule: {:#?}", result);
+    tracing::info!("ipv6 flow target refresh result: {:#?}", result);
     for (flow_id, configes) in result {
         if let Some(info) = configes.get(0) {
             landscape_ebpf::map_setting::route::add_wan_route(flow_id, info.clone());
