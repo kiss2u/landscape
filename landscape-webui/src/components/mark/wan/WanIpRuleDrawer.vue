@@ -41,9 +41,9 @@ async function export_config() {
         if (key === "id") {
           return undefined;
         }
-        if (key === "flow_id") {
-          return undefined;
-        }
+        // if (key === "flow_id") {
+        //   return undefined;
+        // }
         return value;
       },
       2
