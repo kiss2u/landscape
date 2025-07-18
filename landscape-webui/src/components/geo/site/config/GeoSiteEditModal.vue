@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { get_geo_site_config, push_geo_site_config } from "@/api/geo/site";
 import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
+import { FormInst, FormRules } from "naive-ui";
 import { computed, ref } from "vue";
 
 const emit = defineEmits(["refresh"]);
@@ -37,6 +38,13 @@ const isModified = computed(() => {
 });
 
 async function saveRule() {
+  if (!formRef.value) return;
+  try {
+    await formRef.value.validate();
+  } catch (err) {
+    return; // 表单校验失败，阻止保存
+  }
+
   if (rule.value) {
     try {
       commit_spin.value = true;
@@ -48,6 +56,26 @@ async function saveRule() {
     }
   }
 }
+
+const formRef = ref<FormInst | null>(null);
+
+const rules: FormRules = {
+  name: [
+    { required: true, message: "名称不能为空", trigger: ["input", "blur"] },
+  ],
+  url: [
+    {
+      required: true,
+      validator: (rule, value) => {
+        if (!/^https?:\/\//.test(value)) {
+          return new Error("URL 必须以 http:// 或 https:// 开头");
+        }
+        return true;
+      },
+      trigger: ["input", "blur"],
+    },
+  ],
+};
 </script>
 <template>
   <n-modal
@@ -61,7 +89,14 @@ async function saveRule() {
   >
     <!-- {{ rule }}
     {{ rule_json }} -->
-    <n-form v-if="rule" style="flex: 1" ref="formRef" :model="rule" :cols="5">
+    <n-form
+      v-if="rule"
+      style="flex: 1"
+      ref="formRef"
+      :model="rule"
+      :rules="rules"
+      :cols="5"
+    >
       <n-grid :cols="5">
         <n-form-item-gi label="启用" :offset="0" :span="1">
           <n-switch v-model:value="rule.enable">
@@ -69,11 +104,15 @@ async function saveRule() {
             <template #unchecked> 禁用 </template>
           </n-switch>
         </n-form-item-gi>
-        <n-form-item-gi label="下载 URL" :span="5">
+        <n-form-item-gi label="下载 URL" path="url" :span="5">
           <n-input v-model:value="rule.url" clearable />
         </n-form-item-gi>
 
-        <n-form-item-gi label="名称 (与其他配置区分， 需要唯一)" :span="5">
+        <n-form-item-gi
+          label="名称 (与其他配置区分， 需要唯一)"
+          path="name"
+          :span="5"
+        >
           <n-input v-model:value="rule.name" clearable />
         </n-form-item-gi>
       </n-grid>
@@ -88,7 +127,7 @@ async function saveRule() {
         >
           保存
         </n-button>
-      </n-flex></template
-    >
+      </n-flex>
+    </template>
   </n-modal>
 </template>

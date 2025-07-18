@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { delete_geo_site_config } from "@/api/geo/site";
 import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";
 
@@ -20,10 +20,18 @@ async function del() {
     emit("refresh");
   }
 }
+
+const title = computed(() => {
+  if (props.geo_site.name) {
+    return props.geo_site.name;
+  } else {
+    return "undefined";
+  }
+});
 </script>
 <template>
   <n-flex>
-    <n-card :title="geo_site.name" size="small">
+    <n-card :title="title" size="small">
       <!-- {{ geo_site }} -->
       <n-descriptions bordered label-placement="top" :column="3">
         <n-descriptions-item label="名称">
