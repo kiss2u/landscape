@@ -6,7 +6,7 @@ use hickory_proto::{
     },
 };
 use hickory_resolver::{
-    config::{NameServerConfigGroup, ResolverConfig},
+    config::{NameServerConfigGroup, ResolveHosts, ResolverConfig, ResolverOpts},
     Resolver,
 };
 use landscape_common::{
@@ -41,10 +41,15 @@ impl CacheResolver {
             _ => flow_id,
         };
 
+        let mut options = ResolverOpts::default();
+        options.cache_size = 0;
+        options.preserve_intermediates = false;
+        options.use_hosts_file = ResolveHosts::Never;
         let resolver = Resolver::builder_with_config(
             resolve,
             MarkConnectionProvider::new(MarkRuntimeProvider::new(mark_value)),
         )
+        .with_options(options)
         .build();
         CacheResolver { resolver, flow_id: mark_value }
     }
