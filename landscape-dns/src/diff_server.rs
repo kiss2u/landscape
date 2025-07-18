@@ -134,6 +134,10 @@ impl LandscapeFiffFlowDnsService {
     pub async fn update_flow_map(&self, flow_config: &Vec<FlowConfig>) {
         let mut new_map = HashMap::new();
         for config in flow_config.iter() {
+            if !config.enable {
+                continue;
+            }
+
             for each_rule in config.flow_match_rules.iter() {
                 new_map.insert(each_rule.clone(), config.flow_id);
             }
