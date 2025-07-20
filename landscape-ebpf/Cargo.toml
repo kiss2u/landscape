@@ -23,6 +23,8 @@ nix = { version = "0.28", default-features = false, features = [
 
 socket2 = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
 plain = "0.2"
 
 # logs

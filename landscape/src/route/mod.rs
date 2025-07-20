@@ -56,11 +56,9 @@ impl IpRouteService {
                                 read_lock.clone()
                             };
 
-                            refresh_target_bpf_map(
-                                vec![flow_config],
-                                ipv4_wan_infos,
-                                ipv6_wan_infos,
-                            );
+                            let flow_configs = vec![flow_config];
+                            refresh_ipv4_target_bpf_map(&flow_configs, ipv4_wan_infos);
+                            refresh_ipv6_target_bpf_map(&flow_configs, ipv6_wan_infos);
                         }
                     }
                     RouteEvent::FlowRuleUpdate { flow_id: None } => {
@@ -75,7 +73,8 @@ impl IpRouteService {
                             read_lock.clone()
                         };
 
-                        refresh_target_bpf_map(flow_configs, ipv4_wan_infos, ipv6_wan_infos);
+                        refresh_ipv4_target_bpf_map(&flow_configs, ipv4_wan_infos);
+                        refresh_ipv6_target_bpf_map(&flow_configs, ipv6_wan_infos);
                     }
                 }
             }
@@ -147,7 +146,7 @@ impl IpRouteService {
             refresh_default_router = refresh_default_router || old_info.default_route;
         }
         drop(lock);
-        self.refreash_target_map(target).await;
+        self.refresh_ipv6_target_map(target).await;
         if refresh_default_router {
             self.refresh_default_router().await;
         }
@@ -161,7 +160,7 @@ impl IpRouteService {
             refresh_default_router = refresh_default_router || old_info.default_route;
         }
         drop(lock);
-        self.refreash_target_map(target).await;
+        self.refresh_ipv4_target_map(target).await;
         if refresh_default_router {
             self.refresh_default_router().await;
         }
@@ -172,7 +171,7 @@ impl IpRouteService {
         let result = lock.remove(key);
         drop(lock);
         if let Some(info) = result {
-            self.refreash_target_map(info.get_flow_target()).await;
+            self.refresh_ipv4_target_map(info.get_flow_target()).await;
             if info.default_route {
                 self.refresh_default_router().await;
             }
@@ -184,7 +183,7 @@ impl IpRouteService {
         let result = lock.remove(key);
         drop(lock);
         if let Some(info) = result {
-            self.refreash_target_map(info.get_flow_target()).await;
+            self.refresh_ipv6_target_map(info.get_flow_target()).await;
             if info.default_route {
                 self.refresh_default_router().await;
             }
@@ -205,7 +204,7 @@ impl IpRouteService {
         }
     }
 
-    pub async fn refreash_target_map(&self, t: FlowTarget) {
+    pub async fn refresh_ipv4_target_map(&self, t: FlowTarget) {
         let flow_configs = self.flow_repo.find_by_target(t).await.unwrap_or_default();
 
         let ipv4_wan_infos = {
@@ -213,19 +212,23 @@ impl IpRouteService {
             read_lock.clone()
         };
 
+        refresh_ipv4_target_bpf_map(&flow_configs, ipv4_wan_infos);
+    }
+    pub async fn refresh_ipv6_target_map(&self, t: FlowTarget) {
+        let flow_configs = self.flow_repo.find_by_target(t).await.unwrap_or_default();
+
         let ipv6_wan_infos = {
             let read_lock = self.ipv6_wan_ifaces.read().await;
             read_lock.clone()
         };
 
-        refresh_target_bpf_map(flow_configs, ipv4_wan_infos, ipv6_wan_infos);
+        refresh_ipv6_target_bpf_map(&flow_configs, ipv6_wan_infos);
     }
 }
 
-pub fn refresh_target_bpf_map(
-    flow_configs: Vec<FlowConfig>,
+pub fn refresh_ipv4_target_bpf_map(
+    flow_configs: &Vec<FlowConfig>,
     ipv4_wan_infos: HashMap<String, RouteTargetInfo>,
-    ipv6_wan_infos: HashMap<String, RouteTargetInfo>,
 ) {
     let mut result: HashMap<FlowId, Vec<RouteTargetInfo>> = HashMap::new();
     for each_flow_config in flow_configs.iter() {
@@ -257,7 +260,12 @@ pub fn refresh_target_bpf_map(
             landscape_ebpf::map_setting::route::del_ipv4_wan_route(flow_id);
         }
     }
+}
 
+pub fn refresh_ipv6_target_bpf_map(
+    flow_configs: &Vec<FlowConfig>,
+    ipv6_wan_infos: HashMap<String, RouteTargetInfo>,
+) {
     // IPV6
     let mut result: HashMap<FlowId, Vec<RouteTargetInfo>> = HashMap::new();
     for each_flow_config in flow_configs.iter() {

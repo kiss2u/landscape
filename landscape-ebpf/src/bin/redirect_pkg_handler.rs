@@ -1,12 +1,14 @@
 use clap::Parser;
+use landscape_common::docker::DockerTargetEnroll;
+use landscape_common::NAMESPACE_REGISTER_SOCK;
+use tokio::net::UnixStream;
 
 use std::mem::MaybeUninit;
 use std::net::Ipv4Addr;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::thread::sleep;
-use std::time::Duration;
+use std::path::PathBuf;
+
+use std::fs;
+use std::io::{self, BufRead, ErrorKind};
 
 use landscape_ebpf::landscape::TcHookProxy;
 use landscape_ebpf::tproxy::landscape_tproxy::*;
@@ -14,16 +16,16 @@ use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::TC_INGRESS;
 
-use libc::{if_freenameindex, if_nameindex, if_nametoindex};
-use std::ffi::CStr;
-use std::io;
-
 #[derive(Debug, Parser)]
 pub struct CmdParams {
     #[arg(short = 's', long = "saddr", default_value = "0.0.0.0", env = "LAND_PROXY_SERVER_ADDR")]
     tproxy_server_address: Ipv4Addr,
+
     #[arg(short = 'p', long = "sport", default_value_t = 12345, env = "LAND_PROXY_SERVER_PORT")]
     tproxy_server_port: u16,
+
+    #[arg(long = "sock_path", default_value = "/ld_unix_link", env = "LAND_SOCK_PATH")]
+    sock_path: PathBuf,
 }
 
 // fn bump_memlock_rlimit() {
@@ -35,28 +37,29 @@ pub struct CmdParams {
 // }
 
 // ip netns exec tpns cargo run --package landscape-ebpf --bin redirect_pkg_handler
-fn main() {
+/// cargo build --package landscape-ebpf --bin redirect_pkg_handler
+#[tokio::main]
+async fn main() {
     landscape_common::init_tracing!();
     landscape_ebpf::setting_libbpf_log();
 
     // bump_memlock_rlimit();
     let params = CmdParams::parse();
 
-    let ifindex = match get_non_loopback_interface_index() {
+    let container_id = match get_container_id() {
+        Some(id) => id,
+        None => panic!("Not running in a container or ID not found."),
+    };
+
+    let (ifname, ifindex, peer_ifindex) = match get_first_non_loopback_with_peer() {
         Ok(index) => index,
         Err(err) => {
-            eprintln!("Error: {:?}", err);
+            tracing::info!("Error: {:?}", err);
             return;
         }
     };
 
-    // Install Ctrl-C handler
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
+    tracing::info!("attach at: {ifname}, ifindex: {ifindex}, peer_ifindex: {peer_ifindex}");
 
     let proxy_addr: u32 = params.tproxy_server_address.into();
 
@@ -81,50 +84,117 @@ fn main() {
     tproxy_ingress_hook.attach();
     // tproxy_egress_hook.attach();
 
-    // Block until SIGINT
-    while running.load(Ordering::SeqCst) {
-        sleep(Duration::new(1, 0));
+    let socket_path = params.sock_path.join(NAMESPACE_REGISTER_SOCK);
+    let enroll_info = DockerTargetEnroll { id: container_id, ifindex: peer_ifindex as u32 };
+    tokio::select! {
+        _ = run_connection_loop(socket_path, enroll_info) => {
+            tracing::info!("report exit");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("Received Ctrl+C, shutting down...");
+        }
     }
 
     drop(tproxy_ingress_hook);
     // drop(tproxy_egress_hook);
 }
 
-fn get_non_loopback_interface_index() -> Result<i32, io::Error> {
-    unsafe {
-        // 获取所有网卡的名称和索引
-        let interfaces = if_nameindex();
-        if interfaces.is_null() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to get interfaces"));
+fn get_first_non_loopback_with_peer() -> Result<(String, i32, i32), io::Error> {
+    let net_dir = fs::read_dir("/sys/class/net")?;
+
+    for entry in net_dir {
+        let entry = entry?;
+        let iface_name = entry.file_name().to_string_lossy().into_owned();
+
+        if iface_name == "lo" {
+            continue;
         }
 
-        // 遍历网卡，查找非 "lo"
-        let mut ptr = interfaces;
-        while !(*ptr).if_name.is_null() {
-            let name = CStr::from_ptr((*ptr).if_name).to_string_lossy();
+        let iface_path = entry.path();
 
-            if name != "lo" {
-                // 获取索引
-                let index = if_nametoindex((*ptr).if_name);
-                if index == 0 {
-                    if_freenameindex(interfaces);
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Failed to get interface index",
-                    ));
+        // 读取 ifindex
+        let ifindex: i32 = fs::read_to_string(iface_path.join("ifindex"))?
+            .trim()
+            .parse()
+            .map_err(|_| io::Error::new(ErrorKind::InvalidData, "Invalid ifindex"))?;
+
+        // 读取 iflink
+        let iflink: i32 = fs::read_to_string(iface_path.join("iflink"))?
+            .trim()
+            .parse()
+            .map_err(|_| io::Error::new(ErrorKind::InvalidData, "Invalid iflink"))?;
+
+        // 判断是否是成对接口（如 veth）：ifindex != iflink
+        if ifindex != iflink {
+            return Ok((iface_name, ifindex, iflink));
+        }
+    }
+
+    Err(io::Error::new(ErrorKind::NotFound, "No interface with peer ifindex found"))
+}
+
+async fn run_connection_loop(socket_path: PathBuf, enroll: DockerTargetEnroll) {
+    let data = serde_json::to_vec(&enroll).unwrap();
+    loop {
+        match UnixStream::connect(&socket_path).await {
+            Ok(stream) => {
+                if stream.writable().await.is_err() {
+                    continue;
                 }
 
-                if_freenameindex(interfaces);
-                return Ok(index as i32);
+                match stream.try_write(&data) {
+                    Ok(n) => tracing::info!("send success: {:?}, {} bytes", enroll, n),
+                    Err(e) => {
+                        tracing::error!("write error: {:?}", e);
+                        continue;
+                    }
+                }
             }
-
-            ptr = ptr.add(1);
+            Err(e) => {
+                tracing::error!("Connect fail: {:?}", e);
+            }
         }
-
-        // 释放资源
-        if_freenameindex(interfaces);
-
-        // 如果未找到非 "lo" 网卡
-        Err(io::Error::new(io::ErrorKind::NotFound, "No non-loopback interface found"))
+        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
     }
+}
+
+pub fn get_container_id() -> Option<String> {
+    // Step 1: 判断是否为 cgroup v2（cgroup.controllers 文件是否存在）
+    if !std::path::Path::new("/sys/fs/cgroup/cgroup.controllers").exists() {
+        // 如果是 cgroup v1，直接返回 None
+        return None;
+    }
+
+    // Step 2: 打开 /proc/self/mountinfo
+    let file = fs::File::open("/proc/self/mountinfo").ok()?;
+    let reader = io::BufReader::new(file);
+
+    // Step 3: 逐行查找包含 "containers" 的路径
+    for line in reader.lines().flatten() {
+        if line.contains("containers") {
+            // mountinfo 格式中第5列是 mount point，第4列是 root（路径）
+            // 示例：38 29 0:31 /docker/abcdef1234567890 /sys/fs/cgroup/containers/docker/abcdef1234567890 ...
+
+            // 拆分出路径部分尝试提取容器 ID
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() >= 5 {
+                let root = fields[3]; // 第4列（root 路径）
+                                      // 查找路径中是否包含容器 ID（64位或12位）
+                if let Some(id) = extract_container_id_from_path(root) {
+                    return Some(id);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Simple extraction of docker-like container ID from path (matches 64 or 12 hex characters)
+fn extract_container_id_from_path(path: &str) -> Option<String> {
+    use regex::Regex;
+
+    // Matches a 64-bit or 12-bit hexadecimal ID
+    let re = Regex::new(r"([a-f0-9]{64}|[a-f0-9]{12})").ok()?;
+    re.captures(path).and_then(|cap| cap.get(1)).map(|m| m.as_str().to_string())
 }

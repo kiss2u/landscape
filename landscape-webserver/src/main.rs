@@ -181,7 +181,7 @@ async fn main() -> LdResult<()> {
     let route_wan_service =
         RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
 
-    let docker_service = LandscapeDockerService::new(route_service.clone());
+    let docker_service = LandscapeDockerService::new(home_path.clone(), route_service.clone());
 
     let pppd_service =
         PPPDServiceConfigManagerService::new(db_store_provider.clone(), route_service.clone())

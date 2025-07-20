@@ -1,47 +1,75 @@
+use bollard::{
+    secret::{ContainerSummary, EventMessageTypeEnum},
+    Docker,
+};
+use landscape_common::NAMESPACE_REGISTER_SOCK_PATH;
+use landscape_common::{docker::DockerTargetEnroll, NAMESPACE_REGISTER_SOCK};
 use landscape_common::{
     route::RouteTargetInfo,
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
 use regex::Regex;
 use serde::Serialize;
-use std::{fs::File, io::BufRead};
-
-use bollard::{
-    secret::{ContainerSummary, EventMessageTypeEnum},
-    Docker,
-};
+use std::{fs::File, io::BufRead, path::PathBuf};
+use tokio::net::UnixListener;
+use tokio::net::UnixStream;
+use tokio::{io::AsyncWriteExt, net::unix::SocketAddr};
 use tokio_stream::StreamExt;
 
 use crate::{get_all_devices, route::IpRouteService};
 
 pub mod network;
 
-/// docker 监听服务的状态结构体
+/// Docker Service
 #[derive(Serialize, Clone)]
 pub struct LandscapeDockerService {
     pub status: DefaultWatchServiceStatus,
     #[serde(skip)]
     route_service: IpRouteService,
+    #[serde(skip)]
+    home_path: PathBuf,
+}
+
+pub async fn listen_unix_sock(home_path: PathBuf) -> UnixListener {
+    let socket_path = home_path.join(NAMESPACE_REGISTER_SOCK_PATH);
+
+    if !socket_path.exists() {
+        std::fs::create_dir_all(&socket_path).expect("fail to create namespace socket");
+    }
+
+    let socket_path = socket_path.join(NAMESPACE_REGISTER_SOCK);
+
+    if socket_path.exists() {
+        std::fs::remove_file(&socket_path).expect("fail to remove");
+    }
+
+    tracing::info!("Listening on {:?}", socket_path);
+    let listener = UnixListener::bind(socket_path);
+
+    listener.expect("Listen fail")
 }
 
 impl LandscapeDockerService {
-    pub fn new(route_service: IpRouteService) -> Self {
+    pub fn new(home_path: PathBuf, route_service: IpRouteService) -> Self {
         let status = DefaultWatchServiceStatus::new();
-        LandscapeDockerService { status, route_service }
+        LandscapeDockerService { status, route_service, home_path }
     }
 
     pub async fn start_to_listen_event(&self) {
-        // 检测是否已经启动了
+        // reset to stop
         self.status.wait_stop().await;
         let status = self.status.clone();
         let route_service = self.route_service.clone();
+        let path = self.home_path.clone();
         tokio::spawn(async move {
             status.just_change_status(ServiceStatus::Staring);
             let docker = Docker::connect_with_socket_defaults();
             let docker = docker.unwrap();
 
+            let unix_socket = listen_unix_sock(path).await;
+
             route_service.remove_all_wan_docker().await;
-            scan_and_set_all_docker(&route_service, &docker).await;
+            // scan_and_set_all_docker(&route_service, &docker).await;
 
             let mut event_stream = docker.events::<String>(None);
             let mut receiver = status.subscribe();
@@ -59,6 +87,11 @@ impl LandscapeDockerService {
                             }
                         } else {
                             break;
+                        }
+                    },
+                    info = unix_socket.accept() => {
+                        if let Ok(conn) = info {
+                            accept_docker_info(&route_service, &docker, conn).await
                         }
                     },
                     change_result = receiver.changed() => {
@@ -100,7 +133,7 @@ impl LandscapeDockerService {
 pub async fn scan_and_set_all_docker(ip_route: &IpRouteService, docker: &Docker) {
     let containers = get_docker_continer_summary(&docker).await;
 
-    // tracing::info!("containers: {containers:?}");
+    tracing::debug!("containers: {containers:?}");
     for container in containers {
         if let Some(name) = container.names.and_then(|d| d.get(0).cloned()) {
             if let Some(name) = name.strip_prefix("/") {
@@ -119,9 +152,67 @@ pub async fn get_docker_continer_summary(docker: &Docker) -> Vec<ContainerSummar
     container_summarys
 }
 
-pub async fn handle_event(
+pub async fn accept_docker_info(
     ip_route_service: &IpRouteService,
     docker: &Docker,
+    (mut stream, _addr): (UnixStream, SocketAddr),
+) {
+    let ip_route_service = ip_route_service.clone();
+    let docker = docker.clone();
+    tokio::spawn(async move {
+        //
+        let mut buf = vec![0u8; 1024];
+        let Ok(_) = stream.readable().await else {
+            return;
+        };
+
+        match stream.try_read(&mut buf) {
+            Ok(n) if n == 0 => {
+                tracing::error!("Client disconnected");
+            }
+            Ok(n) => {
+                let result = serde_json::from_slice::<DockerTargetEnroll>(&buf[..n]);
+
+                tracing::info!("Receive info from sock: {:?}", result);
+                if let Ok(DockerTargetEnroll { id, ifindex }) = result {
+                    let Ok(container_info) = docker.inspect_container(&id, None).await else {
+                        tracing::error!("can not inspect container id: {id}");
+                        return;
+                    };
+
+                    let mut container_name = if let Some(container_name) = container_info.name {
+                        container_name
+                    } else {
+                        return;
+                    };
+
+                    if container_name.starts_with('/') {
+                        container_name = container_name
+                            .strip_prefix('/')
+                            .map(|n| n.to_string())
+                            .unwrap_or(container_name);
+                    }
+                    tracing::error!("container_name: {container_name:?}");
+
+                    let (ipv4, ipv6) = RouteTargetInfo::docker_new(ifindex, &container_name);
+
+                    ip_route_service.insert_ipv4_wan_route(&container_name, ipv4).await;
+                    ip_route_service.insert_ipv6_wan_route(&container_name, ipv6).await;
+                    ip_route_service.print_wan_ifaces().await;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to read from socket: {:?}", e);
+            }
+        }
+
+        let _ = stream.shutdown().await;
+    });
+}
+
+pub async fn handle_event(
+    ip_route_service: &IpRouteService,
+    _docker: &Docker,
     emsg: bollard::secret::EventMessage,
 ) {
     match emsg.typ {
@@ -130,17 +221,17 @@ pub async fn handle_event(
             // println!("{:?}", emsg);
             if let Some(action) = emsg.action {
                 match action.as_str() {
-                    "start" => {
-                        if let Some(actor) = emsg.actor {
-                            if let Some(attr) = actor.attributes {
-                                //
-                                if let Some(name) = attr.get("name") {
-                                    inspect_container_and_set_route(name, ip_route_service, docker)
-                                        .await;
-                                }
-                            }
-                        }
-                    }
+                    // "start" => {
+                    //     if let Some(actor) = emsg.actor {
+                    //         if let Some(attr) = actor.attributes {
+                    //             //
+                    //             if let Some(name) = attr.get("name") {
+                    //                 inspect_container_and_set_route(name, ip_route_service, docker)
+                    //                     .await;
+                    //             }
+                    //         }
+                    //     }
+                    // }
                     "stop" => {
                         // tracing::info!("docker stop");
                         if let Some(actor) = emsg.actor {
@@ -163,15 +254,20 @@ pub async fn handle_event(
         }
     }
 }
+
 pub async fn create_docker_event_spawn(ip_route_service: IpRouteService) {
     let docker = Docker::connect_with_socket_defaults();
     let docker = docker.unwrap();
+
+    ip_route_service.remove_all_wan_docker().await;
+    scan_and_set_all_docker(&ip_route_service, &docker).await;
 
     tokio::spawn(async move {
         let mut event_stream = docker.events::<String>(None);
 
         while let Some(e) = event_stream.next().await {
             if let Ok(msg) = e {
+                println!("{:?}", msg);
                 handle_event(&ip_route_service, &docker, msg).await;
             }
         }
@@ -200,6 +296,7 @@ async fn inspect_container_and_set_route(
         tracing::error!("can not inspect container: {name}");
         return;
     };
+
     if let Some(state) = container_info.state {
         if let Some(pid) = state.pid {
             let file_path = format!("/proc/{:?}/net/igmp", pid);
@@ -233,7 +330,6 @@ fn read_igmp_index(file_path: &str) -> std::io::Result<Option<u32>> {
     let file = File::open(file_path)?;
     let reader = std::io::BufReader::new(file);
 
-    // 正则表达式用于匹配数字
     let re = Regex::new(r"\d+").unwrap();
     let mut result = None;
     for line in reader.lines() {

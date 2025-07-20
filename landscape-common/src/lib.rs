@@ -41,6 +41,10 @@ pub const INIT_FILE_NAME: &str = "landscape_init.toml";
 pub const TLS_DEFAULT_CERT: &str = "cert.pem";
 pub const TLS_DEFAULT_KEY: &str = "key.pem";
 
+/// NAMESPACE SOCK
+pub const NAMESPACE_REGISTER_SOCK_PATH: &str = "unix_link";
+pub const NAMESPACE_REGISTER_SOCK: &str = "register.sock";
+
 /// LOG Path
 pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 /// web resource

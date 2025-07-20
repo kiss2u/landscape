@@ -13,6 +13,7 @@ use landscape::route::IpRouteService;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use tokio::sync::mpsc;
 
+/// cargo run --package landscape --bin docker_test
 #[tokio::main]
 async fn main() {
     landscape_common::init_tracing!();

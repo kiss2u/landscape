@@ -48,8 +48,8 @@ pub fn create_flow_dns_inner_map(flow_id: u32, data: Vec<FlowDnsMarkInfo>) {
 
     if let Err(e) = flow_dns_match_map.update(key_value, value_value, MapFlags::ANY) {
         let last_os_error = std::io::Error::last_os_error();
-        println!("Last OS error: {:?}", last_os_error);
-        println!("Last OS error: {e:?}");
+        tracing::error!("Last OS error: {:?}", last_os_error);
+        tracing::error!("Last OS error: {e:?}");
     }
 }
 
