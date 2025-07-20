@@ -168,11 +168,7 @@ const tags = computed(() => {
         <n-flex>
           <span v-if="tags[0].length == 0"> {{ "" }}</span>
           <n-tag v-else v-for="tag in tags[0]" :bordered="false">
-            {{
-              `${tag[0]}: ${
-                frontEndStore.presentation_mode ? mask_string(tag[1]) : tag[1]
-              }`
-            }}
+            {{ `${tag[0]}` }}
           </n-tag>
         </n-flex>
 

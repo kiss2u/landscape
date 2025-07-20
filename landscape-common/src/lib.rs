@@ -43,6 +43,7 @@ pub const TLS_DEFAULT_KEY: &str = "key.pem";
 
 /// NAMESPACE SOCK
 pub const NAMESPACE_REGISTER_SOCK_PATH: &str = "unix_link";
+pub const NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER: &str = "ld_unix_link";
 pub const NAMESPACE_REGISTER_SOCK: &str = "register.sock";
 
 /// LOG Path

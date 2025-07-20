@@ -1,6 +1,6 @@
 use clap::Parser;
 use landscape_common::docker::DockerTargetEnroll;
-use landscape_common::NAMESPACE_REGISTER_SOCK;
+use landscape_common::{NAMESPACE_REGISTER_SOCK, NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER};
 use tokio::net::UnixStream;
 
 use std::mem::MaybeUninit;
@@ -24,8 +24,8 @@ pub struct CmdParams {
     #[arg(short = 'p', long = "sport", default_value_t = 12345, env = "LAND_PROXY_SERVER_PORT")]
     tproxy_server_port: u16,
 
-    #[arg(long = "sock_path", default_value = "/ld_unix_link", env = "LAND_SOCK_PATH")]
-    sock_path: PathBuf,
+    #[arg(long = "sock_path", env = "LAND_SOCK_PATH")]
+    sock_path: Option<PathBuf>,
 }
 
 // fn bump_memlock_rlimit() {
@@ -84,7 +84,10 @@ async fn main() {
     tproxy_ingress_hook.attach();
     // tproxy_egress_hook.attach();
 
-    let socket_path = params.sock_path.join(NAMESPACE_REGISTER_SOCK);
+    let socket_path = params
+        .sock_path
+        .unwrap_or(PathBuf::from(format!("/{}", NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER)))
+        .join(NAMESPACE_REGISTER_SOCK);
     let enroll_info = DockerTargetEnroll { id: container_id, ifindex: peer_ifindex as u32 };
     tokio::select! {
         _ = run_connection_loop(socket_path, enroll_info) => {

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use axum::{
     extract::{Path, State},
     routing::{get, post},
@@ -10,7 +12,10 @@ use bollard::container::{
 use bollard::{container::ListContainersOptions, secret::ContainerSummary, Docker};
 
 use image::get_docker_images_paths;
-use landscape_common::service::DefaultWatchServiceStatus;
+use landscape_common::{
+    service::DefaultWatchServiceStatus, NAMESPACE_REGISTER_SOCK_PATH,
+    NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER,
+};
 use network::get_docker_networks_paths;
 use serde::{Deserialize, Serialize};
 
@@ -132,8 +137,11 @@ async fn remove_container(Path(container_name): Path<String>) -> LandscapeApiRes
     LandscapeApiResp::success(())
 }
 
-async fn run_cmd_container(Json(docker_cmd): Json<DockerCmd>) -> LandscapeApiResult<()> {
-    if let Err(_) = docker_cmd.execute_docker_command().await {
+async fn run_cmd_container(
+    State(state): State<LandscapeApp>,
+    Json(docker_cmd): Json<DockerCmd>,
+) -> LandscapeApiResult<()> {
+    if let Err(_) = docker_cmd.execute_docker_command(&state.home_path).await {
         return Err(DockerError::FailToRunContainerByCmd)?;
     }
     LandscapeApiResp::success(())
@@ -162,7 +170,7 @@ struct DockerCmd {
 
 impl DockerCmd {
     // 生成 Docker 命令
-    fn generate_docker_command(&self) -> Vec<String> {
+    fn generate_docker_command(&self, home_path: &PathBuf) -> Vec<String> {
         let mut command = vec!["docker".to_string(), "run".to_string(), "-d".to_string()];
 
         if let Some(container_name) = &self.container_name {
@@ -194,7 +202,7 @@ impl DockerCmd {
         let mut accept_local = false;
         if let Some(labels) = &self.labels {
             for label in labels {
-                if label.key == "ld_red_id" {
+                if label.key == "ld_flow_edge" {
                     accept_local = true;
                 }
                 command.push("--label".to_string());
@@ -208,6 +216,14 @@ impl DockerCmd {
             command.push("--cap-add=NET_ADMIN".to_string());
             command.push("--cap-add=BPF".to_string());
             command.push("--cap-add=PERFMON".to_string());
+            command.push("--volume".to_string());
+            // /root/.landscape-router/unix_link/:/ld_unix_link/
+            let mapping_volume = format!(
+                "{}/:/{}/:ro",
+                home_path.join(NAMESPACE_REGISTER_SOCK_PATH).display(),
+                NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER
+            );
+            command.push(mapping_volume);
         }
 
         command.push(self.image_name.clone());
@@ -217,8 +233,8 @@ impl DockerCmd {
     }
 
     // 执行 Docker 命令
-    async fn execute_docker_command(&self) -> Result<(), ()> {
-        let command = self.generate_docker_command();
+    async fn execute_docker_command(&self, home_path: &PathBuf) -> Result<(), ()> {
+        let command = self.generate_docker_command(home_path);
         if let Ok(status) =
             tokio::process::Command::new(&command[0]).args(&command[1..]).status().await
         {

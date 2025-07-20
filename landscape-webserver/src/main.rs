@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router};
 
@@ -71,6 +71,7 @@ const ROUTE_EVENT_CHANNEL_SIZE: usize = 128;
 
 #[derive(Clone)]
 pub struct LandscapeApp {
+    pub home_path: PathBuf,
     pub dns_service: LandscapeDnsService,
     pub dns_rule_service: DNSRuleService,
     pub flow_rule_service: FlowRuleService,
@@ -204,6 +205,7 @@ async fn main() -> LdResult<()> {
 
     metric_service.start_service().await;
     let landscape_app_status = LandscapeApp {
+        home_path: home_path.clone(),
         dns_service,
         dns_rule_service,
         flow_rule_service,

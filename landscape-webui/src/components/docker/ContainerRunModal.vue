@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { run_cmd } from "@/api/docker";
 import { KeyValuePair } from "@/lib/common";
-import { DockerCmd } from "@/lib/docker";
+import { DockerCmd, LAND_REDIRECT_ID_KEY } from "@/lib/docker";
 import { useDockerStore } from "@/stores/status_docker";
 import { useNotification } from "naive-ui";
 import { computed, ref } from "vue";
@@ -34,12 +34,10 @@ async function save_config() {
   dockerStore.UPDATE_INFO();
 }
 
-const id_key = "ld_red_id";
-
 function add_redirect_id() {
   if (formModel.value.labels) {
     for (const label of formModel.value.labels) {
-      if (label.key === id_key) {
+      if (label.key === LAND_REDIRECT_ID_KEY) {
         // 提示
         notification.info({
           content: "已经存在标签了",
@@ -50,17 +48,15 @@ function add_redirect_id() {
       }
     }
   }
-  formModel.value.labels = [
-    {
-      key: id_key,
-      value: "",
-    },
-  ];
+  formModel.value.labels.unshift({
+    key: LAND_REDIRECT_ID_KEY,
+    value: "",
+  });
 }
 
 const show_add_redirect_id_btn = computed(() => {
   for (const label of formModel.value.labels) {
-    if (label.key === id_key) {
+    if (label.key === LAND_REDIRECT_ID_KEY) {
       return true;
     }
   }
@@ -125,20 +121,21 @@ const show_add_redirect_id_btn = computed(() => {
           />
         </n-form-item>
         <n-form-item label="标签">
-          <!-- <n-flex style="flex: 1" vertical>
+          <n-flex style="flex: 1" vertical>
             <n-button
               :disabled="show_add_redirect_id_btn"
               @click="add_redirect_id"
-              >添加处理转发 ID
+            >
+              运行容器为 Flow 出口
             </n-button>
-          </n-flex> -->
-          <n-dynamic-input
-            v-model:value="formModel.labels"
-            preset="pair"
-            separator=":"
-            key-placeholder="key"
-            value-placeholder="value"
-          />
+            <n-dynamic-input
+              v-model:value="formModel.labels"
+              preset="pair"
+              separator=":"
+              key-placeholder="key"
+              value-placeholder="value"
+            />
+          </n-flex>
         </n-form-item>
       </n-form>
       <template #footer>
