@@ -97,8 +97,6 @@ struct flow_mark {
 //     union u_inet_addr addr;
 // };
 
-
-
 struct flow_dns_match_key {
     union u_inet_addr addr;
     u8 l3_protocol;
@@ -130,7 +128,7 @@ struct {
     __array(values, struct each_flow_dns);
 } flow_v_dns_map SEC(".maps");
 
-// 
+//
 struct flow_ip_trie_key {
     __u32 prefixlen;
     u8 l3_protocol;
@@ -161,7 +159,6 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
     __array(values, struct each_flow_ip_trie);
 } flow_v_ip_map SEC(".maps");
-
 
 struct lan_route_key {
     __u32 prefixlen;
@@ -236,7 +233,6 @@ struct lan_mac_cache {
 
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
     __type(key, struct lan_mac_cache_key);
     __type(value, struct lan_mac_cache);
     __uint(max_entries, 65535);

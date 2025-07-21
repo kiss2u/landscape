@@ -192,7 +192,7 @@ pub async fn accept_docker_info(
                             .map(|n| n.to_string())
                             .unwrap_or(container_name);
                     }
-                    tracing::error!("container_name: {container_name:?}");
+                    tracing::info!("container_name: {container_name:?}");
 
                     let (ipv4, ipv6) = RouteTargetInfo::docker_new(ifindex, &container_name);
 
@@ -249,6 +249,40 @@ pub async fn handle_event(
                 }
             }
         }
+        // Some(EventMessageTypeEnum::NETWORK) => {
+        //     let Some(action) = emsg.action else {
+        //         return;
+        //     };
+
+        //     let Some(id) = emsg.actor else {
+        //         return;
+        //     };
+
+        //     let Some(net_id) = id.id else {
+        //         return;
+        //     };
+
+        //     // println!("{:?}", emsg);
+
+        //     match action.as_str() {
+        //         "create" => {
+        //             let Ok(net_info) = docker.inspect_network::<String>(&net_id, None).await else {
+        //                 return;
+        //             };
+
+        //             println!("");
+        //             println!("{:?}", net_info);
+        //             println!("");
+        //         }
+        //         "destroy" => {
+        //             println!("");
+        //             // println!("{:?}", emsg);
+        //             ip_route_service.remove_ipv4_lan_route(net_id).await;
+        //             println!("");
+        //         }
+        //         _ => {}
+        //     }
+        // }
         _ => {
             tracing::error!("{:?}", emsg);
         }
@@ -259,15 +293,15 @@ pub async fn create_docker_event_spawn(ip_route_service: IpRouteService) {
     let docker = Docker::connect_with_socket_defaults();
     let docker = docker.unwrap();
 
-    ip_route_service.remove_all_wan_docker().await;
-    scan_and_set_all_docker(&ip_route_service, &docker).await;
+    // ip_route_service.remove_all_wan_docker().await;
+    // scan_and_set_all_docker(&ip_route_service, &docker).await;
 
     tokio::spawn(async move {
         let mut event_stream = docker.events::<String>(None);
 
         while let Some(e) = event_stream.next().await {
             if let Ok(msg) = e {
-                println!("{:?}", msg);
+                // println!("{:?}", msg);
                 handle_event(&ip_route_service, &docker, msg).await;
             }
         }

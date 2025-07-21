@@ -330,7 +330,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     } else {
         // bpf_log_info("flow_id: %d, ip map is empty", *flow_id_ptr);
     }
-    
+
     struct flow_dns_match_key key = {0};
     struct flow_dns_match_value *dns_rule_value = NULL;
     key.l3_protocol = context->l3_protocol;
@@ -407,7 +407,6 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
 
     // 找不到转发的 target 按照原有计划进行处理
     if (target_info == NULL) {
-
         if (wan_key.flow_id == 0) {
             // Default flow PASS
             return TC_ACT_UNSPEC;
@@ -540,6 +539,11 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
+    u32 mark = skb->mark;
+    barrier_var(mark);
+    mark = replace_flow_source(mark, FLOW_FROM_LAN);
+    skb->mark = mark;
+
     ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_id);
     return ret;
 
@@ -588,6 +592,7 @@ int wan_route_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_egress"
     int ret;
     u32 flow_id = 0;
+    u8 from_where;
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
@@ -595,7 +600,8 @@ int wan_route_egress(struct __sk_buff *skb) {
         return ret;
     }
 
-    if (skb->ingress_ifindex != 0) {
+    from_where = get_flow_source(skb->mark);
+    if (from_where != FLOW_FROM_UNKNOW) {
         // 端口转发数据, 相对于是已经决定使用这个出口, 所以直接发送
         return TC_ACT_UNSPEC;
     }
@@ -615,10 +621,13 @@ int wan_route_egress(struct __sk_buff *skb) {
         return ret;
     }
 
+    u32 mark = skb->mark;
+    barrier_var(mark);
+    mark = replace_flow_source(mark, FLOW_FROM_WAN);
+    skb->mark = mark;
+
     ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_id);
     return ret;
-
-    return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
 }
 

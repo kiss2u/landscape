@@ -40,8 +40,14 @@
 #define FLOW_REDIRECT 3
 #define FLOW_ALLOW_REUSE 4
 
-#define FLOW_ID_MASK 0x000000FF
+#define FLOW_FROM_UNKNOW 0
+#define FLOW_FROM_HOST 1
+#define FLOW_FROM_LAN 2
+#define FLOW_FROM_WAN 4
+
+#define FLOW_SOURCE_MASK 0xFF000000
 #define FLOW_ACTION_MASK 0x0000FF00
+#define FLOW_ID_MASK 0x000000FF
 
 // 替换 FLOW_ID_MASK 对应的 0~7 位
 static __always_inline u32 replace_flow_id(u32 original, u8 new_id) {
@@ -57,10 +63,21 @@ static __always_inline u32 replace_flow_action(u32 original, u8 new_action) {
     return original;
 }
 
+// 替换 FLOW_SOURCE_MASK 对应的 24~31 位
+static __always_inline u32 replace_flow_source(u32 original, u8 new_source) {
+    original &= ~FLOW_SOURCE_MASK;               // 清除原来的 Source 部分
+    original |= ((u32)new_source & 0xFF) << 24;  // 设置新的 Source 部分
+    return original;
+}
+
 static __always_inline u8 get_flow_id(u32 original) { return (original & FLOW_ID_MASK); }
 
 static __always_inline u8 get_flow_action(u32 original) {
     return (original & FLOW_ACTION_MASK) >> 8;
+}
+
+static __always_inline u8 get_flow_source(u32 original) {
+    return (original & FLOW_SOURCE_MASK) >> 24;
 }
 
 #define PRINT_MAC_ADDR(mac)                                                                        \
