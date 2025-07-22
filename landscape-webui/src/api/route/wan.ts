@@ -26,6 +26,6 @@ export async function update_route_wans_config(
   await axiosService.post(`services/route_wans`, config);
 }
 
-export async function del_route_wans(id: string): Promise<void> {
-  await axiosService.delete(`services/route_wans/${id}`);
+export async function del_route_wans(iface_name: string): Promise<void> {
+  await axiosService.delete(`services/route_wans/${iface_name}`);
 }
