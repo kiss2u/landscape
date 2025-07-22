@@ -1,7 +1,10 @@
 FROM rust:slim-bookworm
 
 RUN rustup component add rustfmt && \
-    rustup target add aarch64-unknown-linux-gnu
+    rustup install nightly && \
+    rustup default nightly && \
+    rustup target add aarch64-unknown-linux-gnu && \
+    rustup component add rustfmt
 
 RUN dpkg --add-architecture arm64 && apt-get update && \
     apt-get install -y \
