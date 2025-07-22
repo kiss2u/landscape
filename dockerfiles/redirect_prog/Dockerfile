@@ -14,5 +14,10 @@ RUN apt-get update && apt-get install -y \
 
 COPY apps/ ./
 
+RUN chmod +x /app/start.sh \
+    && chmod +x /app/redirect_pkg_handler \
+    && chmod +x /app/server/run.sh \
+    && chmod +x /app/server/redirect_demo_server
+
 # 使用启动脚本作为容器启动命令
 CMD ["/app/start.sh"]
