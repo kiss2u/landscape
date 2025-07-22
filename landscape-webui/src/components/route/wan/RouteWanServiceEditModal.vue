@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { useMarkConfigStore } from "@/stores/status_mark";
 
 import { IfaceZoneType } from "@/rust_bindings/common/iface";
-import { RouteLanServiceConfig } from "@/rust_bindings/common/route";
+import { RouteWanServiceConfig } from "@/rust_bindings/common/route";
+import { useRouteWanConfigStore } from "@/stores/status_route_wan";
 import {
   get_route_wan_config,
   update_route_wans_config,
 } from "@/api/route/wan";
 
-let markConfigStore = useMarkConfigStore();
+let routeWanConfigStore = useRouteWanConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
 
@@ -18,7 +18,7 @@ const iface_info = defineProps<{
   zone: IfaceZoneType;
 }>();
 
-const service_config = ref<RouteLanServiceConfig | null>(null);
+const service_config = ref<RouteWanServiceConfig | null>(null);
 
 async function on_modal_enter() {
   try {
@@ -38,7 +38,7 @@ async function on_modal_enter() {
 async function save_config() {
   if (service_config.value != null) {
     let config = await update_route_wans_config(service_config.value);
-    await markConfigStore.UPDATE_INFO();
+    await routeWanConfigStore.UPDATE_INFO();
     show_model.value = false;
   }
 }
