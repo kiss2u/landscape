@@ -36,11 +36,12 @@ async function on_modal_enter() {
     console.log(config);
     // iface_service_type.value = config.t;
     service_config.value = config;
-    await search_ipv6_pd();
   } catch (e) {
     new IPV6RAServiceConfig({
       iface_name: iface_info.iface_name,
     });
+  } finally {
+    await search_ipv6_pd();
   }
 }
 
