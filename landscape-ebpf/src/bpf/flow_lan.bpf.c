@@ -525,8 +525,14 @@ int lan_route_ingress(struct __sk_buff *skb) {
     COPY_ADDR_FROM(cache_mac.mac, context.smac);
     ret = bpf_map_update_elem(&ip_mac_tab, &saddr, &cache_mac, BPF_ANY);
 
+    // if (saddr.ip[0] == 0xfe) {
+    //     if ((saddr.ip[1] & 0xc0) == 0x80) {
+    //         bpf_log_info("fe80 %pI6 -> %pI6", context.saddr.in6_u.u6_addr8, context.daddr.in6_u.u6_addr8);
+    //     }
+    // }
+
     if (ret != 0) {
-        bpf_log_info("cache ip: %pI6 mac error", ret);
+        bpf_log_info("cache ip: %pI6 mac error", saddr.ip);
     }
 
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
