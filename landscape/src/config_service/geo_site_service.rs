@@ -238,6 +238,22 @@ impl GeoSiteService {
     pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoSiteSourceConfig> {
         self.store.query_by_name(name).await.unwrap()
     }
+
+    pub async fn update_geo_config_by_bytes(&self, name: String, file_bytes: impl Into<Vec<u8>>) {
+        let result = landscape_protobuf::read_geo_sites_from_bytes(file_bytes).await;
+        {
+            let mut file_cache_lock = self.file_cache.lock().await;
+            for (key, values) in result {
+                let info = GeoDomainConfig {
+                    name: name.clone(),
+                    key: key.to_ascii_uppercase(),
+                    values,
+                };
+                file_cache_lock.set(info);
+            }
+        }
+        let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+    }
 }
 
 #[async_trait::async_trait]

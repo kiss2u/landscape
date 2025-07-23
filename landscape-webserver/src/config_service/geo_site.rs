@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
@@ -11,7 +11,7 @@ use landscape_common::config::{
 };
 use landscape_common::service::controller_service::ConfigController;
 
-use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult, UPLOAD_GEO_FILE_SIZE_LIMIT};
 use crate::{error::LandscapeApiError, LandscapeApp};
 
 pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
@@ -22,6 +22,10 @@ pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
         .route("/geo_sites/cache", get(get_geo_site_cache).post(refresh_geo_site_cache))
         .route("/geo_sites/cache/search", get(search_geo_site_cache))
         .route("/geo_sites/cache/detail", get(get_geo_site_cache_detail))
+        .route(
+            "/geo_sites/{name}/update_by_upload",
+            post(update_by_upload).layer(DefaultBodyLimit::max(UPLOAD_GEO_FILE_SIZE_LIMIT)),
+        )
 }
 
 async fn get_geo_site_cache_detail(
@@ -111,5 +115,29 @@ async fn del_geo_site(
     Path(id): Path<ConfigId>,
 ) -> LandscapeApiResult<()> {
     state.geo_site_service.delete(id).await;
+    LandscapeApiResp::success(())
+}
+
+// curl -vvv -k -X POST https://localhost:6443/api/src/config/geo_sites/test2/update_by_upload
+// -H "Authorization: Bearer $(cat ../.landscape-router/landscape_api_token)"
+//  -F "file=@../.landscape-router/geosite.dat1"
+async fn update_by_upload(
+    State(state): State<LandscapeApp>,
+    Path(name): Path<String>,
+    mut multipart: Multipart,
+) -> LandscapeApiResult<()> {
+    tracing::info!("Got upload request for: {}", name);
+
+    let file = multipart.next_field().await;
+    let Ok(Some(field)) = file else {
+        return Err(LandscapeApiError::BadRequest("geo site file not found".to_string()));
+    };
+
+    let Ok(bytes) = field.bytes().await else {
+        return Err(LandscapeApiError::BadRequest("geo site file read error".to_string()));
+    };
+
+    state.geo_site_service.update_geo_config_by_bytes(name, bytes).await;
+
     LandscapeApiResp::success(())
 }

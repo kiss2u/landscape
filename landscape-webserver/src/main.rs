@@ -69,6 +69,8 @@ const DNS_EVENT_CHANNEL_SIZE: usize = 128;
 const DST_IP_EVENT_CHANNEL_SIZE: usize = 128;
 const ROUTE_EVENT_CHANNEL_SIZE: usize = 128;
 
+const UPLOAD_GEO_FILE_SIZE_LIMIT: usize = 100 * 1024 * 1024;
+
 #[derive(Clone)]
 pub struct LandscapeApp {
     pub home_path: PathBuf,

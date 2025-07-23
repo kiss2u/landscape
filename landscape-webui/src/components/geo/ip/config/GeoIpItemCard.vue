@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { delete_geo_ip_config } from "@/api/geo/ip";
+import { delete_geo_ip_config, update_geo_ip_by_upload } from "@/api/geo/ip";
 import { GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
 import { computed, ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";
 
 const frontEndStore = useFrontEndStore();
-const emit = defineEmits(["refresh"]);
+const emit = defineEmits(["refresh", "refresh:keys"]);
 
 interface Prop {
   geo_ip_source: GeoIpSourceConfig;
@@ -28,6 +28,11 @@ const title = computed(() => {
     return "undefined";
   }
 });
+
+const show_upload = ref(false);
+const onGeoUpload = async (formData: FormData) => {
+  await update_geo_ip_by_upload(props.geo_ip_source.name, formData);
+};
 </script>
 <template>
   <n-flex>
@@ -57,6 +62,10 @@ const title = computed(() => {
       </n-descriptions>
       <template #header-extra>
         <n-flex>
+          <n-button type="info" secondary @click="show_upload = true">
+            使用文件更新
+          </n-button>
+
           <n-button type="warning" secondary @click="show_edit_modal = true">
             编辑
           </n-button>
@@ -75,5 +84,11 @@ const title = computed(() => {
       @refresh="emit('refresh')"
       v-model:show="show_edit_modal"
     ></GeoIpEditModal>
+
+    <GeoUploadFile
+      v-model:show="show_upload"
+      :upload="onGeoUpload"
+      @refresh="emit('refresh:keys')"
+    ></GeoUploadFile>
   </n-flex>
 </template>

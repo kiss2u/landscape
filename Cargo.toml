@@ -60,7 +60,7 @@ libbpf-cargo = { version = "0.24.8" }
 libbpf-sys = { version = "*" }
 
 # web
-axum = { version = "0.8.4", features = ["ws"] }
+axum = { version = "0.8.4", features = ["ws", "multipart"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = "0.7.2"
 
