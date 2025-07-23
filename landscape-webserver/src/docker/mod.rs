@@ -33,11 +33,11 @@ pub async fn get_docker_paths() -> Router<LandscapeApp> {
             get(get_docker_status).post(start_docker_status).delete(stop_docker_status),
         )
         .route("/container_summarys", get(get_all_container_summarys))
-        .route("/run/:container_name", post(run_container))
+        .route("/run/{container_name}", post(run_container))
         .route("/run_cmd", post(run_cmd_container))
-        .route("/start/:container_name", post(start_container))
-        .route("/stop/:container_name", post(stop_container))
-        .route("/remove/:container_name", post(remove_container))
+        .route("/start/{container_name}", post(start_container))
+        .route("/stop/{container_name}", post(stop_container))
+        .route("/remove/{container_name}", post(remove_container))
         .nest("/images", get_docker_images_paths().await)
         .nest("/networks", get_docker_networks_paths().await)
 }

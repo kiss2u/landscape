@@ -13,7 +13,7 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 pub async fn get_flow_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/flow_rules", get(get_flow_rules).post(add_flow_rule))
-        .route("/flow_rules/:id", get(get_flow_rule).delete(del_flow_rule))
+        .route("/flow_rules/{id}", get(get_flow_rule).delete(del_flow_rule))
 }
 
 async fn get_flow_rules(State(state): State<LandscapeApp>) -> LandscapeApiResult<Vec<FlowConfig>> {

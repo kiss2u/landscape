@@ -15,10 +15,10 @@ use crate::{error::LandscapeApiError, LandscapeApp};
 pub async fn get_iface_pppd_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/pppds", get(get_all_pppd_configs).post(handle_iface_pppd_config))
-        .route("/pppds/:iface_name", get(get_iface_pppd_conifg).delete(delete_and_stop_iface_pppd))
+        .route("/pppds/{iface_name}", get(get_iface_pppd_conifg).delete(delete_and_stop_iface_pppd))
         .route("/pppds/status", get(get_all_pppd_status))
         .route(
-            "/pppds/attach/:iface_name",
+            "/pppds/attach/{iface_name}",
             get(get_iface_pppd_conifg_by_attach_iface_name)
                 .delete(delete_and_stop_iface_pppd_by_attach_iface_name),
         )

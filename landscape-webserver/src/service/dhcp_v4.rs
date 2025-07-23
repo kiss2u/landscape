@@ -21,11 +21,11 @@ pub async fn get_dhcp_v4_service_paths() -> Router<LandscapeApp> {
         .route("/dhcp_v4", post(handle_service_config))
         .route("/dhcp_v4/assigned_ips", get(get_all_iface_assigned_ips))
         .route(
-            "/dhcp_v4/:iface_name",
+            "/dhcp_v4/{iface_name}",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
-        .route("/dhcp_v4/:iface_name/assigned_ips", get(get_all_iface_assigned_ips_by_iface_name))
-    // .route("/dhcp_v4/:iface_name/restart", post(restart_mark_service_status))
+        .route("/dhcp_v4/{iface_name}/assigned_ips", get(get_all_iface_assigned_ips_by_iface_name))
+    // .route("/dhcp_v4/{iface_name}/restart", post(restart_mark_service_status))
 }
 
 async fn get_all_iface_assigned_ips(

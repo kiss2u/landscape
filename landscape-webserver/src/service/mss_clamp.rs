@@ -28,10 +28,10 @@ pub async fn get_mss_clamp_service_paths(
         .route("/mss_clamp/status", get(get_all_iface_service_status))
         .route("/mss_clamp", post(handle_service_config))
         .route(
-            "/mss_clamp/:iface_name",
+            "/mss_clamp/{iface_name}",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
-        // .route("/mss_clamp/:iface_name/restart", post(restart_mark_service_status))
+        // .route("/mss_clamp/{iface_name}/restart", post(restart_mark_service_status))
         .with_state(share_state)
 }
 

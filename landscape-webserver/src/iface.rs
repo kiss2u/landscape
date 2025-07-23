@@ -21,13 +21,13 @@ pub async fn get_network_paths(store: LandscapeDBServiceProvider) -> Router {
     Router::new()
         .route("/", get(get_ifaces))
         .route("/wan_configs", get(get_wan_ifaces))
-        .route("/manage/:iface_name", post(manage_ifaces))
+        .route("/manage/{iface_name}", post(manage_ifaces))
         .route("/bridge", post(create_bridge))
         .route("/controller", post(set_controller))
         .route("/zone", post(change_zone))
-        .route("/:iface_name/status/:status", post(change_dev_status))
-        .route("/:iface_name/wifi_mode/:mode", post(change_wifi_mode))
-        .route("/:iface_name/cpu_balance", get(get_cpu_balance).post(set_cpu_balance))
+        .route("/{iface_name}/status/{status}", post(change_dev_status))
+        .route("/{iface_name}/wifi_mode/{mode}", post(change_wifi_mode))
+        .route("/{iface_name}/cpu_balance", get(get_cpu_balance).post(set_cpu_balance))
         .with_state(share_state)
 }
 

@@ -18,7 +18,7 @@ pub async fn get_geo_site_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/geo_sites", get(get_geo_sites).post(add_geo_site))
         .route("/geo_sites/set_many", post(add_many_geo_sites))
-        .route("/geo_sites/:id", get(get_geo_rule).delete(del_geo_site))
+        .route("/geo_sites/{id}", get(get_geo_rule).delete(del_geo_site))
         .route("/geo_sites/cache", get(get_geo_site_cache).post(refresh_geo_site_cache))
         .route("/geo_sites/cache/search", get(search_geo_site_cache))
         .route("/geo_sites/cache/detail", get(get_geo_site_cache_detail))

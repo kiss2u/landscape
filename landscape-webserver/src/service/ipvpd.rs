@@ -18,10 +18,10 @@ pub async fn get_iface_pdclient_paths() -> Router<LandscapeApp> {
         .route("/ipv6pd/status", get(get_all_status))
         .route("/ipv6pd", post(handle_iface_pd))
         .route(
-            "/ipv6pd/:iface_name",
+            "/ipv6pd/{iface_name}",
             get(get_iface_pd_conifg).delete(delete_and_stop_iface_service),
         )
-    // .route("/nats/:iface_name/restart", post(restart_nat_service_status))
+    // .route("/nats/{iface_name}/restart", post(restart_nat_service_status))
 }
 
 async fn get_all_status(

@@ -1,20 +1,19 @@
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
+        ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
         Path,
     },
     response::IntoResponse,
 };
 use axum::{routing::get, Router};
 use landscape::dump::eth::EthFram;
-use std::borrow::Cow;
 use std::ops::ControlFlow;
 use tokio::sync::mpsc::Sender;
 
 use axum::extract::ws::CloseFrame;
 
 pub fn get_tump_router() -> Router {
-    Router::new().route("/dump/:iface_name", get(ws_handler))
+    Router::new().route("/dump/{iface_name}", get(ws_handler))
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, Path(iface_name): Path<String>) -> impl IntoResponse {
@@ -25,7 +24,7 @@ async fn ws_handler(ws: WebSocketUpgrade, Path(iface_name): Path<String>) -> imp
 /// Actual websocket statemachine (one will be spawned per connection)
 async fn handle_socket(mut socket: WebSocket, who_in: String) {
     // send a ping (unsupported by some browsers) just to kick things off and get a response
-    if socket.send(Message::Ping(vec![1, 2, 3])).await.is_ok() {
+    if socket.send(Message::Ping(vec![1, 2, 3].into())).await.is_ok() {
         println!("Pinged {who_in}...");
     } else {
         println!("Could not send ping {who_in}!");
@@ -57,7 +56,7 @@ async fn handle_socket(mut socket: WebSocket, who_in: String) {
                         if let Err(e) = socket
                             .send(Message::Close(Some(CloseFrame {
                                 code: axum::extract::ws::close_code::NORMAL,
-                                reason: Cow::from("Goodbye"),
+                                reason: Utf8Bytes::from("Goodbye"),
                             })))
                             .await
                         {
@@ -75,7 +74,7 @@ async fn handle_socket(mut socket: WebSocket, who_in: String) {
 async fn handle_dump_msg(packet: Box<EthFram>, socket: &mut WebSocket) {
     // let data = serde_json::json!(packet).to_string();
     let data = serde_json::to_string_pretty(&packet).unwrap();
-    if let Err(e) = socket.send(Message::Text(data)).await {
+    if let Err(e) = socket.send(Message::Text(Utf8Bytes::from(&data))).await {
         println!("send data error: {e:?}");
     }
     // if let Err(e) = socket.send(Message::Text(serde_json::json!(packet).to_string())).await {

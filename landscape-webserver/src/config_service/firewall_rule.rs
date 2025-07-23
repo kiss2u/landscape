@@ -13,7 +13,7 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 pub async fn get_firewall_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/firewall_rules", get(get_firewall_rules).post(add_firewall_rule))
-        .route("/firewall_rules/:id", get(get_firewall_rule).delete(del_firewall_rule))
+        .route("/firewall_rules/{id}", get(get_firewall_rule).delete(del_firewall_rule))
 }
 
 async fn get_firewall_rules(

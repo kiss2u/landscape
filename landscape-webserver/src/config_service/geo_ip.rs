@@ -17,7 +17,7 @@ pub async fn get_geo_ip_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/geo_ips", get(get_geo_ips).post(add_geo_ip))
         .route("/geo_ips/set_many", post(add_many_geo_ips))
-        .route("/geo_ips/:id", get(get_geo_rule).delete(del_geo_ip))
+        .route("/geo_ips/{id}", get(get_geo_rule).delete(del_geo_ip))
         .route("/geo_ips/cache", get(get_geo_ip_cache).post(refresh_geo_ip_cache))
         .route("/geo_ips/cache/search", get(search_geo_ip_cache))
         .route("/geo_ips/cache/detail", get(get_geo_ip_cache_detail))
