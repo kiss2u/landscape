@@ -308,7 +308,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     // }
 
     volatile u32 flow_mark_action = 0;
-    volatile u16 priority = 0;
+    volatile u16 priority = 0xFFFF;
 
     struct flow_ip_trie_key ip_trie_key = {0};
     ip_trie_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 64 : 160;
