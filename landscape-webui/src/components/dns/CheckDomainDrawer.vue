@@ -4,6 +4,7 @@ import { useMessage } from "naive-ui";
 import { SearchLocate } from "@vicons/carbon";
 import { CheckDnsReq, CheckDnsResult } from "@/rust_bindings/dns";
 import { check_domain } from "@/api/dns_service";
+import { LandscapeDnsRecordType } from "@/rust_bindings/common/dns_record_type";
 const message = useMessage();
 
 interface Props {
@@ -62,6 +63,13 @@ async function query() {
     message.info("请输入待查询域名");
   }
 }
+const showInner = ref(false);
+
+async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
+  req.value.domain = domain;
+  req.value.record_type = record_type;
+  query();
+}
 </script>
 
 <template>
@@ -75,6 +83,44 @@ async function query() {
   >
     <n-drawer-content title="测试域名查询 (结果不会被缓存)" closable>
       <n-flex style="height: 100%" vertical>
+        <n-flex :wrap="false" justify="space-between">
+          <n-button
+            size="small"
+            :loading="loading"
+            type="info"
+            ghost
+            @click="quick_btn('A', 'www.baidu.com')"
+          >
+            IPv4 Baidu
+          </n-button>
+          <n-button
+            size="small"
+            ghost
+            :loading="loading"
+            type="success"
+            @click="quick_btn('AAAA', 'www.baidu.com')"
+          >
+            IPv6 Baidu
+          </n-button>
+          <n-button
+            size="small"
+            :loading="loading"
+            type="info"
+            ghost
+            @click="quick_btn('A', 'test.ustc.edu.cn')"
+          >
+            IPv4 USTC
+          </n-button>
+          <n-button
+            size="small"
+            ghost
+            :loading="loading"
+            type="success"
+            @click="quick_btn('AAAA', 'test6.ustc.edu.cn')"
+          >
+            IPv6 USTC
+          </n-button>
+        </n-flex>
         <n-spin :show="loading">
           <n-input-group>
             <n-select
@@ -82,7 +128,11 @@ async function query() {
               v-model:value="req.record_type"
               :options="options"
             />
-            <n-input v-model:value="req.domain" />
+            <n-input
+              placeholder="输入域名后, 点击右侧按钮或使用回车"
+              @keyup.enter="query"
+              v-model:value="req.domain"
+            />
 
             <n-button @click="query">
               <template #icon>
@@ -115,8 +165,15 @@ async function query() {
               <n-descriptions-item label="DNS 处理方式" :span="2">
                 {{ result.config.resolve_mode }}
               </n-descriptions-item>
+
               <n-descriptions-item label="匹配规则">
-                {{ result.config.source }}
+                <n-button
+                  v-if="result.config.source.length > 0"
+                  @click="showInner = true"
+                >
+                  详情
+                </n-button>
+                <span v-else>无内容</span>
               </n-descriptions-item>
             </n-descriptions>
             <n-divider title-placement="left"> DNS 上游查询结果 </n-divider>
@@ -135,5 +192,16 @@ async function query() {
         </n-scrollbar>
       </n-flex>
     </n-drawer-content>
+
+    <n-drawer :mask-closable="false" v-model:show="showInner" width="50%">
+      <n-drawer-content title="详情" closable>
+        <n-flex v-if="result.config" vertical>
+          <n-flex v-for="each in result.config.source" :wrap="false">
+            <span>{{ each.match_type }}</span>
+            <n-flex> {{ each.value }} </n-flex>
+          </n-flex>
+        </n-flex>
+      </n-drawer-content>
+    </n-drawer>
   </n-drawer>
 </template>
