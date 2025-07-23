@@ -3,7 +3,7 @@ use dhcproto::v6::{DhcpOption, DhcpOptions, OptionCode, IAPD, ORO};
 pub fn get_solicit_options() -> DhcpOptions {
     let mut options = DhcpOptions::new();
     let oro = ORO {
-        opts: vec![OptionCode::DomainSearchList, OptionCode::IAPrefix],
+        opts: vec![OptionCode::IAPrefix, OptionCode::DomainNameServers],
     };
 
     let iapd = IAPD { id: 1, t1: 0, t2: 0, opts: DhcpOptions::new() };
