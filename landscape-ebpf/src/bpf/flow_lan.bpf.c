@@ -344,7 +344,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     if (dns_rules_map != NULL) {
         dns_rule_value = bpf_map_lookup_elem(dns_rules_map, &key);
         if (dns_rule_value != NULL) {
-            if (dns_rule_value->priority > priority) {
+            if (dns_rule_value->priority <= priority) {
                 flow_mark_action = dns_rule_value->mark;
                 priority = dns_rule_value->priority;
             }
