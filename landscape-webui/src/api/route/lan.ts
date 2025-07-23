@@ -31,6 +31,6 @@ export async function update_route_lans_config(
   await axiosService.post(`services/route_lans`, config);
 }
 
-export async function del_route_lans(id: string): Promise<void> {
-  await axiosService.delete(`services/route_lans/${id}`);
+export async function del_route_lans(iface_name: string): Promise<void> {
+  await axiosService.delete(`services/route_lans/${iface_name}`);
 }

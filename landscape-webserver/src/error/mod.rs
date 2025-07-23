@@ -8,6 +8,9 @@ pub enum LandscapeApiError {
     #[error("`{0}` not found")]
     NotFound(String),
 
+    #[error("`{0}`")]
+    BadRequest(String),
+
     // #[error("Failed to parse configuration: {0}")]
     // JsonParseError(#[from] serde_json::Error),
     // #[error("IO error occurred: {0}")]
@@ -29,6 +32,7 @@ impl LandscapeErrRespTrait for LandscapeApiError {
     fn get_code(&self) -> u32 {
         match self {
             LandscapeApiError::NotFound(_) => 201_404,
+            LandscapeApiError::BadRequest(_) => 201_400,
             LandscapeApiError::AuthError(err) => err.get_code(),
             LandscapeApiError::DockerError(err) => err.get_code(),
             LandscapeApiError::LdError(_) => 500,

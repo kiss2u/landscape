@@ -18,7 +18,7 @@ pub async fn get_route_lan_paths() -> Router<LandscapeApp> {
         .route("/route_lans/status", get(get_all_route_lan_status))
         .route("/route_lans", post(handle_route_lan_status))
         .route(
-            "/route_lans/:iface_name",
+            "/route_lans/{iface_name}",
             get(get_route_lan_conifg).delete(delete_and_stop_route_lan),
         )
 }

@@ -1,12 +1,12 @@
 use std::net::SocketAddr;
 
 use axum::{
-    extract::Host,
     handler::HandlerWithoutStateExt,
     http::{uri::Authority, StatusCode, Uri},
     response::Redirect,
     BoxError,
 };
+use axum_extra::extract::Host;
 use landscape_common::config::WebRuntimeConfig;
 
 #[allow(dead_code)]

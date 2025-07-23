@@ -17,10 +17,10 @@ pub async fn get_dst_ip_rule_config_paths() -> Router<LandscapeApp> {
         .route("/dst_ip_rules", get(get_dst_ip_rules).post(add_dst_ip_rules))
         .route("/dst_ip_rules/set_many", post(add_many_dst_ip_rules))
         .route(
-            "/dst_ip_rules/:id",
+            "/dst_ip_rules/{id}",
             get(get_dst_ip_rule).post(modify_dst_ip_rules).delete(del_dst_ip_rule),
         )
-        .route("/dst_ip_rules/flow/:flow_id", get(get_flow_dst_ip_rules))
+        .route("/dst_ip_rules/flow/{flow_id}", get(get_flow_dst_ip_rules))
 }
 
 async fn get_dst_ip_rules(

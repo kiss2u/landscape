@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
@@ -9,7 +9,7 @@ use landscape_common::config::{
 };
 use landscape_common::service::controller_service::ConfigController;
 
-use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+use crate::{api::LandscapeApiResp, error::LandscapeApiResult, UPLOAD_GEO_FILE_SIZE_LIMIT};
 
 use crate::{error::LandscapeApiError, LandscapeApp};
 
@@ -17,10 +17,14 @@ pub async fn get_geo_ip_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/geo_ips", get(get_geo_ips).post(add_geo_ip))
         .route("/geo_ips/set_many", post(add_many_geo_ips))
-        .route("/geo_ips/:id", get(get_geo_rule).delete(del_geo_ip))
+        .route("/geo_ips/{id}", get(get_geo_rule).delete(del_geo_ip))
         .route("/geo_ips/cache", get(get_geo_ip_cache).post(refresh_geo_ip_cache))
         .route("/geo_ips/cache/search", get(search_geo_ip_cache))
         .route("/geo_ips/cache/detail", get(get_geo_ip_cache_detail))
+        .route(
+            "/geo_ips/{name}/update_by_upload",
+            post(update_by_upload).layer(DefaultBodyLimit::max(UPLOAD_GEO_FILE_SIZE_LIMIT)),
+        )
 }
 
 async fn get_geo_ip_cache_detail(
@@ -110,5 +114,26 @@ async fn del_geo_ip(
     Path(id): Path<ConfigId>,
 ) -> LandscapeApiResult<()> {
     state.geo_ip_service.delete(id).await;
+    LandscapeApiResp::success(())
+}
+
+async fn update_by_upload(
+    State(state): State<LandscapeApp>,
+    Path(name): Path<String>,
+    mut multipart: Multipart,
+) -> LandscapeApiResult<()> {
+    tracing::info!("Got upload request for: {}", name);
+
+    let file = multipart.next_field().await;
+    let Ok(Some(field)) = file else {
+        return Err(LandscapeApiError::BadRequest("geo ip file not found".to_string()));
+    };
+
+    let Ok(bytes) = field.bytes().await else {
+        return Err(LandscapeApiError::BadRequest("geo ip file read error".to_string()));
+    };
+
+    state.geo_ip_service.update_geo_config_by_bytes(name, bytes).await;
+
     LandscapeApiResp::success(())
 }

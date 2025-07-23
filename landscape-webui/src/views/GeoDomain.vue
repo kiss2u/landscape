@@ -71,6 +71,9 @@ const show_geo_drawer_modal = ref(false);
       </n-grid>
     </n-flex>
 
-    <GeoSiteDrawer v-model:show="show_geo_drawer_modal"></GeoSiteDrawer>
+    <GeoSiteDrawer
+      @refresh:keys="refresh"
+      v-model:show="show_geo_drawer_modal"
+    ></GeoSiteDrawer>
   </n-layout>
 </template>

@@ -26,8 +26,8 @@ pub async fn get_iface_nat_paths(
     Router::new()
         .route("/nats/status", get(get_all_nat_status))
         .route("/nats", post(handle_iface_nat_status))
-        .route("/nats/:iface_name", get(get_iface_nat_conifg).delete(delete_and_stop_iface_nat))
-        // .route("/nats/:iface_name/restart", post(restart_nat_service_status))
+        .route("/nats/{iface_name}", get(get_iface_nat_conifg).delete(delete_and_stop_iface_nat))
+        // .route("/nats/{iface_name}/restart", post(restart_nat_service_status))
         .with_state(share_state)
 }
 

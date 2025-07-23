@@ -77,3 +77,14 @@ export async function get_geo_site_cache_detail(
   });
   return data.data;
 }
+
+export async function update_geo_site_by_upload(
+  name: string,
+  form_data: FormData
+): Promise<GeoDomainConfig> {
+  let data = await axiosService.post(
+    `config/geo_sites/${name}/update_by_upload`,
+    form_data
+  );
+  return data.data;
+}

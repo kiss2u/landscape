@@ -56,6 +56,10 @@ pub async fn icmp_ra_server(
     // sudo sysctl -w net.ipv6.conf.all.router_solicitations=0
     // sudo sysctl -w net.ipv6.conf.default.router_solicitations=0
 
+    let ipv6_forwarding_path = format!("/proc/sys/net/ipv6/conf/{}/forwarding", iface_name);
+    std::fs::write(&ipv6_forwarding_path, "1")
+        .expect(&format!("set {} ipv6 forwarding error", iface_name));
+
     service_status.just_change_status(ServiceStatus::Staring);
     //  sysctl -w net.ipv6.conf.all.forwarding=1
     let socket = Socket::new(Domain::IPV6, Type::RAW, Some(Protocol::ICMPV6))?;
@@ -247,6 +251,9 @@ pub async fn icmp_ra_server(
     }
 
     route_service.remove_ipv6_lan_route(&iface_name).await;
+
+    std::fs::write(&ipv6_forwarding_path, "0")
+        .expect(&format!("set {} ipv6 forwarding error", iface_name));
     tracing::info!("ICMP v6 RA Server Stop: {:#?}", service_status);
     if !service_status.is_stop() {
         service_status.just_change_status(ServiceStatus::Stop);

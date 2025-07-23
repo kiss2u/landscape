@@ -29,10 +29,10 @@ pub async fn get_firewall_service_paths(
         .route("/firewall/status", get(get_all_iface_service_status))
         .route("/firewall", post(handle_service_config))
         .route(
-            "/firewall/:iface_name",
+            "/firewall/{iface_name}",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
-        // .route("/firewall/:iface_name/restart", post(restart_mark_service_status))
+        // .route("/firewall/{iface_name}/restart", post(restart_mark_service_status))
         .with_state(share_state)
 }
 

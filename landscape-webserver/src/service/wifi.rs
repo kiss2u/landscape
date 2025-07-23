@@ -23,7 +23,7 @@ pub async fn get_wifi_service_paths(store: LandscapeDBServiceProvider) -> Router
         .route("/wifi/status", get(get_all_iface_service_status))
         .route("/wifi", post(handle_service_config))
         .route(
-            "/wifi/:iface_name",
+            "/wifi/{iface_name}",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
         .with_state(share_state)

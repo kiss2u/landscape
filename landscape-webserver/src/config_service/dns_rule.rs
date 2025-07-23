@@ -14,8 +14,8 @@ pub async fn get_dns_rule_config_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/dns_rules", get(get_dns_rules).post(add_dns_rules))
         .route("/dns_rules/set_many", post(add_many_dns_rules))
-        .route("/dns_rules/:id", get(get_dns_rule).delete(del_dns_rules))
-        .route("/dns_rules/flow/:flow_id", get(get_flow_dns_rules))
+        .route("/dns_rules/{id}", get(get_dns_rule).delete(del_dns_rules))
+        .route("/dns_rules/flow/{flow_id}", get(get_flow_dns_rules))
 }
 
 async fn get_dns_rules(

@@ -17,10 +17,10 @@ pub async fn get_iface_icmpv6ra_paths() -> Router<LandscapeApp> {
         .route("/icmpv6ra/status", get(get_all_status))
         .route("/icmpv6ra", post(handle_iface_icmpv6))
         .route(
-            "/icmpv6ra/:iface_name",
+            "/icmpv6ra/{iface_name}",
             get(get_iface_icmpv6_conifg).delete(delete_and_stop_iface_icmpv6),
         )
-    // .route("/nats/:iface_name/restart", post(restart_nat_service_status))
+    // .route("/nats/{iface_name}/restart", post(restart_nat_service_status))
 }
 
 async fn get_all_status(

@@ -308,7 +308,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     // }
 
     volatile u32 flow_mark_action = 0;
-    volatile u16 priority = 0;
+    volatile u16 priority = 0xFFFF;
 
     struct flow_ip_trie_key ip_trie_key = {0};
     ip_trie_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 64 : 160;
@@ -344,7 +344,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     if (dns_rules_map != NULL) {
         dns_rule_value = bpf_map_lookup_elem(dns_rules_map, &key);
         if (dns_rule_value != NULL) {
-            if (dns_rule_value->priority > priority) {
+            if (dns_rule_value->priority <= priority) {
                 flow_mark_action = dns_rule_value->mark;
                 priority = dns_rule_value->priority;
             }
@@ -525,8 +525,14 @@ int lan_route_ingress(struct __sk_buff *skb) {
     COPY_ADDR_FROM(cache_mac.mac, context.smac);
     ret = bpf_map_update_elem(&ip_mac_tab, &saddr, &cache_mac, BPF_ANY);
 
+    // if (saddr.ip[0] == 0xfe) {
+    //     if ((saddr.ip[1] & 0xc0) == 0x80) {
+    //         bpf_log_info("fe80 %pI6 -> %pI6", context.saddr.in6_u.u6_addr8, context.daddr.in6_u.u6_addr8);
+    //     }
+    // }
+
     if (ret != 0) {
-        bpf_log_info("cache ip: %pI6 mac error", ret);
+        bpf_log_info("cache ip: %pI6 mac error", saddr.ip);
     }
 
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);

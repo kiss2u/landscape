@@ -19,10 +19,10 @@ pub async fn get_iface_ipconfig_paths() -> Router<LandscapeApp> {
         .route("/ipconfigs/status", get(get_all_ipconfig_status))
         .route("/ipconfigs", post(handle_iface_service_status))
         .route(
-            "/ipconfigs/:iface_name",
+            "/ipconfigs/{iface_name}",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
-    // .route("/ipconfigs/:iface_name/status", get(get_iface_service_status))
+    // .route("/ipconfigs/{iface_name}/status", get(get_iface_service_status))
 }
 
 async fn get_all_ipconfig_status(

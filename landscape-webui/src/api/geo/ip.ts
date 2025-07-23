@@ -70,3 +70,14 @@ export async function get_geo_ip_cache_detail(
   });
   return data.data;
 }
+
+export async function update_geo_ip_by_upload(
+  name: string,
+  form_data: FormData
+): Promise<GeoIpConfig> {
+  let data = await axiosService.post(
+    `config/geo_ips/${name}/update_by_upload`,
+    form_data
+  );
+  return data.data;
+}

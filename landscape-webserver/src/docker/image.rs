@@ -12,8 +12,8 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 pub async fn get_docker_images_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/", get(get_all_images))
-        .route("/:image_name", post(pull_image_by_image_name))
-        .route("/id/:image_id", delete(delete_image_by_id))
+        .route("/{image_name}", post(pull_image_by_image_name))
+        .route("/id/{image_id}", delete(delete_image_by_id))
 }
 
 async fn get_all_images() -> LandscapeApiResult<Vec<ImageSummary>> {

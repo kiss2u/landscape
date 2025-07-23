@@ -26,23 +26,26 @@ axiosService.interceptors.request.use(
 axiosService.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const code = error.response.status;
-    const msg = error.response.data.message;
-    if (code === 401) {
-      // 清除本地存储中的认证信息
-      localStorage.removeItem("token");
+    if (error.response != undefined && error.response.status != undefined) {
+      const code = error.response.status;
+      const msg = error.response.data.message;
+      if (code === 401) {
+        // 清除本地存储中的认证信息
+        localStorage.removeItem("token");
 
-      // 重定向到登录页面
-      router.push({
-        path: "/login",
-        // query: { redirect: router.currentRoute }, // 登录成功后重定向回原页面
-      });
-    }
+        // 重定向到登录页面
+        router.push({
+          path: "/login",
+          // query: { redirect: router.currentRoute }, // 登录成功后重定向回原页面
+        });
+      }
 
-    if (msg && window.$message) {
-      window.$message.error(msg);
+      if (msg && window.$message) {
+        window.$message.error(msg);
+      }
+      return Promise.reject(error.response.data);
     }
-    return Promise.reject(error.response.data);
+    return Promise.reject(error);
   }
 );
 

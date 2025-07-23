@@ -8,7 +8,7 @@ import { onMounted, ref } from "vue";
 import { useMessage } from "naive-ui";
 const message = useMessage();
 
-const emit = defineEmits(["refresh"]);
+const emit = defineEmits(["refresh", "refresh:keys"]);
 
 const show = defineModel<boolean>("show", { required: true });
 const show_create_modal = ref(false);
@@ -76,6 +76,7 @@ async function import_rules() {
           <n-flex vertical>
             <GeoIpItemCard
               @refresh="refresh"
+              @refresh:keys="emit('refresh:keys')"
               v-for="rule in configs"
               :key="rule.index"
               :geo_ip_source="rule"
