@@ -598,7 +598,6 @@ int wan_route_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_egress"
     int ret;
     u32 flow_id = 0;
-    u8 from_where;
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
@@ -606,8 +605,7 @@ int wan_route_egress(struct __sk_buff *skb) {
         return ret;
     }
 
-    from_where = get_flow_source(skb->mark);
-    if (from_where != FLOW_FROM_UNKNOW) {
+    if (skb->ingress_ifindex != 0) {
         // 端口转发数据, 相对于是已经决定使用这个出口, 所以直接发送
         return TC_ACT_UNSPEC;
     }
