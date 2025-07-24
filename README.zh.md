@@ -47,7 +47,7 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     - ✅ 将被标记流量按照标记配置( 直连/丢弃/允许复用端口/重定向到 Docker 容器或者网卡 )进行转发 
     - ❌ 对指定数据设置跟踪标记
     - ✅ 外网 IP 行为控制, 按照标记的规则控制外网 IP, 并支持使用 `geoip.dat` 协助配置
-    - ✅ 允许外网 IP 规则选择是否将 DNS 动作覆盖.
+    - ✅ IP 规则和 DNS 规则冲突时, 依据规则的优先级进行判定 (值越小越高)
 - <u>Geo 管理</u>
     - ✅ 多 Geo 来源管理
     - ✅ Geo IP/Site 自动更新
@@ -85,14 +85,14 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 - <u> 杂项 </u>
     - ✅ 登录界面
     - ❌ 添加英文版前端页面
-    - ❌ 网卡 XPS/RSP 优化, 将网卡压力负载到不同的核心, 提升整体吞吐
+    - ✅ 网卡 XPS/RSP 优化, 将网卡压力负载到不同的核心, 提升整体吞吐, 但是网卡中断绑定不是很熟悉, 如有建议欢迎 issue
 
 ---
 
 ## 启动方式和限制
 
 ### 系统要求
-- 支持的 Linux 内核版本：`6.1` 及以上。
+- 支持的 Linux 内核版本：`6.9` 及以上。
 - (可选) `docker`
 
 ### 手工部署步骤
@@ -108,7 +108,27 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
    ```shell
    ./landscape-webserver
    ```
-   默认端口为 6300, 默认用户名: root, 密码: root. 其他参数可使用 `./landscape-webserver --help` 查看.
+   默认端口为 6300
+   默认用户名: root
+   密码: root. 
+   其他参数可使用 `./landscape-webserver --help` 查看.
+5. 确认无误之后可以设置为 systemd 服务
+    创建 `/etc/systemd/system/landscape-router.service`
+    文件内容: 
+    ```text
+    [Unit]
+    Description=Landscape Router
+
+    [Service]
+    ExecStart=/root/landscape-webserver <- 记得修改此处
+    Restart=always
+    User=root
+    LimitMEMLOCK=infinity
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
 
 ### Docker Compose 启动体验
 见文档 [快速启动](https://landscape.whileaway.dev/quick.html)

@@ -51,14 +51,14 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
     * ✅ Use DHCPv6-PD to request prefix from upstream
     * ✅ Use RA to advertise prefix to downstream
 
-* <u>Traffic Control Module</u>
+* <u>Flow Control Module</u>
 
   * ✅ Tag flows using IP + QoS
   * ✅ Each flow can have its own DNS settings and cache
   * ✅ Route marked traffic based on rules (direct/drop/reuse port/redirect to Docker or NIC)
   * ❌ Assign tracking marks to specified packets
   * ✅ External IP behavior control via tagging and `geoip.dat` support
-  * ✅ Optionally override DNS for external IP rules
+  * ✅ When IP rules and DNS rules conflict, the priority of the rules is used for verdict (the smaller the value, the higher the priority)
 
 * <u>Geo Management</u>
 
@@ -112,7 +112,7 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 
   * ✅ Login screen
   * ❌ English UI frontend
-  * ❌ NIC XPS/RPS optimization to distribute load across CPU cores
+  * ✅ NIC XPS/RPS optimization to distribute load across CPU cores
 
 ---
 
@@ -120,7 +120,7 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 
 ### System Requirements
 
-* Supported Linux Kernel: `6.1` or later
+* Supported Linux Kernel: `6.9` or later
 * (Optional) `docker`
 
 ### Manual Startup
@@ -144,6 +144,22 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
    Default username: **root**
    Default password: **root**
    Use `./landscape-webserver --help` for other options.
+5. Once everything is confirmed to work, you can set it up as a systemd service.
+   Create `/etc/systemd/system/landscape-router.service` with the following content:
+
+   ```text
+   [Unit]
+   Description=Landscape Router
+
+   [Service]
+   ExecStart=/root/landscape-webserver  # remember to modify this path accordingly
+   Restart=always
+   User=root
+   LimitMEMLOCK=infinity
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
 
 ### Docker Compose
 
