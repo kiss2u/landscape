@@ -8,7 +8,11 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 
 > 基于 Rust / eBPF / AF_PACKET 开发。
 
-[简体中文](./README.zh.md) | [English](./README.md)
+[简体中文](./README.zh.md) | [English](./README.md)  
+
+## 更多信息请阅读 [文档](https://landscape.whileaway.dev/introduction.html)
+
+
 
 ## 截图
 ![](docs/images/1.png)
@@ -150,3 +154,13 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 ---
 
 如果您有任何建议或问题，可以在 [issues](./issues/new) 页面提交您的反馈。
+
+## Star History
+
+<a href="https://www.star-history.com/#ThisSeanZhang/landscape&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ThisSeanZhang/landscape&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ThisSeanZhang/landscape&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ThisSeanZhang/landscape&type=Date" />
+ </picture>
+</a>

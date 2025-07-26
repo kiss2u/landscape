@@ -11,6 +11,9 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 
 [简体中文](./README.zh.md) | [English](./README.md)
 
+---
+
+
 ## Screenshot
 ![](docs/images/1.png)
 
@@ -185,3 +188,13 @@ See [Build Documentation](https://landscape.whileaway.dev/compilation/) or [Cros
 ---
 
 If you have any suggestions or issues, feel free to submit them via [issues](./issues/new).
+
+## Star History
+
+<a href="https://www.star-history.com/#ThisSeanZhang/landscape&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ThisSeanZhang/landscape&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ThisSeanZhang/landscape&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ThisSeanZhang/landscape&type=Date" />
+ </picture>
+</a>
