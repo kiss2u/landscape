@@ -317,8 +317,15 @@ pub struct DHCPv4Server {
 impl DHCPv4Server {
     ///
     fn init(config: DHCPv4ServerConfig) -> Self {
+        if config.ip_range_end == Some(Ipv4Addr::UNSPECIFIED) {
+            tracing::warn!("ip_range_end is 0.0.0.0, treated as unset (using subnet last_address)");
+        }
+
         let ip_range_start = Ipv4Inet::new(config.ip_range_start, config.network_mask).unwrap();
-        let ip_addr_end = config.ip_range_end.unwrap_or_else(|| ip_range_start.last_address());
+        let ip_addr_end = match config.ip_range_end {
+            Some(addr) if addr != Ipv4Addr::UNSPECIFIED => addr,
+            _ => ip_range_start.last_address(),
+        };
 
         tracing::debug!("using {:?} -> {:?} to init range", config.ip_range_start, ip_addr_end);
 
