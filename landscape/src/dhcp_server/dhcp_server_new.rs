@@ -467,6 +467,13 @@ impl DHCPv4Server {
         !remove_keys.is_empty()
     }
 
+    fn is_ip_in_range(&self, ip: Ipv4Addr) -> bool {
+        let ip_u32 = u32::from(ip);
+        let start = u32::from(self.ip_range_start.address());
+        let end = start + self.range_capacity;
+        ip_u32 >= start && ip_u32 <= end
+    }
+
     /// 检查是否存在过, 存在过直接刷新时间
     pub fn ack_request(&mut self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
         if let Some(offered_cache) = self.offered_ip.get_mut(mac_addr) {
@@ -489,6 +496,11 @@ impl DHCPv4Server {
                 tracing::error!(
                     "Requested IP {ip_addr:?} is already allocated to another client, request by {mac_addr:?}"
                 );
+                return false;
+            }
+
+            if !self.is_ip_in_range(ip_addr) {
+                tracing::warn!("Requested IP out of range");
                 return false;
             }
 
