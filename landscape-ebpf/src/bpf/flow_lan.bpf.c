@@ -7,6 +7,7 @@
 
 #include "landscape.h"
 #include "flow_lan_share.h"
+#include "land_wan_ip.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -272,6 +273,27 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int current_eth_net_offset,
+                                                 struct route_context *context) {
+#define BPF_LOG_TOPIC "is_current_wan_packet"
+
+    u32 current_ifindex = skb->ingress_ifindex;
+    struct in6_addr dst_addr = {0};
+    __u32 *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &current_ifindex);
+
+    if (wan_ip_info != NULL) {
+        // Check if the current DST IP is the IP that enters the WAN network card
+        dst_addr.in6_u.u6_addr32[0] = *wan_ip_info;
+        // bpf_log_info("wan_ip_info ip: %pI6", &dst_addr);
+        if (ip_addr_equal(&dst_addr, &context->daddr)) {
+            return TC_ACT_UNSPEC;
+        }
+    }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
 static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_net_offset,
                                         struct route_context *context, u32 *flow_id_) {
 #define BPF_LOG_TOPIC "flow_verdict"
@@ -527,7 +549,8 @@ int lan_route_ingress(struct __sk_buff *skb) {
 
     // if (saddr.ip[0] == 0xfe) {
     //     if ((saddr.ip[1] & 0xc0) == 0x80) {
-    //         bpf_log_info("fe80 %pI6 -> %pI6", context.saddr.in6_u.u6_addr8, context.daddr.in6_u.u6_addr8);
+    //         bpf_log_info("fe80 %pI6 -> %pI6", context.saddr.in6_u.u6_addr8,
+    //         context.daddr.in6_u.u6_addr8);
     //     }
     // }
 
@@ -579,6 +602,11 @@ int wan_route_ingress(struct __sk_buff *skb) {
     ret = is_broadcast_ip(&context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
+    }
+
+    ret = is_current_wan_packet(skb, current_eth_net_offset, &context);
+    if (ret != TC_ACT_OK) {
+        return ret;
     }
 
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
