@@ -78,3 +78,5 @@ pub const LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME: u32 = 40;
 
 #[cfg(not(debug_assertions))]
 pub const LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME: u32 = 60 * 60 * 12;
+
+pub const SYSCTL_IPV6_RA_ACCEPT_PATTERN: &str = "net.ipv6.conf.{}.accept_ra";

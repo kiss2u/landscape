@@ -35,6 +35,8 @@ socket2 = "0.5.8"
 paste = "1.0.15"
 chrono = "0.4.41"
 
+sysctl = "0.6.0"
+
 # self_cell = "*"
 colored = "3.0.0"
 dotenvy = "0.15.7"

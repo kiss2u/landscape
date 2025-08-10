@@ -3165,6 +3165,7 @@ dependencies = [
  "serde",
  "serde_json",
  "socket2",
+ "sysctl",
  "sysinfo 0.35.2",
  "tokio",
  "tokio-stream",
@@ -6807,6 +6808,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.91",
+]
+
+[[package]]
+name = "sysctl"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01198a2debb237c62b6826ec7081082d951f46dbb64b0e8c7649a452230d1dfc"
+dependencies = [
+ "bitflags 2.6.0",
+ "byteorder",
+ "enum-as-inner 0.6.1",
+ "libc",
+ "thiserror 1.0.64",
+ "walkdir",
 ]
 
 [[package]]

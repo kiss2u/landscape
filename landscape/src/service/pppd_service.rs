@@ -4,6 +4,8 @@ use std::process::Command;
 use std::process::Stdio;
 
 use landscape_common::route::RouteTargetInfo;
+use landscape_common::SYSCTL_IPV6_RA_ACCEPT_PATTERN;
+use sysctl::Sysctl as _;
 use tokio::sync::{oneshot, watch};
 
 use landscape_common::config::ppp::PPPDConfig;
@@ -110,6 +112,7 @@ pub async fn create_pppd_thread(
                 let update = if let Some(data) = ip4addr { data != new_ip4addr } else { true };
                 if update {
                     if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
+                        set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
                         landscape_ebpf::map_setting::add_wan_ip(new_ip4addr.0, ip.clone());
 
                         let info = RouteTargetInfo {
@@ -251,6 +254,21 @@ impl PPPDServiceConfigManagerService {
         for each in configs {
             self.service.stop_service(each.iface_name.clone()).await;
             self.get_repository().delete(each.iface_name).await.unwrap();
+        }
+    }
+}
+
+fn set_iface_ipv6_ra_accept_to_2(iface_name: &str) {
+    if let Ok(ctl) = sysctl::Ctl::new(&SYSCTL_IPV6_RA_ACCEPT_PATTERN.replace("{}", iface_name)) {
+        match ctl.set_value_string("2") {
+            Ok(value) => {
+                if value != "2" {
+                    tracing::error!("modify value error: {:?}", value)
+                }
+            }
+            Err(e) => {
+                tracing::error!("err: {e:?}")
+            }
         }
     }
 }
