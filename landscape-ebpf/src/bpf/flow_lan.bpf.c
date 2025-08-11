@@ -277,6 +277,10 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
                                                  struct route_context *context) {
 #define BPF_LOG_TOPIC "is_current_wan_packet"
 
+    if (context->l3_protocol == LANDSCAPE_IPV6_TYPE) {
+        return TC_ACT_OK;
+    }
+
     u32 current_ifindex = skb->ingress_ifindex;
     struct in6_addr dst_addr = {0};
     __u32 *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &current_ifindex);
@@ -422,7 +426,8 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
     int ret;
     struct route_target_key wan_key = {0};
 
-    wan_key.flow_id = flow_id;
+    wan_key.flow_id = get_flow_id(flow_id);
+    ;
     wan_key.l3_protocol = context->l3_protocol;
 
     struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
@@ -433,8 +438,7 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
             // Default flow PASS
             return TC_ACT_UNSPEC;
         } else {
-            bpf_log_info("DROP l3_protocol: %d", wan_key.l3_protocol);
-            bpf_log_info("DROP flow_id: %d", wan_key.flow_id);
+            bpf_log_info("DROP flow_id: %d, l3_protocol: %d", wan_key.flow_id, wan_key.l3_protocol);
             // Other DROP
             return TC_ACT_SHOT;
         }
