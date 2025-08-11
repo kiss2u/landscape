@@ -1166,7 +1166,7 @@ int egress_nat(struct __sk_buff *skb) {
 
         
         u8 flow_action = get_flow_action(skb->mark);
-        if (flow_action != FLOW_ALLOW_REUSE) {
+        if (flow_action != FLOW_ALLOW_REUSE && packet_info.ip_protocol != IPPROTO_ICMP) {
             // PORT REUSE check
             if (!ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr) ||
                 packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
