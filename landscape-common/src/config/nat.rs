@@ -1,5 +1,6 @@
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
+use std::net::IpAddr;
 use ts_rs::TS;
 
 use crate::database::repository::LandscapeDBStore;
@@ -45,4 +46,15 @@ impl Default for NatConfig {
             icmp_in_range: 32768..65535,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/nat.d.ts")]
+pub struct StaticNatMapping {
+    pub port: u16,
+    pub wan_iface_name: Option<String>,
+    pub target_port: u16,
+    pub target_ip: IpAddr,
+    /// TCP / UDP
+    pub l4_protocol: u8,
 }

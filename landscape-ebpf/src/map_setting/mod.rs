@@ -19,6 +19,7 @@ pub mod flow_dns;
 pub mod flow_target;
 pub mod flow_wanip;
 pub mod metric;
+pub mod nat;
 pub mod route;
 
 pub(crate) fn init_path(paths: LandscapeMapPath) {
