@@ -52,8 +52,11 @@ impl Default for NatConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/nat.d.ts")]
 pub struct StaticNatMappingConfig {
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
     pub id: Uuid,
     pub enable: bool,
+    pub remark: String,
     pub wan_port: u16,
     pub wan_iface_name: Option<String>,
     pub lan_port: u16,

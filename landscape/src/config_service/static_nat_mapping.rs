@@ -72,7 +72,7 @@ pub fn update_mapping_rules(
     let old_ids: HashSet<_> = old_rules.keys().collect();
 
     let remove_ids: HashSet<_> = &old_ids - &new_ids;
-    let remove_rules: Vec<_> =
+    let mut remove_rules: Vec<_> =
         old_rules.values().filter(|v| remove_ids.contains(&v.id)).cloned().collect();
 
     let mut update_list = vec![];
@@ -80,6 +80,7 @@ pub fn update_mapping_rules(
         match (rules.get(id), old_rules.get(id)) {
             (Some(rule), Some(old_rule)) => {
                 if !rule.is_same_config(&old_rule) {
+                    remove_rules.push(old_rule.clone());
                     update_list.push(rule.clone());
                 }
             }
@@ -122,6 +123,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             l4_protocol: 17,
             id: Uuid::new_v4(),
             enable: true,
+            remark: "Default DHCPv4 Client Port".to_string(),
             update_at: get_f64_timestamp(),
         },
         // DHCPv6 Clinet
@@ -133,6 +135,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             l4_protocol: 17,
             id: Uuid::new_v4(),
             enable: true,
+            remark: "Default DHCPv6 Client Port".to_string(),
             update_at: get_f64_timestamp(),
         },
     ];
@@ -146,6 +149,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             l4_protocol: 6,
             id: Uuid::new_v4(),
             enable: true,
+            remark: "For Test".to_string(),
             update_at: get_f64_timestamp(),
         });
 
@@ -157,6 +161,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             l4_protocol: 6,
             id: Uuid::new_v4(),
             enable: true,
+            remark: "".to_string(),
             update_at: get_f64_timestamp(),
         });
 
@@ -168,6 +173,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             l4_protocol: 6,
             id: Uuid::new_v4(),
             enable: true,
+            remark: "".to_string(),
             update_at: get_f64_timestamp(),
         });
     }

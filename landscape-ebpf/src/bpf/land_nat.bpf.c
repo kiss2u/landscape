@@ -1114,7 +1114,10 @@ int ingress_nat(struct __sk_buff *skb) {
         COPY_ADDR_FROM(lan_ip.all, nat_ingress_value->addr.all);
     }
 
-    // bpf_log_info("lan_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
+    // if (nat_ingress_value->is_static && nat_ingress_value->addr.ip != 0) {
+    //     bpf_log_info("lan_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
+    // }
+
 
     // modify source
     ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,

@@ -20,6 +20,7 @@ pub enum StaticNatMappingConfigs {
     Table,
     Id,
     Enable,
+    Remark,
     WanPort,
     WanIfaceName,
     LanPort,

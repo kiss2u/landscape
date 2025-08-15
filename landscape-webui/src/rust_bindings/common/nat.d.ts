@@ -12,3 +12,22 @@ export type NatServiceConfig = {
   nat_config: NatConfig;
   update_at: number;
 };
+
+export type StaticNatMappingConfig = {
+  id: string | null;
+  enable: boolean;
+  remark: string;
+  wan_port: number;
+  wan_iface_name: string | null;
+  lan_port: number;
+  /**
+   * If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
+   * the router's own address instead of an internal host.
+   */
+  lan_ip: string;
+  /**
+   * TCP / UDP
+   */
+  l4_protocol: number;
+  update_at: number;
+};

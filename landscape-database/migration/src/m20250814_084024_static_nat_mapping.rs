@@ -16,6 +16,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(StaticNatMappingConfigs::Id).uuid().primary_key())
                     .col(ColumnDef::new(StaticNatMappingConfigs::Enable).boolean().default(false))
                     .col(integer(StaticNatMappingConfigs::WanPort))
+                    .col(string_null(StaticNatMappingConfigs::Remark))
                     .col(string_null(StaticNatMappingConfigs::WanIfaceName))
                     .col(integer(StaticNatMappingConfigs::LanPort))
                     .col(string(StaticNatMappingConfigs::LanIp))

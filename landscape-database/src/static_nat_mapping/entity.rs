@@ -19,6 +19,8 @@ pub struct Model {
     /// Whether this mapping is enabled
     pub enable: bool,
 
+    pub remark: String,
+
     /// External (WAN) port for the NAT rule
     pub wan_port: u16,
 
@@ -51,6 +53,7 @@ impl From<Model> for StaticNatMappingConfig {
         StaticNatMappingConfig {
             id: model.id,
             enable: model.enable,
+            remark: model.remark,
             wan_port: model.wan_port,
             wan_iface_name: model.wan_iface_name,
             lan_port: model.lan_port,
@@ -72,6 +75,7 @@ impl Into<ActiveModel> for StaticNatMappingConfig {
 impl UpdateActiveModel<ActiveModel> for StaticNatMappingConfig {
     fn update(self, active: &mut ActiveModel) {
         active.enable = Set(self.enable);
+        active.remark = Set(self.remark);
         active.wan_port = Set(self.wan_port);
         active.wan_iface_name = Set(self.wan_iface_name);
         active.lan_port = Set(self.lan_port);

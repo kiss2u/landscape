@@ -54,10 +54,10 @@ const menuOptions: MenuOption[] = [
   //   icon: renderIcon(Network4),
   // },
   {
-    label: "NAT",
+    label: "静态 NAT 管理",
     key: "nat",
     icon: renderIcon(ImportExportRound),
-    disabled: true,
+    disabled: false,
   },
   {
     label: "防火墙",
