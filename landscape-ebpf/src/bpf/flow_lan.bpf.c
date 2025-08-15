@@ -647,10 +647,16 @@ int wan_route_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    // ret = lan_redirect_check(skb, current_eth_net_offset, &context);
-    // if (ret != TC_ACT_OK) {
-    //     return ret;
-    // }
+    
+    ret = is_broadcast_ip(&context);
+    if (ret != TC_ACT_OK) {
+        return TC_ACT_UNSPEC;
+    }
+    
+    ret = lan_redirect_check(skb, current_eth_net_offset, &context);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
 
     ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_id);
     if (ret != TC_ACT_OK) {

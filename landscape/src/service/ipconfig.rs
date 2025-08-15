@@ -81,6 +81,16 @@ async fn init_service_from_config(
                     .output();
                 tracing::debug!("start setting");
                 landscape_ebpf::map_setting::add_wan_ip(iface.index, ipv4.clone());
+
+                let lan_info = LanRouteInfo {
+                    ifindex: iface.index,
+                    iface_name: iface_name.clone(),
+                    iface_ip: IpAddr::V4(ipv4),
+                    mac: iface.mac,
+                    prefix: ipv4_mask,
+                };
+                route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
+
                 if let Some(default_router_ip) = default_router_ip {
                     if !default_router_ip.is_broadcast()
                         && !default_router_ip.is_unspecified()
@@ -110,15 +120,6 @@ async fn init_service_from_config(
                             gateway_ip: IpAddr::V4(default_router_ip),
                         };
                         route_service.insert_ipv4_wan_route(&iface_name, info).await;
-
-                        let lan_info = LanRouteInfo {
-                            ifindex: iface.index,
-                            iface_name: iface_name.clone(),
-                            iface_ip: IpAddr::V4(ipv4),
-                            mac: iface.mac,
-                            prefix: ipv4_mask,
-                        };
-                        route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
                     }
                 }
 

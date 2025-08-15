@@ -715,6 +715,15 @@ async fn bind_ipv4(
         *ip_arg = Some(args);
     }
 
+    let lan_info = LanRouteInfo {
+        ifindex: ifindex,
+        iface_name: iface_name.to_string(),
+        iface_ip: IpAddr::V4(new_yiaddr),
+        mac: Some(mac_addr.clone()),
+        prefix: mask as u8,
+    };
+    route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
+
     if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
         route_service
             .insert_ipv4_wan_route(
@@ -731,14 +740,6 @@ async fn bind_ipv4(
                 },
             )
             .await;
-        let lan_info = LanRouteInfo {
-            ifindex: ifindex,
-            iface_name: iface_name.to_string(),
-            iface_ip: IpAddr::V4(new_yiaddr),
-            mac: Some(mac_addr.clone()),
-            prefix: mask as u8,
-        };
-        route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
         if default_router {
             LD_ALL_ROUTERS
                 .add_route(RouteInfo {
