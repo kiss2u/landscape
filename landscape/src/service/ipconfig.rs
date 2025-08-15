@@ -2,6 +2,7 @@ use std::net::IpAddr;
 
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::route::{LanRouteInfo, RouteTargetInfo};
+use landscape_common::LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT;
 use landscape_common::{
     args::LAND_HOSTNAME,
     config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
@@ -164,7 +165,7 @@ async fn init_service_from_config(
                     iface.index,
                     iface.name,
                     mac_addr,
-                    68,
+                    LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
                     service_status,
                     hostname,
                     default_router,

@@ -5,3 +5,5 @@ pub mod flow_rule;
 
 pub mod geo_ip;
 pub mod geo_site;
+
+pub mod static_nat_mapping;

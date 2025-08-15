@@ -13,3 +13,18 @@ pub enum NatServiceConfigs {
     IcmpInRangeEnd,
     UpdateAt,
 }
+
+#[derive(DeriveIden)]
+pub enum StaticNatMappingConfigs {
+    #[sea_orm(iden = "static_nat_mapping_configs")]
+    Table,
+    Id,
+    Enable,
+    WanPort,
+    WanIfaceName,
+    LanPort,
+    LanIp,
+    #[sea_orm(iden = "l4_protocol")]
+    L4Protocol,
+    UpdateAt,
+}

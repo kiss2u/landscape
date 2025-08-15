@@ -16,6 +16,7 @@ use landscape::{
         dns_rule::DNSRuleService, dst_ip_rule::DstIpRuleService,
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
+        static_nat_mapping::StaticNatMappingService,
     },
     docker::LandscapeDockerService,
     metric::MetricService,
@@ -61,6 +62,7 @@ use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::info;
 
 use crate::{
+    config_service::static_nat_mapping::get_static_nat_mapping_config_paths,
     service::{route_lan::get_route_lan_paths, route_wan::get_route_wan_paths},
     sys_service::config_service::get_config_paths,
 };
@@ -103,6 +105,9 @@ pub struct LandscapeApp {
     /// ipv6
     ipv6_pd_service: DHCPv6ClientManagerService,
     ipv6_ra_service: IPV6RAManagerService,
+
+    // Static NAT Mapping
+    static_nat_mapping_config_service: StaticNatMappingService,
 }
 
 #[tokio::main]
@@ -203,6 +208,9 @@ async fn main() -> LdResult<()> {
     )
     .await;
 
+    let static_nat_mapping_config_service =
+        StaticNatMappingService::new(db_store_provider.clone()).await;
+
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;
@@ -231,6 +239,7 @@ async fn main() -> LdResult<()> {
         // IPV6
         ipv6_pd_service,
         ipv6_ra_service,
+        static_nat_mapping_config_service,
     };
     // 初始化结束
 
@@ -297,6 +306,7 @@ async fn main() -> LdResult<()> {
                 .merge(get_geo_site_config_paths().await)
                 .merge(get_geo_ip_config_paths().await)
                 .merge(get_dst_ip_rule_config_paths().await)
+                .merge(get_static_nat_mapping_config_paths().await)
                 .with_state(landscape_app_status.clone()),
         )
         .nest(

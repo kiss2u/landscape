@@ -2,6 +2,7 @@ use core::ops::Range;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use ts_rs::TS;
+use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
 use crate::store::storev2::LandscapeStore;
@@ -50,11 +51,34 @@ impl Default for NatConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/nat.d.ts")]
-pub struct StaticNatMapping {
-    pub port: u16,
+pub struct StaticNatMappingConfig {
+    pub id: Uuid,
+    pub enable: bool,
+    pub wan_port: u16,
     pub wan_iface_name: Option<String>,
-    pub target_port: u16,
-    pub target_ip: IpAddr,
+    pub lan_port: u16,
+    /// If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
+    /// the router's own address instead of an internal host.
+    pub lan_ip: IpAddr,
     /// TCP / UDP
     pub l4_protocol: u8,
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
+}
+
+impl StaticNatMappingConfig {
+    pub fn is_same_config(&self, other: &StaticNatMappingConfig) -> bool {
+        self.id == other.id
+            && self.wan_port == other.wan_port
+            && self.wan_iface_name == other.wan_iface_name
+            && self.lan_port == other.lan_port
+            && self.lan_ip == other.lan_ip
+            && self.l4_protocol == other.l4_protocol
+    }
+}
+
+impl LandscapeDBStore<Uuid> for StaticNatMappingConfig {
+    fn get_id(&self) -> Uuid {
+        self.id
+    }
 }

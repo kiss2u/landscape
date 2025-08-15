@@ -4,3 +4,5 @@ pub mod firewall_rule;
 pub mod flow_rule;
 pub mod geo_ip_service;
 pub mod geo_site_service;
+
+pub mod static_nat_mapping;

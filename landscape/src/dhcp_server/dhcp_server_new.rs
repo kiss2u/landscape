@@ -16,7 +16,9 @@ use landscape_common::config::dhcp_v4_server::DHCPv4ServerConfig;
 use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
 use landscape_common::net::MacAddr;
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
-use landscape_common::LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME;
+use landscape_common::{
+    LANDSCAPE_DEFAULE_DHCP_V4_SERVER_PORT, LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME,
+};
 use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};
 use socket2::{Domain, Protocol, Type};
@@ -91,7 +93,8 @@ pub async fn dhcp_v4_server(
         add_address(&link_name, IpAddr::V4(ip), prefix_length, handle).await
     });
 
-    let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 67);
+    let socket_addr =
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), LANDSCAPE_DEFAULE_DHCP_V4_SERVER_PORT);
 
     let socket2 = socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
 
