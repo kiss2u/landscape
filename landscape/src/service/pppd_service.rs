@@ -113,7 +113,7 @@ pub async fn create_pppd_thread(
                 if update {
                     if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
                         set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
-                        landscape_ebpf::map_setting::add_wan_ip(new_ip4addr.0, ip.clone());
+                        landscape_ebpf::map_setting::add_ipv4_wan_ip(new_ip4addr.0, ip.clone(), 32);
 
                         let info = RouteTargetInfo {
                             ifindex: new_ip4addr.0,

@@ -277,21 +277,23 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
                                                  struct route_context *context) {
 #define BPF_LOG_TOPIC "is_current_wan_packet"
 
+    
     if (context->l3_protocol == LANDSCAPE_IPV6_TYPE) {
         return TC_ACT_OK;
     }
 
-    u32 current_ifindex = skb->ingress_ifindex;
-    struct in6_addr dst_addr = {0};
-    __u32 *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &current_ifindex);
-
+    struct wan_ip_info_key wan_search_key = {0};
+    wan_search_key.ifindex = skb->ingress_ifindex;
+    wan_search_key.l3_protocol = context->l3_protocol;
+    
+    struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
     if (wan_ip_info != NULL) {
         // Check if the current DST IP is the IP that enters the WAN network card
-        dst_addr.in6_u.u6_addr32[0] = *wan_ip_info;
-        // bpf_log_info("wan_ip_info ip: %pI6", &dst_addr);
-        if (ip_addr_equal(&dst_addr, &context->daddr)) {
+        // bpf_log_info("wan_ip_info ip: %pI6", &wan_ip_info->addr);
+        if (ip_addr_equal(&wan_ip_info->addr, &context->daddr)) {
             return TC_ACT_UNSPEC;
         }
+
     }
 
     return TC_ACT_OK;
@@ -427,7 +429,6 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
     struct route_target_key wan_key = {0};
 
     wan_key.flow_id = get_flow_id(flow_id);
-    ;
     wan_key.l3_protocol = context->l3_protocol;
 
     struct route_target_info *target_info = bpf_map_lookup_elem(&rt_target_map, &wan_key);
@@ -647,12 +648,11 @@ int wan_route_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    
     ret = is_broadcast_ip(&context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
-    
+
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;

@@ -683,7 +683,7 @@ async fn bind_ipv4(
     route_service: &IpRouteService,
     mac_addr: &MacAddr,
 ) -> DhcpState {
-    landscape_ebpf::map_setting::add_wan_ip(ifindex, new_yiaddr.clone());
+    landscape_ebpf::map_setting::add_ipv4_wan_ip(ifindex, new_yiaddr.clone(), mask as u8);
     if let Some(args) = ip_arg.take() {
         if let Err(result) = std::process::Command::new("ip").args(&args).output() {
             tracing::error!("{:?}", result);

@@ -80,7 +80,7 @@ async fn init_service_from_config(
                     .args(&["addr", "add", &format!("{}/{}", ipv4, ipv4_mask), "dev", &iface_name])
                     .output();
                 tracing::debug!("start setting");
-                landscape_ebpf::map_setting::add_wan_ip(iface.index, ipv4.clone());
+                landscape_ebpf::map_setting::add_ipv4_wan_ip(iface.index, ipv4.clone(), ipv4_mask);
 
                 let lan_info = LanRouteInfo {
                     ifindex: iface.index,
@@ -134,7 +134,7 @@ async fn init_service_from_config(
                 }
                 route_service.remove_ipv4_wan_route(&iface_name).await;
                 route_service.remove_ipv4_lan_route(&iface_name).await;
-                landscape_ebpf::map_setting::del_wan_ip(iface.index);
+                landscape_ebpf::map_setting::del_ipv4_wan_ip(iface.index);
                 service_status.just_change_status(ServiceStatus::Stop);
             }
         }

@@ -119,7 +119,7 @@ pub fn handle_address_msg(message: NetlinkMessage<RouteNetlinkMessage>) {
 
 #[instrument(skip(link_message))]
 fn handle_address_update(link_message: AddressMessage, is_add: bool) {
-    let link_ifindex = link_message.header.index;
+    // let link_ifindex = link_message.header.index;
     let mut addr = None;
 
     for attr in link_message.attributes.iter() {
@@ -132,18 +132,18 @@ fn handle_address_update(link_message: AddressMessage, is_add: bool) {
     }
 
     if let Some(addr) = addr {
-        let ip = match addr {
+        let _ = match addr {
             std::net::IpAddr::V4(ipv4_addr) => ipv4_addr,
             std::net::IpAddr::V6(_) => {
                 return; // 如果是 IPv6，可以直接返回，或根据需要处理
             }
         };
 
-        if is_add {
-            landscape_ebpf::map_setting::add_wan_ip(link_ifindex, ip.clone());
-        } else {
-            landscape_ebpf::map_setting::del_wan_ip(link_ifindex);
-        }
+        // if is_add {
+        //     landscape_ebpf::map_setting::add_ipv4_wan_ip(link_ifindex, ip.clone());
+        // } else {
+        //     landscape_ebpf::map_setting::del_ipv4_wan_ip(link_ifindex);
+        // }
     }
 }
 

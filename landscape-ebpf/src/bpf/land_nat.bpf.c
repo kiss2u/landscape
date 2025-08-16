@@ -551,15 +551,20 @@ egress_lookup_or_new_mapping(struct __sk_buff *skb, u8 ip_protocol, bool allow_c
         if (!allow_create_mapping) {
             return TC_ACT_SHOT;
         }
-        u32 wan_ip_key = skb->ifindex;
-        __be32 *wan_ip = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_ip_key);
-        if (!wan_ip) {
+        struct wan_ip_info_key wan_search_key = {0};
+        wan_search_key.ifindex = skb->ifindex;
+        wan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+
+        struct wan_ip_info_value *wan_ip_info =
+            bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+
+        if (!wan_ip_info) {
             bpf_log_info("can't find the wan ip, using ifindex: %d", skb->ifindex);
             return TC_ACT_SHOT;
         }
         struct nat_mapping_value new_nat_egress_value = {0};
 
-        new_nat_egress_value.addr.ip = *wan_ip;
+        new_nat_egress_value.addr.ip = wan_ip_info->addr.ip;
         new_nat_egress_value.port = egress_key.from_port;  // 尽量先试试使用客户端发起时候的端口
         new_nat_egress_value.trigger_addr = pkt_ip_pair->dst_addr;
         new_nat_egress_value.trigger_port = pkt_ip_pair->dst_port;
@@ -1118,7 +1123,6 @@ int ingress_nat(struct __sk_buff *skb) {
     //     bpf_log_info("lan_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
     // }
 
-
     // modify source
     ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
                          packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset,
@@ -1248,13 +1252,17 @@ int egress_nat(struct __sk_buff *skb) {
 
     union u_inet_addr nat_addr;
     if (nat_egress_value->is_static) {
-        u32 wan_ip_key = skb->ifindex;
-        __be32 *wan_ip = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_ip_key);
-        if (!wan_ip) {
+        struct wan_ip_info_key wan_search_key = {0};
+        wan_search_key.ifindex = skb->ifindex;
+        wan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+
+        struct wan_ip_info_value *wan_ip_info =
+            bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+        if (!wan_ip_info) {
             bpf_log_info("can't find the wan ip, using ifindex: %d", skb->ifindex);
             return TC_ACT_SHOT;
         }
-        nat_addr.ip = *wan_ip;
+        nat_addr.ip = wan_ip_info->addr.ip;
     } else {
         COPY_ADDR_FROM(nat_addr.all, nat_egress_value->addr.all);
     }
