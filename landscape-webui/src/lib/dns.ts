@@ -1,5 +1,5 @@
-import { FlowDnsMark } from "@/rust_bindings/flow";
-import { FlowDnsMarkType } from "./default_value";
+import { FlowMark } from "@/rust_bindings/flow";
+import { FlowMarkType } from "./default_value";
 import {
   DNSResolveMode,
   DNSRuleConfig,
@@ -12,7 +12,7 @@ export class DnsRule implements DNSRuleConfig {
   index: number;
   name: string;
   enable: boolean;
-  mark: FlowDnsMark;
+  mark: FlowMark;
   source: RuleSource[];
   resolve_mode: DNSResolveMode;
   flow_id: number;
@@ -24,7 +24,7 @@ export class DnsRule implements DNSRuleConfig {
     this.index = obj?.index ?? -1;
     this.name = obj?.name ?? "";
     this.enable = obj?.enable ?? true;
-    this.mark = obj?.mark ? { ...obj.mark } : { t: FlowDnsMarkType.KeepGoing };
+    this.mark = obj?.mark ? { ...obj.mark } : { t: FlowMarkType.KeepGoing };
     this.source = obj?.source ?? [];
     this.resolve_mode = obj?.resolve_mode
       ? { ...obj.resolve_mode }

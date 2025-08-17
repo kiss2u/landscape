@@ -1,31 +1,31 @@
 <script setup lang="ts">
 import { get_flow_rules } from "@/api/flow";
-import { FlowDnsMarkType } from "@/lib/default_value";
-import { FlowDnsMark } from "@/rust_bindings/flow";
+import { FlowMarkType } from "@/lib/default_value";
+import { FlowMark } from "@/rust_bindings/flow";
 import { computed, onMounted, ref } from "vue";
 
-const mark = defineModel<FlowDnsMark>("mark", { required: true });
+const mark = defineModel<FlowMark>("mark", { required: true });
 
 const mark_type_option = [
   {
     label: "无动作",
-    value: FlowDnsMarkType.KeepGoing,
+    value: FlowMarkType.KeepGoing,
   },
   {
     label: "忽略 Flow 设置",
-    value: FlowDnsMarkType.Direct,
+    value: FlowMarkType.Direct,
   },
   {
     label: "禁止连接",
-    value: FlowDnsMarkType.Drop,
+    value: FlowMarkType.Drop,
   },
   {
     label: "重定向至流",
-    value: FlowDnsMarkType.Redirect,
+    value: FlowMarkType.Redirect,
   },
   // {
   //   label: "允许端口共享",
-  //   value: FlowDnsMarkType.AllowReusePort,
+  //   value: FlowMarkType.AllowReusePort,
   // },
 ];
 
@@ -56,7 +56,7 @@ async function search_flows() {
     />
     <n-select
       style="width: 50%"
-      v-if="mark.t === FlowDnsMarkType.Redirect"
+      v-if="mark.t === FlowMarkType.Redirect"
       v-model:value="mark.flow_id"
       filterable
       placeholder="重定向的流 ID"

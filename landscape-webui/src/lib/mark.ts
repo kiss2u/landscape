@@ -51,7 +51,7 @@ export class LanIPRuleConfig {
   }
 }
 
-import type { FlowDnsMark, WanIPRuleSource } from "@/rust_bindings/flow";
+import type { FlowMark, WanIPRuleSource } from "@/rust_bindings/flow";
 import {
   FirewallRuleConfig,
   FirewallRuleConfigItem,
@@ -62,7 +62,7 @@ export class WanIpRuleConfigClass implements WanIpRuleConfig {
   id: string | null;
   index: number;
   enable: boolean;
-  mark: FlowDnsMark;
+  mark: FlowMark;
   source: WanIPRuleSource[];
   remark: string;
   flow_id: number;

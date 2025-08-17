@@ -16,7 +16,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(DstIpRuleConfigs::Id).uuid().primary_key())
                     .col(ColumnDef::new(DstIpRuleConfigs::Index).unsigned().not_null())
                     .col(ColumnDef::new(DstIpRuleConfigs::Enable).boolean().not_null())
-                    .col(ColumnDef::new(DstIpRuleConfigs::Mark).unsigned().not_null()) // FlowDnsMark 映射为 u32
+                    .col(ColumnDef::new(DstIpRuleConfigs::Mark).unsigned().not_null()) // FlowMark 映射为 u32
                     .col(ColumnDef::new(DstIpRuleConfigs::Source).json().not_null()) // Vec<WanIPRuleSource> 映射为 JSON
                     .col(ColumnDef::new(DstIpRuleConfigs::Remark).string().not_null())
                     .col(ColumnDef::new(DstIpRuleConfigs::FlowId).unsigned().not_null())

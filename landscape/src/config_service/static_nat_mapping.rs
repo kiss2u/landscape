@@ -113,32 +113,31 @@ pub fn mapping_rule_into_hash(
 }
 
 pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
-    let mut result = vec![
-        // DHCPv4 Clinet
-        StaticNatMappingConfig {
-            wan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
-            wan_iface_name: None,
-            lan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
-            lan_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            l4_protocol: 17,
-            id: Uuid::new_v4(),
-            enable: true,
-            remark: "Default DHCPv4 Client Port".to_string(),
-            update_at: get_f64_timestamp(),
-        },
-        // DHCPv6 Clinet
-        StaticNatMappingConfig {
-            wan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
-            wan_iface_name: None,
-            lan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
-            lan_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-            l4_protocol: 17,
-            id: Uuid::new_v4(),
-            enable: true,
-            remark: "Default DHCPv6 Client Port".to_string(),
-            update_at: get_f64_timestamp(),
-        },
-    ];
+    let mut result = Vec::with_capacity(5);
+    // DHCPv4 Clinet
+    result.push(StaticNatMappingConfig {
+        wan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
+        wan_iface_name: None,
+        lan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
+        lan_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        l4_protocol: 17,
+        id: Uuid::new_v4(),
+        enable: true,
+        remark: "Default DHCPv4 Client Port".to_string(),
+        update_at: get_f64_timestamp(),
+    });
+    // DHCPv6 Clinet
+    result.push(StaticNatMappingConfig {
+        wan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+        wan_iface_name: None,
+        lan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+        lan_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+        l4_protocol: 17,
+        id: Uuid::new_v4(),
+        enable: true,
+        remark: "Default DHCPv6 Client Port".to_string(),
+        update_at: get_f64_timestamp(),
+    });
     #[cfg(debug_assertions)]
     {
         result.push(StaticNatMappingConfig {
