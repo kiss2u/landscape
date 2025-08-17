@@ -65,7 +65,9 @@ impl Into<u32> for FlowMark {
         let raw_action: u8 = self.action.into();
         let mut value = (raw_action as u32) << 8;
 
-        value |= self.flow_id as u32;
+        if raw_action == FLOW_REDIRECT {
+            value |= self.flow_id as u32;
+        }
 
         if self.allow_reuse_port {
             value |= FLOW_ALLOW_REUSE_PORT_MASK;

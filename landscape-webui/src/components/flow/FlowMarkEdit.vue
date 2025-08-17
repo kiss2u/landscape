@@ -51,6 +51,26 @@ const show_other_function = computed(() => {
     mark.value.action.t == FlowMarkType.Direct
   );
 });
+
+function mark_action_update(value: FlowMarkType) {
+  console.log(value);
+  switch (value) {
+    case FlowMarkType.KeepGoing:
+    case FlowMarkType.Direct: {
+      mark.value.flow_id = 0;
+      break;
+    }
+    case FlowMarkType.Drop: {
+      mark.value.flow_id = 0;
+      mark.value.allow_reuse_port = false;
+      break;
+    }
+    case FlowMarkType.Redirect: {
+      mark.value.allow_reuse_port = false;
+      break;
+    }
+  }
+}
 </script>
 
 <template>
@@ -58,6 +78,7 @@ const show_other_function = computed(() => {
     <n-select
       style="width: 50%"
       v-model:value="mark.action.t"
+      @update:value="mark_action_update"
       :options="mark_type_option"
       placeholder="选择匹配方式"
     />
@@ -71,6 +92,7 @@ const show_other_function = computed(() => {
     <n-select
       style="width: 50%"
       v-model:value="mark.action.t"
+      @update:value="mark_action_update"
       :options="mark_type_option"
       placeholder="选择匹配方式"
     />
@@ -90,6 +112,7 @@ const show_other_function = computed(() => {
     v-else
     style="width: 50%"
     v-model:value="mark.action.t"
+    @update:value="mark_action_update"
     :options="mark_type_option"
     placeholder="选择匹配方式"
   />
