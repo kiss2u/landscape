@@ -94,8 +94,8 @@ pub fn update_mapping_rules(
     tracing::debug!("update_config: {:?}", update_list);
     tracing::debug!("delete_keys: {:?}", remove_rules);
 
-    landscape_ebpf::map_setting::nat::add_static_nat_mapping(update_list);
     landscape_ebpf::map_setting::nat::del_static_nat_mapping(remove_rules);
+    landscape_ebpf::map_setting::nat::add_static_nat_mapping(update_list);
 }
 
 pub fn mapping_rule_into_hash(
