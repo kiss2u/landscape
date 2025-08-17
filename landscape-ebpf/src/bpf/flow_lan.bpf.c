@@ -277,7 +277,6 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
                                                  struct route_context *context) {
 #define BPF_LOG_TOPIC "is_current_wan_packet"
 
-    
     if (context->l3_protocol == LANDSCAPE_IPV6_TYPE) {
         return TC_ACT_OK;
     }
@@ -285,7 +284,7 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
     struct wan_ip_info_key wan_search_key = {0};
     wan_search_key.ifindex = skb->ingress_ifindex;
     wan_search_key.l3_protocol = context->l3_protocol;
-    
+
     struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
     if (wan_ip_info != NULL) {
         // Check if the current DST IP is the IP that enters the WAN network card
@@ -293,7 +292,6 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
         if (ip_addr_equal(&wan_ip_info->addr, &context->daddr)) {
             return TC_ACT_UNSPEC;
         }
-
     }
 
     return TC_ACT_OK;
@@ -301,7 +299,7 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
 }
 
 static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_net_offset,
-                                        struct route_context *context, u32 *flow_id_) {
+                                        struct route_context *context, u32 *init_flow_id_) {
 #define BPF_LOG_TOPIC "flow_verdict"
 
     struct flow_ip_cache_key cache_key = {0};
@@ -324,18 +322,18 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
         //     return TC_ACT_UNSPEC;
         // }
         // 是本机路由流量 ( DNS 中的 MARK 需要按照对应的 流去处理)
-        flow_id = skb->mark;
+        flow_id = *init_flow_id_ & 0xff;
     } else {
         flow_id = *flow_id_ptr;
     }
 
-    u8 flow_id_u8 = flow_id & 0xff;
+    // u8 flow_id_u8 = flow_id & 0xff;
 
     // if (flow_id != 0) {
     //     bpf_log_info("find flow_id: %d, ip: %pI4", flow_id, cache_key.match_key.src_addr.all);
     // }
 
-    volatile u32 flow_mark_action = 0;
+    volatile u32 flow_mark_action = *init_flow_id_;
     volatile u16 priority = 0xFFFF;
 
     struct flow_ip_trie_key ip_trie_key = {0};
@@ -390,7 +388,8 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     struct flow_target_info *target_info;
 apply_action:
 
-    skb->mark = replace_flow_id(flow_mark_action, flow_id_u8);
+    skb->mark = flow_mark_action;
+    // skb->mark = replace_flow_id(flow_mark_action, flow_id_u8);
 
     flow_action = get_flow_action(flow_mark_action);
     dns_flow_id = get_flow_id(flow_mark_action);
@@ -409,12 +408,10 @@ apply_action:
         // bpf_log_info("FLOW_REDIRECT ip: %pI4, flow_id: %d", cache_key.dst_addr.all,
         //              dns_flow_id);
         flow_id = dns_flow_id;
-    } else if (flow_action == FLOW_ALLOW_REUSE) {
-        // 无动作
     }
 
 keep_going:
-    *flow_id_ = flow_id;
+    *init_flow_id_ = flow_id;
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
@@ -422,7 +419,7 @@ keep_going:
 static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
                                                         int current_eth_net_offset,
                                                         struct route_context *context,
-                                                        u32 flow_id) {
+                                                        const u32 flow_id) {
 #define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id"
 
     int ret;
@@ -527,7 +524,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
     // bool is_ipv4;
 
     int ret;
-    u32 flow_id = 0;
+    u32 flow_id = skb->mark;
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
@@ -630,7 +627,7 @@ SEC("tc/egress")
 int wan_route_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_egress"
     int ret;
-    u32 flow_id = 0;
+    u32 flow_id = skb->mark;
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);

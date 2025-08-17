@@ -44,19 +44,38 @@ const flow_search_loading = ref(false);
 async function search_flows() {
   flow_rules.value = await get_flow_rules();
 }
+
+const show_other_function = computed(() => {
+  return (
+    mark.value.action.t == FlowMarkType.KeepGoing ||
+    mark.value.action.t == FlowMarkType.Direct
+  );
+});
 </script>
 
 <template>
-  <n-input-group>
+  <n-flex align="center" style="flex: 1" v-if="show_other_function">
     <n-select
       style="width: 50%"
-      v-model:value="mark.t"
+      v-model:value="mark.action.t"
+      :options="mark_type_option"
+      placeholder="选择匹配方式"
+    />
+
+    <n-flex align="center">
+      <span>&nbsp;全锥型 (NAT1)</span>
+      <n-switch v-model:value="mark.allow_reuse_port" :round="false" />
+    </n-flex>
+  </n-flex>
+  <n-input-group v-else-if="mark.action.t === FlowMarkType.Redirect">
+    <n-select
+      style="width: 50%"
+      v-model:value="mark.action.t"
       :options="mark_type_option"
       placeholder="选择匹配方式"
     />
     <n-select
       style="width: 50%"
-      v-if="mark.t === FlowMarkType.Redirect"
       v-model:value="mark.flow_id"
       filterable
       placeholder="重定向的流 ID"
@@ -67,4 +86,11 @@ async function search_flows() {
       @search="search_flows"
     />
   </n-input-group>
+  <n-select
+    v-else
+    style="width: 50%"
+    v-model:value="mark.action.t"
+    :options="mark_type_option"
+    placeholder="选择匹配方式"
+  />
 </template>

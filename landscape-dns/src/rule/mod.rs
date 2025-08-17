@@ -32,14 +32,7 @@ pub struct CacheResolver {
 
 impl CacheResolver {
     pub fn new(resolve: ResolverConfig, mark: &FlowMark, flow_id: u32) -> Self {
-        let mark_value = match mark.clone() {
-            // 转发时候使用目标 flow 进行标记 DNS 请求
-            FlowMark::Redirect { flow_id } => flow_id as u32,
-            // 忽略流的配置
-            FlowMark::Direct => 0,
-            // 其余情况使用 当前规则所属的 flow 进行标记
-            _ => flow_id,
-        };
+        let mark_value = mark.get_dns_mark(flow_id);
 
         let mut options = ResolverOpts::default();
         options.cache_size = 0;
@@ -52,7 +45,7 @@ impl CacheResolver {
         )
         .with_options(options)
         .build();
-        CacheResolver { resolver, flow_id: mark_value }
+        CacheResolver { resolver, flow_id: flow_id }
     }
 }
 

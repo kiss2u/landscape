@@ -1,11 +1,85 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+const FLOW_ID_MASK: u32 = 0x000000FF;
+const FLOW_ACTION_MASK: u32 = 0x00007F00;
+const FLOW_ALLOW_REUSE_PORT_MASK: u32 = 0x00008000;
+
+const FLOW_KEEP_GOING: u8 = 0;
+const FLOW_DIRECT: u8 = 1;
+const FLOW_DROP: u8 = 2;
+const FLOW_REDIRECT: u8 = 3;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Eq, Hash, TS)]
+#[ts(export, export_to = "flow.ts")]
+pub struct FlowMark {
+    /// Action
+    action: FlowMarkAction,
+
+    /// 允许 NAT 端口共享
+    allow_reuse_port: bool,
+
+    /// Flow Id
+    flow_id: u8,
+}
+
+impl FlowMark {
+    pub fn need_insert_in_ebpf_map(&self) -> bool {
+        match self.action {
+            FlowMarkAction::KeepGoing => self.allow_reuse_port,
+            _ => true,
+        }
+    }
+
+    pub fn get_dns_mark(&self, default_flow_id: u32) -> u32 {
+        let mut mark_value = match self.action {
+            // 转发时候使用目标 flow 进行标记 DNS 请求
+            FlowMarkAction::Redirect => self.flow_id as u32,
+            // 忽略流的配置
+            FlowMarkAction::Direct => 0,
+            // 其余情况使用 当前规则所属的 flow 进行标记
+            _ => default_flow_id,
+        };
+
+        // DNS Allow Reuse Port
+        mark_value |= FLOW_ALLOW_REUSE_PORT_MASK;
+
+        tracing::debug!("dns mark_value: {mark_value}");
+        mark_value
+    }
+}
+
+impl From<u32> for FlowMark {
+    fn from(value: u32) -> Self {
+        let raw_action = ((value & FLOW_ACTION_MASK) >> 8) as u8;
+        let flow_id = (value & FLOW_ID_MASK) as u8;
+        let allow_reuse_port = (value & FLOW_ALLOW_REUSE_PORT_MASK) != 0;
+
+        let action: FlowMarkAction = raw_action.into();
+        FlowMark { action, allow_reuse_port, flow_id }
+    }
+}
+
+impl Into<u32> for FlowMark {
+    fn into(self) -> u32 {
+        let raw_action: u8 = self.action.into();
+        let mut value = (raw_action as u32) << 8;
+
+        value |= self.flow_id as u32;
+
+        if self.allow_reuse_port {
+            value |= FLOW_ALLOW_REUSE_PORT_MASK;
+        }
+
+        value
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Eq, Hash, TS)]
 #[ts(export, export_to = "flow.ts")]
 #[serde(tag = "t")]
 #[serde(rename_all = "snake_case")]
-pub enum FlowMark {
+pub enum FlowMarkAction {
     /// 按照当前 Flow 的配置继续
     #[default]
     KeepGoing,
@@ -15,53 +89,28 @@ pub enum FlowMark {
     /// 丢弃匹配的数据包
     Drop,
     /// 转发到指定的流
-    Redirect { flow_id: u8 },
-    /// 允许 NAT 端口共享
-    AllowReusePort,
+    Redirect,
 }
 
-impl FlowMark {
-    pub fn need_insert_in_ebpf_map(&self) -> bool {
-        match self {
-            FlowMark::KeepGoing => false,
-            _ => true,
+impl From<u8> for FlowMarkAction {
+    fn from(value: u8) -> Self {
+        match value {
+            FLOW_KEEP_GOING => FlowMarkAction::KeepGoing,
+            FLOW_DIRECT => FlowMarkAction::Direct,
+            FLOW_DROP => FlowMarkAction::Drop,
+            FLOW_REDIRECT => FlowMarkAction::Redirect,
+            _ => FlowMarkAction::KeepGoing,
         }
     }
 }
 
-const FLOW_KEEP_GOING: u8 = 0;
-const FLOW_DIRECT: u8 = 1;
-const FLOW_DROP: u8 = 2;
-const FLOW_REDIRECT: u8 = 3;
-const FLOW_ALLOW_REUSE: u8 = 4;
-
-const FLOW_ID_MASK: u32 = 0x000000FF;
-const FLOW_ACTION_MASK: u32 = 0x0000FF00;
-
-impl From<u32> for FlowMark {
-    fn from(value: u32) -> Self {
-        let action = ((value & FLOW_ACTION_MASK) >> 8) as u8;
-        let flow_id = (value & FLOW_ID_MASK) as u8;
-
-        match action {
-            FLOW_KEEP_GOING => FlowMark::KeepGoing,
-            FLOW_DIRECT => FlowMark::Direct,
-            FLOW_DROP => FlowMark::Drop,
-            FLOW_REDIRECT => FlowMark::Redirect { flow_id },
-            FLOW_ALLOW_REUSE => FlowMark::AllowReusePort,
-            _ => FlowMark::KeepGoing,
-        }
-    }
-}
-
-impl Into<u32> for FlowMark {
-    fn into(self) -> u32 {
+impl Into<u8> for FlowMarkAction {
+    fn into(self) -> u8 {
         match self {
-            FlowMark::KeepGoing => (FLOW_KEEP_GOING as u32) << 8,
-            FlowMark::Direct => (FLOW_DIRECT as u32) << 8,
-            FlowMark::Drop => (FLOW_DROP as u32) << 8,
-            FlowMark::Redirect { flow_id } => (FLOW_REDIRECT as u32) << 8 | (flow_id as u32),
-            FlowMark::AllowReusePort => (FLOW_ALLOW_REUSE as u32) << 8,
+            FlowMarkAction::KeepGoing => FLOW_KEEP_GOING,
+            FlowMarkAction::Direct => FLOW_DIRECT,
+            FlowMarkAction::Drop => FLOW_DROP,
+            FlowMarkAction::Redirect => FLOW_REDIRECT,
         }
     }
 }
@@ -72,26 +121,56 @@ mod tests {
 
     #[test]
     fn test_from_u32() {
-        // action = 1 (Direct)
-        assert_eq!(FlowMark::from(0x0100), FlowMark::Direct);
-        // action = 3 (Redirect), index = 5
-        assert_eq!(FlowMark::from(0x0305), FlowMark::Redirect { flow_id: 5 });
-        // action = 4 (SymmetricNat)
-        assert_eq!(FlowMark::from(0x0400), FlowMark::AllowReusePort);
+        assert_eq!(
+            FlowMark::from(0x0100),
+            FlowMark {
+                action: FlowMarkAction::Direct,
+                allow_reuse_port: false,
+                flow_id: 0
+            }
+        );
+        assert_eq!(
+            FlowMark::from(0x0305),
+            FlowMark {
+                action: FlowMarkAction::Redirect,
+                allow_reuse_port: false,
+                flow_id: 5
+            }
+        );
+        assert_eq!(
+            FlowMark::from(0x8300), // 0x8000 | 0x0300
+            FlowMark {
+                action: FlowMarkAction::Redirect,
+                allow_reuse_port: true,
+                flow_id: 0
+            }
+        );
     }
 
     #[test]
     fn test_into_u32() {
-        // Direct -> action = 1
-        let mark: u32 = FlowMark::Direct.into();
+        let mark: u32 = FlowMark {
+            action: FlowMarkAction::Direct,
+            allow_reuse_port: false,
+            flow_id: 0,
+        }
+        .into();
         assert_eq!(mark, 0x0100);
 
-        // Redirect { flow_id: 5 } -> action = 3, index = 5
-        let mark: u32 = FlowMark::Redirect { flow_id: 5 }.into();
+        let mark: u32 = FlowMark {
+            action: FlowMarkAction::Redirect,
+            allow_reuse_port: false,
+            flow_id: 5,
+        }
+        .into();
         assert_eq!(mark, 0x0305);
 
-        // SymmetricNat -> action = 4
-        let mark: u32 = FlowMark::AllowReusePort.into();
-        assert_eq!(mark, 0x0400);
+        let mark: u32 = FlowMark {
+            action: FlowMarkAction::Redirect,
+            allow_reuse_port: true,
+            flow_id: 0,
+        }
+        .into();
+        assert_eq!(mark, 0x8000 | 0x0300); // 0x8000 | 0x0300
     }
 }

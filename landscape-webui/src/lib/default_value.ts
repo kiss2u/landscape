@@ -35,5 +35,4 @@ export enum FlowMarkType {
   Direct = "direct",
   Drop = "drop",
   Redirect = "redirect",
-  AllowReusePort = "allow_reuse_port",
 }

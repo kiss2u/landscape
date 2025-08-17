@@ -7,6 +7,18 @@ import {
   RuleSource,
 } from "@/rust_bindings/common/dns";
 
+function convert_flow_mark(flow_mark?: FlowMark): FlowMark {
+  if (flow_mark) {
+    return flow_mark;
+  } else {
+    return {
+      action: { t: FlowMarkType.KeepGoing },
+      flow_id: 0,
+      allow_reuse_port: false,
+    };
+  }
+}
+
 export class DnsRule implements DNSRuleConfig {
   id: string | null;
   index: number;
@@ -24,7 +36,7 @@ export class DnsRule implements DNSRuleConfig {
     this.index = obj?.index ?? -1;
     this.name = obj?.name ?? "";
     this.enable = obj?.enable ?? true;
-    this.mark = obj?.mark ? { ...obj.mark } : { t: FlowMarkType.KeepGoing };
+    this.mark = convert_flow_mark(obj?.mark);
     this.source = obj?.source ?? [];
     this.resolve_mode = obj?.resolve_mode
       ? { ...obj.resolve_mode }

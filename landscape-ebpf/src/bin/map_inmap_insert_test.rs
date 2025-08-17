@@ -11,7 +11,7 @@ pub fn main() {
     landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
         12,
         vec![FlowMarkInfo {
-            mark: FlowMark::KeepGoing.into(),
+            mark: FlowMark::default().into(),
             ip: std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
             priority: 0,
         }],
@@ -20,7 +20,7 @@ pub fn main() {
     landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
         12,
         vec![FlowMarkInfo {
-            mark: FlowMark::KeepGoing.into(),
+            mark: FlowMark::default().into(),
             ip: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
             priority: 1,
         }],
