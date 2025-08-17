@@ -122,12 +122,12 @@ async function saveRule() {
             <template #unchecked> 禁用 </template>
           </n-switch>
         </n-form-item-gi>
-        <n-form-item-gi label="覆盖 DNS 配置" :span="1">
+        <!-- <n-form-item-gi label="覆盖 DNS 配置" :span="1">
           <n-switch v-model:value="rule.override_dns">
             <template #checked> 覆盖 </template>
             <template #unchecked> 不覆盖 </template>
           </n-switch>
-        </n-form-item-gi>
+        </n-form-item-gi> -->
 
         <n-form-item-gi :span="5" label="流量标记">
           <FlowMarkEdit v-model:mark="rule.mark"></FlowMarkEdit>

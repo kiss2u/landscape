@@ -11,7 +11,7 @@ use clap::Parser;
 use landscape::iface::get_iface_by_name;
 use landscape_common::{
     firewall::{FirewallRuleItem, FirewallRuleMark},
-    mark::PacketMark,
+    flow::mark::FlowMark,
     network::LandscapeIpProtocolCode,
 };
 use landscape_ebpf::map_setting::add_firewall_rule;
@@ -75,7 +75,7 @@ fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {
                 address: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                 ip_prefixlen: 0,
             },
-            mark: PacketMark::default(),
+            mark: FlowMark::default(),
         },
         FirewallRuleMark {
             item: FirewallRuleItem {
@@ -84,7 +84,7 @@ fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {
                 address: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                 ip_prefixlen: 0,
             },
-            mark: PacketMark::default(),
+            mark: FlowMark::default(),
         },
         FirewallRuleMark {
             item: FirewallRuleItem {
@@ -93,7 +93,7 @@ fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {
                 address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
                 ip_prefixlen: 0,
             },
-            mark: PacketMark::default(),
+            mark: FlowMark::default(),
         },
         FirewallRuleMark {
             item: FirewallRuleItem {
@@ -102,7 +102,7 @@ fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {
                 address: IpAddr::V4(Ipv4Addr::BROADCAST),
                 ip_prefixlen: 0,
             },
-            mark: PacketMark::default(),
+            mark: FlowMark::default(),
         },
     ]
 }

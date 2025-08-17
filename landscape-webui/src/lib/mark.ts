@@ -1,13 +1,5 @@
 import { PacketMark } from "@/rust_bindings/mark";
-import { MarkType } from "./dns";
-
-export enum FlowMarkType {
-  KEEP_GOING = "keep_going",
-  DIRECT = "direct",
-  DROP = "drop",
-  REDIRECT = "redirect",
-  ALLOW_REUSE_PORT = "allow_reuse_port",
-}
+import { convert_flow_mark, MarkType } from "./dns";
 
 export class MarkServiceConfig {
   iface_name: string;
@@ -73,7 +65,7 @@ export class WanIpRuleConfigClass implements WanIpRuleConfig {
     this.id = obj?.id ?? null;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
-    this.mark = obj?.mark ? { ...obj.mark } : { t: FlowMarkType.KEEP_GOING };
+    this.mark = convert_flow_mark(obj.mark);
     this.source = obj?.source ? obj?.source.map(new_wan_rules) : [];
     this.remark = obj?.remark ?? "";
     this.flow_id = obj?.flow_id ?? 0;
@@ -107,7 +99,7 @@ export class FirewallRule implements FirewallRuleConfig {
   id: string | null;
   index: number;
   enable: boolean;
-  mark: PacketMark;
+  mark: FlowMark;
   items: FirewallRuleItemClass[];
   remark: string;
   update_at: number;
@@ -116,7 +108,7 @@ export class FirewallRule implements FirewallRuleConfig {
     this.id = obj?.id ?? null;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
-    this.mark = obj?.mark ? { ...obj.mark } : { t: MarkType.NoMark };
+    this.mark = convert_flow_mark(obj.mark);
     this.items = obj?.items
       ? obj?.items.map((e) => new FirewallRuleItemClass(e))
       : [];

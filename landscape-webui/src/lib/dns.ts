@@ -7,7 +7,7 @@ import {
   RuleSource,
 } from "@/rust_bindings/common/dns";
 
-function convert_flow_mark(flow_mark?: FlowMark): FlowMark {
+export function convert_flow_mark(flow_mark?: FlowMark): FlowMark {
   if (flow_mark) {
     return flow_mark;
   } else {

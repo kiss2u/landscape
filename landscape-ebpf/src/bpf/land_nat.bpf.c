@@ -1198,6 +1198,9 @@ int egress_nat(struct __sk_buff *skb) {
         }
 
         bool allow_reuse_port = get_flow_allow_reuse_port(skb->mark);
+        // if (allow_reuse_port) {
+        //     bpf_log_info("allow_reuse_port: %u, skb->mark: %u", allow_reuse_port, skb->mark);
+        // }
         if (!allow_reuse_port && packet_info.ip_protocol != IPPROTO_ICMP) {
             // PORT REUSE check
             if (!ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr) ||

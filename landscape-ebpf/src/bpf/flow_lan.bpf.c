@@ -349,9 +349,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
             flow_mark_action = ip_flow_mark_value->mark;
             priority = ip_flow_mark_value->priority;
             // bpf_log_info("find ip map mark: %d", flow_mark_action);
-            // if (ip_flow_mark->override_dns == 1) {
-            //     goto apply_action;
-            // }
+            // bpf_log_info("get_flow_allow_reuse_port: %d", get_flow_allow_reuse_port(flow_mark_action));
         }
     } else {
         // bpf_log_info("flow_id: %d, ip map is empty", *flow_id_ptr);
@@ -384,15 +382,15 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     }
 
     // bpf_log_info("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
-    u8 flow_action, dns_flow_id;
+    u8 flow_action;
     struct flow_target_info *target_info;
 apply_action:
 
-    skb->mark = flow_mark_action;
+    // skb->mark = flow_mark_action;
     // skb->mark = replace_flow_id(flow_mark_action, flow_id_u8);
 
     flow_action = get_flow_action(flow_mark_action);
-    dns_flow_id = get_flow_id(flow_mark_action);
+    // dns_flow_id = get_flow_id(flow_mark_action);
     // bpf_log_info("dns_flow_id %d, flow_action: %d ", dns_flow_id, flow_action);
     if (flow_action == FLOW_KEEP_GOING) {
         // 无动作
@@ -400,18 +398,23 @@ apply_action:
     } else if (flow_action == FLOW_DIRECT) {
         // bpf_log_info("FLOW_DIRECT ip: %pI4", cache_key.dst_addr.all);
         // RESET Flow ID
-        flow_id = 0;
+        // flow_id = 0;
+        flow_mark_action = replace_flow_id(flow_mark_action, 0);
     } else if (flow_action == FLOW_DROP) {
         // bpf_log_info("FLOW_DROP ip: %pI4", cache_key.dst_addr.all);
         return TC_ACT_SHOT;
     } else if (flow_action == FLOW_REDIRECT) {
         // bpf_log_info("FLOW_REDIRECT ip: %pI4, flow_id: %d", cache_key.dst_addr.all,
         //              dns_flow_id);
-        flow_id = dns_flow_id;
+        // flow_id = dns_flow_id;
     }
 
 keep_going:
-    *init_flow_id_ = flow_id;
+    // if (flow_mark_action != 0) {
+    //     bpf_log_info("flow_mark_action valueis : %u", flow_mark_action);
+    //     bpf_log_info("dst ip: %pI4", cache_key.dst_addr.all);
+    // }
+    *init_flow_id_ = flow_mark_action;
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
@@ -524,7 +527,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
     // bool is_ipv4;
 
     int ret;
-    u32 flow_id = skb->mark;
+    u32 flow_mark = skb->mark;
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
@@ -565,17 +568,15 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_id);
+    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    u32 mark = skb->mark;
-    barrier_var(mark);
-    mark = replace_flow_source(mark, FLOW_FROM_LAN);
-    skb->mark = mark;
+    barrier_var(flow_mark);
+    skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
 
-    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_id);
+    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_mark);
     return ret;
 
 #undef BPF_LOG_TOPIC
@@ -627,7 +628,7 @@ SEC("tc/egress")
 int wan_route_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_egress"
     int ret;
-    u32 flow_id = skb->mark;
+    u32 flow_mark = skb->mark;
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
@@ -654,18 +655,15 @@ int wan_route_egress(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) {
         return ret;
     }
-
-    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_id);
+    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    u32 mark = skb->mark;
-    barrier_var(mark);
-    mark = replace_flow_source(mark, FLOW_FROM_WAN);
-    skb->mark = mark;
+    barrier_var(flow_mark);
+    skb->mark = replace_flow_source(flow_mark, FLOW_FROM_WAN);
 
-    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_id);
+    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_mark);
     return ret;
 #undef BPF_LOG_TOPIC
 }
