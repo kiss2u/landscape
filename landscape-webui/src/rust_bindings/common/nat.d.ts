@@ -24,10 +24,12 @@ export type StaticNatMappingConfig = {
    * If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
    * the router's own address instead of an internal host.
    */
-  lan_ip: string;
+  lan_ipv4: string | null;
+  lan_ipv6: string | null;
   /**
    * TCP / UDP
    */
-  l4_protocol: Array<number>;
+  ipv4_l4_protocol: Array<number>;
+  ipv6_l4_protocol: Array<number>;
   update_at: number;
 };

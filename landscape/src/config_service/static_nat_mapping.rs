@@ -1,12 +1,13 @@
 use std::{
     collections::{HashMap, HashSet},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr},
 };
 
 use landscape_common::{
-    config::nat::StaticNatMappingConfig, service::controller_service::ConfigController,
-    utils::time::get_f64_timestamp, LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
-    LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+    config::nat::{StaticNatMappingConfig, StaticNatMappingItem},
+    service::controller_service::ConfigController,
+    utils::time::get_f64_timestamp,
+    LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
 use landscape_database::{
     provider::LandscapeDBServiceProvider,
@@ -62,40 +63,25 @@ pub fn update_mapping_rules(
     rules: Vec<StaticNatMappingConfig>,
     old_rules: Vec<StaticNatMappingConfig>,
 ) {
-    let rules = mapping_rule_into_hash(rules);
-    let old_rules = mapping_rule_into_hash(old_rules);
+    let new_rules: HashSet<StaticNatMappingItem> =
+        rules.into_iter().filter(|e| e.enable).flat_map(|e| e.convert_to_item()).collect();
+    let old_rules: HashSet<StaticNatMappingItem> =
+        old_rules.into_iter().filter(|e| e.enable).flat_map(|e| e.convert_to_item()).collect();
 
-    tracing::debug!("rules: {:?}", rules);
+    tracing::debug!("rules: {:?}", new_rules);
     tracing::debug!("old_rules: {:?}", old_rules);
 
-    let new_ids: HashSet<_> = rules.keys().collect();
-    let old_ids: HashSet<_> = old_rules.keys().collect();
+    // 需要删除的
+    let to_delete: HashSet<_> = old_rules.difference(&new_rules).cloned().collect();
 
-    let remove_ids: HashSet<_> = &old_ids - &new_ids;
-    let mut remove_rules: Vec<_> =
-        old_rules.values().filter(|v| remove_ids.contains(&v.id)).cloned().collect();
+    // 需要添加的
+    let to_add: HashSet<_> = new_rules.difference(&old_rules).cloned().collect();
 
-    let mut update_list = vec![];
-    for id in new_ids {
-        match (rules.get(id), old_rules.get(id)) {
-            (Some(rule), Some(old_rule)) => {
-                if !rule.is_same_config(&old_rule) {
-                    remove_rules.push(old_rule.clone());
-                    update_list.push(rule.clone());
-                }
-            }
-            (Some(rule), None) => {
-                update_list.push(rule.clone());
-            }
-            _ => {}
-        }
-    }
+    tracing::debug!("delete static mapping items: {:?}", to_delete);
+    tracing::debug!("add static mapping items: {:?}", to_add);
 
-    tracing::debug!("update_config: {:?}", update_list);
-    tracing::debug!("delete_keys: {:?}", remove_rules);
-
-    landscape_ebpf::map_setting::nat::del_static_nat_mapping(remove_rules);
-    landscape_ebpf::map_setting::nat::add_static_nat_mapping(update_list);
+    landscape_ebpf::map_setting::nat::del_static_nat_mapping(to_delete.into_iter());
+    landscape_ebpf::map_setting::nat::add_static_nat_mapping(to_add.into_iter());
 }
 
 pub fn mapping_rule_into_hash(
@@ -119,8 +105,10 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
         wan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
         wan_iface_name: None,
         lan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
-        lan_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-        l4_protocol: vec![17],
+        lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
+        lan_ipv6: None,
+        ipv4_l4_protocol: vec![17],
+        ipv6_l4_protocol: vec![],
         id: Uuid::new_v4(),
         enable: true,
         remark: "Default DHCPv4 Client Port".to_string(),
@@ -131,8 +119,10 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
         wan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
         wan_iface_name: None,
         lan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
-        lan_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-        l4_protocol: vec![17],
+        lan_ipv4: None,
+        lan_ipv6: Some(Ipv6Addr::UNSPECIFIED),
+        ipv4_l4_protocol: vec![],
+        ipv6_l4_protocol: vec![17],
         id: Uuid::new_v4(),
         enable: true,
         remark: "Default DHCPv6 Client Port".to_string(),
@@ -144,8 +134,10 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             wan_port: 8080,
             wan_iface_name: None,
             lan_port: 8081,
-            lan_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            l4_protocol: vec![6, 17],
+            lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
+            lan_ipv6: None,
+            ipv4_l4_protocol: vec![6, 17],
+            ipv6_l4_protocol: vec![],
             id: Uuid::new_v4(),
             enable: true,
             remark: "For Test".to_string(),
@@ -156,8 +148,10 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             wan_port: 5173,
             wan_iface_name: None,
             lan_port: 5173,
-            lan_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            l4_protocol: vec![6],
+            lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
+            lan_ipv6: None,
+            ipv4_l4_protocol: vec![6],
+            ipv6_l4_protocol: vec![],
             id: Uuid::new_v4(),
             enable: true,
             remark: "".to_string(),
@@ -168,8 +162,10 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             wan_port: 22,
             wan_iface_name: None,
             lan_port: 22,
-            lan_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            l4_protocol: vec![6],
+            lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
+            lan_ipv6: None,
+            ipv4_l4_protocol: vec![6],
+            ipv6_l4_protocol: vec![],
             id: Uuid::new_v4(),
             enable: true,
             remark: "".to_string(),

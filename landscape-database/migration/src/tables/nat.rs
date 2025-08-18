@@ -24,8 +24,13 @@ pub enum StaticNatMappingConfigs {
     WanPort,
     WanIfaceName,
     LanPort,
-    LanIp,
-    #[sea_orm(iden = "l4_protocol")]
-    L4Protocol,
+    #[sea_orm(iden = "lan_ipv4")]
+    LanIpv4,
+    #[sea_orm(iden = "lan_ipv6")]
+    LanIpv6,
+    #[sea_orm(iden = "ipv4_l4_protocol")]
+    Ipv4L4Protocol,
+    #[sea_orm(iden = "ipv6_l4_protocol")]
+    Ipv6L4Protocol,
     UpdateAt,
 }

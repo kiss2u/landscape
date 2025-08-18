@@ -33,11 +33,19 @@ pub struct Model {
 
     /// Internal IP address to forward traffic to
     /// If set to `UNSPECIFIED` (0.0.0.0 or ::), the mapping targets the router itself
-    pub lan_ip: String,
+    #[sea_orm(column_name = "lan_ipv4")]
+    pub lan_ipv4: Option<String>,
 
-    /// Layer 4 protocol (TCP / UDP)
-    #[sea_orm(column_name = "l4_protocol")]
-    pub l4_protocol: DBJson,
+    #[sea_orm(column_name = "lan_ipv6")]
+    pub lan_ipv6: Option<String>,
+
+    /// Ipv4 Layer 4 protocol (TCP / UDP)
+    #[sea_orm(column_name = "ipv4_l4_protocol")]
+    pub ipv4_l4_protocol: DBJson,
+
+    /// Ipv6 Layer 4 protocol (TCP / UDP)
+    #[sea_orm(column_name = "ipv6_l4_protocol")]
+    pub ipv6_l4_protocol: DBJson,
 
     /// Last update timestamp
     pub update_at: DBTimestamp,
@@ -58,8 +66,10 @@ impl From<Model> for StaticNatMappingConfig {
             wan_port: model.wan_port,
             wan_iface_name: model.wan_iface_name,
             lan_port: model.lan_port,
-            lan_ip: model.lan_ip.parse().unwrap(),
-            l4_protocol: serde_json::from_value(model.l4_protocol).unwrap(),
+            lan_ipv4: model.lan_ipv4.map(|e| e.parse().ok()).unwrap_or(None),
+            lan_ipv6: model.lan_ipv6.map(|e| e.parse().ok()).unwrap_or(None),
+            ipv4_l4_protocol: serde_json::from_value(model.ipv4_l4_protocol).unwrap(),
+            ipv6_l4_protocol: serde_json::from_value(model.ipv6_l4_protocol).unwrap(),
             update_at: model.update_at,
         }
     }
@@ -80,8 +90,10 @@ impl UpdateActiveModel<ActiveModel> for StaticNatMappingConfig {
         active.wan_port = Set(self.wan_port);
         active.wan_iface_name = Set(self.wan_iface_name);
         active.lan_port = Set(self.lan_port);
-        active.lan_ip = Set(self.lan_ip.to_string());
-        active.l4_protocol = Set(serde_json::to_value(&self.l4_protocol).unwrap());
+        active.lan_ipv4 = Set(self.lan_ipv4.map(|ip| ip.to_string()));
+        active.lan_ipv6 = Set(self.lan_ipv6.map(|ip| ip.to_string()));
+        active.ipv4_l4_protocol = Set(serde_json::to_value(&self.ipv4_l4_protocol).unwrap());
+        active.ipv6_l4_protocol = Set(serde_json::to_value(&self.ipv6_l4_protocol).unwrap());
         active.update_at = Set(self.update_at);
     }
 }

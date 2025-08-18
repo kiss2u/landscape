@@ -1,6 +1,6 @@
 use core::ops::Range;
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -62,21 +62,42 @@ pub struct StaticNatMappingConfig {
     pub lan_port: u16,
     /// If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
     /// the router's own address instead of an internal host.
-    pub lan_ip: IpAddr,
+    pub lan_ipv4: Option<Ipv4Addr>,
+    pub lan_ipv6: Option<Ipv6Addr>,
     /// TCP / UDP
-    pub l4_protocol: Vec<u8>,
+    pub ipv4_l4_protocol: Vec<u8>,
+    pub ipv6_l4_protocol: Vec<u8>,
     #[serde(default = "get_f64_timestamp")]
     pub update_at: f64,
 }
 
 impl StaticNatMappingConfig {
-    pub fn is_same_config(&self, other: &StaticNatMappingConfig) -> bool {
-        self.id == other.id
-            && self.wan_port == other.wan_port
-            && self.wan_iface_name == other.wan_iface_name
-            && self.lan_port == other.lan_port
-            && self.lan_ip == other.lan_ip
-            && self.l4_protocol == other.l4_protocol
+    pub fn convert_to_item(&self) -> Vec<StaticNatMappingItem> {
+        let mut result = Vec::with_capacity(4);
+        for l4_protocol in self.ipv4_l4_protocol.iter() {
+            if let Some(ipv4) = self.lan_ipv4 {
+                result.push(StaticNatMappingItem {
+                    wan_port: self.wan_port,
+                    wan_iface_name: self.wan_iface_name.clone(),
+                    lan_port: self.lan_port,
+                    lan_ip: IpAddr::V4(ipv4),
+                    l4_protocol: *l4_protocol,
+                });
+            }
+        }
+
+        for l4_protocol in self.ipv6_l4_protocol.iter() {
+            if let Some(ipv6) = self.lan_ipv6 {
+                result.push(StaticNatMappingItem {
+                    wan_port: self.wan_port,
+                    wan_iface_name: self.wan_iface_name.clone(),
+                    lan_port: self.lan_port,
+                    lan_ip: IpAddr::V6(ipv6),
+                    l4_protocol: *l4_protocol,
+                });
+            }
+        }
+        result
     }
 }
 
@@ -84,4 +105,13 @@ impl LandscapeDBStore<Uuid> for StaticNatMappingConfig {
     fn get_id(&self) -> Uuid {
         self.id
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+pub struct StaticNatMappingItem {
+    pub wan_port: u16,
+    pub wan_iface_name: Option<String>,
+    pub lan_port: u16,
+    pub lan_ip: IpAddr,
+    pub l4_protocol: u8,
 }
