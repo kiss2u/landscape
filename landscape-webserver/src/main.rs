@@ -30,7 +30,7 @@ use landscape::{
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
-    args::{LAND_ARGS, LAND_HOME_PATH},
+    args::{LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
     config::RuntimeConfig,
     error::LdResult,
 };
@@ -110,18 +110,8 @@ pub struct LandscapeApp {
     static_nat_mapping_config_service: StaticNatMappingService,
 }
 
-#[tokio::main]
-async fn main() -> LdResult<()> {
-    let home_path = LAND_HOME_PATH.clone();
+async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let need_init_config = boot_check(&home_path)?;
-
-    let config = RuntimeConfig::new((*LAND_ARGS).clone());
-
-    if let Err(e) = init_logger(config.log.clone()) {
-        panic!("init log error: {e:?}");
-    }
-
-    banner(&config);
 
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
@@ -352,6 +342,30 @@ async fn main() -> LdResult<()> {
 
     // axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> LdResult<()> {
+    let config = RuntimeConfig::new((*LAND_ARGS).clone());
+    let home_path = LAND_HOME_PATH.clone();
+
+    if let Err(e) = init_logger(config.log.clone()) {
+        panic!("init log error: {e:?}");
+    }
+
+    banner(&config);
+
+    let args = &LAND_ARGS;
+    if let Some(action) = &args.action {
+        match action {
+            LandscapeAction::Db { rollback, times } => {
+                landscape_database::provider::db_action(&config.store, rollback, times).await;
+                Ok(())
+            }
+        }
+    } else {
+        run(home_path, config).await
+    }
 }
 
 /// NOT Found
