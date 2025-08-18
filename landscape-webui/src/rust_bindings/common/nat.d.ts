@@ -28,6 +28,6 @@ export type StaticNatMappingConfig = {
   /**
    * TCP / UDP
    */
-  l4_protocol: number;
+  l4_protocol: Array<number>;
   update_at: number;
 };

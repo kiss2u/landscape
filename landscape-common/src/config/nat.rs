@@ -64,7 +64,7 @@ pub struct StaticNatMappingConfig {
     /// the router's own address instead of an internal host.
     pub lan_ip: IpAddr,
     /// TCP / UDP
-    pub l4_protocol: u8,
+    pub l4_protocol: Vec<u8>,
     #[serde(default = "get_f64_timestamp")]
     pub update_at: f64,
 }

@@ -4,6 +4,7 @@ use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
 use crate::DBId;
+use crate::DBJson;
 use crate::DBTimestamp;
 
 pub type StaticNatMappingConfigModel = Model;
@@ -36,7 +37,7 @@ pub struct Model {
 
     /// Layer 4 protocol (TCP / UDP)
     #[sea_orm(column_name = "l4_protocol")]
-    pub l4_protocol: u8,
+    pub l4_protocol: DBJson,
 
     /// Last update timestamp
     pub update_at: DBTimestamp,
@@ -58,7 +59,7 @@ impl From<Model> for StaticNatMappingConfig {
             wan_iface_name: model.wan_iface_name,
             lan_port: model.lan_port,
             lan_ip: model.lan_ip.parse().unwrap(),
-            l4_protocol: model.l4_protocol,
+            l4_protocol: serde_json::from_value(model.l4_protocol).unwrap(),
             update_at: model.update_at,
         }
     }
@@ -80,7 +81,7 @@ impl UpdateActiveModel<ActiveModel> for StaticNatMappingConfig {
         active.wan_iface_name = Set(self.wan_iface_name);
         active.lan_port = Set(self.lan_port);
         active.lan_ip = Set(self.lan_ip.to_string());
-        active.l4_protocol = Set(self.l4_protocol);
+        active.l4_protocol = Set(serde_json::to_value(&self.l4_protocol).unwrap());
         active.update_at = Set(self.update_at);
     }
 }

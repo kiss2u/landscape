@@ -20,7 +20,7 @@ impl MigrationTrait for Migration {
                     .col(string_null(StaticNatMappingConfigs::WanIfaceName))
                     .col(integer(StaticNatMappingConfigs::LanPort))
                     .col(string(StaticNatMappingConfigs::LanIp))
-                    .col(integer(StaticNatMappingConfigs::L4Protocol))
+                    .col(json(StaticNatMappingConfigs::L4Protocol))
                     .col(double(StaticNatMappingConfigs::UpdateAt).default(0))
                     .to_owned(),
             )

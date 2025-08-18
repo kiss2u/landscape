@@ -35,11 +35,6 @@ const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
-const protocolOptions = [
-  { label: "TCP", value: 6 },
-  { label: "UDP", value: 17 },
-];
-
 const rules = {
   wan_port: [
     {
@@ -96,7 +91,7 @@ async function enter() {
       lan_port: 0,
       lan_ip: "0.0.0.0",
       remark: "",
-      l4_protocol: 6,
+      l4_protocol: [6],
       update_at: 0,
     };
   }
@@ -167,12 +162,12 @@ async function saveRule() {
         </n-form-item-gi>
 
         <n-form-item-gi label="允许协议" :span="2">
-          <n-select
-            v-model:value="rule.l4_protocol"
-            placeholder="允许协议"
-            :options="protocolOptions"
-            style="width: 140px"
-          />
+          <n-checkbox-group v-model:value="rule.l4_protocol">
+            <n-space item-style="display: flex;">
+              <n-checkbox :value="6" label="TCP" />
+              <n-checkbox :value="17" label="UDP" />
+            </n-space>
+          </n-checkbox-group>
         </n-form-item-gi>
 
         <!-- <n-form-item-gi :span="5" label="进入的 wan">
