@@ -95,7 +95,7 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(ChartCombo),
   },
   {
-    label: "Geo 管理",
+    label: "地理关系库管理",
     key: "geo",
     icon: renderIcon(BookGlobe20Regular),
     children: [

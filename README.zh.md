@@ -116,7 +116,7 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
    ```
 2. 从 [release](https://github.com/ThisSeanZhang/landscape/releases) 中复制静态页面文件 **static.zip** 并解压到 `~/.landscape-router/static`.
 3. 假如你有桌面环境, 并且有浏览器, 那么可以跳过这一步骤.  
-    创建初始文件 `landscape_init.toml` 可参考 [快速启动中配置](https://landscape.whileaway.dev/quick.html)
+    创建初始文件 `landscape_init.toml` 可参考 [配置文件介绍](https://landscape.whileaway.dev/config/)
 4. 启动服务：从 [Release](https://github.com/ThisSeanZhang/landscape/releases) 中下载需要的版本.  
 运行以下命令启动服务 (需要使用 root 权限进行启动)：
    ```shell
@@ -142,11 +142,6 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     [Install]
     WantedBy=multi-user.target
     ```
-
-
-### Docker Compose 启动体验
-见文档 [快速启动](https://landscape.whileaway.dev/quick.html)
-
 
 ### Armbian 集成
 见文档 [Armbian 集成](https://landscape.whileaway.dev/compilation/armbian.html)
