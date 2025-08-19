@@ -30,10 +30,9 @@ export function flow_target_options(): { label: string; value: string }[] {
   ];
 }
 
-export enum FlowDnsMarkType {
+export enum FlowMarkType {
   KeepGoing = "keep_going",
   Direct = "direct",
   Drop = "drop",
   Redirect = "redirect",
-  AllowReusePort = "allow_reuse_port",
 }

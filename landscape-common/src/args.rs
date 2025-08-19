@@ -1,6 +1,6 @@
 use std::{net::IpAddr, path::PathBuf};
 
-use clap::{arg, Parser};
+use clap::{arg, Parser, Subcommand};
 use once_cell::sync::Lazy;
 
 use crate::LANDSCAPE_CONFIG_DIR_NAME;
@@ -25,6 +25,7 @@ pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
         path.join(LANDSCAPE_CONFIG_DIR_NAME)
     }
 });
+
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
@@ -82,6 +83,21 @@ pub struct WebCommArgs {
     /// [default: 7]
     #[arg(long, env = "LANDSCAPE_LOG_FILE_LIMIT")]
     pub max_log_files: Option<usize>,
+
+    #[command(subcommand)]
+    pub action: Option<LandscapeAction>,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum LandscapeAction {
+    /// Database-related operations
+    Db {
+        #[arg(short, long)]
+        rollback: bool,
+
+        #[clap(short = 't', long, default_value_t = 1)]
+        times: u32,
+    },
 }
 
 #[derive(Debug, Clone)]

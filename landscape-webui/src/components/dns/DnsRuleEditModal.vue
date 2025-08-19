@@ -17,7 +17,7 @@ import { ChangeCatalog } from "@vicons/carbon";
 import { computed, onMounted } from "vue";
 import { ref } from "vue";
 import UpstreamEdit from "@/components/dns/upstream/UpstreamEdit.vue";
-import FlowDnsMark from "@/components/flow/FlowDnsMark.vue";
+import FlowMarkEdit from "@/components/flow/FlowMarkEdit.vue";
 import { RuleSource } from "@/rust_bindings/common/dns";
 import {
   copy_context_to_clipboard,
@@ -206,7 +206,7 @@ async function import_rules() {
             </template>
             <span>向上游 DNS 请求时的流量是否标记</span>
           </n-popover> -->
-          <FlowDnsMark v-model:mark="rule.mark"></FlowDnsMark>
+          <FlowMarkEdit v-model:mark="rule.mark"></FlowMarkEdit>
         </n-form-item-gi>
         <n-form-item-gi :span="5" label="解析模式">
           <n-radio-group

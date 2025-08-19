@@ -3,8 +3,9 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::flow::mark::FlowMark;
 use crate::{
-    mark::PacketMark, network::LandscapeIpProtocolCode, store::storev2::LandscapeStore,
+    network::LandscapeIpProtocolCode, store::storev2::LandscapeStore,
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
 
@@ -23,7 +24,8 @@ pub struct FirewallRuleConfig {
     pub items: Vec<FirewallRuleConfigItem>,
     /// 流量标记
     #[serde(default)]
-    pub mark: PacketMark,
+    pub mark: FlowMark,
+
     #[serde(default = "get_f64_timestamp")]
     pub update_at: f64,
 }
@@ -70,7 +72,7 @@ pub enum LandscapeIpType {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FirewallRuleMark {
     pub item: FirewallRuleItem,
-    pub mark: PacketMark,
+    pub mark: FlowMark,
 }
 
 pub fn insert_default_firewall_rule() -> Option<FirewallRuleConfig> {
@@ -160,7 +162,7 @@ pub fn insert_default_firewall_rule() -> Option<FirewallRuleConfig> {
             enable: true,
             remark: "Landscape Router Default Firewall Rule".to_string(),
             items,
-            mark: PacketMark::default(),
+            mark: FlowMark::default(),
             update_at: get_f64_timestamp(),
         })
     }

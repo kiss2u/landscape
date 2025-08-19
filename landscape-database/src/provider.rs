@@ -19,8 +19,21 @@ use crate::{
     mss_clamp::repository::MssClampServiceRepository, nat::repository::NatServiceRepository,
     pppd::repository::PPPDServiceRepository, ra::repository::IPV6RAServiceRepository,
     route_lan::repository::RouteLanServiceRepository,
-    route_wan::repository::RouteWanServiceRepository, wifi::repository::WifiServiceRepository,
+    route_wan::repository::RouteWanServiceRepository,
+    static_nat_mapping::repository::StaticNatMappingConfigRepository,
+    wifi::repository::WifiServiceRepository,
 };
+
+pub async fn db_action(config: &StoreRuntimeConfig, rollback: &bool, steps: &u32) {
+    let opt: migration::sea_orm::ConnectOptions = config.database_path.clone().into();
+    let database = Database::connect(opt).await.expect("Database connection failed");
+
+    if *rollback {
+        Migrator::down(&database, Some(*steps)).await.unwrap();
+    } else {
+        Migrator::up(&database, Some(*steps)).await.unwrap();
+    }
+}
 
 /// 存储提供者  
 /// 后续有需要再进行抽象
@@ -71,6 +84,7 @@ impl LandscapeDBServiceProvider {
             geo_sites,
             route_lans,
             route_wans,
+            static_nat_mappings,
         }) = config
         {
             let iface_store = self.iface_store();
@@ -186,6 +200,12 @@ impl LandscapeDBServiceProvider {
             for each_config in route_wans {
                 rooute_wan_store.set_model(each_config).await.unwrap();
             }
+
+            let static_nat_mapping_store = self.static_nat_mapping_store();
+            static_nat_mapping_store.truncate_table().await.unwrap();
+            for each_config in static_nat_mappings {
+                static_nat_mapping_store.set_model(each_config).await.unwrap();
+            }
         }
     }
 
@@ -267,6 +287,10 @@ impl LandscapeDBServiceProvider {
 
     pub fn route_lan_service_store(&self) -> RouteLanServiceRepository {
         RouteLanServiceRepository::new(self.database.clone())
+    }
+
+    pub fn static_nat_mapping_store(&self) -> StaticNatMappingConfigRepository {
+        StaticNatMappingConfigRepository::new(self.database.clone())
     }
 }
 

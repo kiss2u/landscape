@@ -390,7 +390,7 @@ static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new,
     // bpf_log_debug("insert new CT");
 
     // 发送 event
-    struct nat_conn_event* event;
+    struct nat_conn_event *event;
     event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
     if (event != NULL) {
         COPY_ADDR_FROM(event->dst_addr.all, nat_egress_value->trigger_addr.all);
@@ -551,15 +551,20 @@ egress_lookup_or_new_mapping(struct __sk_buff *skb, u8 ip_protocol, bool allow_c
         if (!allow_create_mapping) {
             return TC_ACT_SHOT;
         }
-        u32 wan_ip_key = skb->ifindex;
-        __be32 *wan_ip = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_ip_key);
-        if (!wan_ip) {
+        struct wan_ip_info_key wan_search_key = {0};
+        wan_search_key.ifindex = skb->ifindex;
+        wan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+
+        struct wan_ip_info_value *wan_ip_info =
+            bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+
+        if (!wan_ip_info) {
             bpf_log_info("can't find the wan ip, using ifindex: %d", skb->ifindex);
             return TC_ACT_SHOT;
         }
         struct nat_mapping_value new_nat_egress_value = {0};
 
-        new_nat_egress_value.addr.ip = *wan_ip;
+        new_nat_egress_value.addr.ip = wan_ip_info->addr.ip;
         new_nat_egress_value.port = egress_key.from_port;  // 尽量先试试使用客户端发起时候的端口
         new_nat_egress_value.trigger_addr = pkt_ip_pair->dst_addr;
         new_nat_egress_value.trigger_port = pkt_ip_pair->dst_port;
@@ -648,48 +653,52 @@ egress_lookup_or_new_mapping(struct __sk_buff *skb, u8 ip_protocol, bool allow_c
 
 static __always_inline int lookup_static_mapping(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
                                                  const struct inet_pair *pkt_ip_pair,
-                                                 struct nat_mapping_value **nat_gress_value_,
-                                                 struct nat_mapping_value **nat_gress_value_rev_) {
+                                                 struct nat_mapping_value **nat_ingress_value_,
+                                                 struct nat_mapping_value **nat_egress_value_) {
 #define BPF_LOG_TOPIC "lookup_static_mapping"
-    struct nat_mapping_key gress_key = {
-        .gress = gress,
-        .l4proto = ip_protocol,
-        .from_port = pkt_ip_pair->src_port,
-        .from_addr = pkt_ip_pair->src_addr,
-    };
+    struct static_nat_mapping_key egress_key = {0};
+    struct static_nat_mapping_key ingress_key = {0};
+
+    egress_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+    egress_key.l4_protocol = ip_protocol;
+    ingress_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+    ingress_key.l4_protocol = ip_protocol;
 
     struct nat_mapping_value *nat_gress_value = NULL;
     struct nat_mapping_value *nat_gress_value_rev = NULL;
-    u8 gress_rev = gress;
-    if (gress == NAT_MAPPING_INGRESS) {
-        gress_rev = NAT_MAPPING_EGRESS;
-        gress_key.from_port = pkt_ip_pair->dst_port;
-        gress_key.from_addr = pkt_ip_pair->dst_addr;
-    } else {
-        gress_rev = NAT_MAPPING_INGRESS;
-    }
+    if (gress == NAT_MAPPING_EGRESS) {
+        egress_key.gress = NAT_MAPPING_EGRESS;
+        egress_key.prefixlen = 192;
+        egress_key.port = pkt_ip_pair->src_port;
+        COPY_ADDR_FROM(egress_key.addr.all, pkt_ip_pair->src_addr.all);
 
-    // 倒置的值
-    nat_gress_value = bpf_map_lookup_elem(&static_nat_mappings, &gress_key);
-    if (nat_gress_value) {
-        // 已经存在就查询另外一个值 并进行刷新时间
-        struct nat_mapping_key ingress_key = {
-            .gress = gress_rev,
-            .l4proto = ip_protocol,              // 原有的 l4 层协议值
-            .from_port = nat_gress_value->port,  // 数据包中的 内网端口
-            .from_addr = nat_gress_value->addr,  // 内网原始地址
-        };
-        nat_gress_value_rev = bpf_map_lookup_elem(&static_nat_mappings, &ingress_key);
-
-        if (!nat_gress_value_rev) {
+        // 倒置的值
+        nat_gress_value = bpf_map_lookup_elem(&static_nat_mappings, &egress_key);
+        if (nat_gress_value) {
+            // bpf_log_info("find egress value: nat_port: %u", bpf_htons(nat_gress_value->port));
+            *nat_egress_value_ = nat_gress_value;
+        } else {
+            // bpf_log_info("can't find egress value: %u", bpf_htons(egress_key.port));
             return TC_ACT_SHOT;
         }
     } else {
-        return TC_ACT_SHOT;
+        ingress_key.prefixlen = 96;
+        ingress_key.gress = NAT_MAPPING_INGRESS;
+        ingress_key.port = pkt_ip_pair->dst_port;
+        // using current ifindex to query
+        // egress_key.addr.ip = skb->ifindex;
+        nat_gress_value_rev = bpf_map_lookup_elem(&static_nat_mappings, &ingress_key);
+
+        if (!nat_gress_value_rev) {
+            // bpf_log_info("can't find ingress key: target port: %u, protocol: %u",
+            // bpf_htons(ingress_key.port), ip_protocol);
+            return TC_ACT_SHOT;
+        }
+        // bpf_log_info("find ingress value: target %pI4:%u", nat_gress_value_rev->addr.all,
+        //              bpf_htons(nat_gress_value_rev->port));
+        *nat_ingress_value_ = nat_gress_value_rev;
     }
 
-    *nat_gress_value_ = nat_gress_value;
-    *nat_gress_value_rev_ = nat_gress_value_rev;
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
@@ -1028,6 +1037,16 @@ int ingress_nat(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
+    ret = is_broadcast_ip(&packet_info);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    ret = is_handle_protocol(packet_info.ip_protocol);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
     // 检查是否有分片 并设置实际的 IP 端口
     ret = fragment_track(skb, &packet_info);
     if (ret != TC_ACT_OK) {
@@ -1047,12 +1066,6 @@ int ingress_nat(struct __sk_buff *skb) {
     ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_INGRESS,
                                 &packet_info.pair_ip, &nat_ingress_value, &nat_egress_value);
     if (ret != TC_ACT_OK) {
-        /// 在映射范围之外的端口直接通过
-        u16 dst_port = bpf_ntohs(packet_info.pair_ip.dst_port);
-        if (is_out_nat_range(&packet_info, dst_port)) {
-            return TC_ACT_UNSPEC;
-        }
-
         ret = ingress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
                                             &packet_info.pair_ip, &nat_egress_value,
                                             &nat_ingress_value);
@@ -1094,11 +1107,27 @@ int ingress_nat(struct __sk_buff *skb) {
         //     bpf_log_info("real IP: %pI4,", &nat_ingress_value->addr);
     }
 
+    if (nat_ingress_value == NULL) {
+        bpf_log_info("nat_ingress_value is null");
+        return TC_ACT_SHOT;
+    }
+
+    union u_inet_addr lan_ip;
+    if (nat_ingress_value->is_static && nat_ingress_value->addr.ip == 0) {
+        COPY_ADDR_FROM(lan_ip.all, packet_info.pair_ip.dst_addr.all);
+    } else {
+        COPY_ADDR_FROM(lan_ip.all, nat_ingress_value->addr.all);
+    }
+
+    // if (nat_ingress_value->is_static && nat_ingress_value->addr.ip != 0) {
+    //     bpf_log_info("lan_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
+    // }
+
     // modify source
     ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
                          packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset,
                          false, &packet_info.pair_ip.dst_addr, packet_info.pair_ip.dst_port,
-                         &nat_ingress_value->addr, nat_ingress_value->port);
+                         &lan_ip, nat_ingress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
@@ -1129,6 +1158,16 @@ int egress_nat(struct __sk_buff *skb) {
     }
     // bpf_log_info("packet pkt_type: %d", packet_info.pkt_type);
 
+    ret = is_broadcast_ip(&packet_info);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
+    ret = is_handle_protocol(packet_info.ip_protocol);
+    if (ret != TC_ACT_OK) {
+        return ret;
+    }
+
     // 检查是否有分片 并设置实际的 IP 端口
     ret = fragment_track(skb, &packet_info);
     if (ret != TC_ACT_OK) {
@@ -1147,15 +1186,9 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("allow_create_mapping : %d", allow_create_mapping);
 
     ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_EGRESS,
-                                &packet_info.pair_ip, &nat_egress_value, &nat_ingress_value);
+                                &packet_info.pair_ip, &nat_ingress_value, &nat_egress_value);
 
     if (ret != TC_ACT_OK) {
-        /// 在映射范围之外的端口直接通过
-        u16 src_port = bpf_ntohs(packet_info.pair_ip.src_port);
-        if (skb->ingress_ifindex == 0 && is_out_nat_range(&packet_info, src_port)) {
-            return TC_ACT_UNSPEC;
-        }
-
         ret = egress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
                                            &packet_info.pair_ip, &nat_egress_value,
                                            &nat_ingress_value);
@@ -1164,9 +1197,11 @@ int egress_nat(struct __sk_buff *skb) {
             return TC_ACT_SHOT;
         }
 
-        
-        u8 flow_action = get_flow_action(skb->mark);
-        if (flow_action != FLOW_ALLOW_REUSE) {
+        bool allow_reuse_port = get_flow_allow_reuse_port(skb->mark);
+        // if (allow_reuse_port) {
+        //     bpf_log_info("allow_reuse_port: %u, skb->mark: %u", allow_reuse_port, skb->mark);
+        // }
+        if (!allow_reuse_port && packet_info.ip_protocol != IPPROTO_ICMP) {
             // PORT REUSE check
             if (!ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr) ||
                 packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
@@ -1213,11 +1248,35 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("dst IP: %pI4,", &packet_info.pair_ip.dst_addr);
     // bpf_log_info("mapping IP: %pI4,", &nat_egress_value->addr);
 
+    if (nat_egress_value == NULL) {
+        bpf_log_info("nat_egress_value is null");
+        return TC_ACT_SHOT;
+    }
+
+    union u_inet_addr nat_addr;
+    if (nat_egress_value->is_static) {
+        struct wan_ip_info_key wan_search_key = {0};
+        wan_search_key.ifindex = skb->ifindex;
+        wan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+
+        struct wan_ip_info_value *wan_ip_info =
+            bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+        if (!wan_ip_info) {
+            bpf_log_info("can't find the wan ip, using ifindex: %d", skb->ifindex);
+            return TC_ACT_SHOT;
+        }
+        nat_addr.ip = wan_ip_info->addr.ip;
+    } else {
+        COPY_ADDR_FROM(nat_addr.all, nat_egress_value->addr.all);
+    }
+
+    // bpf_log_info("nat_ip IP: %pI4:%u", &nat_addr.all, bpf_ntohs(nat_egress_value->port));
+
     // modify source
     ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
                          packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset, true,
-                         &packet_info.pair_ip.src_addr, packet_info.pair_ip.src_port,
-                         &nat_egress_value->addr, nat_egress_value->port);
+                         &packet_info.pair_ip.src_addr, packet_info.pair_ip.src_port, &nat_addr,
+                         nat_egress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;

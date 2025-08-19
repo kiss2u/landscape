@@ -13,12 +13,18 @@ import GeoIp from "@/views/GeoIp.vue";
 import Config from "@/views/Config.vue";
 
 import Login from "@/views/Login.vue";
+import StaticNatMapping from "@/views/StaticNatMapping.vue";
 
 const inner_zone: Array<RouteRecordRaw> = [
   {
     path: "/",
     name: "",
     component: Landscape,
+  },
+  {
+    path: "/nat",
+    name: "nat",
+    component: StaticNatMapping,
   },
   {
     path: "/flow",

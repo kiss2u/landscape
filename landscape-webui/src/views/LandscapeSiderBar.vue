@@ -54,10 +54,10 @@ const menuOptions: MenuOption[] = [
   //   icon: renderIcon(Network4),
   // },
   {
-    label: "NAT",
+    label: "静态 NAT 管理",
     key: "nat",
     icon: renderIcon(ImportExportRound),
-    disabled: true,
+    disabled: false,
   },
   {
     label: "防火墙",
@@ -95,7 +95,7 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(ChartCombo),
   },
   {
-    label: "Geo 管理",
+    label: "地理关系库管理",
     key: "geo",
     icon: renderIcon(BookGlobe20Regular),
     children: [

@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use crate::config::geo::GeoConfigKey;
 use crate::utils::time::get_f64_timestamp;
-use crate::{database::repository::LandscapeDBStore, flow::mark::FlowDnsMark};
+use crate::{database::repository::LandscapeDBStore, flow::mark::FlowMark};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
@@ -18,7 +18,7 @@ pub struct WanIpRuleConfig {
     pub enable: bool,
     /// 流量标记
     #[serde(default)]
-    pub mark: FlowDnsMark,
+    pub mark: FlowMark,
     /// 匹配规则列表
     #[serde(default)]
     pub source: Vec<WanIPRuleSource>,
@@ -65,7 +65,7 @@ pub struct IpConfig {
 /// IP 标记最小单元
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IpMarkInfo {
-    pub mark: FlowDnsMark,
+    pub mark: FlowMark,
     pub cidr: IpConfig,
     // pub override_dns: bool,
     pub priority: u16,

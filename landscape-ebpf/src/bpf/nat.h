@@ -120,4 +120,37 @@ struct search_port_ctx {
     bool found;
     u64 timeout_interval;
 };
+
+static __always_inline int is_broadcast_ip(const struct ip_packet_info *pkt) {
+    bool is_dst_ipv4_broadcast = false;
+    bool is_src_ipv4_broadcast = false;
+
+    __be32 dst = pkt->pair_ip.dst_addr.ip;
+    __be32 src = pkt->pair_ip.src_addr.ip;
+
+    if (dst == bpf_htonl(0xffffffff) || dst == 0) {
+        is_dst_ipv4_broadcast = true;
+    }
+
+    if (src == bpf_htonl(0xffffffff) || src == 0) {
+        is_src_ipv4_broadcast = true;
+    }
+
+    if (is_dst_ipv4_broadcast || is_src_ipv4_broadcast) {
+        return TC_ACT_UNSPEC;
+    } else {
+        return TC_ACT_OK;
+    }
+}
+
+static __always_inline int is_handle_protocol(const u8 protocol) {
+    // TODO mDNS
+    if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP || protocol == IPPROTO_ICMP ||
+        protocol == NEXTHDR_ICMP) {
+        return TC_ACT_OK;
+    } else {
+        return TC_ACT_UNSPEC;
+    }
+}
+
 #endif /* LD_NAT_H */

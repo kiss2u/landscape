@@ -16,7 +16,9 @@ use landscape_common::config::dhcp_v4_server::DHCPv4ServerConfig;
 use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
 use landscape_common::net::MacAddr;
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
-use landscape_common::LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME;
+use landscape_common::{
+    LANDSCAPE_DEFAULE_DHCP_V4_SERVER_PORT, LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME,
+};
 use netlink_packet_route::address::AddressAttribute;
 use rtnetlink::{new_connection, Handle};
 use socket2::{Domain, Protocol, Type};
@@ -91,7 +93,8 @@ pub async fn dhcp_v4_server(
         add_address(&link_name, IpAddr::V4(ip), prefix_length, handle).await
     });
 
-    let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 67);
+    let socket_addr =
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), LANDSCAPE_DEFAULE_DHCP_V4_SERVER_PORT);
 
     let socket2 = socket2::Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
 
@@ -317,8 +320,15 @@ pub struct DHCPv4Server {
 impl DHCPv4Server {
     ///
     fn init(config: DHCPv4ServerConfig) -> Self {
+        if config.ip_range_end == Some(Ipv4Addr::UNSPECIFIED) {
+            tracing::warn!("ip_range_end is 0.0.0.0, treated as unset (using subnet last_address)");
+        }
+
         let ip_range_start = Ipv4Inet::new(config.ip_range_start, config.network_mask).unwrap();
-        let ip_addr_end = config.ip_range_end.unwrap_or_else(|| ip_range_start.last_address());
+        let ip_addr_end = match config.ip_range_end {
+            Some(addr) if addr != Ipv4Addr::UNSPECIFIED => addr,
+            _ => ip_range_start.last_address(),
+        };
 
         tracing::debug!("using {:?} -> {:?} to init range", config.ip_range_start, ip_addr_end);
 
@@ -460,6 +470,13 @@ impl DHCPv4Server {
         !remove_keys.is_empty()
     }
 
+    fn is_ip_in_range(&self, ip: Ipv4Addr) -> bool {
+        let ip_u32 = u32::from(ip);
+        let start = u32::from(self.ip_range_start.address());
+        let end = start + self.range_capacity;
+        ip_u32 >= start && ip_u32 <= end
+    }
+
     /// 检查是否存在过, 存在过直接刷新时间
     pub fn ack_request(&mut self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
         if let Some(offered_cache) = self.offered_ip.get_mut(mac_addr) {
@@ -482,6 +499,11 @@ impl DHCPv4Server {
                 tracing::error!(
                     "Requested IP {ip_addr:?} is already allocated to another client, request by {mac_addr:?}"
                 );
+                return false;
+            }
+
+            if !self.is_ip_in_range(ip_addr) {
+                tracing::warn!("Requested IP out of range");
                 return false;
             }
 

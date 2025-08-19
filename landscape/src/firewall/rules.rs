@@ -2,12 +2,12 @@ use std::{collections::HashMap, str::FromStr};
 
 use landscape_common::{
     firewall::{FirewallRuleConfig, FirewallRuleItem, FirewallRuleMark},
-    mark::PacketMark,
+    flow::mark::FlowMark,
     utils::range::NumberRange,
 };
 
 fn convert_mark_map_to_vec_mark(
-    value: HashMap<FirewallRuleItem, PacketMark>,
+    value: HashMap<FirewallRuleItem, FlowMark>,
 ) -> Vec<FirewallRuleMark> {
     let mut result = Vec::with_capacity(value.len());
     for (item, mark) in value.into_iter() {
@@ -36,9 +36,7 @@ pub fn update_firewall_rules(
     landscape_ebpf::map_setting::del_firewall_rule(delete_keys);
 }
 
-fn firewall_rule_into_hash(
-    rules: Vec<FirewallRuleConfig>,
-) -> HashMap<FirewallRuleItem, PacketMark> {
+fn firewall_rule_into_hash(rules: Vec<FirewallRuleConfig>) -> HashMap<FirewallRuleItem, FlowMark> {
     let mut new_mark_infos = HashMap::new();
 
     for ip_rule in rules.into_iter() {
@@ -80,8 +78,8 @@ fn firewall_rule_into_hash(
 }
 
 fn find_delete_rule_keys(
-    new_rules: &mut HashMap<FirewallRuleItem, PacketMark>,
-    old_rules: HashMap<FirewallRuleItem, PacketMark>,
+    new_rules: &mut HashMap<FirewallRuleItem, FlowMark>,
+    old_rules: HashMap<FirewallRuleItem, FlowMark>,
 ) -> Vec<FirewallRuleItem> {
     let mut delete_keys = vec![];
     for (key, old_mark) in old_rules.into_iter() {

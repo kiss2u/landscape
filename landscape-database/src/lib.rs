@@ -8,7 +8,6 @@ pub mod flow_wan;
 pub mod iface;
 pub mod iface_ip;
 pub mod mss_clamp;
-pub mod nat;
 pub mod pppd;
 pub mod provider;
 pub mod ra;
@@ -24,6 +23,9 @@ pub mod geo_site;
 
 pub mod route_lan;
 pub mod route_wan;
+
+pub mod nat;
+pub mod static_nat_mapping;
 
 /// 定义 ID 类型
 pub(crate) type DBId = Uuid;

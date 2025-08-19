@@ -40,6 +40,7 @@ use crate::{
     args::WebCommArgs,
     config::{
         geo::{GeoIpSourceConfig, GeoSiteSourceConfig},
+        nat::StaticNatMappingConfig,
         route_lan::RouteLanServiceConfig,
         route_wan::RouteWanServiceConfig,
     },
@@ -104,6 +105,9 @@ pub struct InitConfig {
     pub route_lans: Vec<RouteLanServiceConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub route_wans: Vec<RouteWanServiceConfig>,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub static_nat_mappings: Vec<StaticNatMappingConfig>,
 }
 
 /// auth realte config

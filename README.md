@@ -19,6 +19,15 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 
 ---
 
+## CORE Features
+* Traffic diversion control (SIP, QoS (dscp), DIP, domain, Geo matching rules)  
+* eBPF routing
+* Independent DNS configuration and caching for each flow (to prevent DNS pollution and leaks) 
+* Traffic import into Docker containers 
+* Geo management  
+
+---
+
 ## Features
 
 > ✅ Implemented and tested
@@ -135,7 +144,7 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
    ```
 2. Download **static.zip** from [release](https://github.com/ThisSeanZhang/landscape/releases) and extract to `~/.landscape-router/static`
 3. If you have a desktop environment and browser, you can skip this step.
-   Otherwise, refer to [Quick Start Guide](https://landscape.whileaway.dev/quick.html) to create `landscape_init.toml`
+   Otherwise, refer to [Config](https://landscape.whileaway.dev/config/) to create `landscape_init.toml`
 4. Start the service by downloading a release binary from [Releases](https://github.com/ThisSeanZhang/landscape/releases)
    Then run (as root):
 
@@ -163,10 +172,6 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
    [Install]
    WantedBy=multi-user.target
    ```
-
-### Docker Compose
-
-See [Quick Start Guide](https://landscape.whileaway.dev/quick.html)
 
 ### Armbian Integration
 

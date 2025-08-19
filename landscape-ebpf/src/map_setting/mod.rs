@@ -1,4 +1,7 @@
-use std::{mem::MaybeUninit, net::Ipv4Addr};
+use std::{
+    mem::MaybeUninit,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+};
 
 use landscape_common::firewall::{FirewallRuleItem, FirewallRuleMark, LandscapeIpType};
 use libbpf_rs::{
@@ -12,13 +15,17 @@ mod share_map {
 
 use share_map::*;
 
-use crate::{LandscapeMapPath, MAP_PATHS};
+use crate::{
+    map_setting::share_map::types::{u_inet_addr, wan_ip_info_key, wan_ip_info_value},
+    LandscapeMapPath, LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
+};
 
 pub mod flow;
 pub mod flow_dns;
 pub mod flow_target;
 pub mod flow_wanip;
 pub mod metric;
+pub mod nat;
 pub mod route;
 
 pub(crate) fn init_path(paths: LandscapeMapPath) {
@@ -64,14 +71,38 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
     let _landscape_skel = landscape_open.load().unwrap();
 }
 
-pub fn add_wan_ip(ifindex: u32, addr: Ipv4Addr) {
+pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, mask: u8) {
+    add_wan_ip(ifindex, IpAddr::V6(addr), mask, LANDSCAPE_IPV6_TYPE);
+}
+
+pub fn add_ipv4_wan_ip(ifindex: u32, addr: Ipv4Addr, mask: u8) {
+    add_wan_ip(ifindex, IpAddr::V4(addr), mask, LANDSCAPE_IPV4_TYPE);
+}
+
+fn add_wan_ip(ifindex: u32, addr: IpAddr, mask: u8, l3_protocol: u8) {
     tracing::debug!("add wan index - 1: {ifindex:?}");
     let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
 
-    let addr_num: u32 = addr.clone().into();
-    if let Err(e) =
-        wan_ipv4_binding.update(&ifindex.to_le_bytes(), &addr_num.to_be_bytes(), MapFlags::ANY)
-    {
+    let mut key = wan_ip_info_key::default();
+    let mut value = wan_ip_info_value::default();
+    key.ifindex = ifindex;
+    key.l3_protocol = l3_protocol;
+    value.mask = mask;
+
+    match addr {
+        std::net::IpAddr::V4(ipv4_addr) => {
+            value.addr.ip = ipv4_addr.to_bits().to_be();
+        }
+        std::net::IpAddr::V6(ipv6_addr) => {
+            value.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
+        }
+    };
+
+    let key = unsafe { plain::as_bytes(&key) };
+    let value = unsafe { plain::as_bytes(&value) };
+
+    // let addr_num: u32 = .clone().into();
+    if let Err(e) = wan_ipv4_binding.update(key, value, MapFlags::ANY) {
         tracing::error!("setting wan ip error:{e:?}");
     } else {
         tracing::info!("setting wan index: {ifindex:?} addr:{addr:?}");
@@ -87,10 +118,23 @@ pub fn add_wan_ip(ifindex: u32, addr: Ipv4Addr) {
     // }
 }
 
-pub fn del_wan_ip(ifindex: u32) {
+pub fn del_ipv6_wan_ip(ifindex: u32) {
+    del_wan_ip(ifindex, LANDSCAPE_IPV6_TYPE);
+}
+
+pub fn del_ipv4_wan_ip(ifindex: u32) {
+    del_wan_ip(ifindex, LANDSCAPE_IPV4_TYPE);
+}
+
+fn del_wan_ip(ifindex: u32, l3_protocol: u8) {
     tracing::debug!("del wan index - 1: {ifindex:?}");
     let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
-    if let Err(e) = wan_ipv4_binding.delete(&ifindex.to_le_bytes()) {
+    let mut key = wan_ip_info_key::default();
+    key.ifindex = ifindex;
+    key.l3_protocol = l3_protocol;
+
+    let key = unsafe { plain::as_bytes(&key) };
+    if let Err(e) = wan_ipv4_binding.delete(key) {
         tracing::error!("delete wan ip error:{e:?}");
     } else {
         tracing::info!("delete wan index: {ifindex:?}");

@@ -57,5 +57,7 @@ tracing-appender = { workspace = true }
 dhcproto = { workspace = true }
 ts-rs = { workspace = true }
 
+sysctl = { workspace = true }
+
 [dependencies.pnet]
 workspace = true

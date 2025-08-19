@@ -2,6 +2,7 @@ use std::net::IpAddr;
 
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::route::{LanRouteInfo, RouteTargetInfo};
+use landscape_common::LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT;
 use landscape_common::{
     args::LAND_HOSTNAME,
     config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
@@ -79,7 +80,17 @@ async fn init_service_from_config(
                     .args(&["addr", "add", &format!("{}/{}", ipv4, ipv4_mask), "dev", &iface_name])
                     .output();
                 tracing::debug!("start setting");
-                landscape_ebpf::map_setting::add_wan_ip(iface.index, ipv4.clone());
+                landscape_ebpf::map_setting::add_ipv4_wan_ip(iface.index, ipv4.clone(), ipv4_mask);
+
+                let lan_info = LanRouteInfo {
+                    ifindex: iface.index,
+                    iface_name: iface_name.clone(),
+                    iface_ip: IpAddr::V4(ipv4),
+                    mac: iface.mac,
+                    prefix: ipv4_mask,
+                };
+                route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
+
                 if let Some(default_router_ip) = default_router_ip {
                     if !default_router_ip.is_broadcast()
                         && !default_router_ip.is_unspecified()
@@ -109,15 +120,6 @@ async fn init_service_from_config(
                             gateway_ip: IpAddr::V4(default_router_ip),
                         };
                         route_service.insert_ipv4_wan_route(&iface_name, info).await;
-
-                        let lan_info = LanRouteInfo {
-                            ifindex: iface.index,
-                            iface_name: iface_name.clone(),
-                            iface_ip: IpAddr::V4(ipv4),
-                            mac: iface.mac,
-                            prefix: ipv4_mask,
-                        };
-                        route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
                     }
                 }
 
@@ -132,7 +134,7 @@ async fn init_service_from_config(
                 }
                 route_service.remove_ipv4_wan_route(&iface_name).await;
                 route_service.remove_ipv4_lan_route(&iface_name).await;
-                landscape_ebpf::map_setting::del_wan_ip(iface.index);
+                landscape_ebpf::map_setting::del_ipv4_wan_ip(iface.index);
                 service_status.just_change_status(ServiceStatus::Stop);
             }
         }
@@ -164,7 +166,7 @@ async fn init_service_from_config(
                     iface.index,
                     iface.name,
                     mac_addr,
-                    68,
+                    LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
                     service_status,
                     hostname,
                     default_router,

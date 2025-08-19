@@ -5,7 +5,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
-use crate::flow::mark::FlowDnsMark;
+use crate::flow::mark::FlowMark;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
 
@@ -70,7 +70,7 @@ pub struct FlowMathPair {
 
 /// 用于 Flow ebpf DNS Map 记录操作
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FlowDnsMarkInfo {
+pub struct FlowMarkInfo {
     pub ip: IpAddr,
     pub mark: u32,
     pub priority: u16,
@@ -78,6 +78,6 @@ pub struct FlowDnsMarkInfo {
 
 #[derive(Debug, Clone)]
 pub struct DnsRuntimeMarkInfo {
-    pub mark: FlowDnsMark,
+    pub mark: FlowMark,
     pub priority: u16,
 }

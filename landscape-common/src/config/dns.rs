@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
 use crate::utils::time::get_f64_timestamp;
-use crate::{flow::mark::FlowDnsMark, store::storev2::LandscapeStore};
+use crate::{flow::mark::FlowMark, store::storev2::LandscapeStore};
 
 use super::geo::GeoConfigKey;
 
@@ -28,7 +28,7 @@ pub struct DNSRuleConfig {
     pub resolve_mode: DNSResolveMode,
     /// 流量标记
     #[serde(default)]
-    pub mark: FlowDnsMark,
+    pub mark: FlowMark,
     /// 匹配规则列表
     #[serde(default)]
     pub source: Vec<RuleSource>,
@@ -53,7 +53,7 @@ pub struct DNSRuntimeRule {
     /// 解析模式
     pub resolve_mode: DNSResolveMode,
     /// 流量标记
-    pub mark: FlowDnsMark,
+    pub mark: FlowMark,
     /// 匹配规则列表
     pub source: Vec<DomainConfig>,
 

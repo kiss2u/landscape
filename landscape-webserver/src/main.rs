@@ -16,6 +16,7 @@ use landscape::{
         dns_rule::DNSRuleService, dst_ip_rule::DstIpRuleService,
         firewall_rule::FirewallRuleService, flow_rule::FlowRuleService,
         geo_ip_service::GeoIpService, geo_site_service::GeoSiteService,
+        static_nat_mapping::StaticNatMappingService,
     },
     docker::LandscapeDockerService,
     metric::MetricService,
@@ -29,7 +30,7 @@ use landscape::{
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
 };
 use landscape_common::{
-    args::{LAND_ARGS, LAND_HOME_PATH},
+    args::{LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
     config::RuntimeConfig,
     error::LdResult,
 };
@@ -61,6 +62,7 @@ use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::info;
 
 use crate::{
+    config_service::static_nat_mapping::get_static_nat_mapping_config_paths,
     service::{route_lan::get_route_lan_paths, route_wan::get_route_wan_paths},
     sys_service::config_service::get_config_paths,
 };
@@ -103,20 +105,13 @@ pub struct LandscapeApp {
     /// ipv6
     ipv6_pd_service: DHCPv6ClientManagerService,
     ipv6_ra_service: IPV6RAManagerService,
+
+    // Static NAT Mapping
+    static_nat_mapping_config_service: StaticNatMappingService,
 }
 
-#[tokio::main]
-async fn main() -> LdResult<()> {
-    let home_path = LAND_HOME_PATH.clone();
+async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let need_init_config = boot_check(&home_path)?;
-
-    let config = RuntimeConfig::new((*LAND_ARGS).clone());
-
-    if let Err(e) = init_logger(config.log.clone()) {
-        panic!("init log error: {e:?}");
-    }
-
-    banner(&config);
 
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
@@ -203,6 +198,9 @@ async fn main() -> LdResult<()> {
     )
     .await;
 
+    let static_nat_mapping_config_service =
+        StaticNatMappingService::new(db_store_provider.clone()).await;
+
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;
@@ -231,6 +229,7 @@ async fn main() -> LdResult<()> {
         // IPV6
         ipv6_pd_service,
         ipv6_ra_service,
+        static_nat_mapping_config_service,
     };
     // 初始化结束
 
@@ -297,6 +296,7 @@ async fn main() -> LdResult<()> {
                 .merge(get_geo_site_config_paths().await)
                 .merge(get_geo_ip_config_paths().await)
                 .merge(get_dst_ip_rule_config_paths().await)
+                .merge(get_static_nat_mapping_config_paths().await)
                 .with_state(landscape_app_status.clone()),
         )
         .nest(
@@ -342,6 +342,30 @@ async fn main() -> LdResult<()> {
 
     // axum::serve(listener, app.layer(TraceLayer::new_for_http())).await.unwrap();
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> LdResult<()> {
+    let config = RuntimeConfig::new((*LAND_ARGS).clone());
+    let home_path = LAND_HOME_PATH.clone();
+
+    if let Err(e) = init_logger(config.log.clone()) {
+        panic!("init log error: {e:?}");
+    }
+
+    banner(&config);
+
+    let args = &LAND_ARGS;
+    if let Some(action) = &args.action {
+        match action {
+            LandscapeAction::Db { rollback, times } => {
+                landscape_database::provider::db_action(&config.store, rollback, times).await;
+                Ok(())
+            }
+        }
+    } else {
+        run(home_path, config).await
+    }
 }
 
 /// NOT Found

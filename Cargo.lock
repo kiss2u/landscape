@@ -3134,7 +3134,7 @@ dependencies = [
 
 [[package]]
 name = "landscape"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "async-trait",
  "bollard",
@@ -3165,6 +3165,7 @@ dependencies = [
  "serde",
  "serde_json",
  "socket2",
+ "sysctl",
  "sysinfo 0.35.2",
  "tokio",
  "tokio-stream",
@@ -3181,7 +3182,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-common"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3211,7 +3212,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-database"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "async-trait",
  "landscape-common",
@@ -3228,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-dns"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "aho-corasick",
  "async-trait",
@@ -3264,7 +3265,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-ebpf"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "clap 4.5.39",
  "ctrlc",
@@ -3290,7 +3291,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-protobuf"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "homedir",
  "jemalloc-ctl",
@@ -3304,7 +3305,7 @@ dependencies = [
 
 [[package]]
 name = "landscape-webserver"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "axum",
  "axum-extra",
@@ -3692,7 +3693,7 @@ dependencies = [
 
 [[package]]
 name = "migration"
-version = "0.6.7"
+version = "0.6.8"
 dependencies = [
  "async-std",
  "sea-orm-migration",
@@ -6807,6 +6808,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.91",
+]
+
+[[package]]
+name = "sysctl"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01198a2debb237c62b6826ec7081082d951f46dbb64b0e8c7649a452230d1dfc"
+dependencies = [
+ "bitflags 2.6.0",
+ "byteorder",
+ "enum-as-inner 0.6.1",
+ "libc",
+ "thiserror 1.0.64",
+ "walkdir",
 ]
 
 [[package]]

@@ -7,7 +7,10 @@ use std::{
 };
 
 use landscape::{dhcp_client::v4::dhcp_v4_client, iface::get_iface_by_name, route::IpRouteService};
-use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
+use landscape_common::{
+    service::{DefaultWatchServiceStatus, ServiceStatus},
+    LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
+};
 
 use clap::Parser;
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -49,7 +52,7 @@ async fn main() {
                     iface.index,
                     iface.name,
                     mac,
-                    68,
+                    LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
                     status,
                     "TEST-PC".to_string(),
                     false,

@@ -23,7 +23,7 @@ use tokio::sync::Mutex;
 use crate::{diff_server::CheckDnsResult, rule::ResolutionRule, CacheDNSItem, DNSCache};
 use landscape_common::{
     config::dns::{DNSRuntimeRule, FilterResult},
-    flow::{DnsRuntimeMarkInfo, FlowDnsMarkInfo},
+    flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
 };
 
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
@@ -93,8 +93,8 @@ impl LandscapeDnsRequestHandle {
         let mut cache = LruCache::new(NonZeroUsize::new(2048).unwrap());
 
         if let Ok(old_cache) = self.cache.try_lock() {
-            let mut update_dns_mark_list: HashSet<FlowDnsMarkInfo> = HashSet::new();
-            let mut del_dns_mark_list: HashSet<FlowDnsMarkInfo> = HashSet::new();
+            let mut update_dns_mark_list: HashSet<FlowMarkInfo> = HashSet::new();
+            let mut del_dns_mark_list: HashSet<FlowMarkInfo> = HashSet::new();
 
             for ((domain, req_type), value) in old_cache.iter() {
                 'resolver: for (_index, resolver) in resolves.iter() {

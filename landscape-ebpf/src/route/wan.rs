@@ -48,6 +48,9 @@ pub fn wan_route_attach(
     open_skel.maps.flow_v_ip_map.set_pin_path(&MAP_PATHS.flow_verdict_ip_map)?;
     open_skel.maps.flow_v_ip_map.reuse_pinned_map(&MAP_PATHS.flow_verdict_ip_map)?;
 
+    open_skel.maps.wan_ipv4_binding.set_pin_path(&MAP_PATHS.wan_ip)?;
+    open_skel.maps.wan_ipv4_binding.reuse_pinned_map(&MAP_PATHS.wan_ip)?;
+
     if !has_mac {
         open_skel.maps.rodata_data.current_eth_net_offset = 0;
     }

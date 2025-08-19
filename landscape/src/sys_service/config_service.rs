@@ -35,6 +35,7 @@ impl LandscapeConfigService {
             geo_sites: self.store.geo_site_rule_store().list().await.unwrap(),
             route_lans: self.store.route_lan_service_store().list().await.unwrap(),
             route_wans: self.store.route_wan_service_store().list().await.unwrap(),
+            static_nat_mappings: self.store.static_nat_mapping_store().list().await.unwrap(),
         }
     }
 }
