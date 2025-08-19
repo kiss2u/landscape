@@ -395,11 +395,13 @@ apply_action:
     if (flow_action == FLOW_KEEP_GOING) {
         // 无动作
         // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", cache_key.dst_addr.all);
+        flow_mark_action = replace_flow_id(flow_mark_action, flow_id & 0xFF);
     } else if (flow_action == FLOW_DIRECT) {
         // bpf_log_info("FLOW_DIRECT ip: %pI4", cache_key.dst_addr.all);
         // RESET Flow ID
         // flow_id = 0;
         flow_mark_action = replace_flow_id(flow_mark_action, 0);
+        goto keep_going;
     } else if (flow_action == FLOW_DROP) {
         // bpf_log_info("FLOW_DROP ip: %pI4", cache_key.dst_addr.all);
         return TC_ACT_SHOT;
@@ -411,7 +413,8 @@ apply_action:
 
 keep_going:
     // if (flow_mark_action != 0) {
-    //     bpf_log_info("flow_mark_action valueis : %u", flow_mark_action);
+    //     bpf_log_info("flow_mark_action value is : %u", flow_mark_action);
+    //     bpf_log_info("get_flow_id value is : %u", get_flow_id(flow_mark_action));
     //     bpf_log_info("dst ip: %pI4", cache_key.dst_addr.all);
     // }
     *init_flow_id_ = flow_mark_action;
