@@ -3232,6 +3232,7 @@ name = "landscape-dns"
 version = "0.6.8"
 dependencies = [
  "aho-corasick",
+ "arc-swap",
  "async-trait",
  "clap 4.5.39",
  "ctrlc",
@@ -3261,6 +3262,7 @@ dependencies = [
  "tracing-subscriber",
  "trie-rs",
  "ts-rs",
+ "uuid",
 ]
 
 [[package]]

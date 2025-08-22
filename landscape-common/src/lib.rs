@@ -25,6 +25,8 @@ pub mod store;
 pub mod test;
 pub mod utils;
 
+pub mod dns;
+
 /// Home Path
 pub const LANDSCAPE_CONFIG_DIR_NAME: &str = ".landscape-router";
 
