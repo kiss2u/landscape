@@ -1,6 +1,4 @@
-use hickory_proto::rr::{Record, RecordType};
-use landscape_common::config::dns::{DNSRuntimeRule, LandscapeDnsRecordType};
-use landscape_common::config::FlowId;
+use landscape_common::config::dns::DNSRuntimeRule;
 use landscape_common::flow::{FlowConfig, PacketMatchMark};
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use std::collections::HashMap;
@@ -8,43 +6,11 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
+use serde::Serialize;
 
 use crate::server::request::LandscapeDnsRequestHandle;
 use crate::server::server::DiffFlowServer;
-
-#[derive(Serialize, Deserialize, Debug, Default, TS)]
-#[ts(export, export_to = "dns.d.ts")]
-pub struct CheckDnsResult {
-    #[ts(type = "any | null")]
-    pub config: Option<DNSRuntimeRule>,
-    #[ts(type = "Array<any>|null")]
-    pub records: Option<Vec<Record>>,
-    #[ts(type = "Array<any>|null")]
-    pub cache_records: Option<Vec<Record>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, TS)]
-#[ts(export, export_to = "dns.d.ts")]
-pub struct CheckDnsReq {
-    flow_id: FlowId,
-    domain: String,
-    record_type: LandscapeDnsRecordType,
-}
-
-impl CheckDnsReq {
-    pub fn get_domain(&self) -> String {
-        format!("{}.", self.domain)
-    }
-}
-
-fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
-    match record_type {
-        LandscapeDnsRecordType::A => RecordType::A,
-        LandscapeDnsRecordType::AAAA => RecordType::AAAA,
-    }
-}
+use crate::{convert_record_type, CheckDnsReq, CheckDnsResult};
 
 #[derive(Serialize, Debug, Clone)]
 pub struct LandscapeFiffFlowDnsService {

@@ -1,10 +1,15 @@
 use hickory_proto::rr::{Record, RecordType};
+use landscape_common::config::dns::{DNSRuntimeRule, LandscapeDnsRecordType};
+use landscape_common::config::FlowId;
 use landscape_common::{
     config::dns::FilterResult,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
 };
+
 use lru::LruCache;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf, time::Instant};
+use ts_rs::TS;
 
 pub mod connection;
 pub mod diff_server;
@@ -43,6 +48,38 @@ fn check_resolver_conf() {
 
     // 写入新内容到 /etc/resolv.conf
     std::fs::write(&resolver_file, new_content).unwrap();
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, TS)]
+#[ts(export, export_to = "dns.d.ts")]
+pub struct CheckDnsResult {
+    #[ts(type = "any | null")]
+    pub config: Option<DNSRuntimeRule>,
+    #[ts(type = "Array<any>|null")]
+    pub records: Option<Vec<Record>>,
+    #[ts(type = "Array<any>|null")]
+    pub cache_records: Option<Vec<Record>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, TS)]
+#[ts(export, export_to = "dns.d.ts")]
+pub struct CheckDnsReq {
+    flow_id: FlowId,
+    domain: String,
+    record_type: LandscapeDnsRecordType,
+}
+
+impl CheckDnsReq {
+    pub fn get_domain(&self) -> String {
+        format!("{}.", self.domain)
+    }
+}
+
+fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
+    match record_type {
+        LandscapeDnsRecordType::A => RecordType::A,
+        LandscapeDnsRecordType::AAAA => RecordType::AAAA,
+    }
 }
 
 #[derive(Clone)]

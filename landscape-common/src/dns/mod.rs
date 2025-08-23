@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::config::dns::{CloudflareMode, DnsUpstreamType, DomainConfig, FilterResult, RuleSource};
+use crate::config::dns::{CloudflareMode, DnsUpstreamType, DomainConfig, FilterResult};
 use crate::flow::mark::FlowMark;
 use crate::flow::DnsRuntimeMarkInfo;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RuleHandlerInfo {
     pub rule_id: Option<Uuid>,
     pub flow_id: u32,
@@ -19,7 +19,7 @@ pub struct RuleHandlerInfo {
     pub filter: FilterResult,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RedirectInfo {
     pub result_ip: Vec<IpAddr>,
 }
@@ -34,54 +34,20 @@ impl RuleHandlerInfo {
     }
 }
 
+#[derive(Default, Clone, Debug)]
 pub struct DnsServerInitInfo {
     pub rules: HashMap<DomainConfig, Arc<RuleHandlerInfo>>,
     pub redirect_rules: HashMap<DomainConfig, Arc<RedirectInfo>>,
     pub resolver_configs: Vec<DnsResolverConfig>,
+    pub default_resolver: Option<RuleHandlerInfo>,
 }
 
+#[derive(Clone, Debug)]
 pub struct DnsResolverConfig {
     pub id: Uuid,
     pub resolve_mode: DnsUpstreamMode,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DNSRuleInitInfo {
-    pub id: Option<Uuid>,
-    pub name: String,
-    /// 优先级
-    pub index: u32,
-    /// 是否启用
-    pub enable: bool,
-    /// 过滤模式
-    pub filter: FilterResult,
-    /// 解析模式
-    pub resolve_mode: DnsUpstreamMode,
-    /// 流量标记
     pub mark: FlowMark,
-    /// 匹配规则列表
-    pub source: Vec<DomainConfig>,
-    /// 匹配规则列表 key
-    pub source_key: Vec<RuleSource>,
-
     pub flow_id: u32,
-}
-
-impl Default for DNSRuleInitInfo {
-    fn default() -> Self {
-        Self {
-            id: Default::default(),
-            name: Default::default(),
-            index: 1,
-            enable: true,
-            filter: Default::default(),
-            resolve_mode: Default::default(),
-            mark: Default::default(),
-            source: Default::default(),
-            source_key: Default::default(),
-            flow_id: Default::default(),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]

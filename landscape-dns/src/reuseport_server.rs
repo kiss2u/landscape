@@ -18,9 +18,8 @@ use hickory_resolver::{
 };
 use hickory_server::ServerFuture;
 use landscape_common::{
-    config::dns::{DnsUpstreamType, DomainConfig},
-    dns::{DNSRuleInitInfo, DnsUpstreamMode, RedirectInfo, RuleHandlerInfo},
-    flow::DnsRuntimeMarkInfo,
+    config::dns::DnsUpstreamType,
+    dns::{DnsResolverConfig, DnsServerInitInfo, DnsUpstreamMode, RedirectInfo, RuleHandlerInfo},
     service::DefaultWatchServiceStatus,
 };
 use tokio::sync::Mutex;
@@ -29,7 +28,9 @@ use uuid::Uuid;
 
 use crate::{
     connection::{MarkConnectionProvider, MarkRuntimeProvider},
+    convert_record_type,
     reuseport_server::{matcher::DomainMatcher, request::LandscapeDnsRequestHandle},
+    CheckDnsReq, CheckDnsResult,
 };
 
 mod listener;
@@ -58,36 +59,42 @@ impl LandscapeReusePortDnsServer {
         &self.status
     }
 
-    pub async fn init_server(&self, infos: Vec<DNSRuleInitInfo>) {
-        let dns_rules: Vec<DNSRuleInitInfo> =
-            infos.into_iter().filter(|rule| rule.enable).collect();
-
-        let mut groups: HashMap<u32, Vec<DNSRuleInitInfo>> = HashMap::new();
-
-        for rule in dns_rules.into_iter() {
-            groups.entry(rule.flow_id).or_default().push(rule);
-        }
-
-        for (flow_id, rules) in groups {
-            self.refresh_flow_server(flow_id, rules).await;
-        }
-    }
-
-    pub async fn refresh_flow_server(&self, flow_id: u32, infos: Vec<DNSRuleInitInfo>) {
+    pub async fn refresh_flow_server(&self, flow_id: u32, info: DnsServerInitInfo) {
+        tracing::debug!(
+            "[flow_id: {flow_id}]: dns init default_resolver: {:#?}",
+            info.default_resolver
+        );
         {
             let mut lock = self.flow_dns_server.lock().await;
             if let Some((old_handler, _)) = lock.get_mut(&flow_id) {
-                old_handler.renew_rules(infos).await;
+                old_handler.renew_rules(info).await;
                 return;
             }
         }
 
-        let handler = LandscapeDnsRequestHandle::new(infos, flow_id);
+        let handler = LandscapeDnsRequestHandle::new(info, flow_id);
         let token = start_dns_server(flow_id, self.addr, handler.clone()).await;
 
         {
             let mut lock = self.flow_dns_server.lock().await;
             lock.insert(flow_id, (handler, token));
+        }
+    }
+
+    pub async fn check_domain(&self, req: CheckDnsReq) -> CheckDnsResult {
+        let handler = {
+            let flow_server = self.flow_dns_server.lock().await;
+            if let Some((handler, _)) = flow_server.get(&req.flow_id) {
+                Some(handler.clone())
+            } else {
+                None
+            }
+        };
+
+        if let Some(handler) = handler {
+            handler.check_domain(&req.get_domain(), convert_record_type(req.record_type)).await
+        } else {
+            CheckDnsResult::default()
         }
     }
 }
@@ -131,62 +138,18 @@ pub struct FlowDnsServer {
 }
 
 impl FlowDnsServer {
-    pub fn new(infos: Vec<DNSRuleInitInfo>) -> Self {
-        let (matcher, resolver_map, default_resolver) = Self::build_rules(infos);
+    pub fn new(info: DnsServerInitInfo) -> Self {
+        // let (matcher, resolver_map, default_resolver) = Self::build_rules(infos);
         FlowDnsServer {
-            redirect_matcher: DomainMatcher::new(HashMap::new()),
-            matcher,
-            resolver_map,
-            default_resolver,
+            redirect_matcher: DomainMatcher::new(info.redirect_rules),
+            matcher: DomainMatcher::new(info.rules),
+            resolver_map: info
+                .resolver_configs
+                .into_iter()
+                .map(|e| (e.id, new_resolver(e)))
+                .collect(),
+            default_resolver: info.default_resolver,
         }
-    }
-
-    pub fn refresh_rule(&mut self, infos: Vec<DNSRuleInitInfo>) {
-        let (matcher, resolver_map, default_resolver) = Self::build_rules(infos);
-        self.matcher = matcher;
-        self.resolver_map = resolver_map;
-        self.default_resolver = default_resolver;
-    }
-
-    fn build_rules(
-        mut infos: Vec<DNSRuleInitInfo>,
-    ) -> (
-        DomainMatcher<RuleHandlerInfo>,
-        HashMap<Uuid, Resolver<MarkConnectionProvider>>,
-        Option<RuleHandlerInfo>,
-    ) {
-        // 排序，优先级值大的规则在前, 这样遍历时就会被 优先级值小的 ( 高 ) 覆盖
-        infos.sort_by(|a, b| b.index.cmp(&a.index));
-
-        let mut match_map: HashMap<DomainConfig, Arc<RuleHandlerInfo>> = HashMap::new();
-        let mut resolver_map: HashMap<Uuid, Resolver<MarkConnectionProvider>> = HashMap::new();
-
-        let mut default_resolver = None;
-        for each in infos {
-            let resolver_id = Uuid::new_v4();
-            let resolver = new_resolver(&each.resolve_mode, each.flow_id);
-            resolver_map.insert(resolver_id, resolver);
-
-            let info = RuleHandlerInfo {
-                rule_id: each.id,
-                flow_id: each.flow_id,
-                resolver_id,
-                mark: DnsRuntimeMarkInfo { mark: each.mark, priority: each.index as u16 },
-                filter: each.filter,
-            };
-
-            if each.source.is_empty() {
-                default_resolver = Some(info);
-            } else {
-                let info = Arc::new(info);
-
-                for each_source in each.source {
-                    match_map.insert(each_source, info.clone());
-                }
-            }
-        }
-
-        (DomainMatcher::new(match_map), resolver_map, default_resolver)
     }
 
     pub fn redirect_lookup(&self, domain: &str, query_type: RecordType) -> Vec<Record> {
@@ -238,6 +201,12 @@ impl FlowDnsServer {
                         Err(result)
                     }
                 };
+            } else {
+                tracing::debug!(
+                    "can not find resolver_id: {:?} in resolver_map: {:?}",
+                    info.resolver_id,
+                    self.resolver_map
+                );
             }
         }
 
@@ -245,24 +214,22 @@ impl FlowDnsServer {
     }
 }
 
-pub fn new_resolver(
-    resolve_mode: &DnsUpstreamMode,
-    mark_value: u32,
-) -> Resolver<MarkConnectionProvider> {
-    let resolve_config = match resolve_mode {
+pub fn new_resolver(config: DnsResolverConfig) -> Resolver<MarkConnectionProvider> {
+    let mark_value = config.mark.get_dns_mark(config.flow_id);
+    let resolve_config = match config.resolve_mode {
         DnsUpstreamMode::Upstream { upstream, ips, port } => {
             let name_server = match upstream {
                 DnsUpstreamType::Plaintext => {
-                    NameServerConfigGroup::from_ips_clear(ips, port.unwrap_or(53), true)
+                    NameServerConfigGroup::from_ips_clear(&ips, port.unwrap_or(53), true)
                 }
                 DnsUpstreamType::Tls { domain } => NameServerConfigGroup::from_ips_tls(
-                    ips,
+                    &ips,
                     port.unwrap_or(843),
                     domain.to_string(),
                     true,
                 ),
                 DnsUpstreamType::Https { domain } => NameServerConfigGroup::from_ips_https(
-                    ips,
+                    &ips,
                     port.unwrap_or(443),
                     domain.to_string(),
                     true,

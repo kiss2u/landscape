@@ -20,7 +20,7 @@ use hickory_server::{
 use lru::LruCache;
 use tokio::sync::Mutex;
 
-use crate::{diff_server::CheckDnsResult, rule::ResolutionRule, CacheDNSItem, DNSCache};
+use crate::{rule::ResolutionRule, CacheDNSItem, CheckDnsResult, DNSCache};
 use landscape_common::{
     config::dns::{DNSRuntimeRule, FilterResult},
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},

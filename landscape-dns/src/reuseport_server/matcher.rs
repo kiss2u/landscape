@@ -72,6 +72,8 @@ impl<T> DomainMatcher<T> {
     }
 
     pub fn match_value(&self, domain: &str) -> Option<&T> {
+        let domain = if let Some(stripped) = domain.strip_suffix('.') { stripped } else { domain };
+
         // 1. 完全匹配
         if let Some(val) = self.full_domains.get(domain) {
             return Some(val);

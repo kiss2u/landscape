@@ -12,10 +12,10 @@ use hickory_server::{
 use lru::LruCache;
 use tokio::sync::Mutex;
 
-use crate::{diff_server::CheckDnsResult, reuseport_server::FlowDnsServer, CacheDNSItem, DNSCache};
+use crate::{reuseport_server::FlowDnsServer, CacheDNSItem, CheckDnsResult, DNSCache};
 use landscape_common::{
     config::dns::FilterResult,
-    dns::DNSRuleInitInfo,
+    dns::DnsServerInitInfo,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
 };
 
@@ -28,8 +28,8 @@ pub struct LandscapeDnsRequestHandle {
 }
 
 impl LandscapeDnsRequestHandle {
-    pub fn new(dns_rules: Vec<DNSRuleInitInfo>, flow_id: u32) -> LandscapeDnsRequestHandle {
-        let resolves = FlowDnsServer::new(dns_rules);
+    pub fn new(info: DnsServerInitInfo, flow_id: u32) -> LandscapeDnsRequestHandle {
+        let resolves = FlowDnsServer::new(info);
 
         let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(2048).unwrap())));
 
@@ -40,7 +40,7 @@ impl LandscapeDnsRequestHandle {
         }
     }
 
-    pub async fn renew_rules(&mut self, dns_rules: Vec<DNSRuleInitInfo>) {
+    pub async fn renew_rules(&mut self, info: DnsServerInitInfo) {
         // UPDATE CACHE
 
         // let mut resolves = BTreeMap::new();
@@ -49,7 +49,7 @@ impl LandscapeDnsRequestHandle {
         //     resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, self.flow_id)));
         // }
 
-        let new_resolve = FlowDnsServer::new(dns_rules);
+        let new_resolve = FlowDnsServer::new(info);
         let mut cache = LruCache::new(NonZeroUsize::new(2048).unwrap());
 
         let mut old_cache = self.cache.lock().await;
@@ -273,6 +273,10 @@ impl RequestHandler for LandscapeDnsRequestHandle {
                 let resolves = self.resolves.load();
                 records = match resolves.lookup(&domain, query_type).await {
                     Ok((rdata_vec, info)) => {
+                        tracing::debug!(
+                            "[flow_id: {}]: lookup success: {domain}, info: {info:?}",
+                            self.flow_id
+                        );
                         if rdata_vec.len() > 0 {
                             self.insert(
                                 &domain,
