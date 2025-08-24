@@ -69,6 +69,7 @@ axum-server = "0.7.2"
 # serde
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140" }
+bincode = { version = "2.0.1", features = ["std", "serde"] }
 toml = "0.8.22"
 
 rtnetlink = { version = "0.14.1" }

@@ -7,7 +7,7 @@ use landscape_common::{
     dns::{DnsResolverConfig, DnsServerInitInfo, DnsUpstreamMode, RedirectInfo, RuleHandlerInfo},
     flow::DnsRuntimeMarkInfo,
     service::controller_service::ConfigController,
-    store::storev3::LandscapeStoreTrait,
+    store::storev4::LandscapeStoreTrait,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
 };
 use uuid::Uuid;
@@ -20,7 +20,7 @@ use std::{
 
 use landscape_common::{
     args::LAND_HOME_PATH, config::geo::GeoSiteSourceConfig, event::dns::DnsEvent,
-    store::storev3::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
+    store::storev4::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
     geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,

@@ -273,10 +273,10 @@ impl RequestHandler for LandscapeDnsRequestHandle {
                 let resolves = self.resolves.load();
                 records = match resolves.lookup(&domain, query_type).await {
                     Ok((rdata_vec, info)) => {
-                        tracing::debug!(
-                            "[flow_id: {}]: lookup success: {domain}, info: {info:?}",
-                            self.flow_id
-                        );
+                        // tracing::debug!(
+                        //     "[flow_id: {}]: lookup success: {domain}, info: {info:?}",
+                        //     self.flow_id
+                        // );
                         if rdata_vec.len() > 0 {
                             self.insert(
                                 &domain,

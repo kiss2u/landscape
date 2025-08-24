@@ -58,7 +58,7 @@ impl LandscapeDnsService {
                             dns_service_clone.refresh_flow_server(flow_id, info).await;
                         }
 
-                        tracing::info!("init rule: {:?}", time.elapsed().as_secs());
+                        tracing::info!("init all DNS rule: {:?}", time.elapsed().as_secs());
                     }
                     DnsEvent::RuleUpdated { flow_id: Some(flow_id) } => {
                         tracing::info!("refresh dns rule: flow_id: {flow_id}");
@@ -73,7 +73,10 @@ impl LandscapeDnsService {
                         tracing::info!("convert rule: {:?}", time.elapsed().as_secs());
 
                         dns_service_clone.refresh_flow_server(flow_id, info).await;
-                        tracing::info!("init rule: {:?}", time.elapsed().as_secs());
+                        tracing::info!(
+                            "[flow_id: {flow_id}] init all DNS rule: {:?}",
+                            time.elapsed().as_secs()
+                        );
                     }
                     DnsEvent::FlowUpdated => {
                         // let flow_rules = flow_rule_service_clone.list().await;

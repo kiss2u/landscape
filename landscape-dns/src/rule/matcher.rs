@@ -124,7 +124,7 @@ mod tests {
     use crate::rule::{DomainConfig, DomainMatchType};
     use landscape_common::{
         config::geo::{GeoDomainConfig, GeoFileCacheKey},
-        store::storev3::StoreFileManager,
+        store::storev4::StoreFileManager,
         LANDSCAPE_GEO_CACHE_TMP_DIR,
     };
 
