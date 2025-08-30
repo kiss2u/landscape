@@ -64,6 +64,7 @@ impl GeoSiteService {
         });
         service
     }
+
     pub async fn convert_config_to_init_info(
         &self,
         rules: Vec<DNSRuleConfig>,
@@ -191,6 +192,10 @@ impl GeoSiteService {
         let mut lock = self.file_cache.lock().await;
         let mut result = Vec::with_capacity(configs.len());
         for config in configs.into_iter() {
+            if !config.enable {
+                continue;
+            }
+
             let mut usage_keys = HashSet::new();
             let mut source = vec![];
 

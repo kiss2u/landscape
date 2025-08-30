@@ -17,6 +17,7 @@ pub mod rule;
 pub mod server;
 pub mod socket;
 
+pub mod reuseport_chain_server;
 pub mod reuseport_server;
 
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";

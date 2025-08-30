@@ -4,7 +4,9 @@ use landscape_common::{
     event::dns::DnsEvent,
     service::{controller_service::FlowConfigController, DefaultWatchServiceStatus},
 };
-use landscape_dns::{reuseport_server::LandscapeReusePortDnsServer, CheckDnsReq, CheckDnsResult};
+use landscape_dns::{
+    reuseport_chain_server::LandscapeReusePortChainDnsServer, CheckDnsReq, CheckDnsResult,
+};
 use tokio::sync::mpsc;
 
 use crate::config_service::{
@@ -14,7 +16,7 @@ use crate::config_service::{
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct LandscapeDnsService {
-    dns_service: LandscapeReusePortDnsServer,
+    dns_service: LandscapeReusePortChainDnsServer,
     dns_rule_service: DNSRuleService,
     flow_rule_service: FlowRuleService,
     geo_site_service: GeoSiteService,
@@ -27,13 +29,13 @@ impl LandscapeDnsService {
         flow_rule_service: FlowRuleService,
         geo_site_service: GeoSiteService,
     ) -> Self {
-        let dns_service = LandscapeReusePortDnsServer::new(53);
+        let dns_service = LandscapeReusePortChainDnsServer::new(53);
         let dns_rules = dns_rule_service.get_flow_hashmap().await;
-        // let dns_rules = geo_site_service.convert_config_to_runtime_rule(dns_rules).await;
 
         for (flow_id, value) in dns_rules {
-            let info = geo_site_service.convert_config_to_init_info(value).await;
-            dns_service.refresh_flow_server(flow_id, info).await;
+            let dns_rules = geo_site_service.convert_config_to_runtime_rule(value).await;
+            // let info = geo_site_service.convert_config_to_init_info(value).await;
+            dns_service.refresh_flow_server(flow_id, dns_rules).await;
         }
 
         // dns_service.restart(53).await;
@@ -50,32 +52,39 @@ impl LandscapeDnsService {
                         tracing::info!("refresh dns rule");
                         let time = Instant::now();
                         let dns_rules = dns_rule_service_clone.get_flow_hashmap().await;
-                        tracing::info!("load rule: {:?}", time.elapsed().as_secs());
+                        tracing::info!("load rule: {:?}ms", time.elapsed().as_millis());
 
                         for (flow_id, value) in dns_rules {
-                            let info =
-                                geo_site_service_clone.convert_config_to_init_info(value).await;
-                            dns_service_clone.refresh_flow_server(flow_id, info).await;
+                            // let info =
+                            //     geo_site_service_clone.convert_config_to_init_info(value).await;
+
+                            let dns_rules =
+                                geo_site_service_clone.convert_config_to_runtime_rule(value).await;
+                            dns_service_clone.refresh_flow_server(flow_id, dns_rules).await;
                         }
 
-                        tracing::info!("init all DNS rule: {:?}", time.elapsed().as_secs());
+                        tracing::info!("init all DNS rule: {:?}ms", time.elapsed().as_millis());
                     }
                     DnsEvent::RuleUpdated { flow_id: Some(flow_id) } => {
                         tracing::info!("refresh dns rule: flow_id: {flow_id}");
                         let time = Instant::now();
                         let flow_dns_rules =
                             dns_rule_service_clone.list_flow_configs(flow_id).await;
-                        tracing::info!("load rule: {:?}", time.elapsed().as_secs());
+                        tracing::info!("load rule: {:?}ms", time.elapsed().as_millis());
 
-                        let info = geo_site_service_clone
-                            .convert_config_to_init_info(flow_dns_rules)
+                        // let info = geo_site_service_clone
+                        //     .convert_config_to_init_info(flow_dns_rules)
+                        //     .await;
+
+                        let dns_rules = geo_site_service_clone
+                            .convert_config_to_runtime_rule(flow_dns_rules)
                             .await;
-                        tracing::info!("convert rule: {:?}", time.elapsed().as_secs());
+                        tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
 
-                        dns_service_clone.refresh_flow_server(flow_id, info).await;
+                        dns_service_clone.refresh_flow_server(flow_id, dns_rules).await;
                         tracing::info!(
-                            "[flow_id: {flow_id}] init all DNS rule: {:?}",
-                            time.elapsed().as_secs()
+                            "[flow_id: {flow_id}] init all DNS rule: {:?}ms",
+                            time.elapsed().as_millis()
                         );
                     }
                     DnsEvent::FlowUpdated => {

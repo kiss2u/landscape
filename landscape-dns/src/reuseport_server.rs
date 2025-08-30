@@ -33,7 +33,7 @@ use crate::{
     CheckDnsReq, CheckDnsResult,
 };
 
-mod listener;
+pub mod listener;
 mod matcher;
 mod request;
 

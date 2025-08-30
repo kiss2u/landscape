@@ -159,7 +159,7 @@ pub enum DNSResolveMode {
 
 impl Default for DNSResolveMode {
     fn default() -> Self {
-        DNSResolveMode::Cloudflare { mode: CloudflareMode::Https }
+        DNSResolveMode::Cloudflare { mode: CloudflareMode::Tls }
     }
 }
 
