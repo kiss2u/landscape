@@ -4,7 +4,7 @@ use axum::{
     Router,
 };
 use landscape_common::service::DefaultWatchServiceStatus;
-use landscape_dns::diff_server::{CheckDnsReq, CheckDnsResult};
+use landscape_dns::{CheckDnsReq, CheckDnsResult};
 
 use crate::LandscapeApp;
 

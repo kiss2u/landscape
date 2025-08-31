@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Deserializer;
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
@@ -155,33 +154,39 @@ where
                     let mut reader = BufReader::new(file);
                     let mut pos = reader.seek(SeekFrom::Start(0)).unwrap();
                     // println!("初始化的 pos: {:?}", pos);
-                    let mut stream =
-                        Deserializer::from_reader(reader).into_iter::<SaveUnit<K, V>>();
 
-                    while let Some(data) = stream.next() {
-                        let new_pos = stream.byte_offset() as u64;
-                        if let Ok(unit) = data {
-                            match unit {
-                                SaveUnit::Data(obj) => {
-                                    let key = obj.get_store_key();
-                                    // 如果原本已有同名 key，则这次写入前一条就成了垃圾
-                                    if let Some(old_unit) = index.get(&key) {
-                                        junk_data_size += old_unit.len;
+                    // 使用 bincode 读取文件
+                    loop {
+                        let start_pos = pos;
+                        match bincode::serde::decode_from_reader::<SaveUnit<K, V>, _, _>(
+                            &mut reader,
+                            bincode::config::standard(),
+                        ) {
+                            Ok(unit) => {
+                                let new_pos = reader.seek(SeekFrom::Current(0)).unwrap();
+                                match unit {
+                                    SaveUnit::Data(obj) => {
+                                        let key = obj.get_store_key();
+                                        // 如果原本已有同 key，则这次写入前一条就成了垃圾
+                                        if let Some(old_unit) = index.get(&key) {
+                                            junk_data_size += old_unit.len;
+                                        }
+                                        index.insert(key, (era, start_pos..new_pos).into());
                                     }
-                                    index.insert(key, (era, pos..new_pos).into());
-                                }
-                                SaveUnit::Del(del_key) => {
-                                    // 如果索引里有，就把它删掉并标记垃圾
-                                    if let Some(old_unit) = index.remove(&del_key) {
-                                        junk_data_size += old_unit.len;
-                                    } else {
-                                        // 否则这条 Del 自己是无意义的，也算垃圾
-                                        junk_data_size += new_pos - pos;
+                                    SaveUnit::Del(del_key) => {
+                                        // 如果索引里有，就把它删掉并标记垃圾
+                                        if let Some(old_unit) = index.remove(&del_key) {
+                                            junk_data_size += old_unit.len;
+                                        } else {
+                                            // 否则这条 Del 自己是无意义的，也算垃圾
+                                            junk_data_size += new_pos - start_pos;
+                                        }
                                     }
                                 }
+                                pos = new_pos;
                             }
+                            Err(_) => break, // 文件读取完毕或出错
                         }
-                        pos = new_pos;
                     }
                 }
             }
@@ -301,7 +306,13 @@ where
         let current_pos = self.writer.seek(SeekFrom::Current(0)).unwrap();
         let save_unit: SaveUnit<K, V> = SaveUnit::Data(data);
 
-        serde_json::to_writer(&mut self.writer, &save_unit).unwrap();
+        // 使用 bincode 序列化
+        bincode::serde::encode_into_std_write(
+            &save_unit,
+            &mut self.writer,
+            bincode::config::standard(),
+        )
+        .unwrap();
         self.writer.flush().unwrap();
         let new_pos = self.writer.seek(SeekFrom::Current(0)).unwrap();
 
@@ -322,8 +333,15 @@ where
         let pos = self.index.get(key)?;
         let reader = self.readers.get_mut(&pos.era)?;
         reader.seek(SeekFrom::Start(pos.start)).ok()?;
-        let data_chunk = reader.take(pos.len);
-        if let Ok(SaveUnit::<K, V>::Data(obj)) = serde_json::from_reader(data_chunk) {
+
+        // 读取数据到内存中
+        let mut buffer = vec![0u8; pos.len as usize];
+        reader.read_exact(&mut buffer).ok()?;
+
+        // 使用 bincode 反序列化
+        if let Ok((SaveUnit::<K, V>::Data(obj), _)) =
+            bincode::serde::decode_from_slice(&buffer, bincode::config::standard())
+        {
             Some(obj)
         } else {
             None
@@ -363,9 +381,16 @@ where
             // 依次读出
             if let Some(reader) = self.readers.get_mut(&pos.era) {
                 reader.seek(SeekFrom::Start(pos.start)).unwrap();
-                let data_chunk = reader.take(pos.len);
-                if let Ok(SaveUnit::<K, V>::Data(obj)) = serde_json::from_reader(data_chunk) {
-                    result.push(obj);
+                let mut buffer = vec![0u8; pos.len as usize];
+
+                // 使用 bincode 反序列化
+                if reader.read_exact(&mut buffer).is_ok() {
+                    // 使用 bincode 反序列化
+                    if let Ok((SaveUnit::<K, V>::Data(obj), _)) =
+                        bincode::serde::decode_from_slice(&buffer, bincode::config::standard())
+                    {
+                        result.push(obj);
+                    }
                 }
             }
         }
@@ -379,7 +404,14 @@ where
             // 自身写一个 Delete 记录
             let del_unit = SaveUnit::<K, V>::Del(key.clone());
             let cur_pos = self.writer.stream_position().unwrap();
-            serde_json::to_writer(&mut self.writer, &del_unit).unwrap();
+
+            // 使用 bincode 序列化
+            bincode::serde::encode_into_std_write(
+                &del_unit,
+                &mut self.writer,
+                bincode::config::standard(),
+            )
+            .unwrap();
             self.writer.flush().unwrap();
             let new_pos = self.writer.stream_position().unwrap();
 

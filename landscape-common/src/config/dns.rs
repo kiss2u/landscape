@@ -10,6 +10,30 @@ use crate::{flow::mark::FlowMark, store::storev2::LandscapeStore};
 
 use super::geo::GeoConfigKey;
 
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "common/dns.d.ts")]
+pub struct DNSRedirectRuleConfig {
+    pub id: Uuid,
+    pub remark: String,
+    pub enable: bool,
+
+    /// DNS Query Result
+    pub result: Vec<IpAddr>,
+
+    /// Match Domains
+    #[serde(default)]
+    pub source: Vec<DomainConfig>,
+
+    #[serde(default = "get_f64_timestamp")]
+    pub update_at: f64,
+}
+
+pub struct DNSApplyInfo {
+    pub id: Uuid,
+    pub redirect_rule_id: Uuid,
+    pub flow_id: u8,
+}
+
 /// DNS 配置
 #[derive(Serialize, Deserialize, Debug, Clone, TS)]
 #[ts(export, export_to = "common/dns.d.ts")]
@@ -135,7 +159,7 @@ pub enum DNSResolveMode {
 
 impl Default for DNSResolveMode {
     fn default() -> Self {
-        DNSResolveMode::Cloudflare { mode: CloudflareMode::Https }
+        DNSResolveMode::Cloudflare { mode: CloudflareMode::Tls }
     }
 }
 

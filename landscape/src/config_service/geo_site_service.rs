@@ -1,11 +1,13 @@
 use landscape_common::{
     config::{
-        dns::{DNSRuleConfig, DNSRuntimeRule, RuleSource},
+        dns::{DNSResolveMode, DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
         geo::{GeoDomainConfig, GeoFileCacheKey, GeoSiteFileConfig},
     },
     database::LandscapeDBTrait,
+    dns::{DnsResolverConfig, DnsServerInitInfo, DnsUpstreamMode, RedirectInfo, RuleHandlerInfo},
+    flow::DnsRuntimeMarkInfo,
     service::controller_service::ConfigController,
-    store::storev3::LandscapeStoreTrait,
+    store::storev4::LandscapeStoreTrait,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
 };
 use uuid::Uuid;
@@ -18,7 +20,7 @@ use std::{
 
 use landscape_common::{
     args::LAND_HOME_PATH, config::geo::GeoSiteSourceConfig, event::dns::DnsEvent,
-    store::storev3::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
+    store::storev4::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
     geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,
@@ -63,6 +65,125 @@ impl GeoSiteService {
         service
     }
 
+    pub async fn convert_config_to_init_info(
+        &self,
+        rules: Vec<DNSRuleConfig>,
+    ) -> DnsServerInitInfo {
+        let mut rules: Vec<DNSRuleConfig> = rules.into_iter().filter(|e| e.enable).collect();
+        rules.sort_by(|a, b| b.index.cmp(&a.index));
+
+        let mut init_info = DnsServerInitInfo::default();
+
+        for each in rules {
+            let resolve_mode = match each.resolve_mode {
+                DNSResolveMode::Redirect { ips } => {
+                    let info = Arc::new(RedirectInfo { result_ip: ips });
+
+                    for domain_config in self.get_geo_key_rules(each.source).await.into_iter() {
+                        init_info.redirect_rules.insert(domain_config, info.clone());
+                    }
+                    break;
+                }
+                DNSResolveMode::Upstream { upstream, ips, port } => {
+                    DnsUpstreamMode::Upstream { upstream, ips, port }
+                }
+                DNSResolveMode::Cloudflare { mode } => DnsUpstreamMode::Cloudflare { mode },
+            };
+            let resolver_config = DnsResolverConfig {
+                id: Uuid::new_v4(),
+                resolve_mode: resolve_mode,
+                mark: each.mark,
+                flow_id: each.flow_id,
+            };
+
+            let info = RuleHandlerInfo {
+                rule_id: each.id,
+                flow_id: each.flow_id,
+                resolver_id: resolver_config.id,
+                mark: DnsRuntimeMarkInfo { mark: each.mark, priority: each.index as u16 },
+                filter: each.filter,
+            };
+
+            init_info.resolver_configs.push(resolver_config);
+
+            if each.source.is_empty() {
+                init_info.default_resolver = Some(info);
+            } else {
+                let info = Arc::new(info);
+
+                for domain_config in self.get_geo_key_rules(each.source).await.into_iter() {
+                    init_info.rules.insert(domain_config, info.clone());
+                }
+            }
+        }
+
+        init_info
+    }
+
+    async fn get_geo_key_rules(&self, rule_source: Vec<RuleSource>) -> Vec<DomainConfig> {
+        let mut lock = self.file_cache.lock().await;
+
+        let mut usage_keys = HashSet::new();
+        let mut source = vec![];
+
+        let mut inverse_keys: HashMap<String, HashSet<String>> = HashMap::new();
+        for each in rule_source.into_iter() {
+            match each {
+                RuleSource::GeoKey(k) if k.inverse => {
+                    inverse_keys.entry(k.name).or_default().insert(k.key);
+                }
+                RuleSource::GeoKey(k) => {
+                    let file_cache_key = k.get_file_cache_key();
+                    let predicate: Box<dyn Fn(&GeoSiteFileConfig) -> bool> =
+                        if let Some(attr) = k.attribute_key {
+                            let attr = attr.clone();
+                            Box::new(move |config: &GeoSiteFileConfig| {
+                                config.attributes.contains(&attr)
+                            })
+                        } else {
+                            Box::new(move |_: &GeoSiteFileConfig| true)
+                        };
+                    if let Some(domains) = lock.get(&file_cache_key) {
+                        source.extend(domains.values.into_iter().filter(predicate).map(Into::into));
+                    }
+                    usage_keys.insert(file_cache_key);
+                }
+                RuleSource::Config(c) => {
+                    source.push(c);
+                }
+            }
+        }
+
+        if inverse_keys.len() > 0 {
+            let time = Instant::now();
+            tracing::debug!("{:?}", inverse_keys);
+            for (inverse_key, excluded_names) in inverse_keys {
+                let all_keys: Vec<_> =
+                    lock.filter_keys(|k| k.name == inverse_key).cloned().collect();
+                for key in all_keys.iter() {
+                    if !excluded_names.contains(&key.key) {
+                        if !usage_keys.contains(key) {
+                            if let Some(domains) = lock.get(key) {
+                                usage_keys.insert(key.clone());
+                                source.extend(domains.values.into_iter().map(Into::into));
+                            }
+                        }
+                        // } else {
+                        //     tracing::debug!("excluded_names: {:#?}", key);
+                    }
+                }
+            }
+            tracing::debug!(
+                "using key len: {:#?}, all len: {}, time: {}",
+                usage_keys.len(),
+                lock.len(),
+                time.elapsed().as_secs()
+            );
+        }
+
+        source
+    }
+
     pub async fn convert_config_to_runtime_rule(
         &self,
         configs: Vec<DNSRuleConfig>,
@@ -71,6 +192,10 @@ impl GeoSiteService {
         let mut lock = self.file_cache.lock().await;
         let mut result = Vec::with_capacity(configs.len());
         for config in configs.into_iter() {
+            if !config.enable {
+                continue;
+            }
+
             let mut usage_keys = HashSet::new();
             let mut source = vec![];
 

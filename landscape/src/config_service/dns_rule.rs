@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use landscape_common::{
     config::dns::DNSRuleConfig,
     event::dns::DnsEvent,
@@ -30,6 +32,17 @@ impl DNSRuleService {
         }
 
         dns_rule_service
+    }
+
+    pub async fn get_flow_hashmap(&self) -> HashMap<u32, Vec<DNSRuleConfig>> {
+        let rules = self.list().await;
+
+        let mut groups: HashMap<u32, Vec<DNSRuleConfig>> = HashMap::new();
+        for rule in rules.into_iter() {
+            groups.entry(rule.flow_id).or_default().push(rule);
+        }
+
+        groups
     }
 }
 
