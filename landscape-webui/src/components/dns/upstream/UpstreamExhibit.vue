@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { get_dns_upstream } from "@/api/dns_rule/upstream";
 import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
-import { onMounted, ref } from "vue";
+import { onMounted, watch, ref } from "vue";
 
 type Props = {
   rule_id: string;
@@ -12,6 +12,13 @@ const props = defineProps<Props>();
 onMounted(async () => {
   await refresh();
 });
+
+watch(
+  () => props.rule_id,
+  async () => {
+    await refresh();
+  }
+);
 
 const rule = ref<DnsUpstreamConfig>();
 async function refresh() {
