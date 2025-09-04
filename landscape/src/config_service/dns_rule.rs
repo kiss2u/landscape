@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use landscape_common::{
     config::dns::DNSRuleConfig,
     event::dns::DnsEvent,
-    service::controller_service::{ConfigController, FlowConfigController},
+    service::controller_service_v2::{ConfigController, FlowConfigController},
 };
 use landscape_database::{
     dns_rule::repository::DNSRuleRepository, provider::LandscapeDBServiceProvider,
@@ -11,24 +11,30 @@ use landscape_database::{
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use crate::config_service::dns::upstream::DnsUpstreamService;
+
 #[derive(Clone)]
 pub struct DNSRuleService {
     store: DNSRuleRepository,
     dns_events_tx: mpsc::Sender<DnsEvent>,
+    dns_upstream_service: DnsUpstreamService,
 }
 
 impl DNSRuleService {
     pub async fn new(
         store: LandscapeDBServiceProvider,
         dns_events_tx: mpsc::Sender<DnsEvent>,
+        dns_upstream_service: DnsUpstreamService,
     ) -> Self {
         let store = store.dns_rule_store();
-        let dns_rule_service = Self { store, dns_events_tx };
+        let dns_rule_service = Self { store, dns_events_tx, dns_upstream_service };
 
         let rules = dns_rule_service.list().await;
 
         if rules.is_empty() {
-            dns_rule_service.set(DNSRuleConfig::default()).await;
+            let (rule, upstream) = landscape_common::dns::gen_default_dns_rule_and_upstream();
+            dns_rule_service.set(rule).await;
+            dns_rule_service.dns_upstream_service.set(upstream).await;
         }
 
         dns_rule_service

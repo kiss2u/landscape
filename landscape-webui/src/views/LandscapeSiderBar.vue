@@ -11,6 +11,7 @@ import {
   CicsSystemGroup,
   ModelBuilder,
   ChartCombo,
+  ServerDns,
 } from "@vicons/carbon";
 import { ImportExportRound } from "@vicons/material";
 import { Wall } from "@vicons/tabler";
@@ -58,6 +59,21 @@ const menuOptions: MenuOption[] = [
     key: "nat",
     icon: renderIcon(ImportExportRound),
     disabled: false,
+  },
+  {
+    label: "DNS 相关",
+    key: "dns",
+    icon: renderIcon(ServerDns),
+    children: [
+      {
+        label: "重定向规则管理",
+        key: "dns-redirect",
+      },
+      {
+        label: "上游 DNS 配置管理",
+        key: "dns-upstream",
+      },
+    ],
   },
   {
     label: "防火墙",

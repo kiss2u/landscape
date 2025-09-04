@@ -4,6 +4,21 @@ import type { GeoConfigKey } from "./geo.d";
 
 export type CloudflareMode = "plaintext" | "tls" | "https";
 
+export type DNSRedirectRuleConfig = {
+  id: string;
+  remark: string;
+  enable: boolean;
+  /**
+   * DNS Query Result
+   */
+  result: Array<string>;
+  /**
+   * Match Domains
+   */
+  source: Array<DomainConfig>;
+  update_at: number;
+};
+
 export type DNSResolveMode = { "t": "redirect"; ips: Array<string> } | {
   "t": "upstream";
   upstream: DnsUpstreamType;
@@ -15,7 +30,7 @@ export type DNSResolveMode = { "t": "redirect"; ips: Array<string> } | {
  * DNS 配置
  */
 export type DNSRuleConfig = {
-  id: string | null;
+  id?: string;
   name: string;
   /**
    * 优先级
@@ -29,10 +44,7 @@ export type DNSRuleConfig = {
    * 过滤模式
    */
   filter: FilterResult;
-  /**
-   * 解析模式
-   */
-  resolve_mode: DNSResolveMode;
+  upstream_id: string;
   /**
    * 流量标记
    */
@@ -42,8 +54,23 @@ export type DNSRuleConfig = {
    */
   source: Array<RuleSource>;
   flow_id: number;
-  update_at: number;
+  update_at?: number;
 };
+
+export type DnsUpstreamConfig = {
+  id?: string;
+  remark: string;
+  mode: DnsUpstreamMode;
+  ips: Array<string>;
+  port: number | null;
+  update_at?: number;
+};
+
+export type DnsUpstreamMode =
+  | { "t": "plaintext" }
+  | { "t": "tls"; domain: string }
+  | { "t": "https"; domain: string }
+  | { "t": "quic"; domain: string };
 
 export type DnsUpstreamType = { "t": "plaintext" } | {
   "t": "tls";
