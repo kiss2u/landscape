@@ -137,7 +137,11 @@ const title_name = computed(() =>
     </n-flex>
     <n-flex v-else>
       <n-tag v-for="item in config.flow_match_rules" :bordered="false">
-        {{ `${item.vlan_id ? `${item.vlan_id}@` : ""}${item.ip}` }}
+        {{
+          `${item.vlan_id ? `${item.vlan_id}@` : ""}${item.ip}/${
+            item.prefix_len
+          }`
+        }}
       </n-tag>
     </n-flex>
     <template #action>
