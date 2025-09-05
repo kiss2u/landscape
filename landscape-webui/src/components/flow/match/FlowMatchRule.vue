@@ -36,6 +36,13 @@ function onCreate(): PacketMatchMark {
           :style="{ width: '66%' }"
           placeholder="IP 地址"
         />
+        <n-input-group-label>/</n-input-group-label>
+        <n-input-number
+          v-model:value="value.prefix_len"
+          :style="{ width: '60px' }"
+          placeholder="前缀长度"
+          :show-button="false"
+        />
         <!-- <n-input-number
           v-model:value="value.vlan_id"
           :style="{ width: '33%' }"

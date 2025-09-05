@@ -179,6 +179,8 @@ struct route_context {
     u8 l4_protocol;
     // tos value
     u8 tos;
+    // TODO
+    // u16 dst_port;
     u8 smac[6];
     u8 _pad[3];
 };

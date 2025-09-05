@@ -5,9 +5,10 @@
 #include "packet_def.h"
 #include "landscape.h"
 
+// 64 + 32 = 96
+// 64 + 128 = 192
 struct flow_match_key {
-    // 源 IP 地址
-    union u_inet_addr src_addr;
+    u32 prefixlen;
     // vlan id
     u32 vlan_tci;
     // tos value
@@ -17,15 +18,18 @@ struct flow_match_key {
     // IP 层协议: TCP / UDP
     u8 l4_protocol;
     u8 _pad;
+    // 源 IP 地址
+    union u_inet_addr src_addr;
 };
 
 
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LPM_TRIE);
     __type(key, struct flow_match_key);
     __type(value, u32);
     __uint(max_entries, 65536);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
+    __uint(map_flags, BPF_F_NO_PREALLOC | BPF_F_RDONLY_PROG);
 } flow_match_map SEC(".maps");
 
 #endif /* __LD_FLOW_MATCH_H__ */

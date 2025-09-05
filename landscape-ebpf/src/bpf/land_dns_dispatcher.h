@@ -6,7 +6,7 @@
 #include "landscape.h"
 
 struct {
-    __uint(type, BPF_MAP_TYPE_REUSEPORT_SOCKARRAY);
+    __uint(type, BPF_MAP_TYPE_SOCKMAP);
     __uint(max_entries, 256);
     __type(key, __u32);
     __type(value, __u64);

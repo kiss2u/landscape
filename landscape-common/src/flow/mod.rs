@@ -21,7 +21,7 @@ pub struct PacketMatchMark {
 }
 
 fn default_prefix_len() -> u8 {
-    0
+    32
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
