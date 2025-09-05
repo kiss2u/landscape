@@ -1,7 +1,6 @@
 import { FlowMark } from "@/rust_bindings/flow";
 import { FlowMarkType } from "./default_value";
 import {
-  DNSResolveMode,
   DNSRuleConfig,
   FilterResult,
   RuleSource,

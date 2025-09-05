@@ -46,7 +46,7 @@ use crate::{
     },
     dns::{config::DnsUpstreamConfig, redirect::DNSRedirectRule},
     firewall::FirewallRuleConfig,
-    flow::FlowConfig,
+    flow::config::FlowConfig,
     ip_mark::WanIpRuleConfig,
     LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_DB_SQLITE_NAME, LANDSCAPE_LOG_DIR_NAME,
     LANDSCAPE_WEBROOT_DIR_NAME, LAND_CONFIG,

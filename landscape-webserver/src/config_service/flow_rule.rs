@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::service::controller_service::FlowConfigController;
-use landscape_common::{config::ConfigId, flow::FlowConfig};
+use landscape_common::{config::ConfigId, flow::config::FlowConfig};
 use landscape_common::{config::FlowId, service::controller_service::ConfigController};
 
 use crate::{error::LandscapeApiError, LandscapeApp};

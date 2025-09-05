@@ -12,6 +12,7 @@ function onCreate(): PacketMatchMark {
     ip: "",
     vlan_id: null,
     qos: null,
+    prefix_len: 32,
   };
 }
 </script>
