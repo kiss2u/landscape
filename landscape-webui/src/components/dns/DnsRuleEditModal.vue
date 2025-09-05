@@ -179,7 +179,7 @@ async function import_rules() {
           <FlowMarkEdit v-model:mark="rule.mark"></FlowMarkEdit>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="5" label="上游选择">
+        <n-form-item-gi :span="5" label="DNS 上游选择">
           <SelectUpstream v-model:upstream_id="rule.upstream_id">
           </SelectUpstream>
         </n-form-item-gi>

@@ -31,7 +31,7 @@ use landscape_common::{
 #[derive(Clone, Debug)]
 pub struct ChainDnsRequestHandle {
     redirect_solution: Arc<ArcSwap<Vec<RedirectSolution>>>,
-    resolves: BTreeMap<u32, Arc<ResolutionRule>>,
+    resolves: Arc<ArcSwap<BTreeMap<u32, ResolutionRule>>>,
     pub cache: Arc<Mutex<DNSCache>>,
     pub flow_id: u32,
 }
@@ -40,7 +40,7 @@ impl ChainDnsRequestHandle {
     pub fn new(info: ChainDnsServerInitInfo, flow_id: u32) -> ChainDnsRequestHandle {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
-            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, flow_id)));
+            resolves.insert(rule.index, ResolutionRule::new(rule, flow_id));
         }
         let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(2048).unwrap())));
 
@@ -48,7 +48,7 @@ impl ChainDnsRequestHandle {
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
 
         ChainDnsRequestHandle {
-            resolves,
+            resolves: Arc::new(ArcSwap::from_pointee(resolves)),
             cache,
             flow_id,
             redirect_solution: Arc::new(ArcSwap::from_pointee(redirect_solution)),
@@ -59,7 +59,7 @@ impl ChainDnsRequestHandle {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
             // println!("dns_rules: {:?}", rule);
-            resolves.insert(rule.index, Arc::new(ResolutionRule::new(rule, self.flow_id)));
+            resolves.insert(rule.index, ResolutionRule::new(rule, self.flow_id));
         }
 
         let mut cache = LruCache::new(NonZeroUsize::new(2048).unwrap());
@@ -130,12 +130,14 @@ impl ChainDnsRequestHandle {
             // );
         }
 
-        // println!("cache: {:?}", cache);
-        self.resolves = resolves;
+        // for ((domain, req_type), value) in cache.iter() {
+        //     println!("domain: {:?},req_type: {:?},  value: {:?}", domain, req_type, value);
+        // }
+
+        self.resolves.store(Arc::new(resolves));
         {
             let mut old_cache = self.cache.lock().await;
             *old_cache = cache;
-            drop(old_cache);
         }
 
         let redirect_solution =
@@ -160,28 +162,32 @@ impl ChainDnsRequestHandle {
         };
 
         if records.is_empty() {
-            for (_index, resolver) in self.resolves.iter() {
-                if resolver.is_match(&domain) {
-                    result.rule_id = Some(resolver.get_config_id());
+            {
+                let resolves = self.resolves.load();
+                for (_index, resolver) in resolves.iter() {
+                    if resolver.is_match(&domain) {
+                        result.rule_id = Some(resolver.get_config_id());
 
-                    match tokio::time::timeout(
-                        tokio::time::Duration::from_secs(5),
-                        resolver.lookup(&domain, query_type),
-                    )
-                    .await
-                    {
-                        Ok(Ok(rdata_vec)) => {
-                            result.records = Some(rdata_vec);
+                        match tokio::time::timeout(
+                            tokio::time::Duration::from_secs(5),
+                            resolver.lookup(&domain, query_type),
+                        )
+                        .await
+                        {
+                            Ok(Ok(rdata_vec)) => {
+                                result.records = Some(rdata_vec);
+                            }
+                            Ok(Err(_)) => {
+                                // lookup 返回了错误
+                            }
+                            Err(_) => {
+                                tracing::error!("check domain timeout")
+                            }
                         }
-                        Ok(Err(_)) => {
-                            // lookup 返回了错误
-                        }
-                        Err(_) => {
-                            tracing::error!("check domain timeout")
-                        }
+                        break;
                     }
-                    break;
                 }
+                drop(resolves);
             }
         } else {
             result.records = Some(records);
@@ -321,40 +327,44 @@ impl RequestHandler for ChainDnsRequestHandle {
             if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
                 records = fiter_result(result, &filter);
             } else {
-                for (_index, resolver) in self.resolves.iter() {
-                    if resolver.is_match(&domain) {
-                        records = match resolver.lookup(&domain, query_type).await {
-                            Ok(rdata_vec) => {
-                                if rdata_vec.len() > 0 {
-                                    self.insert(
-                                        &domain,
-                                        query_type,
-                                        rdata_vec.clone(),
-                                        resolver.mark(),
-                                        resolver.filter_mode(),
-                                    )
-                                    .await;
-                                }
-                                fiter_result(rdata_vec, &resolver.filter_mode())
-                            }
-                            Err(error_code) => {
-                                // 构建并返回错误响应
-                                header.set_response_code(error_code);
-                                let response =
-                                    MessageResponseBuilder::from_message_request(request)
-                                        .build_no_records(header);
-                                let result = response_handle.send_response(response).await;
-                                return match result {
-                                    Err(e) => {
-                                        tracing::error!("Request failed: {}", e);
-                                        serve_failed()
+                {
+                    let resolves = self.resolves.load();
+                    for (_index, resolver) in resolves.iter() {
+                        if resolver.is_match(&domain) {
+                            records = match resolver.lookup(&domain, query_type).await {
+                                Ok(rdata_vec) => {
+                                    if rdata_vec.len() > 0 {
+                                        self.insert(
+                                            &domain,
+                                            query_type,
+                                            rdata_vec.clone(),
+                                            resolver.mark(),
+                                            resolver.filter_mode(),
+                                        )
+                                        .await;
                                     }
-                                    Ok(info) => info,
-                                };
-                            }
-                        };
-                        break;
+                                    fiter_result(rdata_vec, &resolver.filter_mode())
+                                }
+                                Err(error_code) => {
+                                    // 构建并返回错误响应
+                                    header.set_response_code(error_code);
+                                    let response =
+                                        MessageResponseBuilder::from_message_request(request)
+                                            .build_no_records(header);
+                                    let result = response_handle.send_response(response).await;
+                                    return match result {
+                                        Err(e) => {
+                                            tracing::error!("Request failed: {}", e);
+                                            serve_failed()
+                                        }
+                                        Ok(info) => info,
+                                    };
+                                }
+                            };
+                            break;
+                        }
                     }
+                    drop(resolves);
                 }
             }
         }
