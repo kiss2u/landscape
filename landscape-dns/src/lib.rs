@@ -97,6 +97,7 @@ pub struct CacheDNSItem {
     insert_time: Instant,
     mark: DnsRuntimeMarkInfo,
     filter: FilterResult,
+    min_ttl: u32,
 }
 
 impl CacheDNSItem {

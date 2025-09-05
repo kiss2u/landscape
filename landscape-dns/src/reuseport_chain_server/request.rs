@@ -109,6 +109,8 @@ impl ChainDnsRequestHandle {
                             let mut new_record = cache_item.clone();
                             new_record.mark = new_mark.clone();
                             new_record.filter = resolver.filter_mode();
+                            new_record.min_ttl =
+                                if new_record.min_ttl < 5 { new_record.min_ttl } else { 5 };
                             cache_items.push(new_record);
                         }
                         if !cache_items.is_empty() {
@@ -212,23 +214,21 @@ impl ChainDnsRequestHandle {
             let mut is_expire = false;
             let mut valid_records: Vec<Record> = vec![];
             let mut ret_fiter = FilterResult::Unfilter;
-            'a_record: for CacheDNSItem { rdatas, insert_time, filter, .. } in records.iter() {
+            'a_record: for CacheDNSItem { rdatas, insert_time, filter, min_ttl, .. } in
+                records.iter()
+            {
                 ret_fiter = filter.clone();
-                let insert_time = insert_time.elapsed().as_secs() as u32;
-                for rdata in rdatas.iter() {
-                    let ttl = rdata.ttl();
-                    if insert_time > ttl {
-                        is_expire = true;
-                        break 'a_record;
-                    }
-
-                    let mut info = rdata.clone();
-                    info.set_ttl(ttl - insert_time);
-                    valid_records.push(info);
-                    // tracing::debug!(
-                    //     "query {domain} , filter: {filter:?}, result: {valid_records:?}"
-                    // );
+                let insert_time_elapsed = insert_time.elapsed().as_secs() as u32;
+                let min_ttl = *min_ttl;
+                if insert_time_elapsed > min_ttl {
+                    is_expire = true;
+                    break 'a_record;
                 }
+                valid_records.extend(rdatas.iter().cloned().map(|mut d| {
+                    d.set_ttl(min_ttl - insert_time_elapsed);
+                    d
+                }));
+                // tracing::debug!("query {domain} , filter: {filter:?}, result: {valid_records:?}");
             }
 
             if is_expire {
@@ -251,18 +251,27 @@ impl ChainDnsRequestHandle {
         mark: &DnsRuntimeMarkInfo,
         filter: FilterResult,
     ) {
+        let min_ttl = rdata_ttl_vec.iter().map(|r| r.ttl()).min().unwrap_or(0);
+        if min_ttl == 0 {
+            return;
+        }
         let cache_item = CacheDNSItem {
             rdatas: rdata_ttl_vec,
             insert_time: Instant::now(),
             mark: mark.clone(),
             filter,
+            min_ttl,
         };
         let update_dns_mark_list = cache_item.get_update_rules();
 
         let mut cache = self.cache.lock().await;
         // tracing::info!("setting ip into cache: {:?}", cache_item);
-        cache.put((domain.to_string(), query_type), vec![cache_item]);
+        let old_cache = cache.put((domain.to_string(), query_type), vec![cache_item]);
         drop(cache);
+        if let Some(_) = old_cache {
+            // TODO 检查新旧变化, 看看是否移出旧的标识
+            // tracing::info!("setting ip into cache: {:?}", item);
+        }
         // 将 mark 写入 mark ebpf map
         if mark.mark.need_insert_in_ebpf_map() {
             tracing::info!("setting ips: {:?}, Mark: {:?}", update_dns_mark_list, mark);

@@ -206,11 +206,16 @@ impl LandscapeDnsRequestHandle {
         mark: &DnsRuntimeMarkInfo,
         filter: FilterResult,
     ) {
+        let min_ttl = rdata_ttl_vec.iter().map(|r| r.ttl()).min().unwrap_or(0);
+        if min_ttl == 0 {
+            return;
+        }
         let cache_item = CacheDNSItem {
             rdatas: rdata_ttl_vec,
             insert_time: Instant::now(),
             mark: mark.clone(),
             filter,
+            min_ttl,
         };
         let update_dns_mark_list = cache_item.get_update_rules();
 
