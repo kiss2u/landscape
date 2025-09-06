@@ -1,13 +1,10 @@
-use std::{collections::HashMap, net::Ipv6Addr};
+use std::{collections::HashMap, net::Ipv6Addr, sync::Arc};
 
-use once_cell::sync::Lazy;
 use tokio::sync::{watch, RwLock};
+use ts_rs::TS;
 
-pub mod default_router;
-
-pub static LD_PD_WATCHES: Lazy<IAPrefixMap> = Lazy::new(IAPrefixMap::new);
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
+#[ts(export, export_to = "common/ipv6_pd.d.ts")]
 pub struct LDIAPrefix {
     /// unit: s
     pub preferred_lifetime: u32,
@@ -15,15 +12,27 @@ pub struct LDIAPrefix {
     pub valid_lifetime: u32,
     pub prefix_len: u8,
     pub prefix_ip: Ipv6Addr,
+
+    pub last_update_time: f64,
 }
 
+#[derive(Clone)]
 pub struct IAPrefixMap {
-    infos: RwLock<HashMap<String, watch::Sender<Option<LDIAPrefix>>>>,
+    infos: Arc<RwLock<HashMap<String, watch::Sender<Option<LDIAPrefix>>>>>,
 }
 
 impl IAPrefixMap {
-    fn new() -> Self {
-        IAPrefixMap { infos: RwLock::new(HashMap::new()) }
+    pub async fn get_info(&self) -> HashMap<String, Option<LDIAPrefix>> {
+        let read = self.infos.read().await;
+        let mut infos = HashMap::new();
+        for (iface, value) in read.iter() {
+            infos.insert(iface.clone(), value.borrow().clone());
+        }
+        infos
+    }
+
+    pub fn new() -> Self {
+        IAPrefixMap { infos: Arc::new(RwLock::new(HashMap::new())) }
     }
 
     // 初始化一个 channel，如果不存在则创建

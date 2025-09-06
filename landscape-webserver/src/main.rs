@@ -37,6 +37,7 @@ use landscape_common::{
     args::{LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
     config::RuntimeConfig,
     error::LdResult,
+    ipv6_pd::IAPrefixMap,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use sys_service::dns_service::get_dns_paths;
@@ -61,7 +62,7 @@ use service::{
     mss_clamp::get_mss_clamp_service_paths,
 };
 use service::{icmp_ra::get_iface_icmpv6ra_paths, nat::get_iface_nat_paths};
-use service::{ipconfig::get_iface_ipconfig_paths, ipvpd::get_iface_pdclient_paths};
+use service::{ipconfig::get_iface_ipconfig_paths, ipv6pd::get_iface_pdclient_paths};
 use service::{pppd::get_iface_pppd_paths, wifi::get_wifi_service_paths};
 use tracing::info;
 
@@ -210,16 +211,19 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         PPPDServiceConfigManagerService::new(db_store_provider.clone(), route_service.clone())
             .await;
 
+    let prefix_map = IAPrefixMap::new();
     let ipv6_pd_service = DHCPv6ClientManagerService::new(
         db_store_provider.clone(),
         dev_obs.resubscribe(),
         route_service.clone(),
+        prefix_map.clone(),
     )
     .await;
     let ipv6_ra_service = IPV6RAManagerService::new(
         db_store_provider.clone(),
         dev_obs.resubscribe(),
         route_service.clone(),
+        prefix_map,
     )
     .await;
 

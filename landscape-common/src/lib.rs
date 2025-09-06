@@ -13,6 +13,7 @@ pub mod global_const;
 pub mod iface;
 pub mod info;
 pub mod ip_mark;
+pub mod ipv6_pd;
 pub mod metric;
 pub mod net;
 pub mod net_proto;

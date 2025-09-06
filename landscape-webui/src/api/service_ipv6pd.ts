@@ -1,6 +1,7 @@
 import { IPV6PDServiceConfig } from "@/lib/ipv6pd";
 import { ServiceStatus } from "@/lib/services";
 import axiosService from ".";
+import { LDIAPrefix } from "@/rust_bindings/common/ipv6_pd";
 
 export async function get_all_ipv6pd_status(): Promise<
   Map<string, ServiceStatus>
@@ -17,7 +18,13 @@ export async function get_iface_ipv6pd_config(
   iface_name: string
 ): Promise<IPV6PDServiceConfig> {
   let data = await axiosService.get(`services/ipv6pd/${iface_name}`);
-  console.log(data.data);
+  return data.data;
+}
+
+export async function get_current_ip_prefix_info(): Promise<
+  Map<String, LDIAPrefix | null>
+> {
+  let data = await axiosService.get(`services/ipv6pd/infos`);
   return data.data;
 }
 

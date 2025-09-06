@@ -5,10 +5,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::{
     config::dhcp_v6_client::IPV6PDServiceConfig, service::DefaultWatchServiceStatus,
 };
+use landscape_common::{ipv6_pd::LDIAPrefix, service::controller_service_v2::ControllerService};
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 use crate::{error::LandscapeApiError, LandscapeApp};
@@ -16,12 +16,19 @@ use crate::{error::LandscapeApiError, LandscapeApp};
 pub async fn get_iface_pdclient_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/ipv6pd/status", get(get_all_status))
+        .route("/ipv6pd/infos", get(get_current_ip_prefix_info))
         .route("/ipv6pd", post(handle_iface_pd))
         .route(
             "/ipv6pd/{iface_name}",
             get(get_iface_pd_conifg).delete(delete_and_stop_iface_service),
         )
     // .route("/nats/{iface_name}/restart", post(restart_nat_service_status))
+}
+
+async fn get_current_ip_prefix_info(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<HashMap<String, Option<LDIAPrefix>>> {
+    LandscapeApiResp::success(state.ipv6_pd_service.get_ipv6_prefix_infos().await)
 }
 
 async fn get_all_status(
@@ -41,7 +48,6 @@ async fn get_iface_pd_conifg(
     }
 }
 
-/// 处理新建 IPv6 PD 获取配置
 async fn handle_iface_pd(
     State(state): State<LandscapeApp>,
     Json(config): Json<IPV6PDServiceConfig>,
