@@ -257,6 +257,31 @@ pub async fn create_bridge(name: String) -> bool {
     create_result.is_ok()
 }
 
+pub async fn delete_bridge(name: String) -> bool {
+    let (connection, handle, _) = new_connection().unwrap();
+    tokio::spawn(connection);
+    let mut result = handle.link().get().match_name(name).execute();
+    loop {
+        match result.try_next().await {
+            Ok(link) => match link {
+                Some(link) => {
+                    let del_result = handle.link().del(link.header.index).execute().await;
+                    if del_result.is_ok() {
+                        return true;
+                    }
+                }
+                None => {
+                    return false;
+                }
+            },
+            Err(e) => {
+                tracing::error!("delete bridge error: {e:?}");
+                return false;
+            }
+        }
+    }
+}
+
 /// Attach the link to a bridge (its controller).
 /// This is equivalent to ip link set LINK master BRIDGE.
 /// To succeed, both the bridge and the link that is being attached must be UP.
