@@ -3,7 +3,9 @@ import { get_flow_rule_by_flow_id } from "@/api/flow";
 import { FlowConfig } from "@/rust_bindings/common/flow";
 import { onMounted, ref, watch, watchEffect } from "vue";
 import { Docker, NetworkWired } from "@vicons/fa";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
+const frontEndStore = useFrontEndStore();
 type Props = {
   flow_id: number;
 };
@@ -30,13 +32,20 @@ async function refresh() {
   <n-popover v-if="config" trigger="hover">
     <template #trigger>
       <n-flex align="center">
-        {{ config.remark ? config.remark : "`未命名`" }} 的
+        {{
+          config.remark ? frontEndStore.MASK_INFO(config.remark) : "`未命名`"
+        }}
+        的
         <n-tag
           size="small"
           v-for="each in config.flow_targets"
           :bordered="false"
         >
-          {{ each.t === "netns" ? each.container_name : each.name }}
+          {{
+            each.t === "netns"
+              ? frontEndStore.MASK_INFO(each.container_name)
+              : frontEndStore.MASK_INFO(each.name)
+          }}
           <template #icon>
             <n-icon :component="each.t === 'netns' ? Docker : NetworkWired" />
           </template>

@@ -7,6 +7,10 @@ import {
 import { CountdownInst } from "naive-ui";
 import { computed, nextTick, ref, watch } from "vue";
 
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
+
+const frontEndStore = useFrontEndStore();
 const emit = defineEmits(["refresh"]);
 type Props = {
   info: DHCPv4OfferInfo;
@@ -68,8 +72,16 @@ async function finish() {
       </thead>
       <tbody>
         <tr v-for="item in show_item">
-          <td>{{ item.mac }}</td>
-          <td>{{ item.ip }}</td>
+          <td>
+            {{
+              frontEndStore.presentation_mode ? mask_string(item.mac) : item.mac
+            }}
+          </td>
+          <td>
+            {{
+              frontEndStore.presentation_mode ? mask_string(item.ip) : item.ip
+            }}
+          </td>
           <td>
             <!-- {{ item.real_expire_time }} -->
             <n-countdown

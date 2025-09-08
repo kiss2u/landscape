@@ -3,7 +3,9 @@ import { ref } from "vue";
 import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
 import { DnsUpstreamModeTsEnum, upstream_mode_exhibit_name } from "@/lib/dns";
 import { delete_dns_upstream } from "@/api/dns_rule/upstream";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
+const frontEndStore = useFrontEndStore();
 type Props = {
   rule: DnsUpstreamConfig;
   show_action?: boolean;
@@ -54,14 +56,14 @@ async function del() {
       </n-descriptions-item>
 
       <n-descriptions-item label="请求端口">
-        {{ rule.port }}
+        {{ frontEndStore.MASK_INFO(rule.port?.toString()) }}
       </n-descriptions-item>
 
       <n-descriptions-item span="2" label="域名地址">
         {{
           rule.mode.t === DnsUpstreamModeTsEnum.Plaintext
             ? "无配置"
-            : rule.mode.domain
+            : frontEndStore.MASK_INFO(rule.mode.domain)
         }}
       </n-descriptions-item>
 
@@ -69,7 +71,7 @@ async function del() {
         <n-scrollbar style="height: 90px">
           <n-flex>
             <n-flex v-for="ip in rule.ips">
-              {{ ip }}
+              {{ frontEndStore.MASK_INFO(ip) }}
             </n-flex>
           </n-flex>
         </n-scrollbar>

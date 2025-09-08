@@ -2,7 +2,9 @@
 import { ref } from "vue";
 import { delete_dns_redirect } from "@/api/dns_rule/redirect";
 import { DNSRedirectRule } from "@/rust_bindings/common/dns_redirect";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
+const frontEndStore = useFrontEndStore();
 type Props = {
   rule: DNSRedirectRule;
 };
@@ -44,7 +46,11 @@ async function del() {
       </n-descriptions-item>
 
       <n-descriptions-item label="回应信息">
-        {{ rule.result_info }}
+        <n-flex v-if="rule.result_info.length > 0">
+          <n-tag v-for="value in rule.result_info" :bordered="false">
+            {{ frontEndStore.MASK_INFO(value) }}
+          </n-tag>
+        </n-flex>
       </n-descriptions-item>
 
       <n-descriptions-item label="匹配规则">

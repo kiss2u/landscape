@@ -3,7 +3,10 @@ import { delete_static_nat_mapping } from "@/api/static_nat_mapping";
 import { StaticNatMappingConfig } from "@/rust_bindings/common/nat";
 import { computed, ref } from "vue";
 import { DotMark } from "@vicons/carbon";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
 
+const frontEndStore = useFrontEndStore();
 const rule = defineModel<StaticNatMappingConfig>("rule", { required: true });
 
 const show_edit_modal = ref(false);
@@ -67,7 +70,11 @@ async function del() {
         <n-descriptions-item label="IPv4 映射">
           {{
             rule.lan_ipv4
-              ? `${rule.wan_port} => ${rule.lan_ipv4}:${rule.lan_port}`
+              ? `${frontEndStore.MASK_INFO(
+                  rule.wan_port.toString()
+                )} => ${frontEndStore.MASK_INFO(rule.lan_ipv4)}:${
+                  rule.lan_port
+                }`
               : "无映射"
           }}
         </n-descriptions-item>
@@ -91,7 +98,11 @@ async function del() {
         <n-descriptions-item label="IPv6 映射" span="2">
           {{
             rule.lan_ipv6
-              ? `${rule.wan_port} => [${rule.lan_ipv6}]:${rule.lan_port}`
+              ? `${frontEndStore.MASK_INFO(
+                  rule.wan_port.toString()
+                )} => [${frontEndStore.MASK_INFO(rule.lan_ipv6)}]:${
+                  rule.lan_port
+                }`
               : "无映射"
           }}
         </n-descriptions-item>

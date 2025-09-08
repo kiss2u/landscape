@@ -4,7 +4,6 @@ import { FlowConfig } from "@/rust_bindings/common/flow";
 import FlowEditModal from "@/components/flow/FlowEditModal.vue";
 import DnsRuleDrawer from "@/components/dns/DnsRuleDrawer.vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import { mask_string } from "@/lib/common";
 import { del_flow_rules } from "@/api/flow";
 
 import { Docker, NetworkWired } from "@vicons/fa";
@@ -39,9 +38,7 @@ async function del() {
 const title_name = computed(() =>
   props.config.remark == null || props.config.remark === ""
     ? `无备注`
-    : frontEndStore.presentation_mode
-    ? mask_string(props.config.remark)
-    : props.config.remark
+    : frontEndStore.MASK_INFO(props.config.remark)
 );
 </script>
 
@@ -138,15 +135,19 @@ const title_name = computed(() =>
     <n-flex v-else>
       <n-tag v-for="item in config.flow_match_rules" :bordered="false">
         {{
-          `${item.vlan_id ? `${item.vlan_id}@` : ""}${item.ip}/${
-            item.prefix_len
-          }`
+          `${item.vlan_id ? `${item.vlan_id}@` : ""}${frontEndStore.MASK_INFO(
+            item.ip
+          )}/${item.prefix_len}`
         }}
       </n-tag>
     </n-flex>
     <template #action>
       <n-tag v-for="each in config.flow_targets" :bordered="false">
-        {{ each.t === "netns" ? each.container_name : each.name }}
+        {{
+          each.t === "netns"
+            ? frontEndStore.MASK_INFO(each.container_name)
+            : frontEndStore.MASK_INFO(each.name)
+        }}
         <template #icon>
           <n-icon :component="each.t === 'netns' ? Docker : NetworkWired" />
         </template>

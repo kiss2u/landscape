@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useFrontEndStore } from "@/stores/front_end_config";
 
 import { HelpFilled } from "@vicons/carbon";
 import { LDIAPrefix } from "@/rust_bindings/common/ipv6_pd";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
 const frontEndStore = useFrontEndStore();
 
@@ -83,7 +83,7 @@ const status = computed(() => {
         {{ config.valid_lifetime }}s
       </n-descriptions-item>
       <n-descriptions-item label="前缀">
-        {{ config.prefix_ip }}/{{ config.prefix_len }}
+        {{ frontEndStore.MASK_INFO(config.prefix_ip) }}/{{ config.prefix_len }}
       </n-descriptions-item>
       <n-descriptions-item :span="3">
         <template #label>

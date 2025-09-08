@@ -7,16 +7,22 @@ onMounted(async () => {
   await get_info();
 });
 
+const loading = ref(false);
 const infos = ref<Map<String, LDIAPrefix | null>>(new Map());
 async function get_info() {
-  infos.value = await get_current_ip_prefix_info();
+  try {
+    loading.value = true;
+    infos.value = await get_current_ip_prefix_info();
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
 <template>
   <n-flex vertical style="flex: 1">
     <n-flex>
-      <n-button @click="get_info">刷新</n-button>
+      <n-button :loading="loading" @click="get_info">刷新</n-button>
     </n-flex>
     <n-flex v-if="infos.size > 0">
       <n-grid x-gap="12" y-gap="10" cols="1 600:2 1200:3 1600:3">

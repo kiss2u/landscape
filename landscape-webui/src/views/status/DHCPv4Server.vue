@@ -7,16 +7,22 @@ onMounted(async () => {
   await get_info();
 });
 
+const loading = ref(false);
 const infos = ref<Map<String, DHCPv4OfferInfo | null>>(new Map());
 async function get_info() {
-  infos.value = await get_dhcp_v4_assigned_ips();
+  try {
+    loading.value = true;
+    infos.value = await get_dhcp_v4_assigned_ips();
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
 <template>
   <n-flex vertical style="flex: 1">
     <n-flex>
-      <n-button @click="get_info">刷新</n-button>
+      <n-button :loading="loading" @click="get_info">刷新</n-button>
     </n-flex>
     <!-- {{ infos }} -->
     <n-flex v-if="infos.size > 0">
