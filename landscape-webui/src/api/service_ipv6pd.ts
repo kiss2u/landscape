@@ -25,7 +25,11 @@ export async function get_current_ip_prefix_info(): Promise<
   Map<String, LDIAPrefix | null>
 > {
   let data = await axiosService.get(`services/ipv6pd/infos`);
-  return data.data;
+  let map = new Map<string, LDIAPrefix | null>();
+  for (const [key, value] of Object.entries(data.data)) {
+    map.set(key, value as LDIAPrefix);
+  }
+  return map;
 }
 
 // 新建新的 PD Client 配置

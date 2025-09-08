@@ -192,7 +192,7 @@ async function import_rules() {
             :wrap="false"
             @click.stop
           >
-            <n-flex> 处理域名匹配规则 (为空则全部匹配, 规则不分先后) </n-flex>
+            <n-flex> 处理域名匹配规则 (无规则将全部匹配, 规则不分先后) </n-flex>
             <n-flex>
               <!-- 不确定为什么点击 label 会触发第一个按钮, 所以放置一个不可见的按钮 -->
               <button

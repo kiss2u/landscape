@@ -22,6 +22,16 @@ const emit = defineEmits(["refresh"]);
 async function refresh() {
   emit("refresh");
 }
+const status = computed(() => {
+  if (
+    props.config.last_update_time + props.config.valid_lifetime * 1000 >
+    new Date().getTime()
+  ) {
+    return true;
+  }
+
+  return false;
+});
 </script>
 
 <template>
@@ -32,10 +42,10 @@ async function refresh() {
     :hoverable="true"
   >
     <template #header>
-      {{ props.iface_name }}
+      <StatusTitle :enable="status" :remark="props.iface_name"></StatusTitle>
     </template>
     <!-- {{ config }} -->
-    <n-descriptions bordered label-placement="top" :column="3">
+    <n-descriptions style="flex: 1" bordered label-placement="top" :column="3">
       <n-descriptions-item>
         <template #label>
           <n-flex align="center">

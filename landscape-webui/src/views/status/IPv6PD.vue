@@ -14,12 +14,22 @@ async function get_info() {
 </script>
 
 <template>
-  <n-flex>
-    <n-grid x-gap="12" y-gap="10" cols="1 600:2 1200:3 1600:3">
-      <n-grid-item v-for="(config, iface_name) in infos" :key="iface_name">
-        <IAPrefixInfoCard :config="config" :iface_name="iface_name" />
-      </n-grid-item>
-    </n-grid>
-  </n-flex>
+  <n-flex vertical style="flex: 1">
+    <n-flex>
+      <n-button @click="get_info">刷新</n-button>
+    </n-flex>
+    <n-flex v-if="infos.size > 0">
+      <n-grid x-gap="12" y-gap="10" cols="1 600:2 1200:3 1600:3">
+        <n-grid-item
+          v-for="([iface_name, config], index) in infos"
+          :key="index"
+        >
+          <IAPrefixInfoCard :config="config" :iface_name="iface_name" />
+        </n-grid-item>
+      </n-grid>
+    </n-flex>
+    <n-empty style="flex: 1" v-else></n-empty
+  ></n-flex>
+
   <!-- {{ infos }} -->
 </template>

@@ -63,7 +63,7 @@ const menuOptions: MenuOption[] = [
       {
         label: "DHCPv4 服务",
         key: "dhcp-v4",
-        disabled: true,
+        disabled: false,
       },
     ],
   },

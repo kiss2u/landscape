@@ -18,7 +18,8 @@ import StaticNatMapping from "@/views/StaticNatMapping.vue";
 import DnsRedirect from "@/views/dns/DnsRedirect.vue";
 import DnsUpstream from "@/views/dns/DnsUpstream.vue";
 
-import IPv6PD from "@/views/status/IPv6PD.vue";
+
+import service_status_route from "./service_status";
 
 const inner_zone: Array<RouteRecordRaw> = [
   {
@@ -31,11 +32,7 @@ const inner_zone: Array<RouteRecordRaw> = [
     name: "dns-redirect",
     component: DnsRedirect,
   },
-  {
-    path: "/ipv6-pd",
-    name: "ipv6-pd",
-    component: IPv6PD,
-  },
+  ...service_status_route,
   {
     path: "/dns-upstream",
     name: "dns-upstream",
