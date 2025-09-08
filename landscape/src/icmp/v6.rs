@@ -75,6 +75,17 @@ pub async fn icmp_ra_server(
     socket.set_multicast_hops_v6(255)?;
     socket.bind_device(Some(iface_name.as_bytes()))?;
 
+    let setting_result = crate::set_iface_ip_no_limit(
+        &iface_name,
+        std::net::IpAddr::V6(mac_addr.to_ipv6_link_local()),
+        64,
+    )
+    .await;
+
+    if !setting_result {
+        tracing::error!("setting unicast_link_local error");
+    }
+
     let address = addresses_by_iface_name(iface_name.to_string()).await;
     let mut link_ipv6_addr = None;
     let mut link_ifindex = 0;
