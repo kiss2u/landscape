@@ -64,12 +64,12 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     - ✅ IP 规则和 DNS 规则冲突时, 依据规则的优先级进行判定 (值越小越高)
 - <u>地理关系库管理</u>
     - ✅ 多 地理关系库 来源管理
-    - ✅ Geo IP/Site 自动更新
+    - ✅ 关系库依据配置自动更新
 - <u>DNS</u>
     - ✅ 支持使用 DNS over HTTPS、DNS over TLS 和 DNS over Quic 向上游请求 DNS
     - ✅ 支持指定网址使用特定上游 DNS
-    - ✅ DNS 劫持 ( 返回 A 解析 )
-    - ❌ DNS 劫持返回多条记录 ( 除了 A 解析之外的)
+    - ✅ DNS 劫持 ( 返回 A / AAAA 解析 )
+    - ❌ DNS 劫持返回多条记录 ( 例如 TXT / CNAME 或者其他的)
     - ✅ 对指定 DNS 解析结果进行 IP 标记, 配置标记模块进行处理
     - ✅ GeoSite 文件支持
     - ❌ 支持将 Docker 容器设置的域名label 加入 DNS 解析中

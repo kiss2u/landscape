@@ -81,8 +81,8 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 
   * ✅ Support DNS over HTTPS, DNS over TLS and DNS over Quic for upstream
   * ✅ Assign specific upstream DNS by domain
-  * ✅ DNS Hijacking (return A records)
-  * ❌ Hijack to return multiple records (other than A)
+  * ✅ DNS Hijacking (return A / AAAA records)
+  * ❌ Hijack to return multiple records (example: TXT / CNAME and other)
   * ✅ Tag resolved IPs and handle with traffic control
   * ✅ Support GeoSite files
   * ❌ Parse Docker container domain labels into DNS records
