@@ -61,6 +61,7 @@ async fn delete_bridge(
     State(state): State<LandscapeApp>,
     Path(bridge_name): Path<String>,
 ) -> LandscapeApiResult<()> {
+    state.remove_all_iface_service(&bridge_name).await;
     state.iface_config_service.delete_bridge(bridge_name).await;
     LandscapeApiResp::success(())
 }
@@ -78,6 +79,7 @@ async fn change_zone(
     State(state): State<LandscapeApp>,
     Json(change_zone): Json<ChangeZone>,
 ) -> LandscapeApiResult<()> {
+    state.remove_all_iface_service(&change_zone.iface_name).await;
     state.iface_config_service.change_zone(change_zone).await;
     LandscapeApiResp::success(())
 }

@@ -6,7 +6,7 @@ const base_url = import.meta.env.VITE_AXIOS_BASE_URL;
 
 const axiosService = axios.create({
   baseURL: `${base_url}/src`,
-  timeout: 10000,
+  timeout: 30000,
 });
 
 axiosService.interceptors.request.use(

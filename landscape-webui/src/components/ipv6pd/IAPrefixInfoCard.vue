@@ -8,7 +8,7 @@ import { useFrontEndStore } from "@/stores/front_end_config";
 const frontEndStore = useFrontEndStore();
 
 interface Props {
-  config: LDIAPrefix;
+  config: LDIAPrefix | null;
   iface_name: string;
   show_action?: boolean;
 }
@@ -23,11 +23,13 @@ async function refresh() {
   emit("refresh");
 }
 const status = computed(() => {
-  if (
-    props.config.last_update_time + props.config.valid_lifetime * 1000 >
-    new Date().getTime()
-  ) {
-    return true;
+  if (props.config) {
+    if (
+      props.config.last_update_time + props.config.valid_lifetime * 1000 >
+      new Date().getTime()
+    ) {
+      return true;
+    }
   }
 
   return false;
@@ -45,7 +47,13 @@ const status = computed(() => {
       <StatusTitle :enable="status" :remark="props.iface_name"></StatusTitle>
     </template>
     <!-- {{ config }} -->
-    <n-descriptions style="flex: 1" bordered label-placement="top" :column="3">
+    <n-descriptions
+      v-if="config"
+      style="flex: 1"
+      bordered
+      label-placement="top"
+      :column="3"
+    >
       <n-descriptions-item>
         <template #label>
           <n-flex align="center">
@@ -104,5 +112,13 @@ const status = computed(() => {
         <n-time :time="config.last_update_time" format="yyyy-MM-dd hh:mm:ss" />
       </n-descriptions-item>
     </n-descriptions>
+    <n-flex
+      align="center"
+      justify="center"
+      style="height: 190px; flex: 1"
+      v-else
+    >
+      <n-empty description="IPv6 PD 还未获得前缀"> </n-empty>
+    </n-flex>
   </n-card>
 </template>

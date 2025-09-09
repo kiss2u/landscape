@@ -27,17 +27,6 @@ const temp_zone = ref(iface_info.zone);
 async function chageIfaceZone() {
   spin.value = true;
   try {
-    await stop_and_del_iface_dhcp_v4(iface_info.iface_name);
-    await stop_and_del_iface_nat(iface_info.iface_name);
-    await delete_and_stop_iface_pppd_by_attach_iface_name(
-      iface_info.iface_name
-    );
-    await stop_and_del_iface_icmpv6ra(iface_info.iface_name);
-    await stop_and_del_iface_ipv6pd(iface_info.iface_name);
-    await stop_and_del_iface_firewall(iface_info.iface_name);
-    await del_route_wans(iface_info.iface_name);
-    await del_route_lans(iface_info.iface_name);
-    await stop_and_del_iface_config(iface_info.iface_name);
     await change_zone({
       iface_name: iface_info.iface_name,
       zone: temp_zone.value,

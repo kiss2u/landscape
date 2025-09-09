@@ -42,6 +42,7 @@ use landscape_common::{
     config::RuntimeConfig,
     error::LdResult,
     ipv6_pd::IAPrefixMap,
+    service::controller_service_v2::ControllerService,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use sys_service::dns_service::get_dns_paths;
@@ -135,11 +136,20 @@ pub struct LandscapeApp {
     nat_service: NatServiceManagerService,
 }
 
-// impl LandscapeApp {
-//     pub(crate) fn remove_all_iface_service(&self, iface_name: &str) {
-//         self.mss_clamp_service
-//     }
-// }
+impl LandscapeApp {
+    pub(crate) async fn remove_all_iface_service(&self, iface_name: &str) {
+        self.mss_clamp_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.wan_ip_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.firewall_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.nat_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.ipv6_pd_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.route_wan_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.dhcp_v4_server_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.ipv6_ra_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.route_lan_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.pppd_service.stop_pppds_by_attach_iface_name(iface_name.to_string()).await;
+    }
+}
 
 async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let need_init_config = boot_check(&home_path)?;
