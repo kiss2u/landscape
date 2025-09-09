@@ -22,7 +22,7 @@ export async function get_iface_ipv6pd_config(
 }
 
 export async function get_current_ip_prefix_info(): Promise<
-  Map<String, LDIAPrefix | null>
+  Map<string, LDIAPrefix | null>
 > {
   let data = await axiosService.get(`services/ipv6pd/infos`);
   let map = new Map<string, LDIAPrefix | null>();

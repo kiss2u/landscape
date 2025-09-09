@@ -531,7 +531,7 @@ impl DHCPv4Server {
     pub fn get_offered_info(&self) -> DHCPv4OfferInfo {
         let mut offered_ips = Vec::with_capacity(self.offered_ip.len());
         let relative_boot_time = self.relative_boot_time.elapsed().as_secs();
-        for (mac, DHCPv4ServerOfferedCache { ip, relative_offer_time, valid_time, .. }) in
+        for (mac, DHCPv4ServerOfferedCache { ip, relative_offer_time, valid_time, is_static }) in
             self.offered_ip.iter()
         {
             offered_ips.push(DHCPv4OfferInfoItem {
@@ -539,6 +539,7 @@ impl DHCPv4Server {
                 ip: ip.clone(),
                 relative_active_time: *relative_offer_time,
                 expire_time: *valid_time,
+                is_static: *is_static,
             });
         }
         DHCPv4OfferInfo {

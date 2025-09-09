@@ -22,4 +22,5 @@ pub struct DHCPv4OfferInfoItem {
     #[ts(type = "number")]
     pub relative_active_time: u64,
     pub expire_time: u32,
+    pub is_static: bool,
 }

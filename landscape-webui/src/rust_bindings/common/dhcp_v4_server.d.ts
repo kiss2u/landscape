@@ -12,6 +12,7 @@ export type DHCPv4OfferInfoItem = {
   ip: string;
   relative_active_time: number;
   expire_time: number;
+  is_static: boolean;
 };
 
 /**

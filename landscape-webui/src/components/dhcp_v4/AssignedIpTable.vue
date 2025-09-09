@@ -31,8 +31,7 @@ const show_item = computed(() => {
   for (const each of props.info.offered_ips) {
     reuslt.push({
       real_expire_time: caculate_time(each),
-      mac: each.mac,
-      ip: each.ip,
+      ...each,
     });
   }
   return reuslt;
@@ -62,12 +61,12 @@ async function finish() {
 <template>
   <!-- {{ info }} -->
   <n-card size="small" :title="iface_name">
-    <n-table v-if="info" :bordered="true" :single-line="false">
+    <n-table v-if="info" :bordered="true" striped>
       <thead>
         <tr>
-          <th>Mac 地址</th>
-          <th>分配 IP</th>
-          <th>分配租期时间 (s)</th>
+          <th style="width: 33%">Mac 地址</th>
+          <th style="width: 33%">分配 IP</th>
+          <th style="width: 33%">分配租期时间 (s)</th>
         </tr>
       </thead>
       <tbody>
@@ -84,7 +83,9 @@ async function finish() {
           </td>
           <td>
             <!-- {{ item.real_expire_time }} -->
+            <n-flex v-if="item.is_static">静态分配</n-flex>
             <n-countdown
+              v-else
               ref="countdownRefs"
               @finish="finish"
               :duration="item.real_expire_time"
