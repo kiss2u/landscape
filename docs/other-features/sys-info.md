@@ -58,6 +58,8 @@
 ![](../images/other-features/CicsSystemGroup/12.png)  
 
 ## vlan 配置
+>  当前为临时方案, 如果之后页面上支持创建 vlan 网卡后, 需要再手动删除添加的 vlan 配置
+
 以 Debian 为例在 /etc/network/interfaces 中创建 vlan 网卡，设置为 manual 即可。
 ↓ 示例
 ```shell
