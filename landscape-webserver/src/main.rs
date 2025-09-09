@@ -23,15 +23,19 @@ use landscape::{
         static_nat_mapping::StaticNatMappingService,
     },
     docker::LandscapeDockerService,
+    firewall::FirewallServiceManagerService,
+    iface::IfaceManagerService,
     metric::MetricService,
     route::IpRouteService,
     service::{
         dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService,
-        ipv6pd::DHCPv6ClientManagerService, pppd_service::PPPDServiceConfigManagerService,
+        ipv6pd::DHCPv6ClientManagerService, mss_clamp::MssClampServiceManagerService,
+        nat_service::NatServiceManagerService, pppd_service::PPPDServiceConfigManagerService,
         ra::IPV6RAManagerService, route_lan::RouteLanServiceManagerService,
         route_wan::RouteWanServiceManagerService,
     },
     sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
+    wifi::WifiServiceManagerService,
 };
 use landscape_common::{
     args::{LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
@@ -103,6 +107,8 @@ pub struct LandscapeApp {
     pub route_lan_service: RouteLanServiceManagerService,
     pub route_wan_service: RouteWanServiceManagerService,
 
+    /// Iface Config
+    iface_config_service: IfaceManagerService,
     /// Iface IP Service
     wan_ip_service: IfaceIpServiceManagerService,
     docker_service: LandscapeDockerService,
@@ -121,7 +127,19 @@ pub struct LandscapeApp {
     dns_redirect_service: DNSRedirectService,
 
     dns_upstream_service: DnsUpstreamService,
+
+    /// Mss Clamp Service
+    mss_clamp_service: MssClampServiceManagerService,
+    firewall_service: FirewallServiceManagerService,
+    wifi_service: WifiServiceManagerService,
+    nat_service: NatServiceManagerService,
 }
+
+// impl LandscapeApp {
+//     pub(crate) fn remove_all_iface_service(&self, iface_name: &str) {
+//         self.mss_clamp_service
+//     }
+// }
 
 async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let need_init_config = boot_check(&home_path)?;
@@ -230,6 +248,19 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let static_nat_mapping_config_service =
         StaticNatMappingService::new(db_store_provider.clone()).await;
 
+    let iface_config_service = IfaceManagerService::new(db_store_provider.clone()).await;
+
+    let mss_clamp_service =
+        MssClampServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let firewall_service =
+        FirewallServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let wifi_service = WifiServiceManagerService::new(db_store_provider.clone()).await;
+
+    let nat_service =
+        NatServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;
@@ -261,6 +292,11 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         static_nat_mapping_config_service,
         dns_redirect_service,
         dns_upstream_service,
+        iface_config_service,
+        mss_clamp_service,
+        firewall_service,
+        wifi_service,
+        nat_service,
     };
     // 初始化结束
 
@@ -305,18 +341,14 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let auth_share = Arc::new(config.auth.clone());
     auth::output_sys_token(&config.auth).await;
     let source_route = Router::new()
-        .nest("/iface", iface::get_network_paths(db_store_provider.clone()).await)
-        .nest(
-            "/metric",
-            metric::get_metric_service_paths().await.with_state(landscape_app_status.clone()),
-        )
+        .nest("/iface", iface::get_network_paths().await)
+        .nest("/metric", metric::get_metric_service_paths().await)
         .nest(
             "/sys_service",
             Router::new()
                 .merge(get_dns_paths().await)
                 .merge(get_config_paths().await)
-                .nest("/docker", docker::get_docker_paths().await)
-                .with_state(landscape_app_status.clone()),
+                .nest("/docker", docker::get_docker_paths().await),
         )
         .nest(
             "/config",
@@ -329,30 +361,24 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
                 .merge(get_dst_ip_rule_config_paths().await)
                 .merge(get_static_nat_mapping_config_paths().await)
                 .merge(get_dns_redirect_config_paths().await)
-                .merge(get_dns_upstream_config_paths().await)
-                .with_state(landscape_app_status.clone()),
+                .merge(get_dns_upstream_config_paths().await),
         )
         .nest(
             "/services",
             Router::new()
-                .merge(get_route_wan_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_route_lan_paths().await.with_state(landscape_app_status.clone()))
-                .merge(
-                    get_mss_clamp_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
-                .merge(
-                    get_firewall_service_paths(db_store_provider.clone(), dev_obs.resubscribe())
-                        .await,
-                )
-                .merge(get_iface_ipconfig_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_dhcp_v4_service_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_iface_pppd_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_wifi_service_paths(db_store_provider.clone()).await)
-                .merge(get_iface_pdclient_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_iface_icmpv6ra_paths().await.with_state(landscape_app_status.clone()))
-                .merge(get_iface_nat_paths(db_store_provider.clone(), dev_obs.resubscribe()).await),
+                .merge(get_route_wan_paths().await)
+                .merge(get_route_lan_paths().await)
+                .merge(get_mss_clamp_service_paths().await)
+                .merge(get_firewall_service_paths().await)
+                .merge(get_iface_ipconfig_paths().await)
+                .merge(get_dhcp_v4_service_paths().await)
+                .merge(get_iface_pppd_paths().await)
+                .merge(get_wifi_service_paths().await)
+                .merge(get_iface_pdclient_paths().await)
+                .merge(get_iface_icmpv6ra_paths().await)
+                .merge(get_iface_nat_paths().await),
         )
+        .with_state(landscape_app_status.clone())
         .nest("/sysinfo", sysinfo::get_sys_info_route())
         .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler));
 

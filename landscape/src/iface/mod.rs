@@ -4,7 +4,8 @@ use config::from_phy_dev;
 use dev_wifi::LandscapeWifiInterface;
 use futures::stream::TryStreamExt;
 use landscape_common::database::repository::Repository;
-use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
+use landscape_common::database::LandscapeServiceDBTrait;
+use landscape_common::service::controller_service_v2::ConfigController;
 use landscape_common::{
     config::iface::{IfaceCpuSoftBalance, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     error::LdResult,
@@ -53,18 +54,14 @@ pub struct IfaceManagerService {
     /// 配置存储
     pub store_service: LandscapeDBServiceProvider,
 
-    pub iface_store: NetIfaceRepository,
+    pub store: NetIfaceRepository,
 }
 
 impl IfaceManagerService {
     pub async fn new(store_service: LandscapeDBServiceProvider) -> Self {
         let store = store_service.iface_store();
         crate::init_devs(store.list_all().await.unwrap()).await;
-        drop(store);
-        Self {
-            iface_store: store_service.iface_store(),
-            store_service,
-        }
+        Self { store, store_service }
     }
 
     pub async fn manage_dev(&self, dev_name: String) {
@@ -79,7 +76,7 @@ impl IfaceManagerService {
     pub async fn old_read_ifaces(&self) -> Vec<IfaceTopology> {
         let all_alive_devs = crate::get_all_devices().await;
         let add_wifi_dev = crate::get_all_wifi_devices().await;
-        let all_config = self.get_iface_configs().await;
+        let all_config = self.list().await;
 
         let mut comfig_map: HashMap<String, NetworkIfaceConfig> = HashMap::new();
         for config in all_config.into_iter() {
@@ -107,7 +104,7 @@ impl IfaceManagerService {
     /// 读取所有的配置  
     /// 返回已配置的网卡列表和未配置的网卡列表
     pub async fn read_ifaces(&self) -> IfacesInfo {
-        let all_config = self.get_iface_configs().await;
+        let all_config = self.list().await;
         let all_alive_devs = crate::get_all_devices().await;
         let mut all_wifi_dev = crate::get_all_wifi_devices().await;
 
@@ -142,7 +139,7 @@ impl IfaceManagerService {
 
     pub async fn delete_bridge(&self, name: String) {
         if crate::delete_bridge(name.clone()).await {
-            self.del_iface_config(name).await;
+            self.delete(name).await;
         }
     }
 
@@ -275,22 +272,21 @@ impl IfaceManagerService {
         store.find_by_iface_name(key).await.ok()?
     }
 
-    pub async fn del_iface_config(&self, key: String) -> bool {
-        let store = self.store_service.iface_store();
-        let res = store.delete(key).await;
-        match res {
-            Ok(_) => true,
-            Err(_) => false,
-        }
-    }
-
-    async fn get_iface_configs(&self) -> Vec<NetworkIfaceConfig> {
-        let store = self.store_service.iface_store();
-        store.list().await.unwrap()
-    }
-
     pub async fn get_all_wan_iface_config(&self) -> Vec<NetworkIfaceConfig> {
-        self.iface_store.get_all_wan_iface().await.unwrap_or_default()
+        self.store.get_all_wan_iface().await.unwrap_or_default()
+    }
+}
+
+#[async_trait::async_trait]
+impl ConfigController for IfaceManagerService {
+    type Id = String;
+
+    type Config = NetworkIfaceConfig;
+
+    type DatabseAction = NetIfaceRepository;
+
+    fn get_repository(&self) -> &Self::DatabseAction {
+        &self.store
     }
 }
 
