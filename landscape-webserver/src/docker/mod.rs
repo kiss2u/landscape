@@ -5,11 +5,15 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use bollard::container::{
-    Config, CreateContainerOptions, RemoveContainerOptions, StartContainerOptions,
-    StopContainerOptions,
+
+use bollard::{
+    query_parameters::{
+        CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+        StartContainerOptions, StopContainerOptions,
+    },
+    secret::{ContainerCreateBody, ContainerSummary},
+    Docker,
 };
-use bollard::{container::ListContainersOptions, secret::ContainerSummary, Docker};
 
 use image::get_docker_images_paths;
 use landscape_common::{
@@ -68,7 +72,7 @@ async fn get_all_container_summarys() -> LandscapeApiResult<Vec<ContainerSummary
 
     if let Ok(docker) = docker {
         let option = ListContainersOptions { all: true, ..Default::default() };
-        if let Ok(containers) = docker.list_containers::<String>(Some(option)).await {
+        if let Ok(containers) = docker.list_containers(Some(option)).await {
             container_summarys = containers;
         }
     }
@@ -78,12 +82,15 @@ async fn get_all_container_summarys() -> LandscapeApiResult<Vec<ContainerSummary
 
 async fn run_container(
     Path(container_name): Path<String>,
-    Json(container_config): Json<Config<String>>,
+    Json(container_config): Json<ContainerCreateBody>,
 ) -> LandscapeApiResult<()> {
     let docker = Docker::connect_with_socket_defaults().unwrap();
     if let Err(e) = &docker
         .create_container(
-            Some(CreateContainerOptions { name: &container_name, platform: None }),
+            Some(CreateContainerOptions {
+                name: Some(container_name.clone()),
+                platform: "".to_string(),
+            }),
             container_config,
         )
         .await
@@ -91,9 +98,8 @@ async fn run_container(
         tracing::error!("{:?}", e);
         return Err(DockerError::CreateContainerError)?;
     } else {
-        if let Err(e) =
-            &docker.start_container(&container_name, None::<StartContainerOptions<String>>).await
-        {
+        let query: Option<StartContainerOptions> = None;
+        if let Err(e) = &docker.start_container(&container_name, query).await {
             tracing::error!("{:?}", e);
             return Err(DockerError::StartContainerError)?;
         }
@@ -104,9 +110,7 @@ async fn run_container(
 async fn start_container(Path(container_name): Path<String>) -> LandscapeApiResult<()> {
     let docker = Docker::connect_with_socket_defaults().unwrap();
 
-    if let Err(e) =
-        &docker.start_container(&container_name, None::<StartContainerOptions<String>>).await
-    {
+    if let Err(e) = &docker.start_container(&container_name, None::<StartContainerOptions>).await {
         tracing::error!("{:?}", e);
         return Err(DockerError::StartContainerError)?;
     }

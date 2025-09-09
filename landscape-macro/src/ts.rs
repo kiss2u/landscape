@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Meta};
+use syn::{parse_macro_input, Attribute, DeriveInput};
 
 pub fn export_ts_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -10,26 +10,11 @@ pub fn export_ts_enum(input: TokenStream) -> TokenStream {
     let enum_ident_ts = syn::Ident::new(&enum_name, enum_ident.span());
 
     let copied_attrs = input.attrs.iter().filter(|attr| {
-        if attr.path.is_ident("ts") {
+        if attr.path().is_ident("ts") {
             return true;
         }
 
-        if attr.path.is_ident("serde") {
-            // 检查 serde 的内容
-            if let Ok(Meta::List(meta_list)) = attr.parse_meta() {
-                // 如果包含 tag=...，则跳过
-                let has_tag = meta_list.nested.iter().any(|nested| {
-                    if let syn::NestedMeta::Meta(Meta::NameValue(nv)) = nested {
-                        nv.path.is_ident("tag")
-                    } else {
-                        false
-                    }
-                });
-                return !has_tag;
-            }
-        }
-
-        false
+        should_process_attr(&attr)
     });
 
     let data = match &input.data {
@@ -53,4 +38,21 @@ pub fn export_ts_enum(input: TokenStream) -> TokenStream {
     };
 
     expanded.into()
+}
+
+fn should_process_attr(attr: &Attribute) -> bool {
+    if attr.path().is_ident("serde") {
+        let mut has_tag = false;
+
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("tag") {
+                has_tag = true;
+            }
+            Ok(())
+        });
+
+        return !has_tag;
+    }
+
+    true
 }

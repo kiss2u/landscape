@@ -80,7 +80,7 @@ netlink-sys = { version = "0.8.6" }
 wl-nl80211 = { version = "0.2.0" }
 
 # for docker
-bollard = "0.18.1"
+bollard = "0.19.2"
 
 # logs
 # log = "0.4.22"

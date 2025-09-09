@@ -1,4 +1,5 @@
 use bollard::{
+    query_parameters::{EventsOptions, InspectContainerOptions, ListContainersOptions},
     secret::{ContainerSummary, EventMessageTypeEnum},
     Docker,
 };
@@ -51,7 +52,8 @@ impl LandscapeDockerService {
             route_service.remove_all_wan_docker().await;
             // scan_and_set_all_docker(&route_service, &docker).await;
 
-            let mut event_stream = docker.events::<String>(None);
+            let query: Option<EventsOptions> = None;
+            let mut event_stream = docker.events(query);
             let mut receiver = status.subscribe();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
             let mut timeout_times = 0;
@@ -126,7 +128,9 @@ pub async fn scan_and_set_all_docker(ip_route: &IpRouteService, docker: &Docker)
 
 pub async fn get_docker_continer_summary(docker: &Docker) -> Vec<ContainerSummary> {
     let mut container_summarys: Vec<ContainerSummary> = vec![];
-    if let Ok(containers) = docker.list_containers::<String>(None).await {
+
+    let query: Option<ListContainersOptions> = None;
+    if let Ok(containers) = docker.list_containers(query).await {
         container_summarys = containers;
     }
     container_summarys
@@ -155,7 +159,8 @@ pub async fn accept_docker_info(
 
                 tracing::info!("Receive info from sock: {:?}", result);
                 if let Ok(DockerTargetEnroll { id, ifindex }) = result {
-                    let Ok(container_info) = docker.inspect_container(&id, None).await else {
+                    let query: Option<InspectContainerOptions> = None;
+                    let Ok(container_info) = docker.inspect_container(&id, query).await else {
                         tracing::error!("can not inspect container id: {id}");
                         return;
                     };
@@ -277,7 +282,8 @@ pub async fn create_docker_event_spawn(ip_route_service: IpRouteService) {
     // scan_and_set_all_docker(&ip_route_service, &docker).await;
 
     tokio::spawn(async move {
-        let mut event_stream = docker.events::<String>(None);
+        let query: Option<EventsOptions> = None;
+        let mut event_stream = docker.events(query);
 
         while let Some(e) = event_stream.next().await {
             if let Ok(msg) = e {
@@ -306,7 +312,8 @@ async fn inspect_container_and_set_route(
     ip_route_service: &IpRouteService,
     docker: &Docker,
 ) {
-    let Ok(container_info) = docker.inspect_container(name, None).await else {
+    let query: Option<InspectContainerOptions> = None;
+    let Ok(container_info) = docker.inspect_container(name, query).await else {
         tracing::error!("can not inspect container: {name}");
         return;
     };

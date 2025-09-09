@@ -29,9 +29,17 @@ async function on_modal_enter() {
     image_name: props.image_name,
   });
 }
+
+const save_loading = ref(false);
 async function save_config() {
-  await run_cmd(formModel.value);
-  dockerStore.UPDATE_INFO();
+  try {
+    save_loading.value = true;
+    await run_cmd(formModel.value);
+    dockerStore.UPDATE_INFO();
+    show_model.value = false;
+  } finally {
+    save_loading.value = false;
+  }
 }
 
 function add_redirect_id() {
@@ -140,7 +148,14 @@ const show_add_redirect_id_btn = computed(() => {
       </n-form>
       <template #footer>
         <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+          <n-button
+            :loading="save_loading"
+            round
+            type="primary"
+            @click="save_config"
+          >
+            创建容器
+          </n-button>
         </n-flex>
       </template>
     </n-card>

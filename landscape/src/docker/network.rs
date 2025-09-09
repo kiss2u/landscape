@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bollard::{
+    query_parameters::ListNetworksOptions,
     secret::{Network, NetworkContainer},
     Docker,
 };
@@ -16,7 +17,8 @@ pub async fn inspect_all_networks() -> Vec<LandscapeDockerNetwork> {
     let docker = Docker::connect_with_socket_defaults();
     let docker = docker.unwrap();
 
-    let networks = docker.list_networks::<String>(None).await.unwrap();
+    let query: Option<ListNetworksOptions> = None;
+    let networks = docker.list_networks(query).await.unwrap();
 
     let mut result = Vec::with_capacity(networks.len());
     for networks in networks {

@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Attribute, DeriveInput, Lit, Meta, MetaList, NestedMeta};
+use syn::{parse_macro_input, Attribute, DeriveInput, Lit};
 
 mod ts;
 
@@ -19,7 +19,7 @@ pub fn derive_request_model(input: TokenStream) -> TokenStream {
     let ts_attr_tokens = input
         .attrs
         .iter()
-        .find(|attr| attr.path.is_ident("ts"))
+        .find(|attr| attr.path().is_ident("ts"))
         .cloned()
         .map(|attr| quote!(#attr)) // 这里是关键：quote 整个 Attribute
         .unwrap_or_default();
@@ -36,7 +36,7 @@ pub fn derive_request_model(input: TokenStream) -> TokenStream {
         let ident = field.ident.as_ref().unwrap();
         let ty = &field.ty;
 
-        let skip_attr = field.attrs.iter().find(|a| a.path.is_ident("skip"));
+        let skip_attr = field.attrs.iter().find(|a| a.path().is_ident("skip"));
 
         if let Some(attr) = skip_attr {
             // 解析 #[skip(default = "xxx")]
@@ -78,16 +78,18 @@ pub fn derive_request_model(input: TokenStream) -> TokenStream {
 }
 
 fn parse_skip_default(attr: &Attribute) -> Option<syn::Path> {
-    if let Ok(Meta::List(MetaList { nested, .. })) = attr.parse_meta() {
-        for item in nested {
-            if let NestedMeta::Meta(Meta::NameValue(nv)) = item {
-                if nv.path.is_ident("default") {
-                    if let Lit::Str(lit) = nv.lit {
-                        return Some(lit.parse().unwrap());
-                    }
+    let mut result = None;
+
+    let _ = attr.parse_nested_meta(|meta| {
+        if meta.path.is_ident("default") {
+            if let Ok(lit) = meta.value()?.parse::<Lit>() {
+                if let Lit::Str(lit_str) = lit {
+                    result = Some(lit_str.parse().unwrap());
                 }
             }
         }
-    }
-    None
+        Ok(())
+    });
+
+    result
 }

@@ -39,10 +39,16 @@ const time = computed(() => {
 });
 
 const show_btn = computed(() => new DockerBtnShow(props.container.State));
+const start_spin = ref(false);
 async function start() {
   if (title.value) {
-    await start_container(title.value);
-    await dockerStore.UPDATE_INFO();
+    try {
+      start_spin.value = true;
+      await start_container(title.value);
+      await dockerStore.UPDATE_INFO();
+    } finally {
+      start_spin.value = false;
+    }
   }
 }
 
@@ -62,10 +68,16 @@ async function stop() {
   }
 }
 
+const remove_spin = ref(false);
 async function remove() {
   if (title.value) {
-    await remove_container(title.value);
-    await dockerStore.UPDATE_INFO();
+    try {
+      remove_spin.value = true;
+      await remove_container(title.value);
+      await dockerStore.UPDATE_INFO();
+    } finally {
+      remove_spin.value = false;
+    }
   }
 }
 
@@ -98,6 +110,7 @@ const tags = computed(() => {
     <template #header-extra>
       <n-flex>
         <n-button
+          :loading="start_spin"
           secondary
           size="small"
           @click="start"
@@ -128,6 +141,7 @@ const tags = computed(() => {
         <n-popconfirm @positive-click="remove">
           <template #trigger>
             <n-button
+              :loading="remove_spin"
               secondary
               size="small"
               type="error"

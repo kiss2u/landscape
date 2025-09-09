@@ -3,7 +3,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use bollard::{image::ListImagesOptions, secret::ImageSummary, Docker};
+use bollard::{query_parameters::ListImagesOptions, secret::ImageSummary, Docker};
 
 use crate::LandscapeApp;
 
@@ -22,7 +22,7 @@ async fn get_all_images() -> LandscapeApiResult<Vec<ImageSummary>> {
 
     if let Ok(docker) = docker {
         let option = ListImagesOptions { all: true, ..Default::default() };
-        if let Ok(images) = docker.list_images::<String>(Some(option)).await {
+        if let Ok(images) = docker.list_images(Some(option)).await {
             summarys = images;
         }
     }
