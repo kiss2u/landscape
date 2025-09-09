@@ -22,11 +22,11 @@ pub async fn load_or_generate_cert(home_path: PathBuf) -> ServerConfig {
     if !cert_path.exists() || !key_path.exists() {
         tracing::info!("default cert is not exists, gen a new cert");
         let subject_alt_names = vec!["localhost".to_string()];
-        let rcgen::CertifiedKey { cert, key_pair } =
+        let rcgen::CertifiedKey { cert, signing_key } =
             generate_simple_self_signed(subject_alt_names).unwrap();
 
         let cert_pem = cert.pem();
-        let key_pem = key_pair.serialize_pem();
+        let key_pem = signing_key.serialize_pem();
 
         fs::write(&cert_path, cert_pem).await.unwrap();
         fs::write(&key_path, key_pem).await.unwrap();
