@@ -1,7 +1,7 @@
 use landscape_common::{
     event::{dns::DnsEvent, route::RouteEvent},
     flow::config::FlowConfig,
-    service::controller_service::{ConfigController, FlowConfigController},
+    service::controller_service_v2::{ConfigController, FlowConfigController},
 };
 use landscape_database::{
     flow_rule::repository::FlowConfigRepository, provider::LandscapeDBServiceProvider,

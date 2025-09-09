@@ -9,7 +9,7 @@ use landscape_common::{
         redirect::{DNSRedirectRule, DNSRedirectRuntimeRule},
         ChainDnsServerInitInfo,
     },
-    service::controller_service::ConfigController,
+    service::controller_service_v2::ConfigController,
     store::storev4::LandscapeStoreTrait,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
 };

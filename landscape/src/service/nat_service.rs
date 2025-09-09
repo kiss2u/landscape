@@ -1,11 +1,11 @@
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::observer::IfaceObserverAction;
-use landscape_common::service::controller_service::ControllerService;
-use landscape_common::service::service_manager::ServiceManager;
+use landscape_common::service::controller_service_v2::ControllerService;
+use landscape_common::service::service_manager_v2::ServiceManager;
 use landscape_common::{
     config::nat::{NatConfig, NatServiceConfig},
     service::{
-        service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
+        service_manager_v2::ServiceStarterTrait, DefaultServiceStatus, DefaultWatchServiceStatus,
         ServiceStatus,
     },
 };
@@ -15,14 +15,15 @@ use tokio::sync::{broadcast, oneshot};
 
 use crate::iface::get_iface_by_name;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct NatService;
 
-impl ServiceHandler for NatService {
+#[async_trait::async_trait]
+impl ServiceStarterTrait for NatService {
     type Status = DefaultServiceStatus;
     type Config = NatServiceConfig;
 
-    async fn initialize(config: NatServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: NatServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
         // service_status.just_change_status(ServiceStatus::Staring);
 
@@ -104,7 +105,7 @@ impl NatServiceManagerService {
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.nat_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let service = ServiceManager::init(store.list().await.unwrap(), Default::default()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {

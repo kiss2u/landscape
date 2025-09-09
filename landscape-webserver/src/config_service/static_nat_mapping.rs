@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::config::{nat::StaticNatMappingConfig, ConfigId};
-use landscape_common::service::controller_service::ConfigController;
+use landscape_common::service::controller_service_v2::ConfigController;
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 use crate::{error::LandscapeApiError, LandscapeApp};

@@ -1,11 +1,11 @@
 use landscape_common::config::flow::FlowWanServiceConfig;
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
 use landscape_common::observer::IfaceObserverAction;
-use landscape_common::service::controller_service::ControllerService;
-use landscape_common::service::service_manager::ServiceManager;
+use landscape_common::service::controller_service_v2::ControllerService;
+use landscape_common::service::service_manager_v2::ServiceManager;
 use landscape_common::service::ServiceStatus;
 use landscape_common::service::{
-    service_manager::ServiceHandler, DefaultServiceStatus, DefaultWatchServiceStatus,
+    service_manager_v2::ServiceStarterTrait, DefaultServiceStatus, DefaultWatchServiceStatus,
 };
 use landscape_database::flow_wan::repository::FlowWanServiceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -13,14 +13,15 @@ use tokio::sync::{broadcast, oneshot};
 
 use crate::iface::get_iface_by_name;
 
-#[derive(Clone)]
-pub struct FlowWanService;
+#[derive(Clone, Default)]
+pub struct FlowWanService {}
 
-impl ServiceHandler for FlowWanService {
+#[async_trait::async_trait]
+impl ServiceStarterTrait for FlowWanService {
     type Status = DefaultServiceStatus;
     type Config = FlowWanServiceConfig;
 
-    async fn initialize(config: FlowWanServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: FlowWanServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
@@ -94,7 +95,8 @@ impl FlowWanServiceManagerService {
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.flow_wan_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let service =
+            ServiceManager::init(store.list().await.unwrap(), FlowWanService::default()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {

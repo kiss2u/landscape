@@ -3,8 +3,8 @@ use landscape_common::{
     config::mss_clamp::MSSClampServiceConfig,
     observer::IfaceObserverAction,
     service::{
-        controller_service::ControllerService,
-        service_manager::{ServiceHandler, ServiceManager},
+        controller_service_v2::ControllerService,
+        service_manager_v2::{ServiceManager, ServiceStarterTrait},
         DefaultServiceStatus, DefaultWatchServiceStatus, ServiceStatus,
     },
 };
@@ -15,15 +15,16 @@ use tokio::sync::{broadcast, oneshot};
 
 use crate::iface::get_iface_by_name;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct MssClampService;
 
-impl ServiceHandler for MssClampService {
+#[async_trait::async_trait]
+impl ServiceStarterTrait for MssClampService {
     type Status = DefaultServiceStatus;
 
     type Config = MSSClampServiceConfig;
 
-    async fn initialize(config: MSSClampServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: MSSClampServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
@@ -103,7 +104,7 @@ impl MssClampServiceManagerService {
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.mss_clamp_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let service = ServiceManager::init(store.list().await.unwrap(), Default::default()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {

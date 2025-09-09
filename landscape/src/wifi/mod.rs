@@ -3,8 +3,8 @@ use landscape_common::{
     args::LAND_HOME_PATH,
     config::wifi::WifiServiceConfig,
     service::{
-        controller_service::ControllerService,
-        service_manager::{ServiceHandler, ServiceManager},
+        controller_service_v2::ControllerService,
+        service_manager_v2::{ServiceManager, ServiceStarterTrait},
         DefaultServiceStatus, DefaultWatchServiceStatus, ServiceStatus,
     },
     LANDSCAPE_HOSTAPD_TMP_DIR,
@@ -21,15 +21,16 @@ use tokio::sync::oneshot;
 
 use crate::iface::get_iface_by_name;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WifiService;
 
-impl ServiceHandler for WifiService {
+#[async_trait::async_trait]
+impl ServiceStarterTrait for WifiService {
     type Status = DefaultServiceStatus;
 
     type Config = WifiServiceConfig;
 
-    async fn initialize(config: WifiServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: WifiServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
@@ -196,7 +197,7 @@ impl ControllerService for WifiServiceManagerService {
 impl WifiServiceManagerService {
     pub async fn new(store_service: LandscapeDBServiceProvider) -> Self {
         let store = store_service.wifi_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let service = ServiceManager::init(store.list().await.unwrap(), Default::default()).await;
 
         // let service_clone = service.clone();
         // tokio::spawn(async move {

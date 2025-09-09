@@ -7,7 +7,7 @@ use landscape_common::config::{
     geo::{GeoFileCacheKey, GeoIpConfig, GeoIpSourceConfig, QueryGeoIpConfig, QueryGeoKey},
     ConfigId,
 };
-use landscape_common::service::controller_service::ConfigController;
+use landscape_common::service::controller_service_v2::ConfigController;
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult, UPLOAD_GEO_FILE_SIZE_LIMIT};
 

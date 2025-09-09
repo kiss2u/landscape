@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 
-use landscape_common::service::controller_service::ControllerService;
+use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::{config::wifi::WifiServiceConfig, service::DefaultWatchServiceStatus};
 
 use crate::{error::LandscapeApiError, LandscapeApp};

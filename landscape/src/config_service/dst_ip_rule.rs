@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use landscape_common::{
     event::dns::DstIpEvent,
     ip_mark::WanIpRuleConfig,
-    service::controller_service::{ConfigController, FlowConfigController},
+    service::controller_service_v2::{ConfigController, FlowConfigController},
 };
 use landscape_database::{
     dst_ip_rule::repository::DstIpRuleRepository, provider::LandscapeDBServiceProvider,

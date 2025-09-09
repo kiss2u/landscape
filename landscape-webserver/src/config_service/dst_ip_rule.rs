@@ -3,7 +3,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape_common::service::controller_service::{ConfigController, FlowConfigController};
+use landscape_common::service::controller_service_v2::{ConfigController, FlowConfigController};
 use landscape_common::{
     config::{ConfigId, FlowId},
     ip_mark::WanIpRuleConfig,

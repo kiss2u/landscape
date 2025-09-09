@@ -1,10 +1,10 @@
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
+use landscape_common::service::service_manager_v2::ServiceManager;
 use landscape_common::{
     config::firewall::FirewallServiceConfig,
     observer::IfaceObserverAction,
     service::{
-        controller_service::ControllerService,
-        service_manager::{ServiceHandler, ServiceManager},
+        controller_service_v2::ControllerService, service_manager_v2::ServiceStarterTrait,
         DefaultServiceStatus, DefaultWatchServiceStatus, ServiceStatus,
     },
 };
@@ -18,15 +18,16 @@ use crate::iface::get_iface_by_name;
 
 pub mod rules;
 
-#[derive(Clone)]
-pub struct FirewallService;
+#[derive(Clone, Default)]
+pub struct FirewallService {}
 
-impl ServiceHandler for FirewallService {
+#[async_trait::async_trait]
+impl ServiceStarterTrait for FirewallService {
     type Status = DefaultServiceStatus;
 
     type Config = FirewallServiceConfig;
 
-    async fn initialize(config: FirewallServiceConfig) -> DefaultWatchServiceStatus {
+    async fn start(&self, config: FirewallServiceConfig) -> DefaultWatchServiceStatus {
         let service_status = DefaultWatchServiceStatus::new();
 
         if config.enable {
@@ -102,7 +103,8 @@ impl FirewallServiceManagerService {
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.firewall_service_store();
-        let service = ServiceManager::init(store.list().await.unwrap()).await;
+        let service =
+            ServiceManager::init(store.list().await.unwrap(), FirewallService::default()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {

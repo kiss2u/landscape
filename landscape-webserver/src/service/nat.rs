@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape_common::service::controller_service::ControllerService;
+use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::{config::nat::NatServiceConfig, service::DefaultWatchServiceStatus};
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
