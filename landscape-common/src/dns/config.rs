@@ -40,7 +40,7 @@ impl Default for DnsUpstreamConfig {
             id: Uuid::new_v4(),
             remark: "Landscape Router Default DNS Upstream".to_string(),
             mode: DnsUpstreamMode::Plaintext,
-            ips: vec![IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))],
+            ips: vec![IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1))],
             port: Some(53),
             update_at: get_f64_timestamp(),
         }
