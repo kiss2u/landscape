@@ -51,8 +51,11 @@ pub fn wan_route_attach(
     open_skel.maps.wan_ipv4_binding.set_pin_path(&MAP_PATHS.wan_ip)?;
     open_skel.maps.wan_ipv4_binding.reuse_pinned_map(&MAP_PATHS.wan_ip)?;
 
+    let rodata_data =
+        open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
+
     if !has_mac {
-        open_skel.maps.rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_eth_net_offset = 0;
     }
 
     let skel = open_skel.load()?;

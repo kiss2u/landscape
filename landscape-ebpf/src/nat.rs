@@ -97,16 +97,20 @@ pub fn init_nat(
     {
         tracing::error!("error: {e:?}");
     }
-    landscape_open.maps.rodata_data.tcp_range_start = config.tcp_range.start;
-    landscape_open.maps.rodata_data.tcp_range_end = config.tcp_range.end;
-    landscape_open.maps.rodata_data.udp_range_start = config.udp_range.start;
-    landscape_open.maps.rodata_data.udp_range_end = config.udp_range.end;
 
-    landscape_open.maps.rodata_data.icmp_range_start = config.icmp_in_range.start;
-    landscape_open.maps.rodata_data.icmp_range_end = config.icmp_in_range.end;
+    let rodata_data =
+        landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
+
+    rodata_data.tcp_range_start = config.tcp_range.start;
+    rodata_data.tcp_range_end = config.tcp_range.end;
+    rodata_data.udp_range_start = config.udp_range.start;
+    rodata_data.udp_range_end = config.udp_range.end;
+
+    rodata_data.icmp_range_start = config.icmp_in_range.start;
+    rodata_data.icmp_range_end = config.icmp_in_range.end;
 
     if !has_mac {
-        landscape_open.maps.rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_eth_net_offset = 0;
     }
 
     let landscape_skel = landscape_open.load().unwrap();

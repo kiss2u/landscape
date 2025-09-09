@@ -28,8 +28,11 @@ pub async fn create_pppoe_tc_ebpf<'a>(
 
     // pppoe_builder.obj_builder.debug(true);
 
-    let pppoe_open: OpenPppoeSkel<'a> = pppoe_builder.open(obj).unwrap();
-    pppoe_open.maps.rodata_data.session_id = session_id;
+    let mut pppoe_open: OpenPppoeSkel<'a> = pppoe_builder.open(obj).unwrap();
+    let rodata_data =
+        pppoe_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
+
+    rodata_data.session_id = session_id;
     let pppoe_skel: PppoeSkel<'a> = pppoe_open.load().unwrap();
 
     // let pppoe_pnet_progs = pppoe_skel.progs;
@@ -189,9 +192,11 @@ pub async fn create_pppoe_tc_ebpf_3(
         let builder = PppoeSkelBuilder::default(); // 假设你可以直接使用它
                                                    // 在新线程中执行逻辑
         let mut open_object = MaybeUninit::uninit();
-        let pppoe_open = builder.open(&mut open_object).unwrap();
-        pppoe_open.maps.rodata_data.session_id = session_id;
-        pppoe_open.maps.rodata_data.pppoe_mtu = mtu;
+        let mut pppoe_open = builder.open(&mut open_object).unwrap();
+        let rodata_data =
+            pppoe_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
+        rodata_data.session_id = session_id;
+        rodata_data.pppoe_mtu = mtu;
 
         let pppoe_skel = pppoe_open.load().unwrap();
 

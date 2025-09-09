@@ -40,8 +40,10 @@ pub fn attach_verdict_flow(
     open_skel.maps.rt_lan_map.set_pin_path(&MAP_PATHS.rt_lan_map)?;
     open_skel.maps.rt_lan_map.reuse_pinned_map(&MAP_PATHS.rt_lan_map)?;
 
+    let rodata_data =
+        open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
     if !has_mac {
-        open_skel.maps.rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_eth_net_offset = 0;
     }
 
     let skel = open_skel.load()?;

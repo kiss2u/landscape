@@ -67,11 +67,13 @@ async fn main() {
     // skel_builder.obj_builder.debug(true);
 
     let mut open_object = MaybeUninit::uninit();
-    let open_skel = skel_builder.open(&mut open_object).unwrap();
+    let mut open_skel = skel_builder.open(&mut open_object).unwrap();
 
+    let rodata_data =
+        open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
     // Set constants
-    open_skel.maps.rodata_data.proxy_addr = proxy_addr.to_be();
-    open_skel.maps.rodata_data.proxy_port = params.tproxy_server_port.to_be();
+    rodata_data.proxy_addr = proxy_addr.to_be();
+    rodata_data.proxy_port = params.tproxy_server_port.to_be();
 
     // Load into kernel
     let skel = open_skel.load().unwrap();

@@ -13,7 +13,7 @@ use std::{
 
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    TC_EGRESS, TC_INGRESS,
+    TracepointCategory, TC_EGRESS, TC_INGRESS,
 };
 use nix::sched;
 
@@ -94,15 +94,18 @@ fn main() {
     let proxy_addr: u32 = params.listen_addr.into();
 
     let mut open_object = MaybeUninit::uninit();
-    let landscape_open = landscape_builder.open(&mut open_object).unwrap();
-    landscape_open.maps.rodata_data.outer_ifindex = params.ns_index as u32;
-    landscape_open.maps.rodata_data.target_addr = target_addr.to_be();
+    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
 
-    landscape_open.maps.rodata_data.proxy_addr = proxy_addr.to_be();
-    landscape_open.maps.rodata_data.proxy_port = params.listen_port.to_be();
+    let rodata_data =
+        landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
+    rodata_data.outer_ifindex = params.ns_index as u32;
+    rodata_data.target_addr = target_addr.to_be();
+
+    rodata_data.proxy_addr = proxy_addr.to_be();
+    rodata_data.proxy_port = params.listen_port.to_be();
 
     if !params.has_mac {
-        landscape_open.maps.rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_eth_net_offset = 0;
     }
 
     let landscape_skel = landscape_open.load().unwrap();
@@ -125,8 +128,9 @@ fn main() {
     wan_egress_hook.attach();
     // ns_outer_ingress_hook.attach();
     enter_namespace("/var/run/netns/tpns").unwrap();
-    let handle_setsockopt_enter_point =
-        handle_setsockopt_enter.attach_tracepoint("syscalls", "sys_enter_setsockopt").unwrap();
+    let handle_setsockopt_enter_point = handle_setsockopt_enter
+        .attach_tracepoint(TracepointCategory::Syscalls, "sys_enter_setsockopt")
+        .unwrap();
     // let handle__ksyscall_link =
     //     handle__ksyscall.attach_ksyscall(false, "__sys_setsockopt").unwrap();
     // let cgroup_fd = std::fs::OpenOptions::new()

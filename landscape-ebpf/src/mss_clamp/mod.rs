@@ -22,13 +22,15 @@ pub fn run_mss_clamp(
     let landscape_builder = MssClampSkelBuilder::default();
 
     let mut open_object = MaybeUninit::uninit();
-    let landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
 
+    let rodata_data =
+        landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
     if !has_mac {
-        landscape_open.maps.rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_eth_net_offset = 0;
     }
 
-    landscape_open.maps.rodata_data.mtu_size = mtu_size;
+    rodata_data.mtu_size = mtu_size;
     let landscape_skel = landscape_open.load().unwrap();
 
     let mss_clamp_egress = landscape_skel.progs.clamp_egress;
