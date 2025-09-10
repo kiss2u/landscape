@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { run_cmd } from "@/api/docker";
 import { KeyValuePair } from "@/lib/common";
-import { DockerCmd, LAND_REDIRECT_ID_KEY } from "@/lib/docker";
+import { LAND_REDIRECT_ID_KEY } from "@/lib/docker";
+import { DockerCmd } from "@/rust_bindings/common/docker";
 import { useDockerStore } from "@/stores/status_docker";
 import { useNotification } from "naive-ui";
 import { computed, ref } from "vue";
@@ -18,16 +19,19 @@ const dockerStore = useDockerStore();
 const notification = useNotification();
 
 // 定义表单的状态
-const formModel = ref(
-  new DockerCmd({
-    image_name: props.image_name,
-  })
-);
+const formModel = ref<DockerCmd>();
 
 async function on_modal_enter() {
-  formModel.value = new DockerCmd({
+  formModel.value = {
     image_name: props.image_name,
-  });
+    restart: DockerRestartPolicy.NO,
+    restart_max_retries: 3,
+    container_name: null,
+    ports: null,
+    environment: null,
+    volumes: null,
+    labels: null,
+  };
 }
 
 const save_loading = ref(false);
@@ -43,34 +47,69 @@ async function save_config() {
 }
 
 function add_redirect_id() {
-  if (formModel.value.labels) {
-    for (const label of formModel.value.labels) {
-      if (label.key === LAND_REDIRECT_ID_KEY) {
-        // 提示
-        notification.info({
-          content: "已经存在标签了",
-          duration: 2500,
-          keepAliveOnHover: true,
-        });
-        break;
+  if (formModel.value) {
+    if (formModel.value.labels) {
+      for (const label of formModel.value.labels) {
+        if (label.key === LAND_REDIRECT_ID_KEY) {
+          // 提示
+          notification.info({
+            content: "已经存在标签了",
+            duration: 2500,
+            keepAliveOnHover: true,
+          });
+          break;
+        }
       }
+
+      formModel.value.labels.unshift({
+        key: LAND_REDIRECT_ID_KEY,
+        value: "",
+      });
     }
   }
-  formModel.value.labels.unshift({
-    key: LAND_REDIRECT_ID_KEY,
-    value: "",
-  });
 }
 
 const show_add_redirect_id_btn = computed(() => {
-  for (const label of formModel.value.labels) {
-    if (label.key === LAND_REDIRECT_ID_KEY) {
-      return true;
+  if (formModel.value?.labels) {
+    for (const label of formModel.value.labels) {
+      if (label.key === LAND_REDIRECT_ID_KEY) {
+        return true;
+      }
     }
   }
 
   return false;
 });
+
+enum DockerRestartPolicy {
+  NO = "no",
+  ON_FAILURE = "on-failure",
+  ON_FAILURE_WITH_MAX_RETRIES = "on-failure:<max-retries>",
+  ALWAYS = "always",
+  UNLESS_STOPPED = "unless-stopped",
+}
+const restrt_options = [
+  {
+    label: "不自动重启",
+    value: DockerRestartPolicy.NO,
+  },
+  {
+    label: "失败时自动重启",
+    value: DockerRestartPolicy.ON_FAILURE,
+  },
+  {
+    label: "失败时自动重启（带最大重试次数）",
+    value: DockerRestartPolicy.ON_FAILURE_WITH_MAX_RETRIES,
+  },
+  {
+    label: "总是自动重启",
+    value: DockerRestartPolicy.ALWAYS,
+  },
+  {
+    label: "除非手动停止，否则自动重启",
+    value: DockerRestartPolicy.UNLESS_STOPPED,
+  },
+];
 </script>
 
 <template>
@@ -87,13 +126,29 @@ const show_add_redirect_id_btn = computed(() => {
       role="dialog"
       aria-modal="true"
     >
-      <n-form :model="formModel" label-width="120px">
+      <n-form v-if="formModel" :model="formModel" label-width="120px">
         <n-form-item label="镜像名称" path="imageName">
           <n-input
             :disabled="true"
             v-model:value="formModel.image_name"
             placeholder="请输入镜像名称"
           />
+        </n-form-item>
+        <n-form-item label="重启策略" path="containerName">
+          <n-input-group>
+            <n-select
+              v-model:value="formModel.restart"
+              :options="restrt_options"
+            />
+            <n-input-number
+              v-if="
+                formModel.restart ===
+                DockerRestartPolicy.ON_FAILURE_WITH_MAX_RETRIES
+              "
+              v-model:value="formModel.restart_max_retries"
+              placeholder=""
+            />
+          </n-input-group>
         </n-form-item>
         <n-form-item label="容器名称" path="containerName">
           <n-input

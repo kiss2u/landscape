@@ -135,31 +135,6 @@ export class DockerBtnShow {
   }
 }
 
-export class DockerCmd {
-  image_name: string;
-  container_name: string;
-  ports: KeyValuePair[];
-  environment: KeyValuePair[];
-  volumes: KeyValuePair[];
-  labels: KeyValuePair[];
-
-  constructor(obj: {
-    image_name?: string;
-    container_name?: string;
-    ports?: KeyValuePair[];
-    environment?: KeyValuePair[];
-    volumes?: KeyValuePair[];
-    labels?: KeyValuePair[];
-  }) {
-    this.image_name = obj.image_name ?? "";
-    this.container_name = obj.container_name ?? "";
-    this.ports = obj.ports ?? [];
-    this.environment = obj.environment ?? [];
-    this.volumes = obj.volumes ?? [];
-    this.labels = obj.labels ?? [];
-  }
-}
-
 // export class HealthConfig {
 //   Test: string[] | undefined;
 //   Interval: number | undefined;
