@@ -15,8 +15,9 @@ use tokio::net::UnixStream;
 use tokio::{io::AsyncWriteExt, net::unix::SocketAddr};
 use tokio_stream::StreamExt;
 
-use crate::{get_all_devices, route::IpRouteService};
+use crate::{docker::image::PullManager, get_all_devices, route::IpRouteService};
 
+pub mod image;
 pub mod network;
 pub mod unix_sock;
 
@@ -28,12 +29,15 @@ pub struct LandscapeDockerService {
     route_service: IpRouteService,
     #[serde(skip)]
     home_path: PathBuf,
+    #[serde(skip)]
+    pub pull_manager: PullManager,
 }
 
 impl LandscapeDockerService {
     pub fn new(home_path: PathBuf, route_service: IpRouteService) -> Self {
         let status = DefaultWatchServiceStatus::new();
-        LandscapeDockerService { status, route_service, home_path }
+        let pull_manager = PullManager::new();
+        LandscapeDockerService { status, route_service, home_path, pull_manager }
     }
 
     pub async fn start_to_listen_event(&self) {

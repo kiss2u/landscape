@@ -29,7 +29,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 ctrlc = { workspace = true }
 socket2 = { workspace = true }
-arc-swap = "1.7.1"
+arc-swap = { workspace = true }
 
 tokio-util = { workspace = true, features = ["codec", "net"] }
 tokio = { workspace = true, features = ['fs', 'net'] }

@@ -18,6 +18,8 @@ import { useMSSClampConfigStore } from "./status_mss_clamp";
 import { useRouteLanConfigStore } from "./status_route_lan";
 import { useRouteWanConfigStore } from "./status_route_wan";
 
+import useDockerImgTask from "@/stores/docker_img_task";
+
 export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const sysinfo = useSysInfo();
   const ifaceNodeStore = useIfaceNodeStore();
@@ -35,6 +37,9 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const mssclampConfigStore = useMSSClampConfigStore();
   const routeLanConfigStore = useRouteLanConfigStore();
   const routeWanConfigStore = useRouteWanConfigStore();
+
+  // SOCK
+  const dockerImgTask = useDockerImgTask();
 
   const interval_function = async () => {
     if (start_count_down_callback.value !== undefined) {
@@ -58,6 +63,8 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
 
       await routeLanConfigStore.UPDATE_INFO();
       await routeWanConfigStore.UPDATE_INFO();
+
+      dockerImgTask.CONNECT();
     } catch (error) {
       // console.log("1111");
       enable_interval.value = false;

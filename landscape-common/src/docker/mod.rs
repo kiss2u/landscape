@@ -5,6 +5,7 @@ use ts_rs::TS;
 
 use crate::{NAMESPACE_REGISTER_SOCK_PATH, NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER};
 
+pub mod image;
 /// This file is to prepare for the future migration
 /// of the docker api library to avoid large-scale modification of the API
 ///

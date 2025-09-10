@@ -36,13 +36,15 @@ async function on_modal_enter() {
 
 const save_loading = ref(false);
 async function save_config() {
-  try {
-    save_loading.value = true;
-    await run_cmd(formModel.value);
-    dockerStore.UPDATE_INFO();
-    show_model.value = false;
-  } finally {
-    save_loading.value = false;
+  if (formModel.value) {
+    try {
+      save_loading.value = true;
+      await run_cmd(formModel.value);
+      dockerStore.UPDATE_INFO();
+      show_model.value = false;
+    } finally {
+      save_loading.value = false;
+    }
   }
 }
 
@@ -88,6 +90,7 @@ enum DockerRestartPolicy {
   ALWAYS = "always",
   UNLESS_STOPPED = "unless-stopped",
 }
+
 const restrt_options = [
   {
     label: "不自动重启",

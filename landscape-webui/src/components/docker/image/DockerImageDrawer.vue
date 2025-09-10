@@ -35,6 +35,7 @@ const pull_docker_image_name = ref("");
           <n-input />
         </n-input-group> -->
         <n-scrollbar>
+          <PullTaskCard />
           <n-flex>
             <DockerImageCard
               v-for="image in images"

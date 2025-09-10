@@ -12,3 +12,15 @@ export type DockerCmd = {
 };
 
 export type KeyValuePair = { key: string; value: string };
+
+export type PullImageReq = { image_name: string; tag: string | null };
+
+export type PullImgTaskItem = {
+  id: string | null;
+  current: bigint | null;
+  total: bigint | null;
+};
+
+export type PullManagerInfo = {
+  tasks: { [key in string]?: { [key in string | null]?: PullImgTaskItem } };
+};

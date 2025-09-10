@@ -19,6 +19,7 @@ zbus = "4.1.2"
 sysinfo = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
+arc-swap = { workspace = true }
 reqwest = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }

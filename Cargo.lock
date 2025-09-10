@@ -3148,6 +3148,7 @@ dependencies = [
 name = "landscape"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "bollard",
  "cidr",
@@ -3196,6 +3197,7 @@ dependencies = [
 name = "landscape-common"
 version = "0.7.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "bincode 2.0.1",
  "chrono",

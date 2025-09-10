@@ -54,6 +54,7 @@ export default defineConfig({
         target: `https://${address}:${port}`,
         changeOrigin: true,
         secure: false,
+        ws: true,
         configure: (proxy: any, options: any) => {
           // proxy will be an instance of 'http-proxy'
         },

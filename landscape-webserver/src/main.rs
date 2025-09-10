@@ -62,6 +62,8 @@ mod service;
 mod sys_service;
 mod sysinfo;
 
+mod websocket;
+
 use service::{
     dhcp_v4::get_dhcp_v4_service_paths, firewall::get_firewall_service_paths,
     mss_clamp::get_mss_clamp_service_paths,
@@ -392,14 +394,23 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         .nest("/sysinfo", sysinfo::get_sys_info_route())
         .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler));
 
+    let sockets_route = Router::new()
+        .nest("/docker", websocket::docker_task::get_docker_images_socks_paths().await)
+        .with_state(landscape_app_status.clone())
+        .merge(dump::get_tump_router())
+        // .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler))
+        ;
+
     let api_route = Router::new()
-        // 资源路由
+        // 资源路由 需要认证
         .nest("/src", source_route)
+        // 认证方式有别
+        .nest("/sock", sockets_route)
         // 认证路由
         .nest("/auth", auth::get_auth_route(auth_share));
     let app = Router::new()
         .nest("/api", api_route)
-        .nest("/sock", dump::get_tump_router())
+        // .nest("/sock", sockets_route)
         .route("/foo", get(|| async { "Hi from /foo" }))
         .fallback_service(serve_dir)
         .layer(TraceLayer::new_for_http());
