@@ -1,7 +1,7 @@
 import { ServiceStatus } from "@/lib/services";
 import { DockerContainerSummary, DockerImageSummary } from "@/lib/docker";
 import axiosService from "@/api";
-import { DockerCmd, PullManagerInfo } from "@/rust_bindings/common/docker";
+import { DockerCmd, PullImgTask } from "@/rust_bindings/common/docker";
 
 export async function get_docker_status(): Promise<ServiceStatus> {
   let data = await axiosService.get("sys_service/docker/status");
@@ -68,7 +68,7 @@ export async function pull_docker_image(name: string): Promise<void> {
   await axiosService.post(`sys_service/docker/images/${name}`);
 }
 
-export async function get_current_tasks(): Promise<PullManagerInfo> {
+export async function get_current_tasks(): Promise<PullImgTask[]> {
   let data = await axiosService.get(`sys_service/docker/images/tasks`);
   return data.data;
 }

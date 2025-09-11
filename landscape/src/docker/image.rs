@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use bollard::query_parameters::CreateImageOptions;
@@ -7,15 +8,22 @@ use bollard::Docker;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
-use landscape_common::docker::image::{
-    ImgPullEvent, PullImgTask, PullImgTaskItem, PullManagerInfo,
-};
+use landscape_common::docker::image::{ImgPullEvent, PullImgTask, PullImgTaskItem};
 use tokio_stream::StreamExt;
+use uuid::Uuid;
+
+pub type ARwLock<T> = Arc<RwLock<T>>;
+
+#[cfg(debug_assertions)]
+const TASK_MAX_SIZE: usize = 4;
+
+#[cfg(not(debug_assertions))]
+const TASK_MAX_SIZE: usize = 64;
 
 #[derive(Clone)]
 pub struct PullManager {
     sock_tx: broadcast::Sender<ImgPullEvent>,
-    tasks: Arc<RwLock<HashMap<String, Arc<PullImgTask>>>>,
+    tasks: ARwLock<VecDeque<ARwLock<PullImgTask>>>,
 }
 
 impl PullManager {
@@ -24,35 +32,54 @@ impl PullManager {
 
         Self {
             sock_tx,
-            tasks: Arc::new(RwLock::new(HashMap::new())),
+            tasks: Arc::new(RwLock::new(VecDeque::new())),
         }
     }
 
-    pub async fn get_info(&self) -> PullManagerInfo {
-        let mut inners = vec![];
-        {
-            let read_outer = self.tasks.read().await;
-            for (_, value) in read_outer.iter() {
-                inners.push(value.clone());
-            }
+    pub async fn get_info(&self) -> Vec<PullImgTask> {
+        let inners: Vec<_> = { self.tasks.read().await.iter().cloned().collect() };
+
+        let mut result = Vec::with_capacity(inners.len());
+        for item in inners.into_iter().rev() {
+            let item_read = item.read().await;
+            result.push(item_read.clone());
+            drop(item_read);
         }
 
-        let mut result = HashMap::new();
-        for item in inners {
-            let img_name = item.img_name.clone();
-            let read_lock = item.layer_current_info.read().await;
-            result.insert(img_name, read_lock.clone());
-            drop(read_lock);
-        }
-
-        PullManagerInfo { tasks: result }
+        result
     }
 
     pub fn get_event_sock(&self) -> broadcast::Receiver<ImgPullEvent> {
         self.sock_tx.subscribe()
     }
 
+    async fn push_task(&self) -> bool {
+        let task_read = self.tasks.read().await;
+        if task_read.len() >= TASK_MAX_SIZE {
+            let task = task_read.front().cloned();
+            drop(task_read);
+            if let Some(task) = task {
+                let is_complete = {
+                    let task = task.read().await;
+                    task.complete
+                };
+
+                if is_complete {
+                    let mut task_write = self.tasks.write().await;
+                    task_write.pop_front();
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     pub async fn pull_img(&self, image_name: String) {
+        if !self.push_task().await {
+            return;
+        }
         let (split_image_name, image_tag) = if let Some((name, tag)) = image_name.split_once(':') {
             (name.to_string(), tag.to_string())
         } else {
@@ -65,15 +92,18 @@ impl PullManager {
             ..Default::default()
         };
 
+        let task_id = Uuid::new_v4();
         let task_info = PullImgTask {
+            id: task_id.clone(),
             img_name: image_name.clone(),
-            layer_current_info: Arc::new(RwLock::new(HashMap::new())),
+            layer_current_info: HashMap::new(),
+            complete: false,
         };
 
-        let item_map = task_info.layer_current_info.clone();
+        let task_info = Arc::new(RwLock::new(task_info));
         {
             let mut write = self.tasks.write().await;
-            write.insert(image_name.clone(), Arc::new(task_info));
+            write.push_back(task_info.clone());
             drop(write);
         }
         let sock_tx = self.sock_tx.clone();
@@ -82,33 +112,50 @@ impl PullManager {
 
             let mut stream = docker.create_image(Some(options), None, None);
 
-            while let Some(res) = stream.next().await {
+            'download: while let Some(res) = stream.next().await {
                 match res {
                     Ok(CreateImageInfo {
-                        id,
+                        id: Some(layer_id),
                         status: Some(_),
                         progress: Some(_),
                         progress_detail: Some(progress_detail),
                         ..
                     }) => {
-                        let mut write = item_map.write().await;
-                        let info = write.entry(id.clone()).or_insert(Default::default());
+                        let mut info_write = task_info.write().await;
+
+                        let info = info_write
+                            .layer_current_info
+                            .entry(layer_id.clone())
+                            .or_insert(Default::default());
 
                         *info = PullImgTaskItem {
-                            id: id.clone(),
+                            id: layer_id.clone(),
                             current: progress_detail.current,
                             total: progress_detail.total,
                         };
+
+                        drop(info_write);
                         let _ = sock_tx.send(ImgPullEvent {
+                            task_id,
                             img_name: image_name.clone(),
-                            id: id.clone(),
+                            id: layer_id.clone(),
                             current: progress_detail.current,
                             total: progress_detail.total,
                         });
                         // println!("[拉取中: {id:?}] {}: {}{:?}", status, progress, progress_detail);
                     }
-                    Ok(CreateImageInfo { id, status: Some(status), .. }) => {
-                        println!("[status: {id:?}] {}", status)
+                    Ok(CreateImageInfo { id: None, status: Some(status), .. }) => {
+                        let mut info_write = task_info.write().await;
+                        if info_write.complete {
+                            break 'download;
+                        }
+                        for (_, item) in &info_write.layer_current_info {
+                            if item.current != item.total {
+                                continue;
+                            }
+                        }
+                        info_write.complete = true;
+                        println!("[status] {}", status)
                     }
 
                     Ok(_) => {}

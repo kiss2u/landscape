@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { run_cmd } from "@/api/docker";
 import { KeyValuePair } from "@/lib/common";
-import { DockerCmd } from "@/lib/docker";
 import { useDockerStore } from "@/stores/status_docker";
 import { useNotification } from "naive-ui";
 import { computed, ref } from "vue";

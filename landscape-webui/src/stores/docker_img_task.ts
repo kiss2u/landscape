@@ -1,11 +1,12 @@
-import { PullManagerInfo } from "@/rust_bindings/common/docker";
+import { get_current_tasks } from "@/api/docker";
+import { ImgPullEvent, PullImgTask } from "@/rust_bindings/common/docker";
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 
 export const useDockerImgTask = defineStore("docker-img_task", () => {
   const socket = ref<WebSocket | undefined>(undefined);
 
-  const tasks = ref<any[]>([]);
+  const tasks = ref<PullImgTask[]>([]);
 
   function CONNECT() {
     if (socket.value && socket.value.readyState === WebSocket.OPEN) {
@@ -22,11 +23,17 @@ export const useDockerImgTask = defineStore("docker-img_task", () => {
 
     socket.value.addEventListener("message", function (event) {
       console.log("Message from server ", event.data);
-      if (tasks.value.length >= 60) {
-        tasks.value.shift();
+      let data = JSON.parse(event.data) as ImgPullEvent;
+      for (const task of tasks.value) {
+        if (task.id == data.task_id) {
+          task.layer_current_info[data.id] = data;
+        }
       }
-      tasks.value.push(JSON.parse(event.data));
     });
+  }
+
+  async function INIT() {
+    tasks.value = await get_current_tasks();
   }
 
   function DISCONNECT() {
@@ -37,6 +44,7 @@ export const useDockerImgTask = defineStore("docker-img_task", () => {
 
   return {
     tasks,
+    INIT,
     CONNECT,
     DISCONNECT,
   };

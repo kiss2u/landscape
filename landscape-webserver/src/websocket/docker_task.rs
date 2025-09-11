@@ -29,9 +29,7 @@ async fn handle_socket(
     mut socket: WebSocket,
     mut img_task_sock: broadcast::Receiver<ImgPullEvent>,
 ) {
-    if socket.send(Message::Ping(vec![1, 2, 3].into())).await.is_ok() {
-        tracing::info!("Pinged ...");
-    } else {
+    if socket.send(Message::Ping(vec![1, 2, 3].into())).await.is_err() {
         tracing::info!("Could not send ping!");
         return;
     }
@@ -61,7 +59,7 @@ async fn handle_socket(
                     if let Err(e) = socket.send(Message::Text(Utf8Bytes::from(&data))).await {
                         tracing::info!("send data error: {e:?}");
                     }
-                    tracing::info!("send data: {msg:?}");
+                    // tracing::info!("send data: {msg:?}");
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => {
                     // ignore

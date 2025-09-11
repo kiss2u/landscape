@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use bollard::{query_parameters::ListImagesOptions, secret::ImageSummary, Docker};
-use landscape_common::docker::image::PullManagerInfo;
+use landscape_common::docker::image::PullImgTask;
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
@@ -19,7 +19,7 @@ pub async fn get_docker_images_paths() -> Router<LandscapeApp> {
 
 async fn get_current_task(
     State(state): State<LandscapeApp>,
-) -> LandscapeApiResult<PullManagerInfo> {
+) -> LandscapeApiResult<Vec<PullImgTask>> {
     LandscapeApiResp::success(state.docker_service.pull_manager.get_info().await)
 }
 

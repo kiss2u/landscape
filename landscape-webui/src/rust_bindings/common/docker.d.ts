@@ -11,16 +11,27 @@ export type DockerCmd = {
   labels: Array<KeyValuePair> | null;
 };
 
+export type ImgPullEvent = {
+  task_id: string;
+  img_name: string;
+  id: string;
+  current: number | null;
+  total: number | null;
+};
+
 export type KeyValuePair = { key: string; value: string };
 
 export type PullImageReq = { image_name: string; tag: string | null };
 
-export type PullImgTaskItem = {
-  id: string | null;
-  current: bigint | null;
-  total: bigint | null;
+export type PullImgTask = {
+  id: string;
+  img_name: string;
+  complete: boolean;
+  layer_current_info: { [key in string]?: PullImgTaskItem };
 };
 
-export type PullManagerInfo = {
-  tasks: { [key in string]?: { [key in string | null]?: PullImgTaskItem } };
+export type PullImgTaskItem = {
+  id: string;
+  current: number | null;
+  total: number | null;
 };

@@ -33,13 +33,16 @@ const size = computed(() => {
   return t;
 });
 
+const loading = ref(false);
 async function delete_image() {
   if (props.image.Id != undefined) {
     try {
+      loading.value = true;
       await delete_docker_image(props.image.Id);
+      emit("refresh");
     } catch (e) {
     } finally {
-      emit("refresh");
+      loading.value = false;
     }
   }
 }
@@ -60,19 +63,26 @@ const show_create_model = ref(false);
           secondary
           size="small"
           type="success"
+          :loading="loading"
           @click="show_create_model = true"
         >
           create
         </n-button>
-        <n-button
-          strong
-          secondary
-          size="small"
-          type="error"
-          @click="delete_image"
-        >
-          delete
-        </n-button>
+
+        <n-popconfirm @positive-click="delete_image">
+          <template #trigger>
+            <n-button
+              strong
+              secondary
+              size="small"
+              type="error"
+              :loading="loading"
+            >
+              delete
+            </n-button>
+          </template>
+          确定删除吗
+        </n-popconfirm>
       </n-flex>
     </template>
 
@@ -91,9 +101,11 @@ const show_create_model = ref(false);
     <!-- {{ props.container }} -->
 
     <template #action>
-      <n-tag v-for="tag of props.image.RepoTags" :bordered="false">
-        {{ tag }}
-      </n-tag>
+      <n-flex>
+        <n-tag v-for="tag of props.image.RepoTags" :bordered="false">
+          {{ tag }}
+        </n-tag>
+      </n-flex>
     </template>
     <ContainerRunModal
       :image_name="title"
