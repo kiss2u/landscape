@@ -13,6 +13,8 @@ pub enum DnsUpstreamMode {
     }, // DNS over TLS (DoT)
     Https {
         domain: String,
+        #[serde(default)]
+        http_endpoint: Option<String>,
     }, // DNS over HTTPS (DoH)
     Quic {
         domain: String,

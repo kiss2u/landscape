@@ -85,12 +85,33 @@ const rules = {
       return true;
     },
   },
+
+  "mode.http_endpoint": {
+    trigger: ["blur", "input"],
+    level: "warning",
+    validator(_: unknown, value: string) {
+      if (!value || value.trim() === "") {
+        return new Error("未指定, 将使用 `/dns-query` 警告可忽略");
+      }
+      return true;
+    },
+  },
 };
 
 async function saveRule() {
   if (rule.value) {
     try {
       await formRef.value?.validate();
+      // 如果是 HTTPS 模式且 endpoint 为空
+      if (
+        rule.value.mode.t === DnsUpstreamModeTsEnum.Https &&
+        (!rule.value.mode.http_endpoint ||
+          rule.value.mode.http_endpoint.trim() === "")
+      ) {
+        message.warning("未填写 URL, 将使用 `/dns-query`");
+        rule.value.mode.http_endpoint = null as any;
+      }
+
       commit_spin.value = true;
       await push_dns_upstream(rule.value);
       console.log("submit success");
@@ -183,25 +204,38 @@ async function import_rules() {
           /> -->
         </n-form-item-gi>
 
+        <n-form-item-gi label="端口">
+          <n-input-number
+            style="flex: 1"
+            :min="1"
+            :max="65535"
+            placeholder="DNS 规则中进行选择时用到"
+            v-model:value="rule.port"
+          />
+        </n-form-item-gi>
+
         <n-form-item-gi
           v-if="rule.mode.t !== DnsUpstreamModeTsEnum.Plaintext"
-          :span="1"
           label="域名"
         >
           <n-input
+            style="width: 230px"
             placeholder="无需包含 https 以及尾部 /dns-query"
             v-model:value="rule.mode.domain"
           >
           </n-input>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="2" label="端口">
-          <n-input-number
-            :min="1"
-            :max="65535"
-            placeholder="DNS 规则中进行选择时用到"
-            v-model:value="rule.port"
-          />
+        <n-form-item-gi
+          path="mode.http_endpoint"
+          v-if="rule.mode.t === DnsUpstreamModeTsEnum.Https"
+          label="URL"
+        >
+          <n-input
+            placeholder="例如: /dns-query"
+            v-model:value="rule.mode.http_endpoint"
+          >
+          </n-input>
         </n-form-item-gi>
 
         <n-form-item-gi :span="2" label="DNS 服务器 IP" path="ips">

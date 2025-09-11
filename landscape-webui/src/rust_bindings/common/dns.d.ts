@@ -60,7 +60,7 @@ export type DnsUpstreamConfig = {
 export type DnsUpstreamMode =
   | { "t": "plaintext" }
   | { "t": "tls"; domain: string }
-  | { "t": "https"; domain: string }
+  | { "t": "https"; domain: string; http_endpoint: string | null }
   | { "t": "quic"; domain: string };
 
 export type DomainConfig = { match_type: DomainMatchType; value: string };

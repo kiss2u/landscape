@@ -35,7 +35,11 @@ const DEFAULT_CONFIGS: Record<
     port: 53,
   },
   [DefaultDnsConfig.ALI_DOH]: {
-    mode: { t: DnsUpstreamModeTsEnum.Https, domain: "dns.alidns.com" },
+    mode: {
+      t: DnsUpstreamModeTsEnum.Https,
+      domain: "dns.alidns.com",
+      http_endpoint: null,
+    },
     ips: ["223.5.5.5", "223.6.6.6", "2400:3200::1", "2400:3200:baba::1"],
     port: 443,
   },
@@ -59,7 +63,11 @@ const DEFAULT_CONFIGS: Record<
     port: 53,
   },
   [DefaultDnsConfig.DNSPOD_DOH]: {
-    mode: { t: DnsUpstreamModeTsEnum.Https, domain: "dns.pub" },
+    mode: {
+      t: DnsUpstreamModeTsEnum.Https,
+      domain: "dns.pub",
+      http_endpoint: null,
+    },
     ips: ["1.12.12.12", "120.53.53.53"],
     port: 443,
   },
@@ -76,7 +84,11 @@ const DEFAULT_CONFIGS: Record<
     port: 53,
   },
   [DefaultDnsConfig.CLOUDFLARE_DOH]: {
-    mode: { t: DnsUpstreamModeTsEnum.Https, domain: "cloudflare-dns.com" },
+    mode: {
+      t: DnsUpstreamModeTsEnum.Https,
+      domain: "cloudflare-dns.com",
+      http_endpoint: null,
+    },
     ips: ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
     port: 443,
   },
@@ -98,7 +110,11 @@ const DEFAULT_CONFIGS: Record<
     port: 53,
   },
   [DefaultDnsConfig.GOOGLE_DOH]: {
-    mode: { t: DnsUpstreamModeTsEnum.Https, domain: "dns.google" },
+    mode: {
+      t: DnsUpstreamModeTsEnum.Https,
+      domain: "dns.google",
+      http_endpoint: null,
+    },
     ips: ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
     port: 443,
   },

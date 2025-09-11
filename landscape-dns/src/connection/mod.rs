@@ -1,5 +1,8 @@
+use std::net::SocketAddr;
+
+use hickory_proto::xfer::Protocol;
 use hickory_resolver::{
-    config::{NameServerConfigGroup, ResolverConfig, ResolverOpts},
+    config::{NameServerConfig, NameServerConfigGroup, ResolverConfig, ResolverOpts},
     Resolver,
 };
 
@@ -26,12 +29,22 @@ pub(crate) fn create_resolver(
         DnsUpstreamMode::Tls { domain } => {
             NameServerConfigGroup::from_ips_tls(&ips, port.unwrap_or(843), domain.to_string(), true)
         }
-        DnsUpstreamMode::Https { domain } => NameServerConfigGroup::from_ips_https(
-            &ips,
-            port.unwrap_or(443),
-            domain.to_string(),
-            true,
-        ),
+        DnsUpstreamMode::Https { domain, http_endpoint } => {
+            let mut group = NameServerConfigGroup::with_capacity(ips.len());
+            let port = port.unwrap_or(443);
+            for ip in ips {
+                let config = NameServerConfig {
+                    socket_addr: SocketAddr::new(ip, port),
+                    protocol: Protocol::Https,
+                    tls_dns_name: Some(domain.clone()),
+                    http_endpoint: http_endpoint.clone(),
+                    trust_negative_responses: true,
+                    bind_addr: None,
+                };
+                group.push(config);
+            }
+            group
+        }
         DnsUpstreamMode::Quic { domain } => NameServerConfigGroup::from_ips_quic(
             &ips,
             port.unwrap_or(443),

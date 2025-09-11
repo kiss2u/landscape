@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
 import { DnsUpstreamModeTsEnum, upstream_mode_exhibit_name } from "@/lib/dns";
 import { delete_dns_upstream } from "@/api/dns_rule/upstream";
@@ -23,6 +23,17 @@ async function del() {
     emit("refresh");
   }
 }
+
+const domain = computed(() => {
+  if (props.rule.mode.t === DnsUpstreamModeTsEnum.Plaintext) {
+    return "无配置";
+  } else if (props.rule.mode.t === DnsUpstreamModeTsEnum.Https) {
+    let url = props.rule.mode.http_endpoint ?? "/dns-query";
+    return frontEndStore.MASK_INFO(`${props.rule.mode.domain}${url}`);
+  } else {
+    return frontEndStore.MASK_INFO(props.rule.mode.domain);
+  }
+});
 </script>
 
 <template>
@@ -60,11 +71,7 @@ async function del() {
       </n-descriptions-item>
 
       <n-descriptions-item span="2" label="域名地址">
-        {{
-          rule.mode.t === DnsUpstreamModeTsEnum.Plaintext
-            ? "无配置"
-            : frontEndStore.MASK_INFO(rule.mode.domain)
-        }}
+        {{ domain }}
       </n-descriptions-item>
 
       <n-descriptions-item span="2" label="上游 IP">
