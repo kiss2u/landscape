@@ -184,15 +184,31 @@ pub fn using_iw_change_wifi_mode(iface_name: &str, mode: &WifiMode) {
 }
 
 pub async fn get_all_wifi_devices() -> HashMap<String, LandscapeWifiInterface> {
-    let (connection, handle, _) = wl_nl80211::new_connection().unwrap();
+    let (connection, handle, _) = match wl_nl80211::new_connection() {
+        Ok(conn) => conn,
+        Err(_) => return HashMap::new(),
+    };
     tokio::spawn(connection);
+
     let mut interface_handle = handle.interface().get().execute().await;
     let mut result = HashMap::new();
-    while let Some(msg) = interface_handle.try_next().await.unwrap() {
+
+    loop {
+        let msg_opt = match interface_handle.try_next().await {
+            Ok(opt) => opt,
+            Err(_) => None,
+        };
+
+        let msg = match msg_opt {
+            Some(m) => m,
+            None => break,
+        };
+
         if let Some(data) = LandscapeWifiInterface::new(msg.payload) {
             result.insert(data.name.clone(), data);
         }
     }
+
     result
 }
 
