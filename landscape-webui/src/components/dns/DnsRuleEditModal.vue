@@ -126,6 +126,18 @@ async function import_rules() {
     rule.value.source = rules;
   } catch (e) {}
 }
+
+function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
+  if (match_type) {
+    rule.value.source.unshift({
+      t: "config",
+      match_type,
+      value: "",
+    });
+  } else {
+    rule.value.source.unshift({ t: RuleSourceEnum.GeoKey, key: "" });
+  }
+}
 </script>
 
 <template>
@@ -151,7 +163,10 @@ async function import_rules() {
           </n-switch>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="5" label="是否过滤结果">
+        <n-form-item-gi :span="2" label="备注">
+          <n-input v-model:value="rule.name" type="text" />
+        </n-form-item-gi>
+        <n-form-item-gi :offset="1" :span="2" label="是否过滤结果">
           <!-- {{ rule }} -->
           <n-radio-group v-model:value="rule.filter" name="filter">
             <n-radio-button
@@ -163,9 +178,6 @@ async function import_rules() {
           </n-radio-group>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="2" label="备注">
-          <n-input v-model:value="rule.name" type="text" />
-        </n-form-item-gi>
         <n-form-item-gi :span="5" label="流量动作">
           <!-- <n-popover trigger="hover">
             <template #trigger>
@@ -214,46 +226,85 @@ async function import_rules() {
             </n-flex>
           </n-flex>
         </template>
-        <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
-          <template #create-button-default> 增加一条规则来源 </template>
-          <template #default="{ value, index }">
-            <n-flex style="flex: 1" :wrap="false">
-              <n-button @click="changeCurrentRuleType(value, index)">
-                <n-icon>
-                  <ChangeCatalog />
-                </n-icon>
-              </n-button>
-              <!-- <n-input
+        <n-flex style="flex: 1" vertical>
+          <n-flex style="padding: 5px 0px" justify="space-between">
+            <n-button
+              style="flex: 1"
+              size="small"
+              @click="add_by_quick_btn(undefined)"
+            >
+              +地理关系库
+            </n-button>
+            <n-button
+              style="flex: 1"
+              size="small"
+              @click="add_by_quick_btn(DomainMatchTypeEnum.Full)"
+            >
+              +精确匹配
+            </n-button>
+            <n-button
+              style="flex: 1"
+              size="small"
+              @click="add_by_quick_btn(DomainMatchTypeEnum.Domain)"
+            >
+              +域名匹配
+            </n-button>
+            <n-button
+              style="flex: 1"
+              size="small"
+              @click="add_by_quick_btn(DomainMatchTypeEnum.Plain)"
+            >
+              +关键词匹配
+            </n-button>
+            <n-button
+              style="flex: 1"
+              size="small"
+              @click="add_by_quick_btn(DomainMatchTypeEnum.Regex)"
+            >
+              +正则匹配
+            </n-button>
+          </n-flex>
+          <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
+            <template #create-button-default> 增加一条规则来源 </template>
+            <template #default="{ value, index }">
+              <n-flex style="flex: 1" :wrap="false">
+                <n-button @click="changeCurrentRuleType(value, index)">
+                  <n-icon>
+                    <ChangeCatalog />
+                  </n-icon>
+                </n-button>
+                <!-- <n-input
                
                 v-model:value="value.key"
                 placeholder="geo key"
                 type="text"
               /> -->
-              <DnsGeoSelect
-                v-model:geo_key="value.key"
-                v-model:geo_name="value.name"
-                v-model:geo_inverse="value.inverse"
-                v-model:attr_key="value.attribute_key"
-                v-if="value.t === RuleSourceEnum.GeoKey"
-              ></DnsGeoSelect>
-              <n-flex v-else style="flex: 1">
-                <n-input-group>
-                  <n-select
-                    style="width: 38%"
-                    v-model:value="value.match_type"
-                    :options="source_style"
-                    placeholder="选择匹配方式"
-                  />
-                  <n-input
-                    placeholder=""
-                    v-model:value="value.value"
-                    type="text"
-                  />
-                </n-input-group>
+                <DnsGeoSelect
+                  v-model:geo_key="value.key"
+                  v-model:geo_name="value.name"
+                  v-model:geo_inverse="value.inverse"
+                  v-model:attr_key="value.attribute_key"
+                  v-if="value.t === RuleSourceEnum.GeoKey"
+                ></DnsGeoSelect>
+                <n-flex v-else style="flex: 1">
+                  <n-input-group>
+                    <n-select
+                      style="width: 38%"
+                      v-model:value="value.match_type"
+                      :options="source_style"
+                      placeholder="选择匹配方式"
+                    />
+                    <n-input
+                      placeholder=""
+                      v-model:value="value.value"
+                      type="text"
+                    />
+                  </n-input-group>
+                </n-flex>
               </n-flex>
-            </n-flex>
-          </template>
-        </n-dynamic-input>
+            </template>
+          </n-dynamic-input>
+        </n-flex>
       </n-form-item>
     </n-form>
     <template #footer>
