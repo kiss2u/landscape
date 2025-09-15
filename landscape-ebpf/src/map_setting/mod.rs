@@ -67,9 +67,6 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
     landscape_open.maps.rt_lan_map.set_pin_path(&paths.rt_lan_map).unwrap();
     landscape_open.maps.rt_target_map.set_pin_path(&paths.rt_target_map).unwrap();
 
-    // route ip mac cache table
-    landscape_open.maps.ip_mac_tab.set_pin_path(&paths.ip_mac_tab).unwrap();
-
     let _landscape_skel = landscape_open.load().unwrap();
 }
 

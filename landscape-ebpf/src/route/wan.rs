@@ -39,9 +39,6 @@ pub fn wan_route_attach(
     open_skel.maps.rt_target_map.set_pin_path(&MAP_PATHS.rt_target_map)?;
     open_skel.maps.rt_target_map.reuse_pinned_map(&MAP_PATHS.rt_target_map)?;
 
-    open_skel.maps.ip_mac_tab.set_pin_path(&MAP_PATHS.ip_mac_tab)?;
-    open_skel.maps.ip_mac_tab.reuse_pinned_map(&MAP_PATHS.ip_mac_tab)?;
-
     open_skel.maps.flow_v_dns_map.set_pin_path(&MAP_PATHS.flow_verdict_dns_map)?;
     open_skel.maps.flow_v_dns_map.reuse_pinned_map(&MAP_PATHS.flow_verdict_dns_map)?;
 

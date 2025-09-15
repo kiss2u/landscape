@@ -205,24 +205,8 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
         }
 
         if (current_eth_net_offset == 0 && lan_info->has_mac) {
-            struct lan_mac_cache_key daddr = {0};
-            daddr.l3_protocol = context->l3_protocol;
-            COPY_ADDR_FROM(daddr.ip, context->daddr.in6_u.u6_addr8);
-            u8 *smac = &lan_info->mac_addr;
-            struct lan_mac_cache *dmac = bpf_map_lookup_elem(&ip_mac_tab, &daddr);
             bool is_ipv4 = context->l3_protocol == LANDSCAPE_IPV4_TYPE;
-            if (dmac == NULL) {
-                bpf_log_info("use ip: %pI6, to find mac error", &context->daddr.in6_u.u6_addr8);
-                return TC_ACT_SHOT;
-            }
-
             unsigned char ethhdr[14];
-            __builtin_memcpy(ethhdr, dmac->mac, 6);
-            __builtin_memcpy(ethhdr + 6, smac, 6);
-
-            // PRINT_MAC_ADDR(ethhdr);
-            // PRINT_MAC_ADDR(ethhdr + 6);
-
             if (is_ipv4) {
                 ethhdr[12] = 0x08;
                 ethhdr[13] = 0x00;
@@ -230,34 +214,26 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
                 ethhdr[12] = 0x86;
                 ethhdr[13] = 0xdd;
             }
-
             if (bpf_skb_change_head(skb, 14, 0)) return TC_ACT_SHOT;
 
             if (bpf_skb_store_bytes(skb, 0, ethhdr, sizeof(ethhdr), 0)) return TC_ACT_SHOT;
-
-            skb->mark = 1;
-            ret = bpf_redirect(lan_info->ifindex, 0);
-            if (ret != 7) {
-                bpf_log_info("bpf_redirect_neigh error: %d", ret);
-            }
-
-        } else {
-            struct bpf_redir_neigh param;
-            if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-                param.nh_family = AF_INET;
-            } else {
-                param.nh_family = AF_INET6;
-            }
-
-            COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
-            ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
-            // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
-            // bpf_log_info("is_ipv4:  %d", is_ipv4);
-            // bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
-            if (ret != 7) {
-                bpf_log_info("bpf_redirect_neigh error: %d", ret);
-            }
         }
+        struct bpf_redir_neigh param;
+        if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+            param.nh_family = AF_INET;
+        } else {
+            param.nh_family = AF_INET6;
+        }
+
+        COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
+        ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
+        // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
+        // bpf_log_info("is_ipv4:  %d", is_ipv4);
+        // bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
+        if (ret != 7) {
+            bpf_log_info("bpf_redirect_neigh error: %d", ret);
+        }
+        // bpf_log_info("bpf_redirect_neigh result: %d", ret);
 
         return ret;
     }
@@ -550,23 +526,12 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    struct lan_mac_cache_key saddr = {0};
-    struct lan_mac_cache cache_mac = {0};
-    saddr.l3_protocol = context.l3_protocol;
-    COPY_ADDR_FROM(saddr.ip, context.saddr.in6_u.u6_addr8);
-    COPY_ADDR_FROM(cache_mac.mac, context.smac);
-    ret = bpf_map_update_elem(&ip_mac_tab, &saddr, &cache_mac, BPF_ANY);
-
     // if (saddr.ip[0] == 0xfe) {
     //     if ((saddr.ip[1] & 0xc0) == 0x80) {
     //         bpf_log_info("fe80 %pI6 -> %pI6", context.saddr.in6_u.u6_addr8,
     //         context.daddr.in6_u.u6_addr8);
     //     }
     // }
-
-    if (ret != 0) {
-        bpf_log_info("cache ip: %pI6 mac error", saddr.ip);
-    }
 
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {

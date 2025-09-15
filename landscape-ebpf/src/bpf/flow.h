@@ -202,22 +202,22 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rt_target_map SEC(".maps");
 
-struct lan_mac_cache_key {
-    u8 ip[16];
-    u8 l3_protocol;
-    u8 _pad[3];
-};
+// struct lan_mac_cache_key {
+//     u8 ip[16];
+//     u8 l3_protocol;
+//     u8 _pad[3];
+// };
 
-struct lan_mac_cache {
-    u8 mac[6];
-    u8 _pad[2];
-};
+// struct lan_mac_cache {
+//     u8 mac[6];
+//     u8 _pad[2];
+// };
 
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __type(key, struct lan_mac_cache_key);
-    __type(value, struct lan_mac_cache);
-    __uint(max_entries, 65535);
-} ip_mac_tab SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_LRU_HASH);
+//     __type(key, struct lan_mac_cache_key);
+//     __type(value, struct lan_mac_cache);
+//     __uint(max_entries, 65535);
+// } ip_mac_tab SEC(".maps");
 
 #endif /* __LD_FLOW_H__ */
