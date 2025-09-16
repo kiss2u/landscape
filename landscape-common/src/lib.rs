@@ -25,6 +25,8 @@ pub mod store;
 pub mod test;
 pub mod utils;
 
+pub mod pty;
+
 pub mod dns;
 
 /// Home Path

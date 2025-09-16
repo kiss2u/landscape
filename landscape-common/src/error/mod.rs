@@ -1,6 +1,10 @@
 use sea_orm::DbErr;
 use thiserror::Error;
 
+use crate::error::pty::PtyError;
+
+pub mod pty;
+
 /// 仅定义当前 common 错误
 #[derive(Error, Debug)]
 pub enum LdError {
@@ -24,6 +28,9 @@ pub enum LdError {
 
     #[error("Database error: {0}")]
     DbMsg(String),
+
+    #[error(transparent)]
+    PtyError(#[from] PtyError),
 }
 
 pub type LdResult<T> = Result<T, LdError>;

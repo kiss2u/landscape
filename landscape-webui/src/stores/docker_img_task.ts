@@ -1,7 +1,8 @@
 import { get_current_tasks } from "@/api/docker";
 import { ImgPullEvent, PullImgTask } from "@/rust_bindings/common/docker";
 import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { ref } from "vue";
+import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 
 export const useDockerImgTask = defineStore("docker-img_task", () => {
   const socket = ref<WebSocket | undefined>(undefined);
@@ -14,8 +15,9 @@ export const useDockerImgTask = defineStore("docker-img_task", () => {
       return;
     }
 
+    const token = localStorage.getItem(LANDSCAPE_TOKEN_KEY);
     socket.value = new WebSocket(
-      `wss://${window.location.hostname}:${window.location.port}/api/sock/docker/listen_docker_task`
+      `wss://${window.location.hostname}:${window.location.port}/api/sock/docker/listen_docker_task?token=${token}`
     );
     socket.value.addEventListener("open", function (event) {
       socket.value?.send("Hello Server!");

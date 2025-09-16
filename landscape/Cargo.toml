@@ -60,5 +60,8 @@ ts-rs = { workspace = true }
 
 sysctl = { workspace = true }
 
+portable-pty = { workspace = true }
+# pseudoterminal = { version = "0.2.1", features = ["non-blocking"] }
+
 [dependencies.pnet]
 workspace = true

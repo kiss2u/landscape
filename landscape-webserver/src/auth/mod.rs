@@ -109,6 +109,40 @@ pub async fn auth_handler(
     }
 }
 
+pub async fn auth_handler_from_query(
+    State(auth): State<Arc<AuthRuntimeConfig>>,
+    req: Request<axum::body::Body>,
+    next: Next,
+) -> Result<Response, LandscapeApiError> {
+    let Some(query_str) = req.uri().query() else {
+        return Err(AuthError::MissingAuthorizationHeader)?;
+    };
+
+    println!("query_str: {}", query_str);
+
+    let Some((_, token)) =
+        query_str.split('&').filter_map(|q| q.split_once('=')).find(|(k, _)| k == &"token")
+    else {
+        return Err(AuthError::MissingAuthorizationHeader)?;
+    };
+
+    println!("token: {}", token);
+
+    let Ok(token_data) = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(SECRET_KEY.as_bytes()),
+        &Validation::default(),
+    ) else {
+        return Err(AuthError::InvalidToken)?;
+    };
+
+    if token_data.claims.sub == auth.admin_user {
+        Ok(next.run(req).await)
+    } else {
+        Err(AuthError::UnauthorizedUser)?
+    }
+}
+
 pub fn get_auth_route(auth: Arc<AuthRuntimeConfig>) -> Router {
     Router::new().route("/login", post(login_handler)).with_state(auth)
 }

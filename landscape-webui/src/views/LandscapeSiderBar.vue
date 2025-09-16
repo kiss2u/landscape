@@ -14,6 +14,7 @@ import {
   ServerDns,
   NetworkPublic,
   Dashboard,
+  Terminal,
 } from "@vicons/carbon";
 import { ImportExportRound } from "@vicons/material";
 import { Wall } from "@vicons/tabler";
@@ -137,6 +138,11 @@ const menuOptions: MenuOption[] = [
     ],
   },
   {
+    label: "WebShell",
+    key: "web-pty",
+    icon: renderIcon(Terminal),
+  },
+  {
     label: "系统配置",
     key: "config",
     icon: renderIcon(Settings),
@@ -166,7 +172,11 @@ const menuOptions: MenuOption[] = [
           Landscape
         </n-flex>
       </n-layout-header>
-      <n-layout position="absolute" style="top: 30px; bottom: 64px">
+      <n-layout
+        :native-scrollbar="false"
+        position="absolute"
+        style="top: 30px; bottom: 64px"
+      >
         <!-- {{ menu_active_key }} -->
         <n-menu
           v-model:value="menu_active_key"

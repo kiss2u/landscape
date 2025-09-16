@@ -396,10 +396,13 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
 
     let sockets_route = Router::new()
         .nest("/docker", websocket::docker_task::get_docker_images_socks_paths().await)
+        .nest("/pty", websocket::web_pty::get_web_pty_socks_paths().await)
         .with_state(landscape_app_status.clone())
         .merge(dump::get_tump_router())
-        // .route_layer(axum::middleware::from_fn_with_state(auth_share.clone(), auth::auth_handler))
-        ;
+        .route_layer(axum::middleware::from_fn_with_state(
+            auth_share.clone(),
+            auth::auth_handler_from_query,
+        ));
 
     let api_route = Router::new()
         // 资源路由 需要认证

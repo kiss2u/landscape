@@ -19,7 +19,7 @@ const { t } = useI18n({ useScope: "global" });
 
 <template>
   <n-flex vertical style="width: 100%">
-    <n-grid x-gap="12" y-gap="12" cols="1 600:2 1200:4 1900:6">
+    <n-grid x-gap="12" y-gap="12" cols="1 600:2 1200:4 1900:5">
       <n-gi style="display: flex; height: 280px" :span="1">
         <SystemInfo></SystemInfo>
       </n-gi>
