@@ -9,6 +9,8 @@ export type DockerCmd = {
   environment: Array<KeyValuePair> | null;
   volumes: Array<KeyValuePair> | null;
   labels: Array<KeyValuePair> | null;
+  entrypoint: string | null;
+  params: string | null;
 };
 
 export type ImgPullEvent = {

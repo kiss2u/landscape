@@ -31,6 +31,8 @@ async function on_modal_enter() {
     environment: null,
     volumes: null,
     labels: null,
+    entrypoint: null,
+    params: null,
   };
 }
 
@@ -159,6 +161,18 @@ const restrt_options = [
             placeholder="请输入容器名称 (可选)"
           />
         </n-form-item>
+        <n-form-item label="entrypoint" path="containerName">
+          <n-input
+            v-model:value="formModel.entrypoint"
+            placeholder="请输入 entrypoint (可选)"
+          />
+        </n-form-item>
+        <!-- <n-form-item label="entrypoint params" path="containerName">
+          <n-input
+            v-model:value="formModel.params"
+            placeholder="请输入entrypoint params (可选)"
+          />
+        </n-form-item> -->
         <n-form-item label="端口映射" path="ports">
           <n-dynamic-input
             v-model:value="formModel.ports"

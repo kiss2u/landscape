@@ -31,6 +31,8 @@ pub struct DockerCmd {
     pub environment: Option<Vec<KeyValuePair>>,
     pub volumes: Option<Vec<KeyValuePair>>,
     pub labels: Option<Vec<KeyValuePair>>,
+    pub entrypoint: Option<String>,
+    pub params: Option<String>,
 }
 
 impl DockerCmd {
@@ -72,6 +74,11 @@ impl DockerCmd {
             }
         }
 
+        if let Some(entrypoint) = &self.entrypoint {
+            command.push("--entrypoint".to_string());
+            command.push(entrypoint.clone());
+        }
+
         let mut accept_local = false;
         if let Some(labels) = &self.labels {
             for label in labels {
@@ -100,6 +107,10 @@ impl DockerCmd {
         }
 
         command.push(self.image_name.clone());
+
+        if let Some(params) = &self.params {
+            command.push(params.clone());
+        }
 
         tracing::info!("command: {:?}", command);
         command
