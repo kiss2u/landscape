@@ -127,6 +127,13 @@ async function import_rules() {
   } catch (e) {}
 }
 
+async function append_import_rules() {
+  try {
+    let rules = JSON.parse(await read_context_from_clipboard());
+    rule.value.source.unshift(...rules);
+  } catch (e) {}
+}
+
 function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
   if (match_type) {
     rule.value.source.unshift({
@@ -221,7 +228,14 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
                 复制
               </n-button>
               <n-button :focusable="false" size="tiny" @click="import_rules">
-                粘贴
+                替换粘贴
+              </n-button>
+              <n-button
+                :focusable="false"
+                size="tiny"
+                @click="append_import_rules"
+              >
+                增量粘贴
               </n-button>
             </n-flex>
           </n-flex>

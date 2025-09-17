@@ -131,6 +131,15 @@ async function import_rules() {
     }
   } catch (e) {}
 }
+
+async function append_import_rules() {
+  try {
+    if (rule.value) {
+      let rules = JSON.parse(await read_context_from_clipboard());
+      rule.value.match_rules.unshift(...rules);
+    }
+  } catch (e) {}
+}
 </script>
 
 <template>
@@ -229,7 +238,14 @@ async function import_rules() {
                   复制
                 </n-button>
                 <n-button :focusable="false" size="tiny" @click="import_rules">
-                  粘贴
+                  替换粘贴
+                </n-button>
+                <n-button
+                  :focusable="false"
+                  size="tiny"
+                  @click="append_import_rules"
+                >
+                  增量粘贴
                 </n-button>
               </n-flex>
             </n-flex>
