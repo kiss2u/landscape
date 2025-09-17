@@ -106,3 +106,34 @@ async fn update_flow_dst_ip_map(
     let result = geo_ip_service.convert_config_to_runtime_rule(rules).await;
     landscape_ebpf::map_setting::flow_wanip::add_wan_ip_mark(flow_id, result);
 }
+
+#[cfg(test)]
+mod tests {
+
+    use std::path::PathBuf;
+
+    use landscape_common::{
+        config::geo::{GeoFileCacheKey, GeoIpConfig},
+        store::storev4::StoreFileManager,
+        LANDSCAPE_GEO_CACHE_TMP_DIR,
+    };
+
+    #[test]
+    pub fn load_ip_test() {
+        let mut ip_store: StoreFileManager<GeoFileCacheKey, GeoIpConfig> = StoreFileManager::new(
+            PathBuf::from("/root/.landscape-router").join(LANDSCAPE_GEO_CACHE_TMP_DIR),
+            "ip".to_string(),
+        );
+
+        let all = ip_store.list();
+
+        for config in all {
+            for c in config.values {
+                if c.ip.is_ipv6() {
+                    println!("key: {}, name: {}", config.key, config.name);
+                    break;
+                }
+            }
+        }
+    }
+}

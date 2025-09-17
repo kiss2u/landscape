@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
 };
 
@@ -83,20 +83,20 @@ pub async fn read_geo_ips<T: AsRef<Path>>(geo_file_path: T) -> HashMap<String, V
 
 pub fn convert_ipconfig_from_proto(value: &crate::protos::geo::CIDR) -> Option<IpConfig> {
     let bytes = value.ip.as_ref();
-    match bytes.len() {
+    let result = match bytes.len() {
         4 => {
             // IPv4 地址构造
-            let ip = IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]));
-            Some(IpConfig { ip, prefix: value.prefix })
+            Some(IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3])))
         }
-        // 16 => {
-        //     // IPv6 地址构造
-        //     let mut octets = [0u8; 16];
-        //     octets.copy_from_slice(bytes);
-        //     Some(IpAddr::V6(Ipv6Addr::from(octets)))
-        // }
+        16 => {
+            // IPv6 地址构造
+            let mut octets = [0u8; 16];
+            octets.copy_from_slice(bytes);
+            Some(IpAddr::V6(Ipv6Addr::from(octets)))
+        }
         _ => None, // 字节数不合法
-    }
+    };
+    result.map(|ip| IpConfig { ip, prefix: value.prefix })
 }
 
 #[cfg(test)]

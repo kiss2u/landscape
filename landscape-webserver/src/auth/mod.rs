@@ -118,15 +118,11 @@ pub async fn auth_handler_from_query(
         return Err(AuthError::MissingAuthorizationHeader)?;
     };
 
-    println!("query_str: {}", query_str);
-
     let Some((_, token)) =
         query_str.split('&').filter_map(|q| q.split_once('=')).find(|(k, _)| k == &"token")
     else {
         return Err(AuthError::MissingAuthorizationHeader)?;
     };
-
-    println!("token: {}", token);
 
     let Ok(token_data) = decode::<Claims>(
         token,

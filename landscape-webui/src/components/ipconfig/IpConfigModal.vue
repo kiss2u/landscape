@@ -9,7 +9,7 @@ import {
   IfaceIpMode,
 } from "@/lib/service_ipconfig";
 import { computed, ref } from "vue";
-import NewIpEdit from "../NewIpEdit.vue";
+import IpEdit from "../IpEdit.vue";
 import { IfaceZoneType } from "@/rust_bindings/common/iface";
 
 const show_model = defineModel<boolean>("show", { required: true });
@@ -114,11 +114,7 @@ function select_ip_model(value: IfaceIpMode) {
       role="dialog"
       aria-modal="true"
     >
-      <n-flex
-        vertical
-        style="width: 100%"
-        v-if="iface_data.ip_model !== undefined"
-      >
+      <n-flex style="flex: 1" vertical v-if="iface_data.ip_model !== undefined">
         <n-flex align="center" :wrap="false">
           <n-flex>
             <n-switch v-model:value="iface_data.enable">
@@ -135,15 +131,18 @@ function select_ip_model(value: IfaceIpMode) {
           </n-flex>
         </n-flex>
 
-        <n-flex>
-          <n-flex v-if="iface_data.ip_model.t === IfaceIpMode.Static">
+        <n-flex style="flex: 1">
+          <n-flex
+            style="flex: 1"
+            v-if="iface_data.ip_model.t === IfaceIpMode.Static"
+          >
             <n-form style="flex: 1" :model="iface_data.ip_model" :cols="5">
               <n-grid :cols="5">
                 <n-form-item-gi label="静态 IP" :span="5">
-                  <NewIpEdit
+                  <IpEdit
                     v-model:ip="iface_data.ip_model.ipv4"
                     v-model:mask="iface_data.ip_model.ipv4_mask"
-                  ></NewIpEdit>
+                  ></IpEdit>
                 </n-form-item-gi>
                 <n-form-item-gi
                   v-if="iface_info.zone == ZoneType.Wan"
@@ -160,9 +159,9 @@ function select_ip_model(value: IfaceIpMode) {
                   label="路由 IP"
                   :span="5"
                 >
-                  <NewIpEdit
+                  <IpEdit
                     v-model:ip="iface_data.ip_model.default_router_ip"
-                  ></NewIpEdit>
+                  ></IpEdit>
                 </n-form-item-gi>
               </n-grid>
             </n-form>

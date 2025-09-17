@@ -5,7 +5,7 @@ import { useMessage } from "naive-ui";
 import { ChangeCatalog } from "@vicons/carbon";
 
 import FlowMarkEdit from "@/components/flow/FlowMarkEdit.vue";
-import NewIpEdit from "@/components/NewIpEdit.vue";
+import IpEdit from "@/components/IpEdit.vue";
 import { WanIPRuleSource } from "@/rust_bindings/flow";
 
 import { new_wan_rules, WanIpRuleConfigClass } from "@/lib/mark";
@@ -158,10 +158,10 @@ async function saveRule() {
                 type="text"
               /> -->
               <n-flex v-else style="flex: 1">
-                <NewIpEdit
+                <IpEdit
                   v-model:ip="value.ip"
                   v-model:mask="value.prefix"
-                ></NewIpEdit>
+                ></IpEdit>
               </n-flex>
             </n-flex>
           </template>
