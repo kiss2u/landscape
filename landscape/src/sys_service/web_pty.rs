@@ -126,7 +126,8 @@ impl LandscapePtySession {
         })?;
 
         // 设置命令
-        let cmd = CommandBuilder::new(config.shell);
+        let mut cmd = CommandBuilder::new(config.shell);
+        cmd.env("TERM", "xterm-256color");
         let mut child = pair.slave.spawn_command(cmd)?;
         drop(pair.slave);
 
