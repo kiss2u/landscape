@@ -33,7 +33,7 @@ const title_name = computed(() =>
       </template>
       <!-- {{ rule }} -->
       <n-descriptions bordered label-placement="top" :column="1">
-        <n-descriptions-item label="流量标记">
+        <n-descriptions-item label="选择流量出口">
           <MarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></MarkExhibit>
         </n-descriptions-item>
         <n-descriptions-item label="匹配规则">

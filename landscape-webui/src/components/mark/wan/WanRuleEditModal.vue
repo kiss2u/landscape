@@ -129,7 +129,7 @@ async function saveRule() {
           </n-switch>
         </n-form-item-gi> -->
 
-        <n-form-item-gi :span="5" label="流量标记">
+        <n-form-item-gi :span="5" label="选择流量出口">
           <FlowMarkEdit v-model:mark="rule.mark"></FlowMarkEdit>
         </n-form-item-gi>
       </n-grid>

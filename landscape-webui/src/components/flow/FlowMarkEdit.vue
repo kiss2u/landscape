@@ -8,11 +8,11 @@ const mark = defineModel<FlowMark>("mark", { required: true });
 
 const mark_type_option = [
   {
-    label: "无动作",
+    label: "当前流的出口",
     value: FlowMarkType.KeepGoing,
   },
   {
-    label: "忽略 Flow 设置",
+    label: "默认流的出口",
     value: FlowMarkType.Direct,
   },
   {
@@ -20,13 +20,9 @@ const mark_type_option = [
     value: FlowMarkType.Drop,
   },
   {
-    label: "重定向至流",
+    label: "使用指定流出口",
     value: FlowMarkType.Redirect,
   },
-  // {
-  //   label: "允许端口共享",
-  //   value: FlowMarkType.AllowReusePort,
-  // },
 ];
 
 onMounted(async () => {
@@ -100,7 +96,7 @@ function mark_action_update(value: FlowMarkType) {
       style="width: 50%"
       v-model:value="mark.flow_id"
       filterable
-      placeholder="重定向的流 ID"
+      placeholder="指定流的 ID"
       :options="flow_options"
       :loading="flow_search_loading"
       clearable

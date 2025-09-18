@@ -203,7 +203,7 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
           </SelectUpstream>
         </n-form-item-gi>
       </n-grid>
-      <n-form-item>
+      <n-form-item :show-feedback="false">
         <template #label>
           <n-flex
             align="center"
@@ -278,46 +278,52 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
               +正则匹配
             </n-button>
           </n-flex>
-          <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
-            <template #create-button-default> 增加一条规则来源 </template>
-            <template #default="{ value, index }">
-              <n-flex style="flex: 1" :wrap="false">
-                <n-button @click="changeCurrentRuleType(value, index)">
-                  <n-icon>
-                    <ChangeCatalog />
-                  </n-icon>
-                </n-button>
-                <!-- <n-input
+          <n-scrollbar style="max-height: 280px">
+            <n-dynamic-input
+              item-style="padding-right: 15px"
+              v-model:value="rule.source"
+              :on-create="onCreate"
+            >
+              <template #create-button-default> 增加一条规则来源 </template>
+              <template #default="{ value, index }">
+                <n-flex :size="[10, 0]" style="flex: 1" :wrap="false">
+                  <n-button @click="changeCurrentRuleType(value, index)">
+                    <n-icon>
+                      <ChangeCatalog />
+                    </n-icon>
+                  </n-button>
+                  <!-- <n-input
                
                 v-model:value="value.key"
                 placeholder="geo key"
                 type="text"
               /> -->
-                <DnsGeoSelect
-                  v-model:geo_key="value.key"
-                  v-model:geo_name="value.name"
-                  v-model:geo_inverse="value.inverse"
-                  v-model:attr_key="value.attribute_key"
-                  v-if="value.t === RuleSourceEnum.GeoKey"
-                ></DnsGeoSelect>
-                <n-flex v-else style="flex: 1">
-                  <n-input-group>
-                    <n-select
-                      style="width: 38%"
-                      v-model:value="value.match_type"
-                      :options="source_style"
-                      placeholder="选择匹配方式"
-                    />
-                    <n-input
-                      placeholder=""
-                      v-model:value="value.value"
-                      type="text"
-                    />
-                  </n-input-group>
+                  <DnsGeoSelect
+                    v-model:geo_key="value.key"
+                    v-model:geo_name="value.name"
+                    v-model:geo_inverse="value.inverse"
+                    v-model:attr_key="value.attribute_key"
+                    v-if="value.t === RuleSourceEnum.GeoKey"
+                  ></DnsGeoSelect>
+                  <n-flex :size="[10, 0]" v-else style="flex: 1">
+                    <n-input-group>
+                      <n-select
+                        style="width: 38%"
+                        v-model:value="value.match_type"
+                        :options="source_style"
+                        placeholder="选择匹配方式"
+                      />
+                      <n-input
+                        placeholder=""
+                        v-model:value="value.value"
+                        type="text"
+                      />
+                    </n-input-group>
+                  </n-flex>
                 </n-flex>
-              </n-flex>
-            </template>
-          </n-dynamic-input>
+              </template>
+            </n-dynamic-input>
+          </n-scrollbar>
         </n-flex>
       </n-form-item>
     </n-form>

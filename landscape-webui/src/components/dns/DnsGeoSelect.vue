@@ -122,7 +122,7 @@ const attribute_options = computed(() => {
 });
 </script>
 <template>
-  <n-flex :wrap="false" align="center">
+  <n-flex :size="[10, 0]" :wrap="false" align="center">
     <n-popover trigger="hover">
       <template #trigger>
         <n-checkbox v-model:checked="inverse"> </n-checkbox>
