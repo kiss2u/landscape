@@ -229,8 +229,9 @@ impl RuntimeConfig {
             admin_pass: read_value(&args.admin_pass, &config.auth.admin_pass, "root".to_string()),
         };
 
+        let default_log_path = home_path.join(LANDSCAPE_LOG_DIR_NAME);
         let log = LogRuntimeConfig {
-            log_path: home_path.join(LANDSCAPE_LOG_DIR_NAME),
+            log_path: read_value(&args.log_path, &config.log.log_path, default_log_path),
             debug: read_value(&args.debug, &config.log.debug, default_debug_mode()),
             log_output_in_terminal: read_value(
                 &args.log_output_in_terminal,
@@ -244,7 +245,7 @@ impl RuntimeConfig {
         let web = WebRuntimeConfig {
             web_root: read_value(&args.web, &config.web.web_root, default_web_path),
             port: read_value(&args.port, &config.web.port, 6300),
-            https_port: read_value(&args.port, &config.web.port, 6443),
+            https_port: read_value(&args.https_port, &config.web.https_port, 6443),
             address: read_value(
                 &args.address,
                 &config.web.address,

@@ -29,7 +29,7 @@ pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
-    /// Static HTML location [default: ~/.landscape-router/static]
+    /// Static HTML location [default: /root/.landscape-router/static]
     #[arg(short, long, env = "LANDSCAPE_WEB_ROOT")]
     pub web: Option<PathBuf>,
 
@@ -53,8 +53,13 @@ pub struct WebCommArgs {
     #[clap(short, long, env = "LANDSCAPE_CONF_PATH")]
     pub config_dir: Option<PathBuf>,
 
+    /// Log File location [default: /root/.landscape-router/logs]
+    #[clap(long = "log_path", env = "LANDSCAPE_LOG_PATH")]
+    pub log_path: Option<PathBuf>,
+
     /// Database URL, SQLite Connect Like Default
-    /// [default: sqlite://~/.landscape-router/landscape_db.sqlite]
+    /// sqlite://<path>
+    /// [default: sqlite:///root/.landscape-router/landscape_db.sqlite]
     #[clap(long = "db_url", env = "DATABASE_URL")]
     pub database_path: Option<String>,
 
