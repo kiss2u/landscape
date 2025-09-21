@@ -318,21 +318,21 @@ impl RequestHandler for ChainDnsRequestHandle {
         header.set_authoritative(true);
         header.set_recursion_available(true);
 
-        // let mut records = vec![];
-
-        let mut records = {
-            let mut records = vec![];
+        let mut records = vec![];
+        let mut redirect_records = None;
+        {
             let redirect_list = self.redirect_solution.load();
             for each in redirect_list.iter() {
                 if each.is_match(&domain) {
-                    records = each.lookup(&domain, query_type);
+                    redirect_records = Some(each.lookup(&domain, query_type));
                     break;
                 }
             }
-            records
         };
 
-        if records.is_empty() {
+        if let Some(redirect_records) = redirect_records {
+            records = redirect_records;
+        } else {
             if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
                 records = fiter_result(result, &filter);
             } else {
