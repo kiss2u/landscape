@@ -112,9 +112,9 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 ### 手工部署步骤
 1. 创建配置文件夹：
    ```shell
-   mkdir -p ~/.landscape-router
+   mkdir -p /root/.landscape-router
    ```
-2. 从 [release](https://github.com/ThisSeanZhang/landscape/releases) 中复制静态页面文件 **static.zip** 并解压到 `~/.landscape-router/static`.
+2. 从 [release](https://github.com/ThisSeanZhang/landscape/releases) 中复制静态页面文件 **static.zip** 并解压到 `/root/.landscape-router/static`.
 3. 假如你有桌面环境, 并且有浏览器, 那么可以跳过这一步骤.  
     创建初始文件 `landscape_init.toml` 可参考 [配置文件介绍](https://landscape.whileaway.dev/config/)
 4. 启动服务：从 [Release](https://github.com/ThisSeanZhang/landscape/releases) 中下载需要的版本.  

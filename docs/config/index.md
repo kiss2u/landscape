@@ -1,7 +1,7 @@
 # 配置文件介绍
 
 程序的配置来源主要有以下:
-* `landscape_init.toml`: 全量配置文件, 除了包含各种规则配置还包含完整的 `landscape.toml`, 仅在初始化时进行读取一次, 
+* `landscape_init.toml`: 全量配置文件, 除了包含各种规则配置还包含完整的 `landscape.toml`, ***仅在首次*** 进行读取 ***一次***, 
     读取后将会创建一个 `landscape_init.lock` 文件, 可在 UI 界面中导出当前的配置的 `init` 文件. 方便使用当前配置进行重新部署.
 * `landscape.toml`: 每次启动进行读取, 只包含监听地址. 登录用户名和密码, 日志等配置.
 
@@ -11,8 +11,9 @@
 `landscape.toml` 中配置的优先级低于命令行传入的参数.
 
 ::: warning
-当删除了 `landscape_init.lock` 文件后, 启动将会清空所有的已有配置, 然后使用 `landscape_init.toml` 中的内容刷新整个配置包含 `landscape.toml` 中的配置.
+* 当删除了 `landscape_init.lock` 文件后, 启动将会清空所有的已有配置, 然后使用 `landscape_init.toml` 中的内容刷新整个配置包含 `landscape.toml` 中的配置.
 所以谨慎删除此文件.
+* 配置文件中关于路径的配置只能使用 **绝对路径** 或者 **相对路径**. 不能使用 **~** 开头的地址
 :::
 
 ## landscape.toml 配置示例
@@ -25,7 +26,7 @@ admin_pass = "root"
 
 [web]
 # Web 根目录路径
-web_root = "~/.landscape-router/static"
+web_root = "/root/.landscape-router/static"
 # HTTP 监听端口
 port = 6300
 # HTTPS 监听端口
@@ -35,7 +36,7 @@ address = "::"
 
 [log]
 # 日志文件路径
-log_path = "~/.landscape-router/logs"
+log_path = "/root/.landscape-router/logs"
 # 是否启用调试模式
 debug = false
 # 是否在终端输出日志
@@ -45,10 +46,30 @@ max_log_files = 10
 
 [store]
 # 数据库路径
-database_path = "sqlite://~/.landscape-router/landscape_db.sqlite?mode=rwc"
+database_path = "sqlite:///root/.landscape-router/landscape_db.sqlite?mode=rwc"
 
 ```
+
 ## landscape_init.toml 配置示例
+
+### config 定义
+配置细节同上, 唯一区别是需要加 **config.**, 例如
+```toml
+[config.auth]
+admin_user = "root"
+admin_pass = "root"
+
+[config.web]
+web_root = "/root/.landscape-router/static"
+
+[config.log]
+log_path = "/root/.landscape-router/logs"
+
+[config.store]
+database_path = "sqlite:///root/.landscape-router/landscape_db.sqlite?mode=rwc"
+
+```
+
 ### 网卡定义
 ```toml
 [[ifaces]]

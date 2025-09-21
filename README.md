@@ -140,9 +140,9 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 1. Create config directory:
 
    ```bash
-   mkdir -p ~/.landscape-router
+   mkdir -p /root/.landscape-router
    ```
-2. Download **static.zip** from [release](https://github.com/ThisSeanZhang/landscape/releases) and extract to `~/.landscape-router/static`
+2. Download **static.zip** from [release](https://github.com/ThisSeanZhang/landscape/releases) and extract to `/root/.landscape-router/static`
 3. If you have a desktop environment and browser, you can skip this step.
    Otherwise, refer to [Config](https://landscape.whileaway.dev/config/) to create `landscape_init.toml`
 4. Start the service by downloading a release binary from [Releases](https://github.com/ThisSeanZhang/landscape/releases)
