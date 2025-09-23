@@ -221,7 +221,13 @@ impl RuntimeConfig {
             a.clone().or_else(|| b.clone()).unwrap_or(default)
         }
 
-        let home_path = args.config_dir.unwrap_or(default_home_path());
+        let mut home_path = args.config_dir.unwrap_or(default_home_path());
+
+        if home_path.is_relative() {
+            home_path = std::env::current_dir().unwrap().join(home_path);
+            home_path = home_path.components().collect();
+        }
+
         let config = read_home_config_file(home_path.clone());
 
         let auth = AuthRuntimeConfig {

@@ -87,3 +87,4 @@ pub const LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME: u32 = 40;
 pub const LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME: u32 = 60 * 60 * 12;
 
 pub const SYSCTL_IPV6_RA_ACCEPT_PATTERN: &str = "net.ipv6.conf.{}.accept_ra";
+pub const SYSCTL_IPV4_RP_FILTER_PATTERN: &str = "net.ipv4.conf.{}.rp_filter";

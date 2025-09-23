@@ -19,6 +19,7 @@ use landscape_common::{
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
     route::LanRouteInfo,
     service::{DefaultWatchServiceStatus, ServiceStatus},
+    SYSCTL_IPV4_RP_FILTER_PATTERN,
 };
 use landscape_common::{net::MacAddr, route::RouteTargetInfo};
 
@@ -174,6 +175,8 @@ pub async fn dhcp_v4_client(
     // landscape_ebpf::map_setting::add_expose_port(client_port);
 
     tracing::info!("DHCP V4 Client Staring");
+
+    set_iface_ipv4_rp_filter_to_0(&iface_name);
 
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), client_port);
 
@@ -765,5 +768,21 @@ async fn bind_ipv4(
         renew_time,
         rebinding_time,
         lease_time,
+    }
+}
+
+fn set_iface_ipv4_rp_filter_to_0(iface_name: &str) {
+    use sysctl::Sysctl;
+    if let Ok(ctl) = sysctl::Ctl::new(&SYSCTL_IPV4_RP_FILTER_PATTERN.replace("{}", iface_name)) {
+        match ctl.set_value_string("0") {
+            Ok(value) => {
+                if value != "0" {
+                    tracing::error!("modify value error: {:?}", value)
+                }
+            }
+            Err(e) => {
+                tracing::error!("err: {e:?}")
+            }
+        }
     }
 }
