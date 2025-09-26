@@ -50,41 +50,6 @@ async function save_config() {
   }
 }
 
-function add_redirect_id() {
-  if (formModel.value) {
-    if (formModel.value.labels) {
-      for (const label of formModel.value.labels) {
-        if (label.key === LAND_REDIRECT_ID_KEY) {
-          // 提示
-          notification.info({
-            content: "已经存在标签了",
-            duration: 2500,
-            keepAliveOnHover: true,
-          });
-          break;
-        }
-      }
-
-      formModel.value.labels.unshift({
-        key: LAND_REDIRECT_ID_KEY,
-        value: "",
-      });
-    }
-  }
-}
-
-const show_add_redirect_id_btn = computed(() => {
-  if (formModel.value?.labels) {
-    for (const label of formModel.value.labels) {
-      if (label.key === LAND_REDIRECT_ID_KEY) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-});
-
 enum DockerRestartPolicy {
   NO = "no",
   ON_FAILURE = "on-failure",
@@ -115,6 +80,45 @@ const restrt_options = [
     value: DockerRestartPolicy.UNLESS_STOPPED,
   },
 ];
+
+const has_edge_label = computed({
+  get() {
+    if (formModel.value?.labels) {
+      for (const label of formModel.value.labels) {
+        if (label.key === LAND_REDIRECT_ID_KEY) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  },
+  set(new_value) {
+    if (new_value) {
+      if (formModel.value?.labels) {
+        formModel.value?.labels.unshift({
+          key: LAND_REDIRECT_ID_KEY,
+          value: "",
+        });
+      } else {
+        if (formModel.value) {
+          formModel.value.labels = [
+            {
+              key: LAND_REDIRECT_ID_KEY,
+              value: "",
+            },
+          ];
+        }
+      }
+    } else {
+      if (formModel.value?.labels) {
+        formModel.value.labels = formModel.value.labels.filter(
+          (e) => e.key !== LAND_REDIRECT_ID_KEY
+        );
+      }
+    }
+  },
+});
 </script>
 
 <template>
@@ -132,82 +136,105 @@ const restrt_options = [
       aria-modal="true"
     >
       <n-form v-if="formModel" :model="formModel" label-width="120px">
-        <n-form-item label="镜像名称" path="imageName">
-          <n-input
-            :disabled="true"
-            v-model:value="formModel.image_name"
-            placeholder="请输入镜像名称"
-          />
-        </n-form-item>
-        <n-form-item label="重启策略" path="containerName">
-          <n-input-group>
-            <n-select
-              v-model:value="formModel.restart"
-              :options="restrt_options"
+        <n-grid :cols="6" :x-gap="12">
+          <n-form-item-gi :span="3" label="容器名称" path="containerName">
+            <n-input
+              v-model:value="formModel.container_name"
+              placeholder="请输入容器名称 (可选)"
             />
-            <n-input-number
-              v-if="
-                formModel.restart ===
-                DockerRestartPolicy.ON_FAILURE_WITH_MAX_RETRIES
-              "
-              v-model:value="formModel.restart_max_retries"
-              placeholder=""
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            :offset="1"
+            :span="2"
+            label="用作 Flow 出口"
+            path="imageName"
+          >
+            <n-switch v-model:value="has_edge_label"> </n-switch>
+          </n-form-item-gi>
+          <n-form-item-gi :span="6" label="重启策略" path="containerName">
+            <n-input-group>
+              <n-select
+                v-model:value="formModel.restart"
+                :options="restrt_options"
+              />
+              <n-input-number
+                v-if="
+                  formModel.restart ===
+                  DockerRestartPolicy.ON_FAILURE_WITH_MAX_RETRIES
+                "
+                v-model:value="formModel.restart_max_retries"
+                placeholder=""
+              />
+            </n-input-group>
+          </n-form-item-gi>
+
+          <n-form-item-gi :span="6" label="entrypoint" path="containerName">
+            <n-input
+              v-model:value="formModel.entrypoint"
+              placeholder="请输入 entrypoint (可选)"
             />
-          </n-input-group>
-        </n-form-item>
-        <n-form-item label="容器名称" path="containerName">
-          <n-input
-            v-model:value="formModel.container_name"
-            placeholder="请输入容器名称 (可选)"
-          />
-        </n-form-item>
-        <n-form-item label="entrypoint" path="containerName">
-          <n-input
-            v-model:value="formModel.entrypoint"
-            placeholder="请输入 entrypoint (可选)"
-          />
-        </n-form-item>
-        <!-- <n-form-item label="entrypoint params" path="containerName">
+          </n-form-item-gi>
+          <!-- <n-form-item-gi label="entrypoint params" path="containerName">
           <n-input
             v-model:value="formModel.params"
             placeholder="请输入entrypoint params (可选)"
           />
-        </n-form-item> -->
-        <n-form-item label="端口映射" path="ports">
-          <n-dynamic-input
-            v-model:value="formModel.ports"
-            preset="pair"
-            separator=":"
-            key-placeholder="主机端口"
-            value-placeholder="容器端口"
-          />
-        </n-form-item>
-        <n-form-item label="环境变量" path="environment">
-          <n-dynamic-input
-            v-model:value="formModel.environment"
-            preset="pair"
-            separator=":"
-            key-placeholder="变量名"
-            value-placeholder="变量值"
-          />
-        </n-form-item>
-        <n-form-item label="卷映射" path="volumes">
-          <n-dynamic-input
-            v-model:value="formModel.volumes"
-            preset="pair"
-            separator=":"
-            key-placeholder="主机目录"
-            value-placeholder="容器目录"
-          />
-        </n-form-item>
-        <n-form-item label="标签">
-          <n-flex style="flex: 1" vertical>
-            <n-button
-              :disabled="show_add_redirect_id_btn"
-              @click="add_redirect_id"
+        </n-form-item-gi> -->
+          <n-form-item-gi :span="6" label="端口映射" path="ports">
+            <n-dynamic-input
+              v-model:value="formModel.ports"
+              preset="pair"
+              separator=":"
+              key-placeholder="主机端口"
+              value-placeholder="容器端口"
+            />
+          </n-form-item-gi>
+          <n-form-item-gi :span="6" label="环境变量" path="environment">
+            <n-dynamic-input
+              v-model:value="formModel.environment"
+              preset="pair"
+              separator=":"
+              key-placeholder="变量名"
+              value-placeholder="变量值"
+            />
+          </n-form-item-gi>
+          <n-form-item-gi :span="6" label="卷映射" path="volumes">
+            <n-dynamic-input
+              v-model:value="formModel.volumes"
+              preset="pair"
+              separator=":"
+              key-placeholder="主机目录"
+              value-placeholder="容器目录"
+            />
+          </n-form-item-gi>
+          <!-- <n-form-item-gi label-style="width: 100%;" content-style="width: 100%;">
+          <template #label>
+            <n-flex
+              align="center"
+              justify="space-between"
+              :wrap="false"
+              @click.stop
             >
-              运行容器为 Flow 出口
-            </n-button>
+              <n-flex> 标签 </n-flex>
+              <n-flex>
+                <button
+                  style="
+                    width: 0;
+                    height: 0;
+                    overflow: hidden;
+                    opacity: 0;
+                    position: absolute;
+                  "
+                ></button>
+                <n-switch v-model:value="has_edge_label">
+                  <template #checked> 已添加 edge 标签 </template>
+                  <template #unchecked> 未添加 edge 标签 </template>
+                </n-switch>
+              </n-flex>
+            </n-flex>
+          </template>
+          <n-flex style="flex: 1" vertical>
             <n-dynamic-input
               v-model:value="formModel.labels"
               preset="pair"
@@ -216,7 +243,8 @@ const restrt_options = [
               value-placeholder="value"
             />
           </n-flex>
-        </n-form-item>
+        </n-form-item-gi> -->
+        </n-grid>
       </n-form>
       <template #footer>
         <n-flex justify="end">
