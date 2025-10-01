@@ -8,6 +8,7 @@ export type DHCPv4OfferInfo = {
 };
 
 export type DHCPv4OfferInfoItem = {
+  hostname: string | null;
   mac: MacAddr;
   ip: string;
   relative_active_time: number;

@@ -13,7 +13,7 @@ use crate::dump::udp_packet::dhcp::{
 use cidr::Ipv4Inet;
 use futures::TryStreamExt;
 use landscape_common::config::dhcp_v4_server::DHCPv4ServerConfig;
-use landscape_common::dhcp::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
+use landscape_common::dhcp::v4_server::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
 use landscape_common::net::MacAddr;
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use landscape_common::utils::time::get_f64_timestamp;
@@ -285,6 +285,7 @@ async fn handle_dhcp_message(
 
 #[derive(Debug)]
 struct DHCPv4ServerOfferedCache {
+    hostname: Option<String>,
     ip: Ipv4Addr,
     relative_offer_time: u64,
     valid_time: u32,
@@ -376,6 +377,7 @@ impl DHCPv4Server {
             offered_ip.insert(
                 each.mac,
                 DHCPv4ServerOfferedCache {
+                    hostname: None,
                     ip: each.ip,
                     relative_offer_time: 0,
                     valid_time: each.expire_time,
@@ -406,9 +408,19 @@ impl DHCPv4Server {
         }
     }
 
+    #[cfg(test)]
+    fn offer_ip_without_hostname(&mut self, mac_addr: &MacAddr) -> Option<Ipv4Addr> {
+        self.offer_ip(mac_addr, None)
+    }
+
     ///
-    fn offer_ip(&mut self, mac_addr: &MacAddr) -> Option<Ipv4Addr> {
+    fn offer_ip(&mut self, mac_addr: &MacAddr, hostname: Option<String>) -> Option<Ipv4Addr> {
         if let Some(DHCPv4ServerOfferedCache { ip, .. }) = self.offered_ip.get(mac_addr) {
+            tracing::info!(
+                "allocated exist ip: {:?} for mac: {:?}, hostname: {hostname:?}",
+                ip,
+                mac_addr
+            );
             return Some(ip.clone());
         }
 
@@ -427,9 +439,16 @@ impl DHCPv4Server {
             if self.allocated_host.contains_key(&address) {
                 seed += 1;
             } else {
+                tracing::info!(
+                    "allocated new ip: {:?} for mac: {:?}, hostname: {hostname:?}",
+                    address,
+                    mac_addr
+                );
+
                 self.offered_ip.insert(
                     mac_addr.clone(),
                     DHCPv4ServerOfferedCache {
+                        hostname,
                         ip: address,
                         relative_offer_time: self.relative_boot_time.elapsed().as_secs(),
                         valid_time: OFFER_VALID_TIME,
@@ -481,10 +500,21 @@ impl DHCPv4Server {
         ip_u32 >= start && ip_u32 <= end
     }
 
+    #[cfg(test)]
+    fn ack_request_without_hostname(&mut self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
+        self.ack_request(mac_addr, ip_addr, None)
+    }
+
     /// 检查是否存在过, 存在过直接刷新时间
-    pub fn ack_request(&mut self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
+    pub fn ack_request(
+        &mut self,
+        mac_addr: &MacAddr,
+        ip_addr: Ipv4Addr,
+        hostname: Option<String>,
+    ) -> bool {
         if let Some(offered_cache) = self.offered_ip.get_mut(mac_addr) {
             if offered_cache.ip == ip_addr {
+                offered_cache.hostname = hostname;
                 if !offered_cache.is_static {
                     // 非静态刷新掉 offer 时间
                     offered_cache.valid_time = self.address_lease_time;
@@ -512,6 +542,7 @@ impl DHCPv4Server {
             }
 
             let lease_cache = DHCPv4ServerOfferedCache {
+                hostname,
                 ip: ip_addr,
                 is_static: false,
                 valid_time: self.address_lease_time,
@@ -531,10 +562,19 @@ impl DHCPv4Server {
     pub fn get_offered_info(&self) -> DHCPv4OfferInfo {
         let mut offered_ips = Vec::with_capacity(self.offered_ip.len());
         let relative_boot_time = self.relative_boot_time.elapsed().as_secs();
-        for (mac, DHCPv4ServerOfferedCache { ip, relative_offer_time, valid_time, is_static }) in
-            self.offered_ip.iter()
+        for (
+            mac,
+            DHCPv4ServerOfferedCache {
+                ip,
+                relative_offer_time,
+                valid_time,
+                is_static,
+                hostname,
+            },
+        ) in self.offered_ip.iter()
         {
             offered_ips.push(DHCPv4OfferInfoItem {
+                hostname: hostname.clone(),
                 mac: mac.clone(),
                 ip: ip.clone(),
                 relative_active_time: *relative_offer_time,
@@ -575,7 +615,9 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
             if let Some(opt) = server.options_map.get(&each_index) {
                 options.push(opt.clone());
             } else {
-                tracing::warn!("在配置中找不到这个 option 配置, index: {each_index:?}");
+                tracing::warn!(
+                    "Note: Ignoring unsupported option request {each_index:?} from DHCP client"
+                );
             }
         }
     }
@@ -589,8 +631,8 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
     options.update_or_create_option(DhcpOptions::AddressLeaseTime(server.address_lease_time));
     options.update_or_create_option(DhcpOptions::ServerIdentifier(server.server_ip));
 
-    if let Some(client_addr) = server.offer_ip(&frame.chaddr) {
-        tracing::info!("allocated ip: {:?} for mac: {:?}", client_addr, frame.chaddr);
+    let hostname = frame.options.get_hostname();
+    if let Some(client_addr) = server.offer_ip(&frame.chaddr, hostname) {
         Some(DhcpEthFrame {
             op: 2,
             htype: 1,
@@ -646,11 +688,12 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
         return None;
     };
 
-    let (message_type, client_addr) = if server.ack_request(&frame.chaddr, client_ip) {
-        (DhcpOptionMessageType::Ack, client_ip)
-    } else {
-        (DhcpOptionMessageType::Nak, Ipv4Addr::UNSPECIFIED)
-    };
+    let (message_type, client_addr) =
+        if server.ack_request(&frame.chaddr, client_ip, frame.options.get_hostname()) {
+            (DhcpOptionMessageType::Ack, client_ip)
+        } else {
+            (DhcpOptionMessageType::Nak, Ipv4Addr::UNSPECIFIED)
+        };
 
     let mut options = DhcpOptionFrame { message_type, options, end: vec![255] };
 
@@ -697,13 +740,13 @@ mod tests {
         let ip = Ipv4Addr::new(192, 168, 5, 226);
         let mac1 = MacAddr::from_str("00:00:00:00:00:01").unwrap();
 
-        let result = dhcp_server.ack_request(&mac1, ip);
+        let result = dhcp_server.ack_request_without_hostname(&mac1, ip);
         tracing::debug!("result: {:?}", result);
 
-        let result = dhcp_server.offer_ip(&mac1);
+        let result = dhcp_server.offer_ip_without_hostname(&mac1);
         tracing::debug!("result: {:?}", result);
 
-        let result = dhcp_server.ack_request(&mac1, ip);
+        let result = dhcp_server.ack_request_without_hostname(&mac1, ip);
         tracing::debug!("result: {:?}", result);
     }
 
@@ -719,20 +762,20 @@ mod tests {
         let mut dhcp_server = DHCPv4Server::init(config);
         tracing::debug!("dhcp_server: {:#?}", dhcp_server);
         let mac1 = MacAddr::from_str("00:00:00:00:00:01").unwrap();
-        let result = dhcp_server.offer_ip(&mac1);
+        let result = dhcp_server.offer_ip_without_hostname(&mac1);
         tracing::debug!("result: {:?}", result);
 
         let mac1 = MacAddr::from_str("00:00:00:00:00:02").unwrap();
-        let result = dhcp_server.offer_ip(&mac1);
+        let result = dhcp_server.offer_ip_without_hostname(&mac1);
         tracing::debug!("result: {:?}", result);
 
         sleep(Duration::from_secs(25));
         let mac1 = MacAddr::from_str("00:00:00:00:00:03").unwrap();
-        let result = dhcp_server.offer_ip(&mac1);
+        let result = dhcp_server.offer_ip_without_hostname(&mac1);
         tracing::debug!("result: {:?}", result);
 
         let mac1 = MacAddr::from_str("00:00:00:00:00:04").unwrap();
-        let result = dhcp_server.offer_ip(&mac1);
+        let result = dhcp_server.offer_ip_without_hostname(&mac1);
         tracing::debug!("result: {:?}", result);
     }
 }

@@ -26,10 +26,15 @@ function caculate_time(item: DHCPv4OfferInfoItem): number {
   return expire_time - new Date().getTime();
 }
 
+function request_time(item: DHCPv4OfferInfoItem): number {
+  return item.relative_active_time * 1000 + props.info.boot_time;
+}
+
 const show_item = computed(() => {
   let reuslt = [];
   for (const each of props.info.offered_ips) {
     reuslt.push({
+      real_request_time: request_time(each),
       real_expire_time: caculate_time(each),
       ...each,
     });
@@ -64,13 +69,22 @@ async function finish() {
     <n-table v-if="info" :bordered="true" striped>
       <thead>
         <tr>
-          <th style="width: 33%">Mac 地址</th>
-          <th style="width: 33%">分配 IP</th>
-          <th style="width: 33%">分配租期时间 (s)</th>
+          <th style="width: 20%">主机名</th>
+          <th style="width: 20%">Mac 地址</th>
+          <th style="width: 20%">分配 IP</th>
+          <th style="width: 20%">最近一次请求时间</th>
+          <th style="width: 20%">剩余租期时间 (s)</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="item in show_item">
+          <td>
+            {{
+              frontEndStore.presentation_mode
+                ? mask_string(item.hostname)
+                : item.hostname
+            }}
+          </td>
           <td>
             {{
               frontEndStore.presentation_mode ? mask_string(item.mac) : item.mac
@@ -80,6 +94,10 @@ async function finish() {
             {{
               frontEndStore.presentation_mode ? mask_string(item.ip) : item.ip
             }}
+          </td>
+
+          <td>
+            <n-time :time="item.real_request_time"></n-time>
           </td>
           <td>
             <!-- {{ item.real_expire_time }} -->

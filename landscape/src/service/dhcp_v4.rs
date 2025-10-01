@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
-use landscape_common::dhcp::DHCPv4OfferInfo;
+use landscape_common::dhcp::v4_server::DHCPv4OfferInfo;
 use landscape_common::route::LanRouteInfo;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::DefaultServiceStatus;

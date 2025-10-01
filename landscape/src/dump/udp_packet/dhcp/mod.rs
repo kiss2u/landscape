@@ -116,6 +116,14 @@ impl DhcpOptionFrame {
         None
     }
 
+    pub fn get_hostname(&self) -> Option<String> {
+        if let Some(DhcpOptions::Hostname(hostname)) = self.has_option(12) {
+            Some(hostname)
+        } else {
+            None
+        }
+    }
+
     pub fn update_or_create_option(&mut self, new_option: DhcpOptions) {
         let new_index = new_option.get_index();
         if let Some(pos) = self.options.iter().position(|opt| opt.get_index() == new_index) {

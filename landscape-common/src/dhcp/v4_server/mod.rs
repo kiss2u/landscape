@@ -17,6 +17,7 @@ pub struct DHCPv4OfferInfo {
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/dhcp_v4_server.d.ts")]
 pub struct DHCPv4OfferInfoItem {
+    pub hostname: Option<String>,
     pub mac: MacAddr,
     pub ip: Ipv4Addr,
     #[ts(type = "number")]

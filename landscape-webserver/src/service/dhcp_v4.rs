@@ -9,7 +9,9 @@ use axum::{
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig, service::DefaultWatchServiceStatus,
 };
-use landscape_common::{dhcp::DHCPv4OfferInfo, service::controller_service_v2::ControllerService};
+use landscape_common::{
+    dhcp::v4_server::DHCPv4OfferInfo, service::controller_service_v2::ControllerService,
+};
 
 use crate::{error::LandscapeApiError, LandscapeApp};
 
