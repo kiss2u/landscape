@@ -7,7 +7,8 @@ use axum::{
 };
 
 use landscape_common::{
-    config::dhcp_v4_server::DHCPv4ServiceConfig, service::DefaultWatchServiceStatus,
+    config::dhcp_v4_server::DHCPv4ServiceConfig, dhcp::v4_server::ArpScanInfo,
+    service::DefaultWatchServiceStatus,
 };
 use landscape_common::{
     dhcp::v4_server::DHCPv4OfferInfo, service::controller_service_v2::ControllerService,
@@ -22,11 +23,13 @@ pub async fn get_dhcp_v4_service_paths() -> Router<LandscapeApp> {
         .route("/dhcp_v4/status", get(get_all_iface_service_status))
         .route("/dhcp_v4", post(handle_service_config))
         .route("/dhcp_v4/assigned_ips", get(get_all_iface_assigned_ips))
+        .route("/dhcp_v4/arp_scan_info", get(get_all_iface_arp_scan_info))
         .route(
             "/dhcp_v4/{iface_name}",
             get(get_iface_service_conifg).delete(delete_and_stop_iface_service),
         )
-        .route("/dhcp_v4/{iface_name}/assigned_ips", get(get_all_iface_assigned_ips_by_iface_name))
+        .route("/dhcp_v4/{iface_name}/assigned_ips", get(get_assigned_ips_by_iface_name))
+        .route("/dhcp_v4/{iface_name}/arp_scan_info", get(get_arp_scan_info_by_iface_name))
     // .route("/dhcp_v4/{iface_name}/restart", post(restart_mark_service_status))
 }
 
@@ -36,12 +39,27 @@ async fn get_all_iface_assigned_ips(
     LandscapeApiResp::success(state.dhcp_v4_server_service.get_assigned_ips().await)
 }
 
-async fn get_all_iface_assigned_ips_by_iface_name(
+async fn get_assigned_ips_by_iface_name(
     State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
 ) -> LandscapeApiResult<Option<DHCPv4OfferInfo>> {
     LandscapeApiResp::success(
         state.dhcp_v4_server_service.get_assigned_ips_by_iface_name(iface_name).await,
+    )
+}
+
+async fn get_all_iface_arp_scan_info(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<HashMap<String, Vec<ArpScanInfo>>> {
+    LandscapeApiResp::success(state.dhcp_v4_server_service.get_arp_scan_info().await)
+}
+
+async fn get_arp_scan_info_by_iface_name(
+    State(state): State<LandscapeApp>,
+    Path(iface_name): Path<String>,
+) -> LandscapeApiResult<Option<Vec<ArpScanInfo>>> {
+    LandscapeApiResp::success(
+        state.dhcp_v4_server_service.get_arp_scan_ips_by_iface_name(iface_name).await,
     )
 }
 

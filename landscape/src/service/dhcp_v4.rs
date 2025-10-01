@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
+use landscape_common::dhcp::v4_server::ArpScanInfo;
+use landscape_common::dhcp::v4_server::ArpScanStatus;
 use landscape_common::dhcp::v4_server::DHCPv4OfferInfo;
 use landscape_common::route::LanRouteInfo;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::DefaultServiceStatus;
 use landscape_common::service::DefaultWatchServiceStatus;
 use landscape_common::store::storev2::LandscapeStore;
+use landscape_common::LAND_ARP_SCAN_INTERVAL;
 use landscape_common::{
     config::dhcp_v4_server::DHCPv4ServiceConfig,
     observer::IfaceObserverAction,
@@ -18,6 +22,7 @@ use landscape_database::dhcp_v4_server::repository::DHCPv4ServerRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use crate::iface::get_iface_by_name;
 use crate::route::IpRouteService;
@@ -26,6 +31,7 @@ use crate::route::IpRouteService;
 #[allow(dead_code)]
 pub struct DHCPv4ServerStarter {
     iface_lease_map: Arc<RwLock<HashMap<String, Arc<RwLock<DHCPv4OfferInfo>>>>>,
+    iface_scan_map: Arc<RwLock<HashMap<String, Arc<RwLock<ArpScanStatus>>>>>,
     route_service: IpRouteService,
 }
 
@@ -34,6 +40,7 @@ impl DHCPv4ServerStarter {
         DHCPv4ServerStarter {
             route_service,
             iface_lease_map: Arc::new(RwLock::new(HashMap::new())),
+            iface_scan_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -48,17 +55,21 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
 
         if config.enable {
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
+                let store_key = config.get_store_key();
                 let assigned_ips = {
                     let mut write = self.iface_lease_map.write().await;
-                    let key = config.get_store_key();
                     write
-                        .entry(key.clone())
+                        .entry(store_key.clone())
                         .or_insert_with(|| Arc::new(RwLock::new(DHCPv4OfferInfo::default())))
                         .clone()
                 };
 
                 let route_service = self.route_service.clone();
                 let status = service_status.clone();
+                let stop_dhcp_server = CancellationToken::new();
+                let stop_dhcp_server_child = stop_dhcp_server.child_token();
+                let server_addr = config.config.server_ip_addr;
+                let network_mask = config.config.network_mask;
                 tokio::spawn(async move {
                     let info = LanRouteInfo {
                         ifindex: iface.index,
@@ -77,7 +88,44 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                     )
                     .await;
                     route_service.remove_ipv4_lan_route(&iface_name).await;
+                    stop_dhcp_server.cancel();
                 });
+
+                if let Some(mac) = iface.mac {
+                    // start arp scan
+                    let scand_arp_info = {
+                        let mut write = self.iface_scan_map.write().await;
+                        write
+                            .entry(store_key)
+                            .or_insert_with(|| Arc::new(RwLock::new(ArpScanStatus::new())))
+                            .clone()
+                    };
+
+                    tokio::spawn(async move {
+                        let mut scan_interval =
+                            tokio::time::interval(Duration::from_millis(LAND_ARP_SCAN_INTERVAL));
+                        loop {
+                            tokio::select! {
+                                _ = stop_dhcp_server_child.cancelled() => {
+                                    break;
+                                }
+                                _ = scan_interval.tick() => {
+                                    let result = crate::arp::scan::scan_ip_info(
+                                        iface.index,
+                                        mac,
+                                        server_addr,
+                                        network_mask,
+                                    ).await;
+
+                                    let mut arp_infos = scand_arp_info.write().await;
+                                    arp_infos.insert_new_info(ArpScanInfo::new(result));
+                                }
+                            }
+                        }
+
+                        tracing::info!("DHCPv4 Server ARP scan stop");
+                    });
+                }
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
             }
@@ -209,6 +257,38 @@ impl DHCPv4ServerManagerService {
         let Some(offer_info) = info else { return None };
 
         let data = offer_info.read().await.clone();
+        return Some(data);
+    }
+
+    pub async fn get_arp_scan_info(&self) -> HashMap<String, Vec<ArpScanInfo>> {
+        let mut result = HashMap::new();
+
+        let map = {
+            let read_lock = self.server_starter.iface_scan_map.read().await;
+            read_lock.clone()
+        };
+
+        for (iface_name, assigned_ips) in map {
+            if let Ok(read) = assigned_ips.try_read() {
+                result.insert(iface_name, read.get_arp_info());
+            }
+        }
+
+        result
+    }
+
+    pub async fn get_arp_scan_ips_by_iface_name(
+        &self,
+        iface_name: String,
+    ) -> Option<Vec<ArpScanInfo>> {
+        let info = {
+            let read_lock = self.server_starter.iface_scan_map.read().await;
+            read_lock.get(&iface_name).map(Clone::clone)
+        };
+
+        let Some(offer_info) = info else { return None };
+
+        let data = offer_info.read().await.get_arp_info();
         return Some(data);
     }
 }

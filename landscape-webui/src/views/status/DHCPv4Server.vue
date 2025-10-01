@@ -1,6 +1,12 @@
 <script lang="ts" setup>
-import { get_dhcp_v4_assigned_ips } from "@/api/service_dhcp_v4";
-import { DHCPv4OfferInfo } from "@/rust_bindings/common/dhcp_v4_server";
+import {
+  get_all_iface_arp_scan_info,
+  get_dhcp_v4_assigned_ips,
+} from "@/api/service_dhcp_v4";
+import {
+  ArpScanInfo,
+  DHCPv4OfferInfo,
+} from "@/rust_bindings/common/dhcp_v4_server";
 import { info } from "console";
 import { computed, onMounted, ref } from "vue";
 
@@ -10,6 +16,11 @@ onMounted(async () => {
 
 const loading = ref(false);
 const infos = ref<{ label: string; value: DHCPv4OfferInfo | null }[]>([]);
+const arp_infos = ref<Map<string, ArpScanInfo[]>>(new Map());
+async function get_arp_info() {
+  arp_infos.value = await get_all_iface_arp_scan_info();
+}
+
 async function get_info() {
   try {
     loading.value = true;
@@ -26,6 +37,7 @@ async function get_info() {
   } finally {
     loading.value = false;
   }
+  await get_arp_info();
 }
 </script>
 
@@ -42,6 +54,7 @@ async function get_info() {
         :key="index"
         :iface_name="data.label"
         :info="data.value"
+        :arp_info="arp_infos.get(data.label)"
       ></AssignedIpTable>
     </n-flex>
     <n-empty style="flex: 1" v-else></n-empty
