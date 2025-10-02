@@ -80,7 +80,12 @@ async fn init_service_from_config(
                     .args(&["addr", "add", &format!("{}/{}", ipv4, ipv4_mask), "dev", &iface_name])
                     .output();
                 tracing::debug!("start setting");
-                landscape_ebpf::map_setting::add_ipv4_wan_ip(iface.index, ipv4.clone(), ipv4_mask);
+                landscape_ebpf::map_setting::add_ipv4_wan_ip(
+                    iface.index,
+                    ipv4.clone(),
+                    default_router_ip.clone(),
+                    ipv4_mask,
+                );
 
                 let lan_info = LanRouteInfo {
                     ifindex: iface.index,

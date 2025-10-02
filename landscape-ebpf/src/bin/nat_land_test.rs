@@ -27,7 +27,7 @@ async fn main() {
     .unwrap();
 
     let addr = Ipv4Addr::new(10, 200, 1, 1);
-    landscape_ebpf::map_setting::add_ipv4_wan_ip(ifindex as u32, addr, 24);
+    landscape_ebpf::map_setting::add_ipv4_wan_ip(ifindex as u32, addr, None, 24);
     std::thread::spawn(move || {
         init_nat(ifindex, true, rx, NatConfig::default());
         let _ = other_tx.send(());

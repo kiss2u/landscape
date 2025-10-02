@@ -686,7 +686,6 @@ async fn bind_ipv4(
     route_service: &IpRouteService,
     mac_addr: &MacAddr,
 ) -> DhcpState {
-    landscape_ebpf::map_setting::add_ipv4_wan_ip(ifindex, new_yiaddr.clone(), mask as u8);
     if let Some(args) = ip_arg.take() {
         if let Err(result) = std::process::Command::new("ip").args(&args).output() {
             tracing::error!("{:?}", result);
@@ -727,7 +726,9 @@ async fn bind_ipv4(
     };
     route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
 
+    let mut gateway_ip = None;
     if let Some(DhcpOptions::Router(router_ip)) = options.has_option(3) {
+        gateway_ip = Some(router_ip.clone());
         route_service
             .insert_ipv4_wan_route(
                 &iface_name,
@@ -755,6 +756,12 @@ async fn bind_ipv4(
             LD_ALL_ROUTERS.del_route_by_iface(iface_name).await;
         }
     }
+    landscape_ebpf::map_setting::add_ipv4_wan_ip(
+        ifindex,
+        new_yiaddr.clone(),
+        gateway_ip,
+        mask as u8,
+    );
 
     let renew_time = tokio::time::Instant::now() + Duration::from_secs(renew_time);
     let rebinding_time = Instant::now() + Duration::from_secs(rebinding_time);

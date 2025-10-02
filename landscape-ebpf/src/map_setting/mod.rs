@@ -70,15 +70,15 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
     let _landscape_skel = landscape_open.load().unwrap();
 }
 
-pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, mask: u8) {
-    add_wan_ip(ifindex, IpAddr::V6(addr), mask, LANDSCAPE_IPV6_TYPE);
+pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, gateway: Option<Ipv6Addr>, mask: u8) {
+    add_wan_ip(ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask, LANDSCAPE_IPV6_TYPE);
 }
 
-pub fn add_ipv4_wan_ip(ifindex: u32, addr: Ipv4Addr, mask: u8) {
-    add_wan_ip(ifindex, IpAddr::V4(addr), mask, LANDSCAPE_IPV4_TYPE);
+pub fn add_ipv4_wan_ip(ifindex: u32, addr: Ipv4Addr, gateway: Option<Ipv4Addr>, mask: u8) {
+    add_wan_ip(ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask, LANDSCAPE_IPV4_TYPE);
 }
 
-fn add_wan_ip(ifindex: u32, addr: IpAddr, mask: u8, l3_protocol: u8) {
+fn add_wan_ip(ifindex: u32, addr: IpAddr, gateway: Option<IpAddr>, mask: u8, l3_protocol: u8) {
     tracing::debug!("add wan index - 1: {ifindex:?}");
     let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
 
@@ -95,6 +95,16 @@ fn add_wan_ip(ifindex: u32, addr: IpAddr, mask: u8, l3_protocol: u8) {
         std::net::IpAddr::V6(ipv6_addr) => {
             value.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
         }
+    };
+
+    match gateway {
+        Some(std::net::IpAddr::V4(ipv4_addr)) => {
+            value.gateway.ip = ipv4_addr.to_bits().to_be();
+        }
+        Some(std::net::IpAddr::V6(ipv6_addr)) => {
+            value.gateway = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
+        }
+        None => {}
     };
 
     let key = unsafe { plain::as_bytes(&key) };

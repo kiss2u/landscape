@@ -827,7 +827,12 @@ impl PPPoEClientManager {
         let session_id = session_id.clone();
         let server_mac_addr = server_mac_addr.clone();
         tokio::spawn(async move {
-            landscape_ebpf::map_setting::add_ipv4_wan_ip(index, client_ip, 32);
+            landscape_ebpf::map_setting::add_ipv4_wan_ip(
+                index,
+                client_ip,
+                Some(server_ip.clone()),
+                32,
+            );
             let _ = std::process::Command::new("ip")
                 .args(&["link", "set", "dev", &iface_name, "mtu", &format!("{}", mru)])
                 .output();

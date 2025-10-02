@@ -12,6 +12,7 @@ struct wan_ip_info_key {
 
 struct wan_ip_info_value {
     union u_inet_addr addr;
+    union u_inet_addr gateway;
     u8 mask;
 };
 
