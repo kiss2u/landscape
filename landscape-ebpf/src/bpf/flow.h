@@ -50,7 +50,6 @@ struct {
     __uint(max_entries, 2048);
 } flow_target_map SEC(".maps");
 
-
 // struct each_flow_target {
 //     __uint(type, BPF_MAP_TYPE_HASH);
 //     __uint(map_flags, BPF_F_NO_PREALLOC);
@@ -202,22 +201,126 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rt_target_map SEC(".maps");
 
-// struct lan_mac_cache_key {
-//     u8 ip[16];
-//     u8 l3_protocol;
-//     u8 _pad[3];
-// };
+struct rt_cache_key {
+    struct in6_addr local_addr;
+    struct in6_addr remote_addr;
+} __rt_cache_key;
 
-// struct lan_mac_cache {
-//     u8 mac[6];
-//     u8 _pad[2];
-// };
+struct rt_cache_value {
+    union {
+        __u32 mark_value;
+        __u32 ifindex;
+    };
+} __rt_cache_value;
 
-// struct {
-//     __uint(type, BPF_MAP_TYPE_LRU_HASH);
-//     __type(key, struct lan_mac_cache_key);
-//     __type(value, struct lan_mac_cache);
-//     __uint(max_entries, 65535);
-// } ip_mac_tab SEC(".maps");
+#define WAN_CACHE 0
+#define LAN_CACHE 1
+
+// 缓存
+struct each_cache_hash {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __type(key, struct rt_cache_key);
+    __type(value, struct rt_cache_value);
+    __uint(max_entries, 65536);
+} __each_cache_map SEC(".maps");
+
+// flow <-> 对应规则 map
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
+    __type(key, u32);
+    __uint(max_entries, 4);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+    __array(values, struct each_cache_hash);
+} rt_cache_map SEC(".maps");
+
+static __always_inline int setting_cache_in_wan(const struct route_context *context, u32 ifindex) {
+#define BPF_LOG_TOPIC "setting_cache_in_wan"
+    struct rt_cache_key search_key = {0};
+    u32 key = LAN_CACHE;
+    COPY_ADDR_FROM(search_key.local_addr.in6_u.u6_addr8, context->daddr.in6_u.u6_addr8);
+    COPY_ADDR_FROM(search_key.remote_addr.in6_u.u6_addr8, context->saddr.in6_u.u6_addr8);
+
+    void *lan_cache = bpf_map_lookup_elem(&rt_cache_map, &key);
+    if (lan_cache) {
+        struct rt_cache_value *target = bpf_map_lookup_elem(lan_cache, &search_key);
+        if (target) {
+            // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+            //     bpf_log_info("Already cached %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
+            //                 search_key.remote_addr.in6_u.u6_addr8);
+            // } else {
+            //     bpf_log_info("Already cached %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
+            //                 search_key.remote_addr.in6_u.u6_addr8);
+            // }
+            return TC_ACT_OK;
+        }
+    }
+
+    key = WAN_CACHE;
+    void *wan_cache = bpf_map_lookup_elem(&rt_cache_map, &key);
+    if (wan_cache) {
+        struct rt_cache_value *target = bpf_map_lookup_elem(wan_cache, &search_key);
+        if (target) {
+            target->ifindex = ifindex;
+        } else {
+            struct rt_cache_value new_target_cache = {0};
+            new_target_cache.ifindex = ifindex;
+            bpf_map_update_elem(wan_cache, &search_key, &new_target_cache, BPF_ANY);
+        }
+
+        // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        //     bpf_log_info("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
+        //                  search_key.remote_addr.in6_u.u6_addr8);
+        // } else {
+        //     bpf_log_info("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
+        //                  search_key.remote_addr.in6_u.u6_addr8);
+        // }
+    } else {
+        bpf_log_info("could not find wan_cache: %d", key);
+    }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline int setting_cache_in_lan(const struct route_context *context,
+                                                u32 flow_mark) {
+#define BPF_LOG_TOPIC "setting_cache_in_lan"
+    struct rt_cache_key search_key = {0};
+    u32 key = WAN_CACHE;
+    COPY_ADDR_FROM(search_key.local_addr.in6_u.u6_addr8, context->saddr.in6_u.u6_addr8);
+    COPY_ADDR_FROM(search_key.remote_addr.in6_u.u6_addr8, context->daddr.in6_u.u6_addr8);
+
+    void *wan_cache = bpf_map_lookup_elem(&rt_cache_map, &key);
+    if (wan_cache) {
+        struct rt_cache_value *target = bpf_map_lookup_elem(wan_cache, &search_key);
+        if (target) {
+            return TC_ACT_OK;
+        }
+    }
+
+    key = LAN_CACHE;
+    void *lan_cache = bpf_map_lookup_elem(&rt_cache_map, &key);
+    if (lan_cache) {
+        struct rt_cache_value *target = bpf_map_lookup_elem(lan_cache, &search_key);
+        if (target) {
+            target->mark_value = flow_mark;
+        } else {
+            struct rt_cache_value new_target_cache = {0};
+            new_target_cache.mark_value = flow_mark;
+            bpf_map_update_elem(lan_cache, &search_key, &new_target_cache, BPF_ANY);
+        }
+
+        // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        //     bpf_log_info("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
+        //                  search_key.remote_addr.in6_u.u6_addr8);
+        // } else {
+        //     bpf_log_info("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
+        //                  search_key.remote_addr.in6_u.u6_addr8);
+        // }
+    }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
 
 #endif /* __LD_FLOW_H__ */

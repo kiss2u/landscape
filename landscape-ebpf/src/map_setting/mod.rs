@@ -29,7 +29,7 @@ pub mod metric;
 pub mod nat;
 pub mod route;
 
-pub(crate) fn init_path(paths: LandscapeMapPath) {
+pub(crate) fn init_path(paths: &LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
     // landscape_builder.obj_builder.debug(true);
     let mut open_object = MaybeUninit::uninit();
@@ -66,8 +66,11 @@ pub(crate) fn init_path(paths: LandscapeMapPath) {
 
     landscape_open.maps.rt_lan_map.set_pin_path(&paths.rt_lan_map).unwrap();
     landscape_open.maps.rt_target_map.set_pin_path(&paths.rt_target_map).unwrap();
+    landscape_open.maps.rt_cache_map.set_pin_path(&paths.rt_cache_map).unwrap();
 
     let _landscape_skel = landscape_open.load().unwrap();
+    route::cache::init_route_wan_cache_inner_map(paths);
+    route::cache::init_route_lan_cache_inner_map(paths);
 }
 
 pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, gateway: Option<Ipv6Addr>, mask: u8) {

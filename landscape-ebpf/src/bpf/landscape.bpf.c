@@ -184,16 +184,75 @@ int xdp_pass(struct xdp_md *ctx) {
 #undef BPF_LOG_TOPIC
 }
 
+// struct test_item {
+//     u64 key;
+// };
+
+// struct {
+//     __uint(type, BPF_MAP_TYPE_LRU_HASH);
+//     __type(key, u32);
+//     __type(value, struct test_item);
+//     __uint(max_entries, 1024);
+// } test_map SEC(".maps");
+
 SEC("tc")
 int mark_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<< mark_egress"
-
+    u64 time1, time2, time3;
     struct ethhdr *eth;
     if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
         return TC_ACT_UNSPEC;
     }
-
     bpf_log_info("h_proto: %x", bpf_ntohs(eth->h_proto));
+
+    // time1 = bpf_ktime_get_ns();
+    // time2 = bpf_ktime_get_ns();
+    // time3 = time2 - time1;
+    
+    // bpf_log_info("bpf_ktime_get_ns time: %u", time3);
+
+
+    // struct test_item item = {0};
+    // struct test_item *item2;
+    // u32 key = 0;
+    // u64 index = 0;
+    // u32 num = 3;
+    
+    // time1 = bpf_ktime_get_ns();
+    // item2 = bpf_map_lookup_elem(&test_map, &key);
+    // if (item2 != NULL) {
+    //     __sync_fetch_and_add(&item2->key, 1);
+    //     index = item2->key;
+    // }
+    
+
+    // if (index %num == 0) {
+    //     time1 = bpf_ktime_get_ns();
+    //     bpf_map_update_elem(&test_map, &key, &item, BPF_ANY);
+    //     time2 = bpf_ktime_get_ns();
+
+    //     bpf_log_info("insert1 time: %u", time2 - time1 - time3);
+    // } else if (index %num ==1) {
+    //     time1 = bpf_ktime_get_ns();
+    //     item2 = bpf_map_lookup_elem(&test_map, &key);
+    //     if (item2 == NULL) {
+    //         bpf_map_update_elem(&test_map, &key, &item, BPF_ANY);
+    //     }
+    //     time2 = bpf_ktime_get_ns();
+
+    //     bpf_log_info("insert2 time: %u", time2 - time1 - time3);
+    // } else if (index %num ==2) {
+    //     time1 = bpf_ktime_get_ns();
+    //     bpf_map_update_elem(&test_map, &key, &item, BPF_NOEXIST );
+    //     time2 = bpf_ktime_get_ns();
+
+    //     bpf_log_info("insert BPF_NOEXIST  time: %u", time2 - time1 - time3);
+
+    // }
+    
+    // time2 = bpf_ktime_get_ns();
+    // bpf_log_info("__sync_fetch_and_add time: %u", time2 - time1 - time3);
+    
 
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

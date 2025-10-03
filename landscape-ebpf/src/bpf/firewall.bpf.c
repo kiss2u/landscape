@@ -453,7 +453,9 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
         // bpf_log_info("call back remove conn");
         ret = bpf_map_delete_elem(&fire2_conn_map, key);
         if (ret) {
-            bpf_log_error("call back remove conn error: %pI4:%d->%pI4:%d", &key->local_addr, bpf_ntohs(key->local_port), &value->trigger_addr, bpf_ntohs(value->trigger_port));
+            bpf_log_error("call back remove conn error: %pI4:%d->%pI4:%d", &key->local_addr,
+                          bpf_ntohs(key->local_port), &value->trigger_addr,
+                          bpf_ntohs(value->trigger_port));
         }
         return 0;
     }
@@ -1061,6 +1063,10 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
         //     "packet ip:%pI4:%d->%pI4:%d, ip_protocol: %d", &packet_info.ip_hdr.pair_ip.src_addr,
         //     bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port), &packet_info.ip_hdr.pair_ip.dst_addr,
         //     bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port), packet_info.ip_hdr.ip_protocol);
+        u32 mark = skb->mark;
+        barrier_var(mark);
+        skb->mark = replace_cache_mask(mark, INGRESS_STATIC_MARK);
+        // bpf_log_info("set wan ingress mark: %u", skb->mark);
         return TC_ACT_UNSPEC;
     }
     return TC_ACT_SHOT;
@@ -1241,6 +1247,10 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
         //     "packet ip:%pI4:%d->%pI4:%d, ip_protocol: %d", &packet_info.ip_hdr.pair_ip.src_addr,
         //     bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port), &packet_info.ip_hdr.pair_ip.dst_addr,
         //     bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port), packet_info.ip_hdr.ip_protocol);
+        u32 mark = skb->mark;
+        barrier_var(mark);
+        skb->mark = replace_cache_mask(mark, INGRESS_STATIC_MARK);
+        // bpf_log_info("set wan ingress mark: %u", skb->mark);
         return TC_ACT_UNSPEC;
     }
     return TC_ACT_SHOT;

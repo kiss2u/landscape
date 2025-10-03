@@ -14,13 +14,13 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 const volatile int current_eth_net_offset = 14;
 
 // todo: 将 flow_target_info 独立出来维护
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __uint(map_flags, BPF_F_NO_COMMON_LRU);
-    __type(key, struct old_flow_cache_key);
-    __type(value, struct flow_target_info);
-    __uint(max_entries, 4096);
-} flow_cache_map SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_LRU_HASH);
+//     __uint(map_flags, BPF_F_NO_COMMON_LRU);
+//     __type(key, struct old_flow_cache_key);
+//     __type(value, struct flow_target_info);
+//     __uint(max_entries, 4096);
+// } flow_cache_map SEC(".maps");
 
 static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
     u8 mac[6];
@@ -480,6 +480,58 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int search_route_in_lan(struct __sk_buff *skb,
+                                               const int current_eth_net_offset,
+                                               const struct route_context *context,
+                                               u32 *flow_mark) {
+#define BPF_LOG_TOPIC "search_route_in_lan"
+    int ret = 0;
+    u32 key = WAN_CACHE;
+    struct rt_cache_key search_key = {0};
+    COPY_ADDR_FROM(search_key.local_addr.in6_u.u6_addr8, context->saddr.in6_u.u6_addr8);
+    COPY_ADDR_FROM(search_key.remote_addr.in6_u.u6_addr8, context->daddr.in6_u.u6_addr8);
+
+    // Fist WAN
+    void *wan_cache = bpf_map_lookup_elem(&rt_cache_map, &key);
+    if (wan_cache) {
+        struct rt_cache_value *target = bpf_map_lookup_elem(wan_cache, &search_key);
+        if (target) {
+            struct wan_ip_info_key wan_search_key = {0};
+            wan_search_key.ifindex = target->ifindex;
+            wan_search_key.l3_protocol = context->l3_protocol;
+
+            struct wan_ip_info_value *wan_ip_info =
+                bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+            if (wan_ip_info != NULL) {
+                struct bpf_redir_neigh param;
+                if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+                    param.nh_family = AF_INET;
+                } else {
+                    param.nh_family = AF_INET6;
+                }
+
+                COPY_ADDR_FROM(param.ipv6_nh, wan_ip_info->gateway.bits);
+                ret = bpf_redirect_neigh(target->ifindex, &param, sizeof(param), 0);
+                return ret;
+            }
+        }
+    }
+
+    key = LAN_CACHE;
+    void *lan_cache = bpf_map_lookup_elem(&rt_cache_map, &key);
+    if (lan_cache) {
+        struct rt_cache_value *target = bpf_map_lookup_elem(lan_cache, &search_key);
+        if (target) {
+            *flow_mark = target->mark_value;
+            return pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, context,
+                                                target->mark_value);
+        }
+    }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
 // ================================
 // LAN Route Egress
 // ================================
@@ -533,6 +585,12 @@ int lan_route_ingress(struct __sk_buff *skb) {
     //     }
     // }
 
+    ret = search_route_in_lan(skb, current_eth_net_offset, &context, &flow_mark);
+    if (ret != TC_ACT_OK) {
+        skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
+        return ret;
+    }
+
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
@@ -547,8 +605,11 @@ int lan_route_ingress(struct __sk_buff *skb) {
     skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
 
     ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_mark);
-    return ret;
 
+    if (ret == TC_ACT_REDIRECT) {
+        setting_cache_in_lan(&context, flow_mark);
+    }
+    return ret;
 #undef BPF_LOG_TOPIC
 }
 
@@ -583,11 +644,15 @@ int wan_route_ingress(struct __sk_buff *skb) {
     }
 
     ret = lan_redirect_check(skb, current_eth_net_offset, &context);
-    if (ret != TC_ACT_OK) {
-        return ret;
+    if (ret == TC_ACT_REDIRECT) {
+        u8 mark = get_cache_mask(skb->mark);
+        if (mark == INGRESS_STATIC_MARK) {
+            // bpf_log_info("get wan ingress mark: %u", mark);
+            setting_cache_in_wan(&context, skb->ifindex);
+        }
     }
 
-    return TC_ACT_UNSPEC;
+    return ret == TC_ACT_OK ? TC_ACT_UNSPEC : ret;
 #undef BPF_LOG_TOPIC
 }
 

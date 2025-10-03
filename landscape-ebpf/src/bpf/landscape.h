@@ -7,6 +7,7 @@
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
 #define TC_ACT_PIPE 3
+#define TC_ACT_REDIRECT 7
 
 #define BPF_LOOP_RET_CONTINUE 0
 #define BPF_LOOP_RET_BREAK 1
@@ -24,6 +25,7 @@
 // L4 proto number
 #define IPPROTO_ICMPV6 58
 
+// EGRESS MARK
 #define OK_MARK 0
 #define DIRECT_MARK 1
 #define DROP_MARK 2
@@ -59,14 +61,14 @@ static __always_inline u32 replace_flow_id(u32 original, u8 new_id) {
 
 // 替换 FLOW_ACTION_MASK 对应的 8~14 位
 static __always_inline u32 replace_flow_action(u32 original, u8 new_action) {
-    original &= ~FLOW_ACTION_MASK;               // 清除原来的 Action 部分
-    original |= ((u32)new_action & 0x7F) << 8;   // 只取低 7 bit，写入 8~14 位
+    original &= ~FLOW_ACTION_MASK;              // 清除原来的 Action 部分
+    original |= ((u32)new_action & 0x7F) << 8;  // 只取低 7 bit，写入 8~14 位
     return original;
 }
 
 // 替换 FLOW_ALLOW_REUSE_PORT_MASK 对应的第 15 位
 static __always_inline u32 set_flow_allow_reuse_port(u32 original, bool allow) {
-    original &= ~FLOW_ALLOW_REUSE_PORT_MASK;     // 清除原来的标志位
+    original &= ~FLOW_ALLOW_REUSE_PORT_MASK;  // 清除原来的标志位
     if (allow) {
         original |= FLOW_ALLOW_REUSE_PORT_MASK;  // 设置为 1
     }
@@ -80,12 +82,11 @@ static __always_inline u32 replace_flow_source(u32 original, u8 new_source) {
     return original;
 }
 
-
 static __always_inline u8 get_flow_id(u32 original) { return (original & FLOW_ID_MASK); }
 
 // 获取 action
 static __always_inline u8 get_flow_action(u32 original) {
-    return (original & FLOW_ACTION_MASK) >> 8;   // 返回 0–127
+    return (original & FLOW_ACTION_MASK) >> 8;  // 返回 0–127
 }
 
 // 获取 reuse port 标志
@@ -96,6 +97,21 @@ static __always_inline bool get_flow_allow_reuse_port(u32 original) {
 static __always_inline u8 get_flow_source(u32 original) {
     return (original & FLOW_SOURCE_MASK) >> 24;
 }
+
+// INGRESS MARK
+#define INGRESS_NO_MARK 0
+#define INGRESS_STATIC_MARK 1
+
+#define INGRESS_CACHE_MASK 0x000000FF
+
+// 替换 INGRESS_CACHE_MASK 对应的 0~7 位
+static __always_inline u32 replace_cache_mask(u32 original, u8 new_mark) {
+    original &= ~INGRESS_CACHE_MASK;
+    original |= ((u32)new_mark & 0xFF);
+    return original;
+}
+
+static __always_inline u8 get_cache_mask(u32 original) { return (original & INGRESS_CACHE_MASK); }
 
 #define PRINT_MAC_ADDR(mac)                                                                        \
     bpf_log_info("mac: %02x:%02x:%02x:%02x:%02x:%02x", (mac)[0], (mac)[1], (mac)[2], (mac)[3],     \

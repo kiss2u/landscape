@@ -11,6 +11,8 @@ use crate::{
     LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
 };
 
+pub mod cache;
+
 pub fn add_lan_route(lan_info: LanRouteInfo) {
     let rt_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_lan_map).unwrap();
     let mut key = lan_route_key::default();
