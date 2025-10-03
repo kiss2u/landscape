@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use landscape_common::flow::{config::FlowConfig, FlowMathPair, PacketMatchMark};
+use landscape_common::flow::{config::FlowConfig, FlowEbpfMatchPair, FlowEntryRule};
 
-fn convert_mark_map_to_vec_mark(value: HashMap<PacketMatchMark, u32>) -> Vec<FlowMathPair> {
+fn convert_mark_map_to_vec_mark(value: HashMap<FlowEntryRule, u32>) -> Vec<FlowEbpfMatchPair> {
     let mut result = Vec::with_capacity(value.len());
     for (match_rule, flow_id) in value.into_iter() {
-        result.push(FlowMathPair { match_rule, flow_id });
+        result.push(FlowEbpfMatchPair::new(match_rule, flow_id));
     }
     result
 }
@@ -41,9 +41,12 @@ pub async fn update_flow_matchs(rules: Vec<FlowConfig>, old_rules: Vec<FlowConfi
     //         landscape_ebpf::map_setting::flow_target::add_flow_target_info(info);
     //     }
     // }
+
+    // TODO: 应当只清理当前 Flow 的缓存
+    landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
 }
 
-fn flow_rule_into_hash(rules: Vec<FlowConfig>) -> HashMap<PacketMatchMark, u32> {
+fn flow_rule_into_hash(rules: Vec<FlowConfig>) -> HashMap<FlowEntryRule, u32> {
     let mut new_mark_infos = HashMap::new();
 
     for ip_rule in rules.into_iter() {
@@ -58,9 +61,9 @@ fn flow_rule_into_hash(rules: Vec<FlowConfig>) -> HashMap<PacketMatchMark, u32> 
 }
 
 fn find_delete_rule_keys(
-    new_rules: &mut HashMap<PacketMatchMark, u32>,
-    old_rules: HashMap<PacketMatchMark, u32>,
-) -> Vec<PacketMatchMark> {
+    new_rules: &mut HashMap<FlowEntryRule, u32>,
+    old_rules: HashMap<FlowEntryRule, u32>,
+) -> Vec<FlowEntryRule> {
     let mut delete_keys = vec![];
     for (key, old_mark) in old_rules.into_iter() {
         if let Some(mark) = new_rules.get(&key) {

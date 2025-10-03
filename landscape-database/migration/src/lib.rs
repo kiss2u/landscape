@@ -22,6 +22,7 @@ mod m20250706_170000_route_wan;
 mod m20250814_084024_static_nat_mapping;
 mod m20250901_031230_dns_redirect;
 mod m20250903_112656_dns_upstream;
+mod m20251003_123332_add_mac_match_in_flow;
 mod tables;
 
 pub struct Migrator;
@@ -52,6 +53,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250814_084024_static_nat_mapping::Migration),
             Box::new(m20250901_031230_dns_redirect::Migration),
             Box::new(m20250903_112656_dns_upstream::Migration),
+            Box::new(m20251003_123332_add_mac_match_in_flow::Migration),
         ]
     }
 }

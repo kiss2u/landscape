@@ -109,11 +109,31 @@ function switch_target() {}
           />
         </n-form-item-gi>
       </n-grid>
-      <n-form-item label="分流入口匹配规则">
+      <n-form-item>
+        <template #label>
+          <Notice
+            >分流入口匹配规则
+            <template #msg>
+              符合规则的客户端将会使用这个流<br />
+              注意优先级 IP > Mac <br />
+              当前未有重复检测， 需要注意不同 Flow 的规则是否重叠
+            </template>
+          </Notice>
+        </template>
         <FlowMatchRule v-model:match_rules="rule.flow_match_rules">
         </FlowMatchRule>
       </n-form-item>
-      <n-form-item label="分流出口规则 ( 当前仅支持一个出口 )">
+      <n-form-item label="">
+        <template #label>
+          <Notice>
+            分流出口规则 ( 当前仅支持一个出口 )
+            <template #msg>
+              符合规则的客户端将会默认使用这个出口进行发送流量<br />
+              除非 `DNS 规则` 或者 `目标 IP` 将流量重定向到别的流
+            </template>
+          </Notice>
+        </template>
+
         <FlowTargetRule v-model:target_rules="rule.flow_targets">
         </FlowTargetRule>
       </n-form-item>

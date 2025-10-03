@@ -92,6 +92,8 @@ impl ConfigController for DstIpRuleService {
             let geo_ip_service = self.geo_ip_service.clone();
             update_flow_dst_ip_map(geo_ip_service, flow_id, rules).await;
         }
+        // TODO: 应当只清理当前 Flow 的缓存
+        landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
     }
 }
 

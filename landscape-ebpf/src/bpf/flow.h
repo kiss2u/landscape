@@ -169,21 +169,6 @@ struct route_target_key {
     u8 _pad[3];
 };
 
-struct route_context {
-    struct in6_addr saddr;
-    struct in6_addr daddr;
-    // IP 协议: IPv4 Ipv6, LANDSCAPE_IPV4_TYPE | LANDSCAPE_IPV6_TYPE
-    u8 l3_protocol;
-    // IP 层协议: TCP / UDP
-    u8 l4_protocol;
-    // tos value
-    u8 tos;
-    // TODO
-    // u16 dst_port;
-    u8 smac[6];
-    u8 _pad[3];
-};
-
 struct route_target_info {
     u32 ifindex;
     struct in6_addr gate_addr;

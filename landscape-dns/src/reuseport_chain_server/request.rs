@@ -145,6 +145,8 @@ impl ChainDnsRequestHandle {
         let redirect_solution =
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
         self.redirect_solution.store(Arc::new(redirect_solution));
+        // TODO: 应当只清理当前 Flow 的缓存
+        landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
     }
 
     pub async fn check_domain(&self, domain: &str, query_type: RecordType) -> CheckChainDnsResult {

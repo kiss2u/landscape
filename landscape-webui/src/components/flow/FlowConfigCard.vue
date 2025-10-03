@@ -5,6 +5,7 @@ import FlowEditModal from "@/components/flow/FlowEditModal.vue";
 import DnsRuleDrawer from "@/components/dns/DnsRuleDrawer.vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { del_flow_rules } from "@/api/flow";
+import FlowEntryRuleExhibit from "@/components/flow/FlowEntryRuleExhibit.vue";
 
 import { Docker, NetworkWired } from "@vicons/fa";
 
@@ -133,13 +134,10 @@ const title_name = computed(() =>
       <n-empty :show-icon="false" description="没有入口规则"> </n-empty>
     </n-flex>
     <n-flex v-else>
-      <n-tag v-for="item in config.flow_match_rules" :bordered="false">
-        {{
-          `${item.vlan_id ? `${item.vlan_id}@` : ""}${frontEndStore.MASK_INFO(
-            item.ip
-          )}/${item.prefix_len}`
-        }}
-      </n-tag>
+      <FlowEntryRuleExhibit
+        v-for="item in config.flow_match_rules"
+        :rule="item"
+      ></FlowEntryRuleExhibit>
     </n-flex>
     <template #action>
       <n-tag v-for="each in config.flow_targets" :bordered="false">

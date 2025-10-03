@@ -22,39 +22,48 @@ int reuseport_dns_dispatcher(struct sk_reuseport_md *reuse_md) {
     // struct bpf_sock *sk;
     // struct bpf_sock *msk = reuse_md->migrating_sk;
 
-    struct flow_match_key search_key = {0};
+    struct flow_match_key match_key = {0};
     int ret = 0;
     __u32 flow_id = 0;
-    // u8 mac_addr[6];
 
-    // ret = bpf_skb_load_bytes_relative(reuse_md, 6, &mac_addr, 6, BPF_HDR_START_MAC);
-    // if (!ret) {
-    //     PRINT_MAC_ADDR(mac_addr);
-    // }
-    if (reuse_md->eth_protocol == ETH_IPV4) {
-        search_key.prefixlen = 96;
-        search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-        ret = bpf_skb_load_bytes_relative(reuse_md, offsetof(struct iphdr, saddr),
-                                          &search_key.src_addr, 4, BPF_HDR_START_NET);
-        if (ret) {
-            bpf_log_info("reuseport_dns_dispatcher, read src IP error: %d", ret);
-            return SK_DROP;
-        }
-        // bpf_log_info("src ip: %pI4", &search_key.src_addr);
-    } else {
-        search_key.prefixlen = 192;
-        search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-        ret = bpf_skb_load_bytes_relative(reuse_md, offsetof(struct ipv6hdr, saddr),
-                                          &search_key.src_addr, 16, BPF_HDR_START_NET);
-        if (ret) {
-            bpf_log_info("reuseport_dns_dispatcher, read src IP error: %d", ret);
-            return SK_DROP;
-        }
+    ret = bpf_skb_load_bytes_relative(reuse_md, 6, &match_key.mac.mac, 6, BPF_HDR_START_MAC);
+    if (!ret) {
+        match_key.prefixlen = FLOW_MAC_MATCH_LEN;
+        match_key.is_match_ip = FLOW_ENTRY_MODE_MAC;
 
-        // bpf_log_info("src ip: %pI6", &search_key.src_addr);
+        // PRINT_MAC_ADDR(match_key.mac.mac);
+
+        u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &match_key);
+        if (flow_id_ptr != NULL) {
+            flow_id = *flow_id_ptr;
+        }
     }
 
-    u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &search_key);
+    match_key.is_match_ip = FLOW_ENTRY_MODE_IP;
+    if (reuse_md->eth_protocol == ETH_IPV4) {
+        match_key.prefixlen = FLOW_IP_IPV4_MATCH_LEN;
+        match_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+        ret = bpf_skb_load_bytes_relative(reuse_md, offsetof(struct iphdr, saddr),
+                                          &match_key.src_addr, 4, BPF_HDR_START_NET);
+        if (ret) {
+            bpf_log_info("reuseport_dns_dispatcher, read src IP error: %d", ret);
+            return SK_DROP;
+        }
+        // bpf_log_info("src ip: %pI4", &match_key.src_addr);
+    } else {
+        match_key.prefixlen = FLOW_IP_IPV6_MATCH_LEN;
+        match_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
+        ret = bpf_skb_load_bytes_relative(reuse_md, offsetof(struct ipv6hdr, saddr),
+                                          &match_key.src_addr, 16, BPF_HDR_START_NET);
+        if (ret) {
+            bpf_log_info("reuseport_dns_dispatcher, read src IP error: %d", ret);
+            return SK_DROP;
+        }
+
+        // bpf_log_info("src ip: %pI6", &match_key.src_addr);
+    }
+
+    u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &match_key);
     if (flow_id_ptr != NULL) {
         flow_id = *flow_id_ptr;
     }

@@ -56,11 +56,31 @@
 #define LANDSCAPE_IPV4_TYPE 0
 #define LANDSCAPE_IPV6_TYPE 1
 
+/// @brief Mac need pad 16 bit
+struct imac_addr {
+    u8 mac[6];
+};
+
 union u_inet_addr {
     __be32 all[4];
     __be32 ip;
     __be32 ip6[4];
     u8 bits[16];
+};
+
+struct route_context {
+    struct in6_addr saddr;
+    struct in6_addr daddr;
+    // IP 协议: IPv4 Ipv6, LANDSCAPE_IPV4_TYPE | LANDSCAPE_IPV6_TYPE
+    u8 l3_protocol;
+    // IP 层协议: TCP / UDP
+    u8 l4_protocol;
+    // tos value
+    u8 tos;
+    // TODO
+    // u16 dst_port;
+    u8 smac[6];
+    u8 _pad[3];
 };
 
 struct inet_pair {

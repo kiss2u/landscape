@@ -64,6 +64,8 @@ pub fn recreate_route_wan_cache_inner_map() {
     create_route_cache_inner_map(&MAP_PATHS.rt_cache_map, "rt_cache_wan".to_string(), WAN_CACHE);
 }
 
+/// 在修改了 DNS 规则， DST IP 规则。 Flow Match 规则后调用
+/// 使缓存失效
 pub fn recreate_route_lan_cache_inner_map() {
     create_route_cache_inner_map(&MAP_PATHS.rt_cache_map, "rt_cache_lan".to_string(), LAN_CACHE);
 }

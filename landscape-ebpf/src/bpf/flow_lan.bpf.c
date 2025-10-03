@@ -278,37 +278,12 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
                                         struct route_context *context, u32 *init_flow_id_) {
 #define BPF_LOG_TOPIC "flow_verdict"
 
-    struct flow_ip_cache_key cache_key = {0};
     int ret;
+    volatile u32 flow_id = *init_flow_id_ & 0xff;
 
-    // cache_key.match_key.l4_protocol; // 暂时不区分协议
-    cache_key.match_key.l3_protocol = context->l3_protocol;
-    cache_key.match_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 96 : 192;
-    COPY_ADDR_FROM(cache_key.match_key.src_addr.all, context->saddr.in6_u.u6_addr32);
-    COPY_ADDR_FROM(cache_key.dst_addr.all, context->daddr.in6_u.u6_addr32);
-
-    // 获得 flow_id
-    u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &cache_key.match_key);
-
-    volatile u32 flow_id;
-    if (flow_id_ptr == NULL) {
-        // 查不到 flow 配置, 如果按照原逻辑直接放行 会导致默认流中, 设置了转发 DNS 查询生效
-        // 但是 访问时 IP 在进行到此处时 被直接发送 就导致行为不一致
-        // if (skb->ingress_ifindex != 0) {
-        //     // 因为不是本机流量, 放行数据包
-        //     return TC_ACT_UNSPEC;
-        // }
-        // 是本机路由流量 ( DNS 中的 MARK 需要按照对应的 流去处理)
-        flow_id = *init_flow_id_ & 0xff;
-    } else {
-        flow_id = *flow_id_ptr;
+    if (match_flow_id(skb, current_eth_net_offset, context, &flow_id)) {
+        return TC_ACT_SHOT;
     }
-
-    // u8 flow_id_u8 = flow_id & 0xff;
-
-    // if (flow_id != 0) {
-    //     bpf_log_info("find flow_id: %d, ip: %pI4", flow_id, cache_key.match_key.src_addr.all);
-    // }
 
     volatile u32 flow_mark_action = *init_flow_id_;
     volatile u16 priority = 0xFFFF;
@@ -317,7 +292,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     ip_trie_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 64 : 160;
     ip_trie_key.l3_protocol = context->l3_protocol;
 
-    COPY_ADDR_FROM(ip_trie_key.addr, cache_key.dst_addr.all);
+    COPY_ADDR_FROM(ip_trie_key.addr, context->daddr.in6_u.u6_addr32);
     struct flow_ip_trie_value *ip_flow_mark_value = NULL;
     void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
     if (ip_rules_map != NULL) {
@@ -336,7 +311,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_n
     struct flow_dns_match_key key = {0};
     struct flow_dns_match_value *dns_rule_value = NULL;
     key.l3_protocol = context->l3_protocol;
-    COPY_ADDR_FROM(key.addr.all, cache_key.dst_addr.all);
+    COPY_ADDR_FROM(key.addr.all, context->daddr.in6_u.u6_addr32);
 
     // 查询 DNS 配置信息，查看是否有转发流的配置
     void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
@@ -372,19 +347,19 @@ apply_action:
     // bpf_log_info("dns_flow_id %d, flow_action: %d ", dns_flow_id, flow_action);
     if (flow_action == FLOW_KEEP_GOING) {
         // 无动作
-        // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", cache_key.dst_addr.all);
+        // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", context->daddr.in6_u.u6_addr32);
         flow_mark_action = replace_flow_id(flow_mark_action, flow_id & 0xFF);
     } else if (flow_action == FLOW_DIRECT) {
-        // bpf_log_info("FLOW_DIRECT ip: %pI4", cache_key.dst_addr.all);
+        // bpf_log_info("FLOW_DIRECT ip: %pI4", context->daddr.in6_u.u6_addr32);
         // RESET Flow ID
         // flow_id = 0;
         flow_mark_action = replace_flow_id(flow_mark_action, 0);
         goto keep_going;
     } else if (flow_action == FLOW_DROP) {
-        // bpf_log_info("FLOW_DROP ip: %pI4", cache_key.dst_addr.all);
+        // bpf_log_info("FLOW_DROP ip: %pI4", context->daddr.in6_u.u6_addr32);
         return TC_ACT_SHOT;
     } else if (flow_action == FLOW_REDIRECT) {
-        // bpf_log_info("FLOW_REDIRECT ip: %pI4, flow_id: %d", cache_key.dst_addr.all,
+        // bpf_log_info("FLOW_REDIRECT ip: %pI4, flow_id: %d", context->daddr.in6_u.u6_addr32,
         //              dns_flow_id);
         // flow_id = dns_flow_id;
     }
@@ -393,7 +368,7 @@ keep_going:
     // if (flow_mark_action != 0) {
     //     bpf_log_info("flow_mark_action value is : %u", flow_mark_action);
     //     bpf_log_info("get_flow_id value is : %u", get_flow_id(flow_mark_action));
-    //     bpf_log_info("dst ip: %pI4", cache_key.dst_addr.all);
+    //     bpf_log_info("dst ip: %pI4", context->daddr.in6_u.u6_addr32);
     // }
     *init_flow_id_ = flow_mark_action;
     return TC_ACT_OK;
