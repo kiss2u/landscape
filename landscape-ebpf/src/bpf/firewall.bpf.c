@@ -12,7 +12,7 @@
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
-const volatile int current_eth_net_offset = 14;
+const volatile u32 current_l3_offset = 14;
 
 #undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
@@ -614,16 +614,15 @@ static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool do_ne
 
 /// @brief 提取 IPv4 数据包中的主要内容
 /// @return
-static __always_inline int extract_v4_packet_info(struct __sk_buff *skb,
-                                                  struct packet_context *pcxt,
-                                                  int current_eth_net_offset) {
+static __always_inline int
+extract_v4_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 current_l3_offset) {
 #define BPF_LOG_TOPIC "extract_v4_packet_info"
     // pcxt->_pad = 0;
     int ret;
     if (pcxt == NULL) {
         return TC_ACT_SHOT;
     }
-    pcxt->l4_payload_offset = current_eth_net_offset;
+    pcxt->l4_payload_offset = current_l3_offset;
 
     ret = extract_iphdr_info(skb, &pcxt->l4_payload_offset, &pcxt->ip_hdr);
     if (ret != TC_ACT_OK) {
@@ -727,15 +726,14 @@ static __always_inline int extract_v4_packet_info(struct __sk_buff *skb,
 
 /// @brief 提取 IPv4 数据包中的主要内容
 /// @return
-static __always_inline int extract_v6_packet_info(struct __sk_buff *skb,
-                                                  struct packet_context *pcxt,
-                                                  int current_eth_net_offset) {
+static __always_inline int
+extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 current_l3_offset) {
 #define BPF_LOG_TOPIC "extract_v6_packet_info"
     int ret;
     if (pcxt == NULL) {
         return TC_ACT_SHOT;
     }
-    pcxt->l4_payload_offset = current_eth_net_offset;
+    pcxt->l4_payload_offset = current_l3_offset;
 
     ret = extract_ipv6hdr_info(skb, &pcxt->l4_payload_offset, &pcxt->ip_hdr);
     if (ret != TC_ACT_OK) {
@@ -839,10 +837,10 @@ static __always_inline int extract_v6_packet_info(struct __sk_buff *skb,
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
                                             bool *is_ipv4_) {
     bool is_ipv4;
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
             return TC_ACT_UNSPEC;
@@ -881,7 +879,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
 
     struct packet_context packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
-    int ret = extract_v4_packet_info(skb, &packet_info, current_eth_net_offset);
+    int ret = extract_v4_packet_info(skb, &packet_info, current_l3_offset);
     if (ret != TC_ACT_OK) {
         if (ret == TC_ACT_SHOT) {
             bpf_log_trace("invalid packet");
@@ -979,7 +977,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
 
     struct packet_context packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
-    int ret = extract_v4_packet_info(skb, &packet_info, current_eth_net_offset);
+    int ret = extract_v4_packet_info(skb, &packet_info, current_l3_offset);
     if (ret != TC_ACT_OK) {
         if (ret == TC_ACT_SHOT) {
             bpf_log_trace("invalid packet");
@@ -1079,7 +1077,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
 
     struct packet_context packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
-    int ret = extract_v6_packet_info(skb, &packet_info, current_eth_net_offset);
+    int ret = extract_v6_packet_info(skb, &packet_info, current_l3_offset);
     if (ret != TC_ACT_OK) {
         if (ret == TC_ACT_SHOT) {
             bpf_log_trace("invalid packet");
@@ -1170,7 +1168,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
 
     struct packet_context packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
-    int ret = extract_v6_packet_info(skb, &packet_info, current_eth_net_offset);
+    int ret = extract_v6_packet_info(skb, &packet_info, current_l3_offset);
     if (ret != TC_ACT_OK) {
         if (ret == TC_ACT_SHOT) {
             bpf_log_trace("invalid packet");
@@ -1264,7 +1262,7 @@ int egress_firewall(struct __sk_buff *skb) {
 
     bool is_ipv4;
     int ret;
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+    if (current_pkg_type(skb, current_l3_offset, &is_ipv4) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
@@ -1286,7 +1284,7 @@ int ingress_firewall(struct __sk_buff *skb) {
 
     bool is_ipv4;
     int ret;
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+    if (current_pkg_type(skb, current_l3_offset, &is_ipv4) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 

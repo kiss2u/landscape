@@ -10,7 +10,6 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
 #undef BPF_LOG_LEVEL
@@ -19,7 +18,7 @@ const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
 const volatile u16 mtu_size = 1492;
 
-const volatile int current_eth_net_offset = 14;
+const volatile u32 current_l3_offset = 14;
 
 #define MAX_SEGMENT_SIZE 2
 
@@ -91,14 +90,13 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
     // tcp hdr max is 60 - 20 = 40; 40 / 2 = 20;
     int times = (tcp_size - 20) / 2;
     times = times > 20 ? 20 : times;
-    struct tcp_option_hdr top_hdr = {0};
+    struct tcp_option_hdr *top_hdr;
     for (int i = 0; i < times; i++) {
-
-        if (bpf_skb_load_bytes(skb, option_offset, &top_hdr,sizeof(top_hdr))) {
+        if (VALIDATE_READ_DATA(skb, &top_hdr, option_offset, sizeof(*top_hdr))) {
             return;
         }
 
-        if (top_hdr.kind == MAX_SEGMENT_SIZE) {
+        if (top_hdr->kind == MAX_SEGMENT_SIZE) {
             if (VALIDATE_READ_DATA(skb, &mss, option_offset + 2, sizeof(*mss))) {
                 return;
             }
@@ -120,7 +118,7 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
 
             return;
         }
-        option_offset = option_offset + top_hdr.len;
+        option_offset = option_offset + top_hdr->len;
         if (option_offset >= option_offset_end) {
             return;
         }
@@ -129,11 +127,11 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, u32 current_l3_offset,
                                               __u32 *ip_hdr_len) {
     int ret = 0;
     bool is_ipv4;
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
             return TC_ACT_UNSPEC;
@@ -160,7 +158,7 @@ static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, int current
             return TC_ACT_UNSPEC;
         }
     }
-    __u32 l3_offset = current_eth_net_offset;
+    __u32 l3_offset = current_l3_offset;
 
     if (is_ipv4) {
         struct iphdr *iph;
@@ -187,8 +185,8 @@ int clamp_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "clamp_ingress"
 
     volatile __u32 ip_hdr_len = 0;
-    if (!find_and_clamp_tcp(skb, current_eth_net_offset, &ip_hdr_len)) {
-        do_mss_clamp(skb, ip_hdr_len + current_eth_net_offset, mtu_size - ip_hdr_len - TCP_HDR_LEN);
+    if (!find_and_clamp_tcp(skb, current_l3_offset, &ip_hdr_len)) {
+        do_mss_clamp(skb, ip_hdr_len + current_l3_offset, mtu_size - ip_hdr_len - TCP_HDR_LEN);
     }
 
     return TC_ACT_UNSPEC;
@@ -200,8 +198,8 @@ int clamp_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "clamp_egress"
 
     volatile __u32 ip_hdr_len = 0;
-    if (!find_and_clamp_tcp(skb, current_eth_net_offset, &ip_hdr_len)) {
-        do_mss_clamp(skb, ip_hdr_len + current_eth_net_offset, mtu_size - ip_hdr_len - TCP_HDR_LEN);
+    if (!find_and_clamp_tcp(skb, current_l3_offset, &ip_hdr_len)) {
+        do_mss_clamp(skb, ip_hdr_len + current_l3_offset, mtu_size - ip_hdr_len - TCP_HDR_LEN);
     }
 
     return TC_ACT_UNSPEC;

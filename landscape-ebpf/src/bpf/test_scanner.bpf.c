@@ -9,7 +9,7 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-const volatile int current_eth_net_offset = 14;
+const volatile u32 current_l3_offset = 14;
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
 #undef BPF_LOG_LEVEL
@@ -33,12 +33,12 @@ struct {
     __type(value, u64);
 } test_sync_map SEC(".maps");
 
-static __always_inline int get_route_context(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int get_route_context(struct __sk_buff *skb, u32 current_l3_offset,
                                              struct route_context_test *context) {
 #define BPF_LOG_TOPIC "get_route_context"
     bool is_ipv4;
     int ret;
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
             return TC_ACT_UNSPEC;
@@ -68,7 +68,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, int current_
 
     if (is_ipv4) {
         struct iphdr *iph;
-        if (VALIDATE_READ_DATA(skb, &iph, current_eth_net_offset, sizeof(struct iphdr))) {
+        if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
             bpf_log_info("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
@@ -78,7 +78,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, int current_
         context->saddr.ip = iph->saddr;
     } else {
         struct ipv6hdr *ip6h;
-        if (VALIDATE_READ_DATA(skb, &ip6h, current_eth_net_offset, sizeof(struct ipv6hdr))) {
+        if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
             bpf_log_info("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
@@ -94,7 +94,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, int current_
 }
 
 static __always_inline int
-get_route_context_from_scanner(struct __sk_buff *skb, int current_eth_net_offset,
+get_route_context_from_scanner(struct __sk_buff *skb, u32 current_l3_offset,
                                struct route_context_test *context,
                                const struct packet_offset_info *offset_info) {
 #define BPF_LOG_TOPIC "get_route_context_from_scanner"
@@ -128,7 +128,7 @@ get_route_context_from_scanner(struct __sk_buff *skb, int current_eth_net_offset
 }
 
 static __always_inline int
-get_route_context_from_scanner_v2(struct __sk_buff *skb, int current_eth_net_offset,
+get_route_context_from_scanner_v2(struct __sk_buff *skb, u32 current_l3_offset,
                                   const struct packet_offset_info *offset_info,
                                   struct route_context_test *context, struct inet_pair *ip_pair) {
 #define BPF_LOG_TOPIC "get_route_context_from_scanner"
@@ -173,7 +173,7 @@ get_route_context_from_scanner_v2(struct __sk_buff *skb, int current_eth_net_off
 }
 
 static __always_inline int
-get_ipv4_route_context_from_scanner(struct __sk_buff *skb, int current_eth_net_offset,
+get_ipv4_route_context_from_scanner(struct __sk_buff *skb, u32 current_l3_offset,
                                     struct route_context_test *context,
                                     const struct packet_offset_info *offset_info) {
 #define BPF_LOG_TOPIC "get_ipv4_route_context_from_scanner"
@@ -214,7 +214,7 @@ int direct_read_info(struct __sk_buff *skb) {
     struct packet_offset_info pkg_offset = {0};
     struct inet_pair ip_pair;
 
-    ret = get_route_context(skb, current_eth_net_offset, &context);
+    ret = get_route_context(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -231,13 +231,13 @@ int scanner_without_offset_info(struct __sk_buff *skb) {
     struct packet_offset_info pkg_offset = {0};
     struct inet_pair ip_pair;
 
-    ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
 
-    ret = get_route_context_from_scanner_v2(skb, current_eth_net_offset, &pkg_offset, &context,
-                                            &ip_pair);
+    ret =
+        get_route_context_from_scanner_v2(skb, current_l3_offset, &pkg_offset, &context, &ip_pair);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -258,15 +258,15 @@ int scanner_has_offset(struct __sk_buff *skb) {
         CB_TO_PACKET_OFFSET_INFO(skb, &pkg_offset);
     } else {
         pkg_offset.status = 1;
-        ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+        ret = scan_packet(skb, current_l3_offset, &pkg_offset);
         if (ret) {
             return ret;
         }
         PACKET_OFFSET_INFO_TO_CB(skb, &pkg_offset);
     }
 
-    ret = get_route_context_from_scanner_v2(skb, current_eth_net_offset, &pkg_offset, &context,
-                                            &ip_pair);
+    ret =
+        get_route_context_from_scanner_v2(skb, current_l3_offset, &pkg_offset, &context, &ip_pair);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -352,7 +352,7 @@ int test_scanner(struct __sk_buff *skb) {
     struct packet_info info = {};
     __builtin_memset(&info, 0, sizeof(info));
 
-    ret = scan_packet(skb, current_eth_net_offset, &info.offset);
+    ret = scan_packet(skb, current_l3_offset, &info.offset);
     if (ret) {
         return ret;
     }
@@ -388,19 +388,19 @@ int test_scanner(struct __sk_buff *skb) {
 //         CB_TO_PACKET_OFFSET_INFO(skb, &pkg_offset);
 //     } else {
 //         pkg_offset.status = 1;
-//         ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+//         ret = scan_packet(skb, current_l3_offset, &pkg_offset);
 //         if (ret) {
 //             return ret;
 //         }
 //         PACKET_OFFSET_INFO_TO_CB(skb, &pkg_offset);
 //     }
 
-//     // ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+//     // ret = scan_packet(skb, current_l3_offset, &pkg_offset);
 //     // if (ret) {
 //     //     return ret;
 //     // }
 
-//     ret = get_route_context_from_scanner_v2(skb, current_eth_net_offset, &pkg_offset, &context,
+//     ret = get_route_context_from_scanner_v2(skb, current_l3_offset, &pkg_offset, &context,
 //                                             &ip_pair);
 //     if (ret != TC_ACT_OK) {
 //         return TC_ACT_UNSPEC;

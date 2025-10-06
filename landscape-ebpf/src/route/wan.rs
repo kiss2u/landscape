@@ -55,7 +55,7 @@ pub fn wan_route_attach(
         open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
 
     if !has_mac {
-        rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_l3_offset = 0;
     }
 
     let skel = open_skel.load()?;

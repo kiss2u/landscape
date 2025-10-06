@@ -11,7 +11,7 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-const volatile int current_eth_net_offset = 14;
+const volatile u32 current_l3_offset = 14;
 
 // todo: 将 flow_target_info 独立出来维护
 // struct {
@@ -80,12 +80,12 @@ static __always_inline int is_broadcast_ip(const struct route_context *context) 
     }
 }
 
-static __always_inline int get_route_context(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int get_route_context(struct __sk_buff *skb, u32 current_l3_offset,
                                              struct route_context *context) {
 #define BPF_LOG_TOPIC "get_route_context"
     bool is_ipv4;
     int ret;
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
             return TC_ACT_UNSPEC;
@@ -119,7 +119,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, int current_
     if (is_ipv4) {
         struct iphdr iph;
 
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
+        ret = bpf_skb_load_bytes(skb, current_l3_offset, &iph, sizeof(iph));
         if (ret) {
             bpf_log_info("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
@@ -131,7 +131,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, int current_
     } else {
         struct ipv6hdr ip6h;
         // 读取 IPv6 头部
-        ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
+        ret = bpf_skb_load_bytes(skb, current_l3_offset, &ip6h, sizeof(ip6h));
         if (ret) {
             bpf_log_info("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
@@ -146,10 +146,10 @@ static __always_inline int get_route_context(struct __sk_buff *skb, int current_
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
                                             bool *is_ipv4_) {
     bool is_ipv4;
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
             return TC_ACT_UNSPEC;
@@ -180,7 +180,7 @@ static __always_inline int current_pkg_type(struct __sk_buff *skb, int current_e
     return TC_ACT_OK;
 }
 
-static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current_l3_offset,
                                               struct route_context *context) {
 #define BPF_LOG_TOPIC "lan_redirect_check"
 
@@ -204,7 +204,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
             return TC_ACT_UNSPEC;
         }
 
-        if (current_eth_net_offset == 0 && lan_info->has_mac) {
+        if (current_l3_offset == 0 && lan_info->has_mac) {
             bool is_ipv4 = context->l3_protocol == LANDSCAPE_IPV4_TYPE;
             unsigned char ethhdr[14];
             if (is_ipv4) {
@@ -249,7 +249,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, int current
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int is_current_wan_packet(struct __sk_buff *skb, u32 current_l3_offset,
                                                  struct route_context *context) {
 #define BPF_LOG_TOPIC "is_current_wan_packet"
 
@@ -274,14 +274,14 @@ static __always_inline int is_current_wan_packet(struct __sk_buff *skb, int curr
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int flow_verdict(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_offset,
                                         struct route_context *context, u32 *init_flow_id_) {
 #define BPF_LOG_TOPIC "flow_verdict"
 
     int ret;
     volatile u32 flow_id = *init_flow_id_ & 0xff;
 
-    if (match_flow_id(skb, current_eth_net_offset, context, &flow_id)) {
+    if (match_flow_id(skb, current_l3_offset, context, &flow_id)) {
         return TC_ACT_SHOT;
     }
 
@@ -376,7 +376,7 @@ keep_going:
 }
 
 static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
-                                                        int current_eth_net_offset,
+                                                        u32 current_l3_offset,
                                                         struct route_context *context,
                                                         const u32 flow_id) {
 #define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id"
@@ -407,7 +407,7 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
     }
 
     // 依据配置发往具体的网卡， 检查 MAC 地址
-    if (current_eth_net_offset == 0 && target_info->has_mac) {
+    if (current_l3_offset == 0 && target_info->has_mac) {
         // 当前数据包没有 mac 目标网卡有 mac
         if (prepend_dummy_mac(skb) != 0) {
             bpf_log_error("add dummy_mac fail");
@@ -415,7 +415,7 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
         }
 
         // 使用 bpf_redirect_neigh 转发时无需进行缩减 mac, docker 时有 mac, 所以也无需缩减 mac 地址
-        // } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
+        // } else if (current_l3_offset != 0 && !target_info->has_mac) {
         //     // 当前有, 目标网卡没有
         //     int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
         //     if (ret < 0) {
@@ -455,8 +455,7 @@ static __always_inline int pick_wan_and_send_by_flow_id(struct __sk_buff *skb,
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int search_route_in_lan(struct __sk_buff *skb,
-                                               const int current_eth_net_offset,
+static __always_inline int search_route_in_lan(struct __sk_buff *skb, const u32 current_l3_offset,
                                                const struct route_context *context,
                                                u32 *flow_mark) {
 #define BPF_LOG_TOPIC "search_route_in_lan"
@@ -498,7 +497,7 @@ static __always_inline int search_route_in_lan(struct __sk_buff *skb,
         struct rt_cache_value *target = bpf_map_lookup_elem(lan_cache, &search_key);
         if (target) {
             *flow_mark = target->mark_value;
-            return pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, context,
+            return pick_wan_and_send_by_flow_id(skb, current_l3_offset, context,
                                                 target->mark_value);
         }
     }
@@ -518,7 +517,7 @@ int lan_route_egress(struct __sk_buff *skb) {
     int ret;
     bool is_ipv4;
 
-    if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+    if (current_pkg_type(skb, current_l3_offset, &is_ipv4) != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
@@ -543,7 +542,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = get_route_context(skb, current_eth_net_offset, &context);
+    ret = get_route_context(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -560,18 +559,18 @@ int lan_route_ingress(struct __sk_buff *skb) {
     //     }
     // }
 
-    ret = search_route_in_lan(skb, current_eth_net_offset, &context, &flow_mark);
+    ret = search_route_in_lan(skb, current_l3_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
         skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
         return ret;
     }
 
-    ret = lan_redirect_check(skb, current_eth_net_offset, &context);
+    ret = lan_redirect_check(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_mark);
+    ret = flow_verdict(skb, current_l3_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
         return ret;
     }
@@ -579,7 +578,7 @@ int lan_route_ingress(struct __sk_buff *skb) {
     barrier_var(flow_mark);
     skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
 
-    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_mark);
+    ret = pick_wan_and_send_by_flow_id(skb, current_l3_offset, &context, flow_mark);
 
     if (ret == TC_ACT_REDIRECT) {
         setting_cache_in_lan(&context, flow_mark);
@@ -603,7 +602,7 @@ int wan_route_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = get_route_context(skb, current_eth_net_offset, &context);
+    ret = get_route_context(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -613,12 +612,12 @@ int wan_route_ingress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    ret = is_current_wan_packet(skb, current_eth_net_offset, &context);
+    ret = is_current_wan_packet(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    ret = lan_redirect_check(skb, current_eth_net_offset, &context);
+    ret = lan_redirect_check(skb, current_l3_offset, &context);
     if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
@@ -651,7 +650,7 @@ int wan_route_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    ret = get_route_context(skb, current_eth_net_offset, &context);
+    ret = get_route_context(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
@@ -661,11 +660,11 @@ int wan_route_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    ret = lan_redirect_check(skb, current_eth_net_offset, &context);
+    ret = lan_redirect_check(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }
-    ret = flow_verdict(skb, current_eth_net_offset, &context, &flow_mark);
+    ret = flow_verdict(skb, current_l3_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
         return ret;
     }
@@ -673,7 +672,7 @@ int wan_route_egress(struct __sk_buff *skb) {
     barrier_var(flow_mark);
     skb->mark = replace_flow_source(flow_mark, FLOW_FROM_WAN);
 
-    ret = pick_wan_and_send_by_flow_id(skb, current_eth_net_offset, &context, flow_mark);
+    ret = pick_wan_and_send_by_flow_id(skb, current_l3_offset, &context, flow_mark);
     return ret;
 #undef BPF_LOG_TOPIC
 }
@@ -686,11 +685,11 @@ int wan_route_egress(struct __sk_buff *skb) {
 //     skb->cb[4] = 111;
 //     struct old_flow_cache_key cache_key = {0};
 //     int ret;
-//     if (current_pkg_type(skb, current_eth_net_offset, &is_ipv4) != TC_ACT_OK) {
+//     if (current_pkg_type(skb, current_l3_offset, &is_ipv4) != TC_ACT_OK) {
 //         return TC_ACT_UNSPEC;
 //     }
 
-//     if (current_eth_net_offset > 0) {
+//     if (current_l3_offset > 0) {
 //         ret = bpf_skb_load_bytes(skb, 6, &cache_key.match_key.h_source,
 //                                  sizeof(cache_key.match_key.h_source));
 //         if (ret) {
@@ -700,7 +699,7 @@ int wan_route_egress(struct __sk_buff *skb) {
 //     }
 
 //     if (is_ipv4) {
-//         ret = bpf_skb_load_bytes(skb, current_eth_net_offset + 1, &cache_key.match_key.tos,
+//         ret = bpf_skb_load_bytes(skb, current_l3_offset + 1, &cache_key.match_key.tos,
 //                                  sizeof(cache_key.match_key.tos));
 //         if (ret) {
 //             bpf_log_info("ipv4 bpf_skb_load_bytes error");
@@ -709,7 +708,7 @@ int wan_route_egress(struct __sk_buff *skb) {
 //     } else {
 //         __u16 first_2_bytes;
 //         ret =
-//             bpf_skb_load_bytes(skb, current_eth_net_offset, &first_2_bytes,
+//             bpf_skb_load_bytes(skb, current_l3_offset, &first_2_bytes,
 //             sizeof(first_2_bytes));
 //         if (ret) {
 //             bpf_log_info("ipv6 bpf_skb_load_bytes error");
@@ -745,7 +744,7 @@ int wan_route_egress(struct __sk_buff *skb) {
 //         struct iphdr iph;
 
 //         // 读取 IPv4 头部
-//         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &iph, sizeof(iph));
+//         ret = bpf_skb_load_bytes(skb, current_l3_offset, &iph, sizeof(iph));
 //         if (ret) {
 //             bpf_log_info("ipv4 bpf_skb_load_bytes error");
 //             return TC_ACT_SHOT;
@@ -759,7 +758,7 @@ int wan_route_egress(struct __sk_buff *skb) {
 //         struct ipv6hdr ip6h;
 
 //         // 读取 IPv6 头部
-//         ret = bpf_skb_load_bytes(skb, current_eth_net_offset, &ip6h, sizeof(ip6h));
+//         ret = bpf_skb_load_bytes(skb, current_l3_offset, &ip6h, sizeof(ip6h));
 //         if (ret) {
 //             bpf_log_info("ipv6 bpf_skb_load_bytes error");
 //             return TC_ACT_SHOT;
@@ -817,14 +816,14 @@ int wan_route_egress(struct __sk_buff *skb) {
 //     }
 
 //     // 依据配置发往具体的端口
-//     if (current_eth_net_offset == 0 && target_info->has_mac) {
+//     if (current_l3_offset == 0 && target_info->has_mac) {
 //         // 当前数据包没有 mac 对方有 mac
 //         if (prepend_dummy_mac(skb) != 0) {
 //             bpf_log_error("add dummy_mac fail");
 //             return TC_ACT_SHOT;
 //         }
 
-//     } else if (current_eth_net_offset != 0 && !target_info->has_mac) {
+//     } else if (current_l3_offset != 0 && !target_info->has_mac) {
 //         // 当前有, 对方没有
 //         // 需要 6.6 以上支持 目前暂不实现
 //         return TC_ACT_SHOT;
@@ -835,7 +834,7 @@ int wan_route_egress(struct __sk_buff *skb) {
 //         return bpf_redirect(target_info->ifindex, 0);
 //     }
 
-//     if (current_eth_net_offset != 0 && target_info->has_mac) {
+//     if (current_l3_offset != 0 && target_info->has_mac) {
 //         struct bpf_fib_lookup fib_egress_param = {0};
 //         fib_egress_param.ifindex = target_info->ifindex;
 //         // fib_egress_param.ifindex = skb->ifindex;

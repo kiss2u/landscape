@@ -29,8 +29,9 @@ pub fn new_firewall(
     let mut open_skel = firewall_builder.open(&mut open_object)?;
     let rodata_data =
         open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
+
     if !has_mac {
-        rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_l3_offset = 0;
     }
 
     open_skel.maps.firewall_block_ip4_map.set_pin_path(&MAP_PATHS.firewall_ipv4_block)?;

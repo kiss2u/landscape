@@ -48,14 +48,14 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC | BPF_F_RDONLY_PROG);
 } flow_match_map SEC(".maps");
 
-static __always_inline int match_flow_id(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int match_flow_id(struct __sk_buff *skb, u32 current_l3_offset,
                                          const struct route_context *context,
                                          u32 *default_flow_id_) {
 #define BPF_LOG_TOPIC "match_flow_id"
     struct flow_match_key match_key = {0};
     u32 ret_flow_id = *default_flow_id_;
 
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         if (bpf_skb_load_bytes(skb, 6, &match_key.mac.mac, 6)) {
             bpf_log_info("read mac error");
             return TC_ACT_SHOT;

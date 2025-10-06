@@ -32,10 +32,10 @@ volatile const __be32 target_addr = 0;
 volatile const __be32 proxy_addr = 0;
 volatile const __be16 proxy_port = 0;
 
-const volatile int current_eth_net_offset = 14;
+const volatile u32 current_l3_offset = 14;
 
 static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_protocol,
-                                               u8 *l4_protocol, int current_eth_net_offset) {
+                                               u8 *l4_protocol, u32 current_l3_offset) {
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
     struct bpf_sock_tuple *result;
@@ -43,8 +43,8 @@ static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_pr
     __u64 tuple_len;
     __u64 ihl_len;
 
-    bpf_log_info("current_eth_net_offset %u", current_eth_net_offset);
-    if (current_eth_net_offset != 0) {
+    bpf_log_info("current_l3_offset %u", current_l3_offset);
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         eth = (struct ethhdr *)(data);
         if (eth + 1 > data_end) return NULL;
@@ -387,7 +387,7 @@ int wan_egress(struct __sk_buff *skb) {
     u8 l4_protocol;
     int ret;
 
-    tuple = get_tuple(skb, &l3_protocol, &l4_protocol, current_eth_net_offset);
+    tuple = get_tuple(skb, &l3_protocol, &l4_protocol, current_l3_offset);
     if (!tuple) {
         bpf_log_info("get_tuple fail");
         return TC_ACT_OK;
@@ -399,8 +399,8 @@ int wan_egress(struct __sk_buff *skb) {
     if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) return TC_ACT_SHOT;
 
     if (tuple->ipv4.daddr != target_addr) return TC_ACT_OK;
-    if (current_eth_net_offset == 0) {
-        bpf_log_info("current_eth_net_offset is 0 prepend_dummy_mac");
+    if (current_l3_offset == 0) {
+        bpf_log_info("current_l3_offset is 0 prepend_dummy_mac");
         if (prepend_dummy_mac(skb) != 0) {
             bpf_log_info("prepend_dummy_mac error");
             return TC_ACT_SHOT;

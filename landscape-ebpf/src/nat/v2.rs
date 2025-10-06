@@ -56,7 +56,7 @@ pub fn init_nat_v2(
     rodata_data.icmp_range_end = config.icmp_in_range.end;
 
     if !has_mac {
-        rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_l3_offset = 0;
     }
 
     let landscape_skel = landscape_open.load().unwrap();

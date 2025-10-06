@@ -105,7 +105,7 @@ fn main() {
     rodata_data.proxy_port = params.listen_port.to_be();
 
     if !params.has_mac {
-        rodata_data.current_eth_net_offset = 0;
+        rodata_data.current_l3_offset = 0;
     }
 
     let landscape_skel = landscape_open.load().unwrap();

@@ -243,13 +243,13 @@ static __always_inline int icmp6_msg_type(struct icmp6hdr *icmp6h) {
     return ICMP_ACT_UNSPEC;
 }
 
-static __always_inline int scan_packet(struct __sk_buff *skb, int current_eth_net_offset,
+static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_offset,
                                        struct packet_offset_info *offset_info) {
 #define BPF_LOG_TOPIC "scan_packet"
 
     bool is_ipv4;
 
-    if (current_eth_net_offset != 0) {
+    if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
             return LD_SCAN_ERR;
@@ -282,8 +282,8 @@ static __always_inline int scan_packet(struct __sk_buff *skb, int current_eth_ne
     }
 
     struct ip_scanner_ctx ctx = {0};
-    offset_info->l3_offset_when_scan = current_eth_net_offset;
-    ctx.l4_offset = current_eth_net_offset;
+    offset_info->l3_offset_when_scan = current_l3_offset;
+    ctx.l4_offset = current_l3_offset;
     if (is_ipv4) {
         if (scan_ipv4(skb, &ctx)) {
             bpf_log_info("scan ip v4 err");

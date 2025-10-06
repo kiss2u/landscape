@@ -16,7 +16,7 @@ const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 #undef BPF_LOG_TOPIC
 #define BPF_LOG_LEVEL LOG_LEVEL
 
-const volatile int current_eth_net_offset = 14;
+const volatile u32 current_l3_offset = 14;
 
 const volatile u64 TCP_SYN_TIMEOUT = 1E9 * 6;
 const volatile u64 TCP_TCP_TRANS = 1E9 * 60 * 4;
@@ -120,21 +120,22 @@ static __always_inline void ipv4_update_csum_icmp_err(struct __sk_buff *skb, u32
 }
 
 static __always_inline int modify_headers(struct __sk_buff *skb, bool is_ipv4, bool is_icmpx_error,
-                                          u8 nexthdr, int l3_off, int l4_off, int err_l4_off,
-                                          bool is_modify_source, union u_inet_addr *from_addr,
-                                          __be16 from_port, union u_inet_addr *to_addr,
-                                          __be16 to_port) {
+                                          u8 nexthdr, u32 current_l3_offset, int l4_off,
+                                          int err_l4_off, bool is_modify_source,
+                                          union u_inet_addr *from_addr, __be16 from_port,
+                                          union u_inet_addr *to_addr, __be16 to_port) {
 #define BPF_LOG_TOPIC "modify_headers"
 
     int ret;
     int ip_offset =
         is_modify_source ? offsetof(struct iphdr, saddr) : offsetof(struct iphdr, daddr);
-    ret = bpf_skb_store_bytes(skb, l3_off + ip_offset, &to_addr->ip, sizeof(to_addr->ip), 0);
+    ret = bpf_skb_store_bytes(skb, current_l3_offset + ip_offset, &to_addr->ip, sizeof(to_addr->ip),
+                              0);
 
     if (ret) {
         return ret;
     }
-    ret = bpf_l3_csum_replace(skb, l3_off + offsetof(struct iphdr, check), from_addr->ip,
+    ret = bpf_l3_csum_replace(skb, current_l3_offset + offsetof(struct iphdr, check), from_addr->ip,
                               to_addr->ip, 4);
     if (ret) {
         return ret;
@@ -761,7 +762,7 @@ int ingress_nat(struct __sk_buff *skb) {
     struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
@@ -856,7 +857,7 @@ int ingress_nat(struct __sk_buff *skb) {
     // bpf_log_info("nat_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
 
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_eth_net_offset,
+    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
                          pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
                          &ip_pair.dst_addr, ip_pair.dst_port, &lan_ip, nat_ingress_value->port);
     if (ret) {
@@ -878,7 +879,7 @@ int egress_nat(struct __sk_buff *skb) {
     struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
@@ -1010,7 +1011,7 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("nat_ip IP: %pI4:%u", &nat_addr.all, bpf_ntohs(nat_egress_value->port));
 
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_eth_net_offset,
+    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
                          pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
                          &ip_pair.src_addr, ip_pair.src_port, &nat_addr, nat_egress_value->port);
     if (ret) {
@@ -1031,7 +1032,7 @@ int test_nat_read(struct __sk_buff *skb) {
     struct ip_packet_info_v2 packet_info = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_eth_net_offset, &packet_info.offset);
+    ret = scan_packet(skb, current_l3_offset, &packet_info.offset);
     if (ret) {
         return ret;
     }
