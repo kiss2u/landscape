@@ -7,7 +7,7 @@
 
 #include "landscape.h"
 #include "share_ifindex_ip.h"
-#include "nat.h"
+#include "land_nat_v2.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
@@ -16,28 +16,20 @@ const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 #undef BPF_LOG_TOPIC
 #define BPF_LOG_LEVEL LOG_LEVEL
 
-// #define ETH_IPV4 bpf_htons(0x0800) /* ETH IPV4 packet */
-// #define ETH_IPV6 bpf_htons(0x86DD) /* ETH IPv6 packet */
-
 const volatile int current_eth_net_offset = 14;
 
 const volatile u64 TCP_SYN_TIMEOUT = 1E9 * 6;
 const volatile u64 TCP_TCP_TRANS = 1E9 * 60 * 4;
 const volatile u64 TCP_TIMEOUT = 1E9 * 60 * 10;
-
 const volatile u64 UDP_TIMEOUT = 1E9 * 60 * 5;
 
-static __always_inline int icmp_msg_type(struct icmphdr *icmph);
-static __always_inline bool is_icmp_error_pkt(const struct ip_packet_info *pkt) {
-    return pkt->l4_payload_offset >= 0 && pkt->icmp_error_payload_offset >= 0;
-}
-
 static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
-    return pkt_type == PKT_CONNLESS || pkt_type == PKT_TCP_SYN;
+    return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
 }
 
 #define NAT_MAPPING_CACHE_SIZE 1024 * 64 * 2
 #define NAT_MAPPING_TIMER_SIZE 1024 * 64 * 2
+
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_mapping_key);
@@ -52,14 +44,6 @@ struct {
     __uint(max_entries, NAT_MAPPING_TIMER_SIZE);
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } map_mapping_timer SEC(".maps");
-
-#define FRAG_CACHE_SIZE 1024 * 32
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __type(key, struct fragment_cache_key);
-    __type(value, struct fragment_cache_value);
-    __uint(max_entries, FRAG_CACHE_SIZE);
-} fragment_cache SEC(".maps");
 
 volatile const u16 tcp_range_start = 32768;
 // volatile const u16 tcp_range_end = 32770;
@@ -155,7 +139,7 @@ static __always_inline int modify_headers(struct __sk_buff *skb, bool is_ipv4, b
     if (ret) {
         return ret;
     }
-    if (l4_off < 0) {
+    if (l4_off == 0) {
         return 0;
     }
 
@@ -251,19 +235,19 @@ static __always_inline int ct_state_transition(u8 l4proto, u8 pkt_type, u8 gress
     }
 #define RESET_TIMER(__timeout) ct_reset_timer(ct_timer_value, (__timeout))
 
-    if (pkt_type == PKT_CONNLESS) {
+    if (pkt_type == PKT_CONNLESS_V2) {
         NEW_STATE(OTHER_EST);
         RESET_TIMER(UDP_TIMEOUT);
         return TC_ACT_OK;
     }
 
-    if (pkt_type == PKT_TCP_RST) {
+    if (pkt_type == PKT_TCP_RST_V2) {
         NEW_STATE(TIMER_INIT);
         RESET_TIMER(TCP_SYN_TIMEOUT);
         return TC_ACT_OK;
     }
 
-    if (pkt_type == PKT_TCP_SYN) {
+    if (pkt_type == PKT_TCP_SYN_V2) {
         NEW_STATE(TIMER_INIT);
         if (gress == ct_timer_value->gress) {
             RESET_TIMER(TCP_SYN_TIMEOUT);
@@ -623,7 +607,7 @@ egress_lookup_or_new_mapping(struct __sk_buff *skb, u8 ip_protocol, bool allow_c
             // bpf_log_debug("found free binding %d -> %d", bpf_ntohs(egress_key.from_port),
             //               bpf_ntohs(new_nat_egress_value.port));
         } else {
-            // bpf_log_debug("mapping is full");
+            bpf_log_debug("mapping is full");
             return TC_ACT_SHOT;
         }
         nat_egress_value = insert_mappings(&egress_key, &new_nat_egress_value, &nat_ingress_value);
@@ -705,376 +689,120 @@ static __always_inline int lookup_static_mapping(struct __sk_buff *skb, u8 ip_pr
 #undef BPF_LOG_TOPIC
 }
 
-/// IP Fragment Related Start
-static __always_inline int fragment_track(struct __sk_buff *skb, struct ip_packet_info *pkt) {
-#define BPF_LOG_TOPIC "fragment_track"
-
-    // 没有被分片的数据包, 无需进行记录
-    if (pkt->fragment_type == NOT_F || (pkt->fragment_type == END_F && pkt->fragment_off == 0)) {
-        return TC_ACT_OK;
-    }
-    if (is_icmp_error_pkt(pkt)) {
-        return TC_ACT_SHOT;
-    }
+static __always_inline int read_packet_info(struct __sk_buff *skb,
+                                            struct packet_offset_info *offset_info,
+                                            struct inet_pair *ip_pair) {
+#define BPF_LOG_TOPIC "read_packet_info"
 
     int ret;
-    struct fragment_cache_key key = {
-        ._pad = {0, 0, 0},
-        .l4proto = pkt->ip_protocol,
-        .id = pkt->fragment_id,
-        .saddr = pkt->pair_ip.src_addr,
-        .daddr = pkt->pair_ip.dst_addr,
-    };
-
-    struct fragment_cache_value *value;
-    if (pkt->fragment_type == MORE_F && pkt->fragment_off == 0) {
-        struct fragment_cache_value value_new;
-        value_new.dport = pkt->pair_ip.dst_port;
-        value_new.sport = pkt->pair_ip.src_port;
-
-        ret = bpf_map_update_elem(&fragment_cache, &key, &value_new, BPF_ANY);
-        if (ret) {
+    if (offset_info->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        struct iphdr *iph;
+        if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
+            bpf_log_info("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
-        value = bpf_map_lookup_elem(&fragment_cache, &key);
-        if (!value) {
-            return TC_ACT_SHOT;
-        }
+        ip_pair->dst_addr.ip = iph->daddr;
+        ip_pair->src_addr.ip = iph->saddr;
     } else {
-        value = bpf_map_lookup_elem(&fragment_cache, &key);
-        if (!value) {
-            bpf_log_warn("fragmentation session of this packet was not tracked");
+        struct ipv6hdr *ip6h;
+        if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->l3_offset_when_scan,
+                               sizeof(struct ipv6hdr))) {
+            bpf_log_info("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
-        pkt->pair_ip.src_port = value->sport;
-        pkt->pair_ip.dst_port = value->dport;
+        COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->saddr.in6_u.u6_addr32);
+        COPY_ADDR_FROM(ip_pair->dst_addr.all, ip6h->daddr.in6_u.u6_addr32);
     }
 
-    return TC_ACT_OK;
-#undef BPF_LOG_TOPIC
-}
-/// IP Fragment Related End
-
-/// ICMP Related Start
-static __always_inline int icmp_err_l3_offset(int l4_off) { return l4_off + ICMP_HDR_LEN; }
-
-static __always_inline __be16 get_icmpx_query_id(struct icmphdr *icmph) {
-    return icmph->un.echo.id;
-}
-
-static __always_inline int only_extract_ip_info(const struct iphdr *iph, struct inet_pair *ip_pair,
-                                                u8 *pkt_ip_protocol, u32 *len_) {
-#define BPF_LOG_TOPIC "only_extract_ip_info"
-    inet_addr_set_ip(&ip_pair->src_addr, iph->saddr);
-    inet_addr_set_ip(&ip_pair->dst_addr, iph->daddr);
-    *pkt_ip_protocol = iph->protocol;
-    if (iph->frag_off & IP_OFFSET) {
-        // 分片数据包不可能产生错误消息
-        return TC_ACT_SHOT;
-    }
-    *len_ = iph->ihl * 4;
-    return TC_ACT_OK;
-#undef BPF_LOG_TOPIC
-}
-
-#define ICMP_ERR_PACKET_L4_LEN 8
-static __always_inline int extract_imcp_err_info(struct __sk_buff *skb, u32 l3_off,
-                                                 struct inet_pair *err_ip_pair, u8 *pkt_ip_protocol,
-                                                 u32 *l3_hdr_len) {
-#define BPF_LOG_TOPIC "extract_imcp_err_info"
-    int ret;
-
-    struct iphdr *iph;
-    if (VALIDATE_READ_DATA(skb, &iph, l3_off, sizeof(*iph))) {
-        return TC_ACT_SHOT;
-    }
-    ret = only_extract_ip_info(iph, err_ip_pair, pkt_ip_protocol, l3_hdr_len);
-    if (ret != TC_ACT_OK) {
-        return ret;
-    }
-
-    int l4_off = l3_off + *l3_hdr_len;
-    if (*pkt_ip_protocol == IPPROTO_TCP) {
+    if (offset_info->l4_protocol == IPPROTO_TCP) {
         struct tcphdr *tcph;
-        if (VALIDATE_READ_DATA(skb, &tcph, l4_off, ICMP_ERR_PACKET_L4_LEN)) {
+        if (VALIDATE_READ_DATA(skb, &tcph, offset_info->l4_offset, sizeof(*tcph))) {
             return TC_ACT_SHOT;
         }
-        err_ip_pair->src_port = tcph->source;
-        err_ip_pair->dst_port = tcph->dest;
-    } else if (*pkt_ip_protocol == IPPROTO_UDP) {
+        ip_pair->src_port = tcph->source;
+        ip_pair->dst_port = tcph->dest;
+
+        if (tcph->fin) {
+            offset_info->pkt_type = PKT_TCP_FIN_V2;
+        } else if (tcph->rst) {
+            offset_info->pkt_type = PKT_TCP_RST_V2;
+        } else if (tcph->syn) {
+            offset_info->pkt_type = PKT_TCP_SYN_V2;
+        } else {
+            offset_info->pkt_type = PKT_TCP_DATA_V2;
+        }
+    } else if (offset_info->l4_protocol == IPPROTO_UDP) {
         struct udphdr *udph;
-        if (VALIDATE_READ_DATA(skb, &udph, l4_off, ICMP_ERR_PACKET_L4_LEN)) {
+        if (VALIDATE_READ_DATA(skb, &udph, offset_info->l4_offset, sizeof(*udph))) {
             return TC_ACT_SHOT;
         }
-        err_ip_pair->src_port = udph->source;
-        err_ip_pair->dst_port = udph->dest;
-    } else if (*pkt_ip_protocol == IPPROTO_ICMP) {
-        void *icmph;
-        if (VALIDATE_READ_DATA(skb, &icmph, l4_off, ICMP_ERR_PACKET_L4_LEN)) {
+        ip_pair->src_port = udph->source;
+        ip_pair->dst_port = udph->dest;
+    } else if (offset_info->l4_protocol == IPPROTO_ICMP ||
+               offset_info->l4_protocol == IPPROTO_ICMPV6) {
+        struct icmphdr *icmph;
+        if (VALIDATE_READ_DATA(skb, &icmph, offset_info->l4_offset, sizeof(struct icmphdr))) {
             return TC_ACT_SHOT;
         }
-        switch (icmp_msg_type(icmph)) {
-        case ICMP_QUERY_MSG: {
-            err_ip_pair->src_port = err_ip_pair->dst_port = get_icmpx_query_id(icmph);
-            break;
-        }
-        case ICMP_ERROR_MSG:
-            // not parsing nested ICMP error
-        case ICMP_ACT_UNSPEC:
-            // ICMP message not parsed
-            return TC_ACT_UNSPEC;
-        default:
-            bpf_log_error("drop icmp packet");
-            return TC_ACT_SHOT;
-        }
+
+        ip_pair->src_port = ip_pair->dst_port = icmph->un.echo.id;
     } else {
         return TC_ACT_UNSPEC;
     }
-
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int icmp_msg_type(struct icmphdr *icmph) {
-    switch (icmph->type) {
-    case ICMP_DEST_UNREACH:
-    case ICMP_TIME_EXCEEDED:
-    case ICMP_PARAMETERPROB:
-        return ICMP_ERROR_MSG;
-    case ICMP_ECHOREPLY:
-    case ICMP_ECHO:
-    case ICMP_TIMESTAMP:
-    case ICMP_TIMESTAMPREPLY:
-        return ICMP_QUERY_MSG;
-    }
-    return ICMP_ACT_UNSPEC;
-}
-/// ICMP Related End
-
-static __always_inline int extract_iphdr_info(struct ip_packet_info *pkt, const struct iphdr *iph) {
-#define BPF_LOG_TOPIC "extract_iphdr_info"
-
-    if (iph->version != 4) {
-        return TC_ACT_SHOT;
-    }
-    inet_addr_set_ip(&pkt->pair_ip.src_addr, iph->saddr);
-    inet_addr_set_ip(&pkt->pair_ip.dst_addr, iph->daddr);
-
-    pkt->fragment_off = (bpf_ntohs(iph->frag_off) & IP_OFFSET) << 3;
-    if (iph->frag_off & IP_MF) {
-        pkt->fragment_type = MORE_F;
-    } else if (pkt->fragment_off) {
-        pkt->fragment_type = END_F;
-    } else {
-        pkt->fragment_type = NOT_F;
-    }
-    pkt->fragment_id = bpf_ntohs(iph->id);
-    pkt->ip_protocol = iph->protocol;
-    pkt->l4_payload_offset += (iph->ihl * 4);
-
-    return TC_ACT_OK;
-#undef BPF_LOG_TOPIC
-}
-/// @brief 提取数据包中的主要内容
-/// @param skb
-/// @param pkt
-/// @return
-static __always_inline int extract_packet_info(struct __sk_buff *skb, struct ip_packet_info *pkt) {
-#define BPF_LOG_TOPIC "extract_packet_info"
-    pkt->_pad = 0;
-    if (pkt == NULL) {
-        return TC_ACT_SHOT;
-    }
-    int eth_offset = current_eth_net_offset;
-    pkt->l4_payload_offset = eth_offset;
-    struct iphdr *iph;
-    if (VALIDATE_READ_DATA(skb, &iph, eth_offset, sizeof(struct iphdr))) {
-        return TC_ACT_SHOT;
-    }
-
-    if (extract_iphdr_info(pkt, iph)) {
-        return TC_ACT_SHOT;
-    }
-
-    // bpf_log_info("packet l4_payload offset: %d", pkt->l4_payload_offset);
-    pkt->pkt_type = PKT_CONNLESS;
-    pkt->icmp_error_payload_offset = -1;
-
-    if (pkt->fragment_type != NOT_F && pkt->fragment_off != 0) {
-        // 不是第一个数据包， 整个都是 payload
-        // 因为没有头部信息, 所以 需要进行查询已有的 track 记录
-        pkt->l4_payload_offset = -1;
-        pkt->pair_ip.src_port = 0;
-        pkt->pair_ip.dst_port = 0;
-        return TC_ACT_OK;
-    }
-
-    if (pkt->ip_protocol == IPPROTO_TCP) {
-        struct tcphdr *tcph;
-        if (VALIDATE_READ_DATA(skb, &tcph, pkt->l4_payload_offset, sizeof(*tcph))) {
-            return TC_ACT_SHOT;
-        }
-        pkt->pair_ip.src_port = tcph->source;
-        pkt->pair_ip.dst_port = tcph->dest;
-        // bpf_log_info("packet dst_port: %d", bpf_ntohs(tcph->dest));
-        if (tcph->fin) {
-            pkt->pkt_type = PKT_TCP_FIN;
-        } else if (tcph->rst) {
-            pkt->pkt_type = PKT_TCP_RST;
-        } else if (tcph->syn) {
-            pkt->pkt_type = PKT_TCP_SYN;
-        } else {
-            pkt->pkt_type = PKT_TCP_DATA;
-        }
-    } else if (pkt->ip_protocol == IPPROTO_UDP) {
-        struct udphdr *udph;
-        if (VALIDATE_READ_DATA(skb, &udph, pkt->l4_payload_offset, sizeof(*udph))) {
-            return TC_ACT_SHOT;
-        }
-        pkt->pair_ip.src_port = udph->source;
-        pkt->pair_ip.dst_port = udph->dest;
-    } else if (pkt->ip_protocol == IPPROTO_ICMP) {
-        struct icmphdr *icmph;
-        if (VALIDATE_READ_DATA(skb, &icmph, pkt->l4_payload_offset, sizeof(struct icmphdr))) {
-            return TC_ACT_SHOT;
-        }
-        //
-        int ret;
-        switch (icmp_msg_type(icmph)) {
-        case ICMP_ERROR_MSG: {
-            struct inet_pair err_ip_pair = {};
-            u32 err_l3_hdr_len;
-            ret = extract_imcp_err_info(skb, icmp_err_l3_offset(pkt->l4_payload_offset),
-                                        &err_ip_pair, &pkt->ip_protocol, &err_l3_hdr_len);
-            if (ret != TC_ACT_OK) {
-                return ret;
-            }
-            pkt->icmp_error_payload_offset =
-                icmp_err_l3_offset(pkt->l4_payload_offset) + err_l3_hdr_len;
-            bpf_log_trace("ICMP error protocol:%d, %pI4->%pI4, %pI4->%pI4, %d->%d",
-                          pkt->ip_protocol, &pkt->pair_ip.src_addr, &pkt->pair_ip.dst_addr,
-                          &err_ip_pair.src_addr.ip, &err_ip_pair.dst_addr.ip,
-                          bpf_ntohs(err_ip_pair.src_port), bpf_ntohs(err_ip_pair.dst_port));
-
-            if (!inet_addr_equal(&pkt->pair_ip.dst_addr, &err_ip_pair.src_addr)) {
-                bpf_log_error("IP destination address does not match source "
-                              "address inside ICMP error message");
-                return TC_ACT_SHOT;
-            }
-
-            COPY_ADDR_FROM(pkt->pair_ip.src_addr.all, err_ip_pair.dst_addr.all);
-            pkt->pair_ip.src_port = err_ip_pair.dst_port;
-            pkt->pair_ip.dst_port = err_ip_pair.src_port;
-            break;
-        }
-        case ICMP_QUERY_MSG: {
-            pkt->pair_ip.src_port = pkt->pair_ip.dst_port = get_icmpx_query_id(icmph);
-            bpf_log_trace("ICMP query, id:%d", bpf_ntohs(pkt->pair_ip.src_port));
-            break;
-        }
-        case ICMP_ACT_UNSPEC:
-            return TC_ACT_UNSPEC;
-        default:
-            bpf_log_error("icmp shot");
-            return TC_ACT_SHOT;
-        }
-    }
-    return TC_ACT_OK;
-#undef BPF_LOG_TOPIC
-}
-
-static __always_inline int current_pkg_type(struct __sk_buff *skb) {
-    if (current_eth_net_offset != 0) {
-        struct ethhdr *eth;
-        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-            return TC_ACT_UNSPEC;
-        }
-
-        if (eth->h_proto != ETH_IPV4) {
-            return TC_ACT_UNSPEC;
-        }
-    } else {
-        u8 *p_version;
-        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
-            return TC_ACT_UNSPEC;
-        }
-        u8 ip_version = (*p_version) >> 4;
-        if (ip_version != 4) {
-            return TC_ACT_UNSPEC;
-        }
-    }
-    return TC_ACT_OK;
-}
-
-static __always_inline bool is_out_nat_range(const struct ip_packet_info *pkt, const u16 port) {
-    if (pkt->ip_protocol == IPPROTO_TCP) {
-        if (port < tcp_range_start || port > tcp_range_end) {
-            return true;
-        }
-        return false;
-    } else if (pkt->ip_protocol == IPPROTO_UDP) {
-        if (port < udp_range_start || port > udp_range_end) {
-            return true;
-        }
-        return false;
-    }
-}
 SEC("tc/ingress")
 int ingress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">>> ingress_nat >>>"
+    // struct ip_packet_info_v2 packet_info = {0};
+    struct packet_offset_info pkg_offset = {0};
+    struct inet_pair ip_pair = {0};
+    int ret = 0;
 
-    if (current_pkg_type(skb) != TC_ACT_OK) {
+    ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+    if (ret) {
+        return ret;
+    }
+
+    if (pkg_offset.l3_protocol == LANDSCAPE_IPV6_TYPE) {
         return TC_ACT_UNSPEC;
     }
 
-    // bpf_log_info("active");
-    struct ip_packet_info packet_info;
-    __builtin_memset(&packet_info, 0, sizeof(packet_info));
-    // 接续数据包填充 eth_fram_info 的信息
-    int ret = extract_packet_info(skb, &packet_info);
-    if (ret != TC_ACT_OK) {
-        if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
-        }
-        return TC_ACT_UNSPEC;
-    }
-
-    ret = is_broadcast_ip(&packet_info);
+    ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    ret = is_handle_protocol(packet_info.ip_protocol);
+    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    if (ret) {
+        return ret;
+    }
+
+    ret = is_broadcast_ip_pair(pkg_offset.l3_protocol, &ip_pair);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    // 检查是否有分片 并设置实际的 IP 端口
-    ret = fragment_track(skb, &packet_info);
+    ret = frag_info_track(&pkg_offset, &ip_pair);
     if (ret != TC_ACT_OK) {
         return TC_ACT_SHOT;
     }
 
-    bool is_icmpx_error = is_icmp_error_pkt(&packet_info);
-    bool allow_create_mapping = packet_info.ip_protocol == IPPROTO_ICMP;
+    bool is_icmpx_error = is_icmp_error_pkt(&pkg_offset);
+    bool allow_create_mapping = pkg_offset.l4_protocol == IPPROTO_ICMP;
 
     // egress  存储的是 Ac:Pc -> An:Pn 的值
     // ingress 存储的是 An:Pn -> Ac:Pc 的值
     struct nat_mapping_value *nat_egress_value, *nat_ingress_value;
 
-    // bpf_log_info("allow_create_mapping : %d", allow_create_mapping);
-
     // 先检查是否有静态映射
-    ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_INGRESS,
-                                &packet_info.pair_ip, &nat_ingress_value, &nat_egress_value);
+    ret = lookup_static_mapping(skb, pkg_offset.l4_protocol, NAT_MAPPING_INGRESS, &ip_pair,
+                                &nat_ingress_value, &nat_egress_value);
     if (ret != TC_ACT_OK) {
-        ret = ingress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
-                                            &packet_info.pair_ip, &nat_egress_value,
-                                            &nat_ingress_value);
-
-        // bpf_log_info("packet src port: %u ", bpf_ntohs(packet_info.pair_ip.src_port));
-        // bpf_log_info("modify port: %u -> %u", bpf_ntohs(packet_info.pair_ip.dst_port),
-        // bpf_ntohs(nat_egress_value->port));
+        ret = ingress_lookup_or_new_mapping(skb, pkg_offset.l4_protocol, allow_create_mapping,
+                                            &ip_pair, &nat_egress_value, &nat_ingress_value);
 
         if (ret != TC_ACT_OK) {
             return TC_ACT_SHOT;
@@ -1087,25 +815,25 @@ int ingress_nat(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat_timer_value *ct_timer_value;
-            ret = lookup_or_new_ct(packet_info.ip_protocol, allow_create_mapping,
-                                   &packet_info.pair_ip, nat_egress_value, nat_ingress_value,
-                                   &ct_timer_value);
+            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+                                   nat_egress_value, nat_ingress_value, &ct_timer_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
+                bpf_log_info("connect ret :%u", ret);
                 return TC_ACT_SHOT;
             }
             if (!is_icmpx_error || ct_timer_value != NULL) {
-                ct_state_transition(packet_info.ip_protocol, packet_info.pkt_type,
-                                    NAT_MAPPING_EGRESS, ct_timer_value);
+                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
+                                    ct_timer_value);
             }
         }
         // } else {
-        //     bpf_log_info("packet dst port: %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
-        //                  bpf_ntohs(packet_info.pair_ip.dst_port));
-        //     bpf_log_info("modify dst port:  %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
+        //     bpf_log_info("packet dst port: %u -> %u", bpf_ntohs(ip_pair.src_port),
+        //                  bpf_ntohs(ip_pair.dst_port));
+        //     bpf_log_info("modify dst port:  %u -> %u", bpf_ntohs(ip_pair.src_port),
         //                  bpf_ntohs(nat_ingress_value->port));
 
-        //     bpf_log_info("src IP: %pI4,", &packet_info.pair_ip.src_addr);
-        //     bpf_log_info("dst IP: %pI4,", &packet_info.pair_ip.dst_addr);
+        //     bpf_log_info("src IP: %pI4,", &ip_pair.src_addr);
+        //     bpf_log_info("dst IP: %pI4,", &ip_pair.dst_addr);
         //     bpf_log_info("real IP: %pI4,", &nat_ingress_value->addr);
     }
 
@@ -1116,7 +844,7 @@ int ingress_nat(struct __sk_buff *skb) {
 
     union u_inet_addr lan_ip;
     if (nat_ingress_value->is_static && nat_ingress_value->addr.ip == 0) {
-        COPY_ADDR_FROM(lan_ip.all, packet_info.pair_ip.dst_addr.all);
+        COPY_ADDR_FROM(lan_ip.all, ip_pair.dst_addr.all);
     } else {
         COPY_ADDR_FROM(lan_ip.all, nat_ingress_value->addr.all);
     }
@@ -1125,11 +853,12 @@ int ingress_nat(struct __sk_buff *skb) {
     //     bpf_log_info("lan_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
     // }
 
+    // bpf_log_info("nat_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
+
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
-                         packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset,
-                         false, &packet_info.pair_ip.dst_addr, packet_info.pair_ip.dst_port,
-                         &lan_ip, nat_ingress_value->port);
+    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_eth_net_offset,
+                         pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
+                         &ip_pair.dst_addr, ip_pair.dst_port, &lan_ip, nat_ingress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
@@ -1143,43 +872,52 @@ SEC("tc/egress")
 int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
 
-    if (current_pkg_type(skb) != TC_ACT_OK) {
+    // struct ip_packet_info_v2 packet_info = {0};
+
+    struct packet_offset_info pkg_offset = {0};
+    struct inet_pair ip_pair = {0};
+    int ret = 0;
+
+    ret = scan_packet(skb, current_eth_net_offset, &pkg_offset);
+    if (ret) {
+        return ret;
+    }
+
+    if (pkg_offset.l3_protocol == LANDSCAPE_IPV6_TYPE) {
         return TC_ACT_UNSPEC;
     }
 
-    // bpf_log_info("active");
-    struct ip_packet_info packet_info;
-    __builtin_memset(&packet_info, 0, sizeof(packet_info));
-    // 接续数据包填充 eth_fram_info 的信息
-    int ret = extract_packet_info(skb, &packet_info);
-    if (ret != TC_ACT_OK) {
-        if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
-        }
-        return TC_ACT_UNSPEC;
-    }
-    // bpf_log_info("packet pkt_type: %d", packet_info.pkt_type);
-
-    ret = is_broadcast_ip(&packet_info);
+    ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    ret = is_handle_protocol(packet_info.ip_protocol);
+    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    if (ret) {
+        return ret;
+    }
+
+    ret = is_broadcast_ip_pair(pkg_offset.l3_protocol, &ip_pair);
     if (ret != TC_ACT_OK) {
         return ret;
     }
 
-    // 检查是否有分片 并设置实际的 IP 端口
-    ret = fragment_track(skb, &packet_info);
+    ret = frag_info_track(&pkg_offset, &ip_pair);
     if (ret != TC_ACT_OK) {
         return TC_ACT_SHOT;
     }
+
+    // bpf_log_info("packet :%pI4 : %u -> %pI4 : %u", ip_pair.src_addr.all,
+    //              bpf_ntohs(ip_pair.src_port), ip_pair.dst_addr.all, bpf_ntohs(ip_pair.dst_port));
+
     // bpf_log_info("packet pkt_type: %d", packet_info.pkt_type);
     // bpf_log_info("icmp_error_payload_offset: %d", packet_info.icmp_error_payload_offset);
 
-    bool is_icmpx_error = is_icmp_error_pkt(&packet_info);
-    bool allow_create_mapping = !is_icmpx_error && pkt_allow_initiating_ct(packet_info.pkt_type);
+    bool is_icmpx_error = is_icmp_error_pkt(&pkg_offset);
+    bool allow_create_mapping = !is_icmpx_error && pkt_allow_initiating_ct(pkg_offset.pkt_type);
+
+    // bpf_log_info("is is_icmpx_error", ip_pair.src_addr.all,
+    //              bpf_ntohs(ip_pair.src_port), ip_pair.dst_addr.all, bpf_ntohs(ip_pair.dst_port));
 
     // egress  存储的是 Ac:Pc -> An:Pn 的值
     // ingress 存储的是 An:Pn -> Ac:Pc 的值
@@ -1187,13 +925,12 @@ int egress_nat(struct __sk_buff *skb) {
 
     // bpf_log_info("allow_create_mapping : %d", allow_create_mapping);
 
-    ret = lookup_static_mapping(skb, packet_info.ip_protocol, NAT_MAPPING_EGRESS,
-                                &packet_info.pair_ip, &nat_ingress_value, &nat_egress_value);
+    ret = lookup_static_mapping(skb, pkg_offset.l4_protocol, NAT_MAPPING_EGRESS, &ip_pair,
+                                &nat_ingress_value, &nat_egress_value);
 
     if (ret != TC_ACT_OK) {
-        ret = egress_lookup_or_new_mapping(skb, packet_info.ip_protocol, allow_create_mapping,
-                                           &packet_info.pair_ip, &nat_egress_value,
-                                           &nat_ingress_value);
+        ret = egress_lookup_or_new_mapping(skb, pkg_offset.l4_protocol, allow_create_mapping,
+                                           &ip_pair, &nat_egress_value, &nat_ingress_value);
 
         if (ret != TC_ACT_OK) {
             return TC_ACT_SHOT;
@@ -1203,20 +940,19 @@ int egress_nat(struct __sk_buff *skb) {
         // if (allow_reuse_port) {
         //     bpf_log_info("allow_reuse_port: %u, skb->mark: %u", allow_reuse_port, skb->mark);
         // }
-        if (nat_egress_value->is_allow_reuse == 0 && packet_info.ip_protocol != IPPROTO_ICMP) {
+        if (nat_egress_value->is_allow_reuse == 0 && pkg_offset.l4_protocol != IPPROTO_ICMP) {
             // PORT REUSE check
-            if (!ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr) ||
-                packet_info.pair_ip.dst_port != nat_egress_value->trigger_port) {
+            if (!ip_addr_equal(&ip_pair.dst_addr, &nat_egress_value->trigger_addr) ||
+                ip_pair.dst_port != nat_egress_value->trigger_port) {
                 bpf_log_info("FLOW_ALLOW_REUSE MARK not set, DROP PACKET");
-                bpf_log_info("dst IP: %pI4,", &packet_info.pair_ip.dst_addr);
+                bpf_log_info("dst IP: %pI4,", &ip_pair.dst_addr);
                 bpf_log_info("trigger_addr IP: %pI4,", &nat_egress_value->trigger_addr);
-                bpf_log_info(
-                    "compare ip result: %d",
-                    ip_addr_equal(&packet_info.pair_ip.dst_addr, &nat_egress_value->trigger_addr));
+                bpf_log_info("compare ip result: %d",
+                             ip_addr_equal(&ip_pair.dst_addr, &nat_egress_value->trigger_addr));
                 bpf_log_info("trigger_port: %u,", bpf_ntohs(nat_egress_value->trigger_port));
-                bpf_log_info("dst_port: %u,", bpf_ntohs(packet_info.pair_ip.dst_port));
+                bpf_log_info("dst_port: %u,", bpf_ntohs(ip_pair.dst_port));
                 bpf_log_info("compare port result: %d",
-                             packet_info.pair_ip.dst_port == nat_egress_value->trigger_port);
+                             ip_pair.dst_port == nat_egress_value->trigger_port);
                 return TC_ACT_SHOT;
             }
         }
@@ -1228,26 +964,25 @@ int egress_nat(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat_timer_value *ct_timer_value;
-            ret = lookup_or_new_ct(packet_info.ip_protocol, allow_create_mapping,
-                                   &packet_info.pair_ip, nat_egress_value, nat_ingress_value,
-                                   &ct_timer_value);
+            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+                                   nat_egress_value, nat_ingress_value, &ct_timer_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 return TC_ACT_SHOT;
             }
             if (!is_icmpx_error || ct_timer_value != NULL) {
-                ct_state_transition(packet_info.ip_protocol, packet_info.pkt_type,
-                                    NAT_MAPPING_EGRESS, ct_timer_value);
+                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
+                                    ct_timer_value);
             }
         }
     }
 
-    // bpf_log_info("packet src port: %u -> %u", bpf_ntohs(packet_info.pair_ip.src_port),
-    //              bpf_ntohs(packet_info.pair_ip.dst_port));
+    // bpf_log_info("packet src port: %u -> %u", bpf_ntohs(ip_pair.src_port),
+    //              bpf_ntohs(ip_pair.dst_port));
     // bpf_log_info("modify src port:  %u -> %u", bpf_ntohs(nat_egress_value->port),
-    //              bpf_ntohs(packet_info.pair_ip.dst_port));
+    //              bpf_ntohs(ip_pair.dst_port));
 
-    // bpf_log_info("src IP: %pI4,", &packet_info.pair_ip.src_addr);
-    // bpf_log_info("dst IP: %pI4,", &packet_info.pair_ip.dst_addr);
+    // bpf_log_info("src IP: %pI4,", &ip_pair.src_addr);
+    // bpf_log_info("dst IP: %pI4,", &ip_pair.dst_addr);
     // bpf_log_info("mapping IP: %pI4,", &nat_egress_value->addr);
 
     if (nat_egress_value == NULL) {
@@ -1275,10 +1010,9 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("nat_ip IP: %pI4:%u", &nat_addr.all, bpf_ntohs(nat_egress_value->port));
 
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, packet_info.ip_protocol, current_eth_net_offset,
-                         packet_info.l4_payload_offset, packet_info.icmp_error_payload_offset, true,
-                         &packet_info.pair_ip.src_addr, packet_info.pair_ip.src_port, &nat_addr,
-                         nat_egress_value->port);
+    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_eth_net_offset,
+                         pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
+                         &ip_pair.src_addr, ip_pair.src_port, &nat_addr, nat_egress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
@@ -1292,17 +1026,19 @@ SEC("tc/egress")
 int test_nat_read(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< test_nat_read <<<"
 
-    if (current_pkg_type(skb) != TC_ACT_OK) {
-        return TC_ACT_UNSPEC;
+    // struct packet_offset_info pkg_offset = {0};
+    // struct inet_pair ip_pair;
+    struct ip_packet_info_v2 packet_info = {0};
+    int ret = 0;
+
+    ret = scan_packet(skb, current_eth_net_offset, &packet_info.offset);
+    if (ret) {
+        return ret;
     }
 
-    struct ip_packet_info packet_info = {0};
-    int ret = extract_packet_info(skb, &packet_info);
-    if (ret != TC_ACT_OK) {
-        if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
-        }
-        return TC_ACT_UNSPEC;
+    ret = read_packet_info(skb, &packet_info.offset, &packet_info.pair_ip);
+    if (ret) {
+        return ret;
     }
 
     return TC_ACT_OK;

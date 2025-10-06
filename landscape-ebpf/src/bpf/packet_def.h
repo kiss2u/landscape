@@ -61,12 +61,12 @@ struct imac_addr {
     u8 mac[6];
 };
 
-union u_inet_addr {
-    __be32 all[4];
-    __be32 ip;
-    __be32 ip6[4];
-    u8 bits[16];
-};
+// union u_inet_addr {
+//     __be32 all[4];
+//     __be32 ip;
+//     __be32 ip6[4];
+//     u8 bits[16];
+// };
 
 struct route_context {
     struct in6_addr saddr;
@@ -83,57 +83,57 @@ struct route_context {
     u8 _pad[3];
 };
 
-struct inet_pair {
-    union u_inet_addr src_addr;
-    union u_inet_addr dst_addr;
-    __be16 src_port;
-    __be16 dst_port;
-};
+// struct inet_pair {
+//     union u_inet_addr src_addr;
+//     union u_inet_addr dst_addr;
+//     __be16 src_port;
+//     __be16 dst_port;
+// };
 
 // ICMPv4 消息类型
-enum {
-    ICMP_ERROR_MSG,
-    ICMP_QUERY_MSG,
-    ICMP_ACT_UNSPEC,
-    ICMP_ACT_SHOT,
-};
+// enum {
+//     ICMP_ERROR_MSG,
+//     ICMP_QUERY_MSG,
+//     ICMP_ACT_UNSPEC,
+//     ICMP_ACT_SHOT,
+// };
 
-enum fragment_type {
-    // 还有分片
-    // offect 且 more 被设置
-    MORE_F,
-    // 结束分片
-    // offect 的值不为 0
-    END_F,
-    // 没有分片
-    NOT_F
-};
+// enum fragment_type {
+//     // 还有分片
+//     // offect 且 more 被设置
+//     MORE_F,
+//     // 结束分片
+//     // offect 的值不为 0
+//     END_F,
+//     // 没有分片
+//     NOT_F
+// };
 
 // 数据包所属的连接类型
-enum {
-    // 无连接
-    PKT_CONNLESS,
-    //
-    PKT_TCP_DATA,
-    PKT_TCP_SYN,
-    PKT_TCP_RST,
-    PKT_TCP_FIN,
-    PKT_TCP_ACK,
-};
+// enum {
+//     // 无连接
+//     PKT_CONNLESS,
+//     //
+//     PKT_TCP_DATA,
+//     PKT_TCP_SYN,
+//     PKT_TCP_RST,
+//     PKT_TCP_FIN,
+//     PKT_TCP_ACK,
+// };
 
 /// 作为 fragment 缓存的 key
-struct fragment_cache_key {
-    u8 _pad[3];
-    u8 l4proto;
-    u32 id;
-    union u_inet_addr saddr;
-    union u_inet_addr daddr;
-};
+// struct fragment_cache_key {
+//     u8 _pad[3];
+//     u8 l4proto;
+//     u32 id;
+//     union u_inet_addr saddr;
+//     union u_inet_addr daddr;
+// };
 
-struct fragment_cache_value {
-    u16 sport;
-    u16 dport;
-};
+// struct fragment_cache_value {
+//     u16 sport;
+//     u16 dport;
+// };
 
 // Timer 状态
 enum {

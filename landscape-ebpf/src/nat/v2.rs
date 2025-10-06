@@ -1,83 +1,27 @@
-use std::{
-    mem::MaybeUninit,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-};
+use std::mem::MaybeUninit;
 
-use land_nat::{
-    types::{nat_conn_event, u_inet_addr},
-    *,
-};
-use landscape_common::{
-    config::nat::NatConfig,
-    event::nat::{NatEvent, NatEventType},
-};
+use land_nat_v2::*;
+use landscape_common::config::nat::NatConfig;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     TC_EGRESS, TC_INGRESS,
 };
 use tokio::sync::oneshot;
 
-use crate::{
-    landscape::TcHookProxy, LANDSCAPE_IPV6_TYPE, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY,
-};
-use crate::{LANDSCAPE_IPV4_TYPE, MAP_PATHS};
+use crate::MAP_PATHS;
+use crate::{landscape::TcHookProxy, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY};
 
-pub(crate) mod land_nat {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_nat.skel.rs"));
+pub(crate) mod land_nat_v2 {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_nat_v2.skel.rs"));
 }
 
-pub mod v2;
-
-// fn bump_memlock_rlimit() {
-//     let rlimit = libc::rlimit { rlim_cur: 128 << 20, rlim_max: 128 << 20 };
-
-//     if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
-//         panic!("Failed to increase rlimit");
-//     }
-// }
-
-unsafe impl plain::Plain for nat_conn_event {}
-unsafe impl plain::Plain for u_inet_addr {}
-
-impl From<&nat_conn_event> for NatEvent {
-    fn from(ev: &nat_conn_event) -> Self {
-        fn convert_ip(raw: &u_inet_addr, proto: u8) -> IpAddr {
-            match proto {
-                LANDSCAPE_IPV4_TYPE => {
-                    let ip = unsafe { raw.ip.clone().to_be() };
-                    IpAddr::V4(Ipv4Addr::from_bits(ip))
-                }
-                LANDSCAPE_IPV6_TYPE => {
-                    let bits = unsafe { raw.bits };
-                    IpAddr::V6(Ipv6Addr::from(bits))
-                }
-                _ => IpAddr::V4(Ipv4Addr::UNSPECIFIED), // fallback
-            }
-        }
-
-        NatEvent {
-            event_type: NatEventType::from(ev.event_type),
-            src_ip: convert_ip(&ev.src_addr, ev.l3_proto),
-            dst_ip: convert_ip(&ev.dst_addr, ev.l3_proto),
-            src_port: ev.src_port.to_be(),
-            dst_port: ev.dst_port.to_be(),
-            l4_proto: ev.l4_proto,
-            flow_id: ev.flow_id,
-            trace_id: ev.trace_id,
-            l3_proto: ev.l3_proto,
-            time: ev.time,
-        }
-    }
-}
-
-pub fn init_nat(
+pub fn init_nat_v2(
     ifindex: i32,
     has_mac: bool,
     service_status: oneshot::Receiver<()>,
     config: NatConfig,
 ) {
-    // bump_memlock_rlimit();
-    let landscape_builder = LandNatSkelBuilder::default();
+    let landscape_builder = LandNatV2SkelBuilder::default();
     // landscape_builder.obj_builder.debug(true);
 
     let mut open_object = MaybeUninit::uninit();

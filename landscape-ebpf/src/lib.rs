@@ -16,6 +16,9 @@ pub mod pppoe;
 pub mod route;
 pub mod tproxy;
 
+#[cfg(test)]
+mod tests;
+
 pub mod dns_dispatcher;
 
 static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
