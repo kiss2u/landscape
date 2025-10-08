@@ -1045,3 +1045,29 @@ int test_nat_read(struct __sk_buff *skb) {
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
+
+SEC("tc/egress")
+int handle_ipv6_egress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "<<< handle_ipv6_egress <<<"
+
+    struct ip_packet_info_v2 packet_info = {0};
+    int ret = 0;
+
+    ret = scan_packet(skb, current_l3_offset, &packet_info.offset);
+    if (ret) {
+        return ret;
+    }
+
+    ret = read_packet_info(skb, &packet_info.offset, &packet_info.pair_ip);
+    if (ret) {
+        return ret;
+    }
+
+    ret = ipv6_egress_prefix_check_and_replace(skb, &packet_info.offset, &packet_info.pair_ip);
+    if (ret) {
+        return ret;
+    }
+    
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}

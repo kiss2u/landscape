@@ -10,8 +10,9 @@ use zerocopy::IntoBytes;
 use crate::tests::test_scanner::types::packet_info;
 use crate::tests::test_scanner::types::u_inet_addr;
 
+mod check;
+mod nat;
 mod scanner;
-mod test_nat;
 
 pub(crate) mod test_scanner {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_scanner.skel.rs"));

@@ -15,7 +15,10 @@
 
 // size limit 5 u32
 struct packet_offset_info {
-    u32 status;
+    u8 icmp_error_l3_protocol;
+    u8 icmp_error_l4_protocol;
+    u16 status;
+
     u8 pkt_type;
     /// LANDSCAPE_IPV4_TYPE | LANDSCAPE_IPV6_TYPE
     u8 l3_protocol;
@@ -43,7 +46,8 @@ struct packet_info {
 
 #define PACKET_OFFSET_INFO_TO_CB(skb, info)                                                        \
     do {                                                                                           \
-        (skb)->cb[0] = (info)->status;                                                             \
+        (skb)->cb[0] = ((u32)(info)->icmp_error_l3_protocol << 24) |                               \
+                       ((u32)(info)->icmp_error_l4_protocol << 16) | ((u32)(info)->status);        \
         (skb)->cb[1] = ((u32)(info)->pkt_type << 24) | ((u32)(info)->l3_protocol << 16) |          \
                        ((u32)(info)->l4_protocol << 8) | ((u32)(info)->fragment_type);             \
         (skb)->cb[2] = ((u32)(info)->fragment_off << 16) | ((u32)(info)->fragment_id);             \
@@ -54,7 +58,9 @@ struct packet_info {
 
 #define CB_TO_PACKET_OFFSET_INFO(skb, info)                                                        \
     do {                                                                                           \
-        (info)->status = (skb)->cb[0];                                                             \
+        (info)->icmp_error_l3_protocol = ((skb)->cb[0] >> 24) & 0xff;                              \
+        (info)->icmp_error_l4_protocol = ((skb)->cb[0] >> 16) & 0xff;                              \
+        (info)->status = (skb)->cb[0] & 0xffff;                                                    \
         (info)->pkt_type = ((skb)->cb[1] >> 24) & 0xff;                                            \
         (info)->l3_protocol = ((skb)->cb[1] >> 16) & 0xff;                                         \
         (info)->l4_protocol = ((skb)->cb[1] >> 8) & 0xff;                                          \
@@ -67,10 +73,33 @@ struct packet_info {
         (info)->icmp_error_inner_l4_offset = (skb)->cb[4] & 0xffff;                                \
     } while (0)
 
-// static __always_inline int restore_offset_from_cb(struct __sk_buff *skb, struct
-// packet_offset_info *offset, u32 current) {
+static __always_inline void restore_offset_from_cb(struct __sk_buff *skb,
+                                                   struct packet_offset_info *offset,
+                                                   u32 current_offset) {
+    u32 l3_base_offset = 0;
+    CB_TO_PACKET_OFFSET_INFO(skb, offset);
 
-// }
+    if (offset->l3_offset_when_scan == current_offset) {
+        return;
+    }
+    if (offset->l3_offset_when_scan > current_offset) {
+        l3_base_offset = offset->l3_offset_when_scan - current_offset;
+        offset->l3_offset_when_scan -= l3_base_offset;
+        offset->l4_offset -= l3_base_offset;
+        offset->icmp_error_l3_offset -= l3_base_offset;
+        offset->icmp_error_inner_l4_offset -= l3_base_offset;
+    } else if (offset->l3_offset_when_scan < current_offset) {
+        l3_base_offset = current_offset - offset->l3_offset_when_scan;
+        offset->l3_offset_when_scan += l3_base_offset;
+        offset->l4_offset += l3_base_offset;
+        offset->icmp_error_l3_offset += l3_base_offset;
+        offset->icmp_error_inner_l4_offset += l3_base_offset;
+    }
+}
+
+static __always_inline bool is_offset_cached(struct __sk_buff *skb) {
+    return (skb->cb[0] & 0xffff) == 1;
+}
 
 struct ip_scanner_ctx {
     u8 l4_protocol;
@@ -334,6 +363,8 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
             }
 
             offset_info->icmp_error_inner_l4_offset = ctx.l4_offset;
+            offset_info->icmp_error_l3_protocol = LANDSCAPE_IPV4_TYPE;
+            offset_info->icmp_error_l4_protocol = ctx.l4_protocol;
 
             u32 *temp_addr;
             u32 dst_ip_val, icmp_src_ip_val;
@@ -388,6 +419,8 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
             }
 
             offset_info->icmp_error_inner_l4_offset = ctx.l4_offset;
+            offset_info->icmp_error_l3_protocol = LANDSCAPE_IPV6_TYPE;
+            offset_info->icmp_error_l4_protocol = ctx.l4_protocol;
 
             union u_ld_ip *temp_addr;
             union u_ld_ip dst_ip_val, icmp_src_ip_val;

@@ -105,6 +105,11 @@ pub mod tests {
 
     #[test]
     fn test_server_1000() {
+        performance_test(1_000_000, crate::tests::dummpy_tcp_pkg());
+    }
+
+    #[test]
+    fn test_icmpv4_error_server_1000() {
         performance_test(
             1_000_000,
             crate::tests::scanner::package::build_icmpv4_error_with_inner_ipv4_eth(),

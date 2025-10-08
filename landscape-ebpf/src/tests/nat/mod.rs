@@ -7,6 +7,9 @@ use libbpf_rs::{
 
 use crate::nat::{land_nat::LandNatSkelBuilder, v2::land_nat_v2::LandNatV2SkelBuilder};
 
+mod ipv6;
+mod package;
+
 pub fn test_nat(mut payload: Vec<u8>) {
     let landscape_builder = LandNatSkelBuilder::default();
     let mut open_object = MaybeUninit::uninit();
@@ -57,7 +60,7 @@ pub fn test_nat_v2(mut payload: Vec<u8>) {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::tests::test_nat::{test_nat, test_nat_v2};
+    use crate::tests::nat::{test_nat, test_nat_v2};
 
     // cargo test --package landscape-ebpf --lib -- tests::test_nat::tests::test --exact --show-output
     #[test]

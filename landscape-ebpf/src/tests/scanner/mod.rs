@@ -20,7 +20,10 @@ mod performance;
 #[repr(C, packed)]
 #[derive(IntoBytes, FromBytes, Immutable, Clone, Debug, Copy, Default)]
 pub struct PacketOffsetInfo {
-    status: U32<LittleEndian>,
+    status: U16<LittleEndian>,
+
+    icmp_error_l3_protocol: u8,
+    icmp_error_l4_protocol: u8,
 
     fragment_type: u8,
     l4_protocol: u8,

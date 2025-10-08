@@ -4,6 +4,10 @@
 
 #include "vmlinux.h"
 
+
+#define IPV6_WAN_ADDR_PREFIX_LEN 7
+#define IPV6_WAN_ADDR_SUFFIX_LEN 16 - 7
+
 struct wan_ip_info_key {
     u32 ifindex;
     u8 l3_protocol;
@@ -11,8 +15,12 @@ struct wan_ip_info_key {
 };
 
 struct wan_ip_info_value {
+    // when IPV4, is IPv4 Address
+    // when IPv6, ip IPv6 Prefix
     union u_inet_addr addr;
+    // always Gateway
     union u_inet_addr gateway;
+    // mask length
     u8 mask;
 };
 
