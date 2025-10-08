@@ -15,18 +15,21 @@ struct ip_packet_info_v2 {
 #define LAND_IPV6_NET_PREFIX_TRANS_MASK (0x0FULL << 56)
 
 struct ipv6_prefix_mapping_key {
-    // setting prefix length /60
     u8 client_suffix[8];
     u16 client_port;
+    // client suffix is 8 byte + 4 bit
+    u8 id_byte;
     // TCP / UDP / ICMP6
     u8 l4_protocol;
 };
 
 struct ipv6_prefix_mapping_value {
-    u8 client_prefix[9];
+    // client prefix is 7 byte + 4 bit
+    u8 client_prefix[8];
     union u_inet_addr trigger_addr;
     u16 trigger_port;
     u8 is_allow_reuse;
+    u8 _pad;
 };
 
 #define CLIENT_PREFIX_CACHE_SIZE 65536 * 3
@@ -72,7 +75,10 @@ static __always_inline int search_ipv6_mapping_egress(struct __sk_buff *skb,
                                                       struct inet_pair *ip_pair) {
     struct ipv6_prefix_mapping_key key = {0};
     key.client_port = ip_pair->src_port;
-    COPY_ADDR_FROM(key.client_suffix, ip_pair->src_addr.bits + IPV6_WAN_ADDR_PREFIX_LEN);
+    COPY_ADDR_FROM(key.client_suffix, ip_pair->src_addr.bits + 8);
+    // bpf_printk("client_suffix: %02x %02x", key.client_suffix[0], key.client_suffix[1]);
+    key.id_byte = ip_pair->src_addr.bits[7] & 0x0F;
+    // bpf_printk("client_suffix: %02x %02x", key.client_suffix[0], key.client_suffix[1]);
     key.l4_protocol = offset_info->l4_protocol;
 
     struct ipv6_prefix_mapping_value *value;
@@ -169,8 +175,8 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
             return TC_ACT_SHOT;
         }
 
-        ret = bpf_l4_csum_replace(skb, inner_l4_checksum_offset, old_inner_ip_prefix >> 32,
-                                  new_inner_ip_prefix >> 32, 4);
+        // ret = bpf_l4_csum_replace(skb, inner_l4_checksum_offset, old_inner_ip_prefix >> 32,
+        //                           new_inner_ip_prefix >> 32, 4);
 
         L4_CSUM_REPLACE_U64_OR_SHOT(skb, inner_l4_checksum_offset, old_inner_ip_prefix,
                                     new_inner_ip_prefix, 0);
@@ -218,6 +224,107 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
         L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_ip_prefix, new_ip_prefix,
                                     BPF_F_PSEUDO_HDR);
     }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline int
+ipv6_ingress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset_info *offset_info,
+                                     struct inet_pair *ip_pair) {
+#define BPF_LOG_TOPIC "ipv6_ingress_prefix_check_and_replace"
+int ret;
+    __be64 local_client_prefix = {0};
+    
+
+    struct ipv6_prefix_mapping_key key = {0};
+    key.client_port = ip_pair->dst_port;
+    COPY_ADDR_FROM(key.client_suffix, ip_pair->dst_addr.bits + 8);
+    // bpf_printk("client_suffix: %02x %02x", key.client_suffix[0], key.client_suffix[1]);
+    key.id_byte = ip_pair->dst_addr.bits[7] & 0x0F;
+    // bpf_printk("client_suffix: %02x %02x", key.client_suffix[0], key.client_suffix[1]);
+    key.l4_protocol = offset_info->l4_protocol;
+
+
+    struct ipv6_prefix_mapping_value *value = bpf_map_lookup_elem(&ip6_client_map, &key);
+    if (value == NULL) {
+        bpf_printk("lookup client prefix error, key.id_byte: %x", key.id_byte);
+        // bpf_printk("lookup client prefix error, key.client_suffix: %02x %02x %02x %02x %02x %02x %02x %02x %02x", key.client_suffix[0], key.client_suffix[1], key.client_suffix[2], key.client_suffix[3], key.client_suffix[4], key.client_suffix[5], key.client_suffix[6], key.client_suffix[7], key.client_suffix[8]);
+        bpf_printk("lookup client prefix error, key.l4_protocol: %u", key.l4_protocol);
+        bpf_printk("lookup client prefix error, key.client_port: %04x", key.client_port);
+        return TC_ACT_SHOT;
+    }
+
+    COPY_ADDR_FROM(&local_client_prefix, value->client_prefix);
+    bpf_printk("is_allow_reuse: %u", value->is_allow_reuse);
+
+    if (is_icmp_error_pkt(offset_info)) {
+        // 修改原数据包的 dst ip， 内部数据包的 src ip
+        u32 inner_l3_ip_src_offset =
+            offset_info->icmp_error_l3_offset + offsetof(struct ipv6hdr, saddr);
+        
+        __be64 *old_inner_ip_point;
+        __be64 old_inner_ip_prefix;
+                if (VALIDATE_READ_DATA(skb, &old_inner_ip_point, inner_l3_ip_src_offset,
+                               sizeof(*old_inner_ip_point))) {
+            return TC_ACT_SHOT;
+        }
+        old_inner_ip_prefix = *old_inner_ip_point;
+
+        u32 inner_l4_checksum_offset = 0;
+        u32 l4_checksum_offset = 0;
+        if (get_l4_checksum_offset(offset_info->icmp_error_inner_l4_offset,
+                                   offset_info->icmp_error_l4_protocol,
+                                   &inner_l4_checksum_offset)) {
+            return TC_ACT_SHOT;
+        }
+        if (get_l4_checksum_offset(offset_info->l4_offset, offset_info->l4_protocol,
+                                   &l4_checksum_offset)) {
+            return TC_ACT_SHOT;
+        }
+        u16 old_inner_l4_checksum, new_inner_l4_checksum;
+        READ_SKB_U16(skb, inner_l4_checksum_offset, old_inner_l4_checksum);
+
+        ret = bpf_skb_store_bytes(skb, inner_l3_ip_src_offset, &local_client_prefix, 8, 0);
+        if (ret) {
+            bpf_printk("bpf_skb_store_bytes err: %d", ret);
+            return TC_ACT_SHOT;
+        }
+
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, inner_l4_checksum_offset, old_inner_ip_prefix,
+                            local_client_prefix, 0);
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_inner_ip_prefix,
+                            local_client_prefix, 0);
+        // 因为更新了内层 checksum  所以要先更新内部checksum 改变导致外部 icmp checksum 改变的代码
+        READ_SKB_U16(skb, inner_l4_checksum_offset, new_inner_l4_checksum);
+        ret = bpf_l4_csum_replace(skb, l4_checksum_offset, old_inner_l4_checksum,
+                                  new_inner_l4_checksum, 2);
+        if (ret) {
+            bpf_printk("2 - bpf_l4_csum_replace err: %d", ret);
+            return TC_ACT_SHOT;
+        }
+
+        u32 ipv6_dst_offset = offset_info->l3_offset_when_scan + offsetof(struct ipv6hdr, daddr);
+        bpf_skb_store_bytes(skb, ipv6_dst_offset, &local_client_prefix, 8, 0);
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_inner_ip_prefix, local_client_prefix,
+                            BPF_F_PSEUDO_HDR);
+    } else {
+        u32 l4_checksum_offset = 0;
+        if (get_l4_checksum_offset(offset_info->l4_offset, offset_info->l4_protocol,
+                                   &l4_checksum_offset)) {
+            return TC_ACT_SHOT;
+        }
+        
+        u32 dst_ip_offset = offset_info->l3_offset_when_scan + offsetof(struct ipv6hdr, daddr);
+
+        __be64 old_ip_prefix;
+        COPY_ADDR_FROM(&old_ip_prefix, ip_pair->dst_addr.all);
+        bpf_skb_store_bytes(skb, dst_ip_offset, &local_client_prefix, 8, 0);
+
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_ip_prefix, local_client_prefix,
+                            BPF_F_PSEUDO_HDR);
+    }
+
 
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC

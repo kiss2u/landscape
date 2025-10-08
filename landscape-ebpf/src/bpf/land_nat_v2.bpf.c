@@ -704,7 +704,16 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         }
         ip_pair->dst_addr.ip = iph->daddr;
         ip_pair->src_addr.ip = iph->saddr;
-    } else {
+
+        if ( offset_info->icmp_error_l3_offset > 0) {
+            if (VALIDATE_READ_DATA(skb, &iph, offset_info->icmp_error_l3_offset,
+                                sizeof(struct iphdr))) {
+                bpf_log_info("ipv4 bpf_skb_load_bytes error");
+                return TC_ACT_SHOT;
+            }
+            ip_pair->src_addr.ip = iph->daddr;
+        }
+    } else if (offset_info->l3_protocol == LANDSCAPE_IPV6_TYPE) {
         struct ipv6hdr *ip6h;
         if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->l3_offset_when_scan,
                                sizeof(struct ipv6hdr))) {
@@ -713,9 +722,40 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         }
         COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->saddr.in6_u.u6_addr32);
         COPY_ADDR_FROM(ip_pair->dst_addr.all, ip6h->daddr.in6_u.u6_addr32);
+
+        if ( offset_info->icmp_error_l3_offset > 0) {
+            if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->icmp_error_l3_offset,
+                               sizeof(struct ipv6hdr))) {
+                bpf_log_info("ipv6 bpf_skb_load_bytes error");
+                return TC_ACT_SHOT;
+            }
+            COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->daddr.in6_u.u6_addr32);
+            bpf_printk("src addr: %pI6", ip_pair->src_addr.all);
+            bpf_printk("dst addr: %pI6", ip_pair->dst_addr.all);
+        }
+    } else {
+        return TC_ACT_UNSPEC;
     }
 
-    if (offset_info->l4_protocol == IPPROTO_TCP) {
+    if (offset_info->icmp_error_l4_protocol == IPPROTO_TCP) {
+        struct tcphdr *tcph;
+        if (VALIDATE_READ_DATA(skb, &tcph, offset_info->icmp_error_inner_l4_offset,
+                               sizeof(*tcph))) {
+            return TC_ACT_SHOT;
+        }
+        ip_pair->dst_port = tcph->source;
+        ip_pair->src_port = tcph->dest;
+
+        if (tcph->fin) {
+            offset_info->pkt_type = PKT_TCP_FIN_V2;
+        } else if (tcph->rst) {
+            offset_info->pkt_type = PKT_TCP_RST_V2;
+        } else if (tcph->syn) {
+            offset_info->pkt_type = PKT_TCP_SYN_V2;
+        } else {
+            offset_info->pkt_type = PKT_TCP_DATA_V2;
+        }
+    } else if (offset_info->l4_protocol == IPPROTO_TCP) {
         struct tcphdr *tcph;
         if (VALIDATE_READ_DATA(skb, &tcph, offset_info->l4_offset, sizeof(*tcph))) {
             return TC_ACT_SHOT;
@@ -732,6 +772,14 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         } else {
             offset_info->pkt_type = PKT_TCP_DATA_V2;
         }
+    } else if (offset_info->icmp_error_l4_protocol == IPPROTO_UDP) {
+        struct udphdr *udph;
+        if (VALIDATE_READ_DATA(skb, &udph, offset_info->icmp_error_inner_l4_offset,
+                               sizeof(*udph))) {
+            return TC_ACT_SHOT;
+        }
+        ip_pair->dst_port = udph->source;
+        ip_pair->src_port = udph->dest;
     } else if (offset_info->l4_protocol == IPPROTO_UDP) {
         struct udphdr *udph;
         if (VALIDATE_READ_DATA(skb, &udph, offset_info->l4_offset, sizeof(*udph))) {
@@ -741,8 +789,12 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         ip_pair->dst_port = udph->dest;
     } else if (offset_info->l4_protocol == IPPROTO_ICMP ||
                offset_info->l4_protocol == IPPROTO_ICMPV6) {
+        u32 offset = offset_info->l4_offset;
+        if (offset_info->icmp_error_inner_l4_offset > 0) {
+            offset = offset_info->icmp_error_inner_l4_offset;
+        }
         struct icmphdr *icmph;
-        if (VALIDATE_READ_DATA(skb, &icmph, offset_info->l4_offset, sizeof(struct icmphdr))) {
+        if (VALIDATE_READ_DATA(skb, &icmph, offset, sizeof(struct icmphdr))) {
             return TC_ACT_SHOT;
         }
 
@@ -1067,7 +1119,33 @@ int handle_ipv6_egress(struct __sk_buff *skb) {
     if (ret) {
         return ret;
     }
-    
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
+SEC("tc/ingress")
+int handle_ipv6_ingress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "<<< handle_ipv6_ingress <<<"
+
+    struct ip_packet_info_v2 packet_info = {0};
+    int ret = 0;
+
+    ret = scan_packet(skb, current_l3_offset, &packet_info.offset);
+    if (ret) {
+        return ret;
+    }
+
+    ret = read_packet_info(skb, &packet_info.offset, &packet_info.pair_ip);
+    if (ret) {
+        return ret;
+    }
+
+    ret = ipv6_ingress_prefix_check_and_replace(skb, &packet_info.offset, &packet_info.pair_ip);
+    if (ret) {
+        return ret;
+    }
+
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
