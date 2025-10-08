@@ -1,16 +1,11 @@
-use std::{mem::MaybeUninit, net::IpAddr};
+use std::mem::MaybeUninit;
 
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder as _},
-    MapCore, MapFlags, ProgramInput,
+    ProgramInput,
 };
 
 use crate::nat::{land_nat::LandNatSkelBuilder, v2::land_nat_v2::LandNatV2SkelBuilder};
-
-use crate::{
-    nat::v2::land_nat_v2::types::{u_inet_addr, wan_ip_info_key, wan_ip_info_value},
-    LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE,
-};
 
 mod ipv6_egress;
 mod ipv6_ingress;
@@ -62,51 +57,6 @@ pub fn test_nat_v2(mut payload: Vec<u8>) {
 
     println!("return_value = {}", result.return_value as i32);
     println!("duration = {:?}", result.duration);
-}
-
-fn add_wan_ip<'obj, T>(
-    wan_ipv4_binding: &T,
-    ifindex: u32,
-    addr: IpAddr,
-    gateway: Option<IpAddr>,
-    mask: u8,
-) where
-    T: MapCore,
-{
-    let mut key = wan_ip_info_key::default();
-    let mut value = wan_ip_info_value::default();
-    key.ifindex = ifindex;
-    value.mask = mask;
-
-    match addr {
-        std::net::IpAddr::V4(ipv4_addr) => {
-            value.addr.ip = ipv4_addr.to_bits().to_be();
-            key.l3_protocol = LANDSCAPE_IPV4_TYPE;
-        }
-        std::net::IpAddr::V6(ipv6_addr) => {
-            value.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
-            key.l3_protocol = LANDSCAPE_IPV6_TYPE;
-        }
-    };
-
-    match gateway {
-        Some(std::net::IpAddr::V4(ipv4_addr)) => {
-            value.gateway.ip = ipv4_addr.to_bits().to_be();
-        }
-        Some(std::net::IpAddr::V6(ipv6_addr)) => {
-            value.gateway = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
-        }
-        None => {}
-    };
-
-    let key = unsafe { plain::as_bytes(&key) };
-    let value = unsafe { plain::as_bytes(&value) };
-
-    if let Err(e) = wan_ipv4_binding.update(key, value, MapFlags::ANY) {
-        tracing::error!("setting wan ip error:{e:?}");
-    } else {
-        tracing::info!("setting wan index: {ifindex:?} addr:{addr:?}");
-    }
 }
 
 #[cfg(test)]

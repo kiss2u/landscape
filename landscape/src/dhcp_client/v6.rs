@@ -173,6 +173,7 @@ fn gen_client_id(mac_addr: MacAddr) -> Vec<u8> {
 }
 pub async fn dhcp_v6_pd_client(
     iface_name: String,
+    ifindex: u32,
     mac_addr: MacAddr,
     client_port: u16,
     service_status: DefaultWatchServiceStatus,
@@ -297,7 +298,7 @@ pub async fn dhcp_v6_pd_client(
                 // 处理接收到的数据包
                 match message_result {
                     Some(data) => {
-                        let need_reset_time = handle_packet(&iface_name, &client_id, &mut status, data, &wan_route_info, &route_service, &prefix_map).await;
+                        let need_reset_time = handle_packet(&iface_name, ifindex, &client_id, &mut status, data, &wan_route_info, &route_service, &prefix_map).await;
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                             // current_timeout_time = t2;
@@ -527,6 +528,7 @@ fn get_status_timeout_config(
 /// 返回值为是否要进行检查刷新超时时间
 async fn handle_packet(
     iface_name: &str,
+    ifindex: u32,
     my_client_id: &[u8],
     current_status: &mut IpV6PdState,
     (msg, msg_addr): (Vec<u8>, SocketAddr),
@@ -662,7 +664,7 @@ async fn handle_packet(
                             // info.iface_ip =
                             info.gateway_ip = IpAddr::V6(ipv6addr.clone());
                             route_service.insert_ipv6_wan_route(&iface_name, info).await;
-                            replace_ip_route(&ia_prefix, ipv6addr, iface_name);
+                            replace_ip_route(&ia_prefix, ipv6addr, iface_name, ifindex);
                             // setting IA prefix to IAPrefixMap
                             prefix_map
                                 .insert_or_replace(
@@ -696,7 +698,7 @@ async fn handle_packet(
     false
 }
 
-fn replace_ip_route(iapd: &IAPrefix, route_ip: Ipv6Addr, iface_name: &str) {
+fn replace_ip_route(iapd: &IAPrefix, route_ip: Ipv6Addr, iface_name: &str, ifindex: u32) {
     let result = std::process::Command::new("ip")
         .args([
             "-6",
@@ -714,6 +716,12 @@ fn replace_ip_route(iapd: &IAPrefix, route_ip: Ipv6Addr, iface_name: &str) {
         ])
         .output();
 
+    landscape_ebpf::map_setting::add_ipv6_wan_ip(
+        ifindex,
+        iapd.prefix_ip,
+        Some(route_ip),
+        iapd.prefix_len,
+    );
     if let Err(e) = result {
         tracing::error!("{e:?}");
     }

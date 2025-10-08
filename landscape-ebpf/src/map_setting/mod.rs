@@ -74,29 +74,38 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
 }
 
 pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, gateway: Option<Ipv6Addr>, mask: u8) {
-    add_wan_ip(ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask, LANDSCAPE_IPV6_TYPE);
+    let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
+    add_wan_ip(&wan_ipv4_binding, ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask);
 }
 
 pub fn add_ipv4_wan_ip(ifindex: u32, addr: Ipv4Addr, gateway: Option<Ipv4Addr>, mask: u8) {
-    add_wan_ip(ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask, LANDSCAPE_IPV4_TYPE);
+    let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
+    add_wan_ip(&wan_ipv4_binding, ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask);
 }
 
-fn add_wan_ip(ifindex: u32, addr: IpAddr, gateway: Option<IpAddr>, mask: u8, l3_protocol: u8) {
+pub(crate) fn add_wan_ip<'obj, T>(
+    wan_ipv4_binding: &T,
+    ifindex: u32,
+    addr: IpAddr,
+    gateway: Option<IpAddr>,
+    mask: u8,
+) where
+    T: MapCore,
+{
     tracing::debug!("add wan index - 1: {ifindex:?}");
-    let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
-
     let mut key = wan_ip_info_key::default();
     let mut value = wan_ip_info_value::default();
     key.ifindex = ifindex;
-    key.l3_protocol = l3_protocol;
     value.mask = mask;
 
     match addr {
         std::net::IpAddr::V4(ipv4_addr) => {
             value.addr.ip = ipv4_addr.to_bits().to_be();
+            key.l3_protocol = LANDSCAPE_IPV4_TYPE;
         }
         std::net::IpAddr::V6(ipv6_addr) => {
             value.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
+            key.l3_protocol = LANDSCAPE_IPV6_TYPE;
         }
     };
 
@@ -113,21 +122,11 @@ fn add_wan_ip(ifindex: u32, addr: IpAddr, gateway: Option<IpAddr>, mask: u8, l3_
     let key = unsafe { plain::as_bytes(&key) };
     let value = unsafe { plain::as_bytes(&value) };
 
-    // let addr_num: u32 = .clone().into();
     if let Err(e) = wan_ipv4_binding.update(key, value, MapFlags::ANY) {
         tracing::error!("setting wan ip error:{e:?}");
     } else {
         tracing::info!("setting wan index: {ifindex:?} addr:{addr:?}");
     }
-
-    // if LAND_ARGS.export_manager {
-    //     let static_nat_mappings =
-    //         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.static_nat_mappings).unwrap();
-    //     crate::nat::set_nat_static_mapping(
-    //         (addr.clone(), LAND_ARGS.port, addr, LAND_ARGS.port),
-    //         &static_nat_mappings,
-    //     );
-    // }
 }
 
 pub fn del_ipv6_wan_ip(ifindex: u32) {

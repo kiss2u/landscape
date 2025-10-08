@@ -63,6 +63,7 @@ impl ServiceStarterTrait for IPV6PDService {
                 tokio::spawn(async move {
                     crate::dhcp_client::v6::dhcp_v6_pd_client(
                         config.iface_name,
+                        iface.index,
                         config.config.mac,
                         LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
                         status_clone,

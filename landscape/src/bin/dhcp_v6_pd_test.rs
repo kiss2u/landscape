@@ -74,16 +74,19 @@ async fn main() {
             default_route: true,
             gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
         };
-        dhcp_v6_pd_client(
-            args.dhcp_client_iface,
-            mac_addr,
-            LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
-            status,
-            route_info,
-            ip_route_service,
-            prefix_map_clone,
-        )
-        .await;
+        if let Some(iface) = get_iface_by_name(&args.dhcp_client_iface).await {
+            dhcp_v6_pd_client(
+                args.dhcp_client_iface,
+                iface.index,
+                mac_addr,
+                LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+                status,
+                route_info,
+                ip_route_service,
+                prefix_map_clone,
+            )
+            .await;
+        }
     });
     let icmp_service_status = DefaultWatchServiceStatus::new();
     let ip_route_service = ip_route.clone();

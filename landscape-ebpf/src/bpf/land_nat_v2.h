@@ -224,7 +224,7 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
                                     BPF_F_PSEUDO_HDR);
     }
 
-    return TC_ACT_OK;
+    return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
 }
 
@@ -325,7 +325,7 @@ int ret;
     }
 
 
-    return TC_ACT_OK;
+    return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
 }
 

@@ -705,9 +705,9 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         ip_pair->dst_addr.ip = iph->daddr;
         ip_pair->src_addr.ip = iph->saddr;
 
-        if ( offset_info->icmp_error_l3_offset > 0) {
+        if (offset_info->icmp_error_l3_offset > 0) {
             if (VALIDATE_READ_DATA(skb, &iph, offset_info->icmp_error_l3_offset,
-                                sizeof(struct iphdr))) {
+                                   sizeof(struct iphdr))) {
                 bpf_log_info("ipv4 bpf_skb_load_bytes error");
                 return TC_ACT_SHOT;
             }
@@ -723,9 +723,9 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->saddr.in6_u.u6_addr32);
         COPY_ADDR_FROM(ip_pair->dst_addr.all, ip6h->daddr.in6_u.u6_addr32);
 
-        if ( offset_info->icmp_error_l3_offset > 0) {
+        if (offset_info->icmp_error_l3_offset > 0) {
             if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->icmp_error_l3_offset,
-                               sizeof(struct ipv6hdr))) {
+                                   sizeof(struct ipv6hdr))) {
                 bpf_log_info("ipv6 bpf_skb_load_bytes error");
                 return TC_ACT_SHOT;
             }
@@ -819,10 +819,6 @@ int ingress_nat(struct __sk_buff *skb) {
         return ret;
     }
 
-    if (pkg_offset.l3_protocol == LANDSCAPE_IPV6_TYPE) {
-        return TC_ACT_UNSPEC;
-    }
-
     ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) {
         return ret;
@@ -841,6 +837,10 @@ int ingress_nat(struct __sk_buff *skb) {
     ret = frag_info_track(&pkg_offset, &ip_pair);
     if (ret != TC_ACT_OK) {
         return TC_ACT_SHOT;
+    }
+
+    if (pkg_offset.l3_protocol == LANDSCAPE_IPV6_TYPE) {
+        return ipv6_ingress_prefix_check_and_replace(skb, &pkg_offset, &ip_pair);
     }
 
     bool is_icmpx_error = is_icmp_error_pkt(&pkg_offset);
@@ -936,10 +936,6 @@ int egress_nat(struct __sk_buff *skb) {
         return ret;
     }
 
-    if (pkg_offset.l3_protocol == LANDSCAPE_IPV6_TYPE) {
-        return TC_ACT_UNSPEC;
-    }
-
     ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) {
         return ret;
@@ -958,6 +954,10 @@ int egress_nat(struct __sk_buff *skb) {
     ret = frag_info_track(&pkg_offset, &ip_pair);
     if (ret != TC_ACT_OK) {
         return TC_ACT_SHOT;
+    }
+
+    if (pkg_offset.l3_protocol == LANDSCAPE_IPV6_TYPE) {
+        return ipv6_egress_prefix_check_and_replace(skb, &pkg_offset, &ip_pair);
     }
 
     // bpf_log_info("packet :%pI4 : %u -> %pI4 : %u", ip_pair.src_addr.all,

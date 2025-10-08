@@ -8,8 +8,8 @@ use std::{
 };
 
 use clap::Parser;
-use landscape::dhcp_client::v6::dhcp_v6_pd_client;
-use landscape_common::{ipv6_pd::IAPrefixMap, net::MacAddr, route::RouteTargetInfo};
+use landscape::{dhcp_client::v6::dhcp_v6_pd_client, iface::get_iface_by_name};
+use landscape_common::{ipv6_pd::IAPrefixMap, route::RouteTargetInfo};
 use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
@@ -39,10 +39,14 @@ async fn main() {
     })
     .unwrap();
 
-    let Some(mac_addr) = MacAddr::from_str(&args.mac) else {
+    let iface =
+        get_iface_by_name(&args.iface_name).await.expect("could nt find iface by iface name");
+
+    let Some(mac_addr) = iface.mac else {
         tracing::error!("mac parse error, mac is: {:?}", args.mac);
         return;
     };
+
     let service_status = DefaultWatchServiceStatus::new();
     let (_, ip_route) = landscape::route::test_used_ip_route().await;
     let status = service_status.clone();
@@ -60,6 +64,7 @@ async fn main() {
         };
         dhcp_v6_pd_client(
             args.iface_name,
+            iface.index,
             mac_addr,
             LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
             status,
