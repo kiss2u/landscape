@@ -137,21 +137,28 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
     }
 
     if (is_icmp_error_pkt(offset_info)) {
-        u32 inner_l3_ip_dst_offset =
-            offset_info->icmp_error_l3_offset + offsetof(struct ipv6hdr, daddr);
+        __be64 old_ip_prefix, new_ip_prefix;
+        COPY_ADDR_FROM(&old_ip_prefix, ip_pair->src_addr.all);
+        COPY_ADDR_FROM(&new_ip_prefix, wan_ip_info->addr.all);
+        new_ip_prefix = (old_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
+                        (new_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
 
-        __be64 *old_inner_ip_point;
-        __be64 old_inner_ip_prefix, new_inner_ip_prefix;
-        if (VALIDATE_READ_DATA(skb, &old_inner_ip_point, inner_l3_ip_dst_offset,
-                               sizeof(*old_inner_ip_point))) {
+        u32 error_sender_offset =
+            offset_info->l3_offset_when_scan + offsetof(struct ipv6hdr, saddr);
+        u32 inner_l3_ip_dst_offset = offset_info->icmp_error_l3_offset + offsetof(struct ipv6hdr, daddr);
+
+        __be64 *error_sender_point;
+        __be64 old_sender_ip_prefix, new_sender_ip_prefix;
+        if (VALIDATE_READ_DATA(skb, &error_sender_point, error_sender_offset,
+                               sizeof(*error_sender_point))) {
             return TC_ACT_SHOT;
         }
 
-        old_inner_ip_prefix = *old_inner_ip_point;
-        COPY_ADDR_FROM(&new_inner_ip_prefix, wan_ip_info->addr.all);
+        old_sender_ip_prefix = *error_sender_point;
+        COPY_ADDR_FROM(&new_sender_ip_prefix, wan_ip_info->addr.all);
 
-        new_inner_ip_prefix = (old_inner_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
-                              (new_inner_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
+        new_sender_ip_prefix = (old_sender_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
+                              (new_sender_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
 
         u32 inner_l4_checksum_offset = 0;
         if (get_l4_checksum_offset(offset_info->icmp_error_inner_l4_offset,
@@ -169,7 +176,7 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
         u16 old_inner_l4_checksum, new_inner_l4_checksum;
         READ_SKB_U16(skb, inner_l4_checksum_offset, old_inner_l4_checksum);
 
-        ret = bpf_skb_store_bytes(skb, inner_l3_ip_dst_offset, &new_inner_ip_prefix, 8, 0);
+        ret = bpf_skb_store_bytes(skb, inner_l3_ip_dst_offset, &new_ip_prefix, 8, 0);
         if (ret) {
             bpf_printk("bpf_skb_store_bytes err: %d", ret);
             return TC_ACT_SHOT;
@@ -178,10 +185,10 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
         // ret = bpf_l4_csum_replace(skb, inner_l4_checksum_offset, old_inner_ip_prefix >> 32,
         //                           new_inner_ip_prefix >> 32, 4);
 
-        L4_CSUM_REPLACE_U64_OR_SHOT(skb, inner_l4_checksum_offset, old_inner_ip_prefix,
-                                    new_inner_ip_prefix, 0);
-        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_inner_ip_prefix,
-                                    new_inner_ip_prefix, 0);
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, inner_l4_checksum_offset, old_ip_prefix,
+                                    new_ip_prefix, 0);
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_ip_prefix,
+                                    new_ip_prefix, 0);
 
         // 因为更新了内层 checksum  所以要先更新内部checksum 改变导致外部 icmp checksum 改变的代码
         READ_SKB_U16(skb, inner_l4_checksum_offset, new_inner_l4_checksum);
@@ -193,16 +200,8 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
             return TC_ACT_SHOT;
         }
 
-        u32 ipv6_src_offset = offset_info->l3_offset_when_scan + offsetof(struct ipv6hdr, saddr);
-
-        __be64 old_ip_prefix, new_ip_prefix;
-        COPY_ADDR_FROM(&old_ip_prefix, ip_pair->src_addr.all);
-        COPY_ADDR_FROM(&new_ip_prefix, wan_ip_info->addr.all);
-        new_ip_prefix = (old_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
-                        (new_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
-
-        bpf_skb_store_bytes(skb, ipv6_src_offset, &new_ip_prefix, 8, 0);
-        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_ip_prefix, new_ip_prefix,
+        bpf_skb_store_bytes(skb, error_sender_offset, &new_sender_ip_prefix, 8, 0);
+        L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_sender_ip_prefix, new_sender_ip_prefix,
                                     BPF_F_PSEUDO_HDR);
 
     } else {
