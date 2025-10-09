@@ -60,3 +60,9 @@ pub struct LanRouteInfo {
     pub mac: Option<MacAddr>,
     pub prefix: u8,
 }
+
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub struct LanIPv6RouteKey {
+    pub iface_name: String,
+    pub subnet_index: u32,
+}

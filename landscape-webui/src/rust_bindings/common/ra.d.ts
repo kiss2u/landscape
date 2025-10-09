@@ -2,33 +2,53 @@
 
 export type IPV6RAConfig = {
   /**
-   * 子网前缀长度, 一般是使用 64
+   * Router Advertisement Interval
    */
-  subnet_prefix: number;
+  ad_interval: number;
   /**
-   * 子网索引 // u64 unsupported by sqlx-sqlite
-   */
-  subnet_index: number;
-  /**
-   * 当前主机的 mac 地址
-   */
-  depend_iface: string;
-  /**
-   * 通告 IP 时间
-   */
-  ra_preferred_lifetime: number;
-  ra_valid_lifetime: number;
-  /**
-   * RA 通告标识
+   * Router Advertisement Flag
    */
   ra_flag: RouterFlags;
+  /**
+   * Ip Source
+   */
+  source: Array<IPV6RaConfigSource>;
 };
 
 export type IPV6RAServiceConfig = {
   iface_name: string;
   enable: boolean;
   config: IPV6RAConfig;
-  update_at: number;
+  update_at?: number;
+};
+
+export type IPV6RaConfigSource =
+  | { "t": "static" } & IPv6RaStaticConfig
+  | { "t": "pd" } & IPv6RaPdConfig;
+
+export type IPv6RaPdConfig = {
+  depend_iface: string;
+  prefix_len: number;
+  subnet_index: number;
+  ra_preferred_lifetime: number;
+  ra_valid_lifetime: number;
+};
+
+export type IPv6RaStaticConfig = {
+  /**
+   * Base Prefix
+   */
+  base_prefix: string;
+  /**
+   * subnet prefix length default 64
+   */
+  sub_prefix_len: number;
+  /**
+   * index of subnet
+   */
+  sub_index: number;
+  ra_preferred_lifetime: number;
+  ra_valid_lifetime: number;
 };
 
 export type RouterFlags = {

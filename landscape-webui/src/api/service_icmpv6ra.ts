@@ -1,7 +1,7 @@
 import api from ".";
-import { IPV6RAServiceConfig } from "@/lib/icmpv6ra";
 import { ServiceStatus } from "@/lib/services";
 import axiosService from ".";
+import { IPV6RAServiceConfig } from "@/rust_bindings/common/ra";
 
 export async function get_all_icmpv6ra_status(): Promise<
   Map<string, ServiceStatus>

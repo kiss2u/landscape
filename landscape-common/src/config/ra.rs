@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::net::Ipv6Addr;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -11,7 +14,9 @@ pub struct IPV6RAServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     pub config: IPV6RAConfig,
+
     #[serde(default = "get_f64_timestamp")]
+    #[ts(as = "Option<_>", optional)]
     pub update_at: f64,
 }
 
@@ -23,20 +28,91 @@ impl LandscapeDBStore<String> for IPV6RAServiceConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/ra.d.ts")]
-pub struct IPV6RAConfig {
-    /// 子网前缀长度, 一般是使用 64
-    pub subnet_prefix: u8,
-    /// 子网索引 // u64 unsupported by sqlx-sqlite
-    // #[ts(type = "number")]
-    pub subnet_index: u32,
-    /// 当前主机的 mac 地址
-    pub depend_iface: String,
-    /// 通告 IP 时间
+#[serde(tag = "t")]
+#[serde(rename_all = "snake_case")]
+pub enum IPV6RaConfigSource {
+    Static(IPv6RaStaticConfig),
+    Pd(IPv6RaPdConfig),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/ra.d.ts")]
+pub struct IPv6RaStaticConfig {
+    /// Base Prefix
+    pub base_prefix: Ipv6Addr,
+
+    /// subnet prefix length default 64
+    pub sub_prefix_len: u8,
+
+    /// index of subnet
+    pub sub_index: u32,
+
     pub ra_preferred_lifetime: u32,
     pub ra_valid_lifetime: u32,
-    /// RA 通告标识
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/ra.d.ts")]
+pub struct IPv6RaPdConfig {
+    pub depend_iface: String,
+
+    // default 64
+    pub prefix_len: u8,
+    pub subnet_index: u32,
+
+    pub ra_preferred_lifetime: u32,
+    pub ra_valid_lifetime: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/ra.d.ts")]
+pub struct IPV6RAConfig {
+    /// Router Advertisement Interval
+    pub ad_interval: u32,
+    /// Router Advertisement Flag
     #[serde(default = "ra_flag_default")]
     pub ra_flag: RouterFlags,
+    /// Ip Source
+    pub source: Vec<IPV6RaConfigSource>,
+}
+
+impl IPV6RAConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        let mut base_prefixes = HashSet::<Ipv6Addr>::new();
+        let mut depend_ifaces = HashSet::<String>::new();
+        let mut sub_indices = HashSet::<u32>::new();
+
+        for src in &self.source {
+            match src {
+                IPV6RaConfigSource::Static(cfg) => {
+                    if !base_prefixes.insert(cfg.base_prefix) {
+                        return Err(format!("Duplicate base_prefix found: {}", cfg.base_prefix));
+                    }
+
+                    if !sub_indices.insert(cfg.sub_index) {
+                        return Err(format!(
+                            "Duplicate sub_index/subnet_index found: {}",
+                            cfg.sub_index
+                        ));
+                    }
+                }
+                IPV6RaConfigSource::Pd(cfg) => {
+                    if !depend_ifaces.insert(cfg.depend_iface.clone()) {
+                        return Err(format!("Duplicate depend_iface found: {}", cfg.depend_iface));
+                    }
+
+                    if !sub_indices.insert(cfg.subnet_index) {
+                        return Err(format!(
+                            "Duplicate sub_index/subnet_index found: {}",
+                            cfg.subnet_index
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, TS)]
@@ -82,13 +158,17 @@ fn ra_flag_default() -> RouterFlags {
 
 impl IPV6RAConfig {
     pub fn new(depend_iface: String) -> Self {
-        Self {
-            subnet_prefix: 64,
-            subnet_index: 1,
+        let source = vec![IPV6RaConfigSource::Pd(IPv6RaPdConfig {
             depend_iface,
             ra_preferred_lifetime: 300,
             ra_valid_lifetime: 300,
+            prefix_len: 64,
+            subnet_index: 1,
+        })];
+        Self {
+            source,
             ra_flag: ra_flag_default(),
+            ad_interval: 300,
         }
     }
 }

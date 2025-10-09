@@ -5,7 +5,7 @@ use landscape_common::{
     config::FlowId,
     event::route::RouteEvent,
     flow::{config::FlowConfig, FlowTarget},
-    route::{LanRouteInfo, RouteTargetInfo},
+    route::{LanIPv6RouteKey, LanRouteInfo, RouteTargetInfo},
 };
 use landscape_database::flow_rule::repository::FlowConfigRepository;
 use landscape_ebpf::map_setting::route::{add_lan_route, del_lan_route};
@@ -21,7 +21,7 @@ pub struct IpRouteService {
     ipv6_wan_ifaces: ShareRwLock<HashMap<String, RouteTargetInfo>>,
 
     ipv4_lan_ifaces: ShareRwLock<HashMap<String, LanRouteInfo>>,
-    ipv6_lan_ifaces: ShareRwLock<HashMap<String, LanRouteInfo>>,
+    ipv6_lan_ifaces: ShareRwLock<HashMap<LanIPv6RouteKey, LanRouteInfo>>,
 }
 
 impl IpRouteService {
@@ -106,11 +106,14 @@ impl IpRouteService {
         }
     }
 
-    pub async fn insert_ipv6_lan_route(&self, key: &str, info: LanRouteInfo) {
+    pub async fn insert_ipv6_lan_route(&self, key: LanIPv6RouteKey, info: LanRouteInfo) {
         let mut lock = self.ipv6_lan_ifaces.write().await;
         add_lan_route(info.clone());
-        lock.insert(key.to_string(), info);
+        let info = lock.insert(key, info);
         drop(lock);
+        if let Some(info) = info {
+            del_lan_route(info);
+        }
     }
 
     pub async fn insert_ipv4_lan_route(&self, key: &str, info: LanRouteInfo) {
@@ -122,9 +125,17 @@ impl IpRouteService {
 
     pub async fn remove_ipv6_lan_route(&self, key: &str) {
         let mut lock = self.ipv6_lan_ifaces.write().await;
-        let result = lock.remove(key);
+        let remove_keys: Vec<_> = lock.keys().filter(|k| k.iface_name == key).cloned().collect();
+
+        let mut remove_values = Vec::with_capacity(remove_keys.len());
+        for key in remove_keys {
+            if let Some(result) = lock.remove(&key) {
+                remove_values.push(result);
+            }
+        }
         drop(lock);
-        if let Some(info) = result {
+
+        for info in remove_values {
             del_lan_route(info);
         }
     }

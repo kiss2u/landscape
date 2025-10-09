@@ -445,7 +445,7 @@ const show_switch = computed(() => {
     :mac="node.mac"
     @refresh="refresh"
   />
-  <IcmpRAEditModal
+  <ICMPRaEditModal
     v-model:show="iface_icmpv6ra_edit_show"
     :zone="node.zone_type"
     :iface_name="node.name"

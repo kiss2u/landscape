@@ -371,7 +371,7 @@ function has_source_hook() {
     :mac="status.mac"
     @refresh="refresh"
   />
-  <IcmpRAEditModal
+  <ICMPRaEditModal
     v-model:show="iface_icmpv6ra_edit_show"
     :zone="config.zone_type"
     :iface_name="config.iface_name"
