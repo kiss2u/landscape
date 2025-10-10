@@ -6,7 +6,6 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "share_ifindex_ip.h"
 #include "land_nat_v2.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
