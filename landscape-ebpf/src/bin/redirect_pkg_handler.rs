@@ -4,7 +4,7 @@ use landscape_common::{NAMESPACE_REGISTER_SOCK, NAMESPACE_REGISTER_SOCK_PATH_IN_
 use tokio::net::UnixStream;
 
 use std::mem::MaybeUninit;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 
 use std::fs;
@@ -20,6 +20,9 @@ use libbpf_rs::TC_INGRESS;
 pub struct CmdParams {
     #[arg(short = 's', long = "saddr", default_value = "0.0.0.0", env = "LAND_PROXY_SERVER_ADDR")]
     tproxy_server_address: Ipv4Addr,
+
+    #[arg(long = "saddr6", default_value = "::", env = "LAND_PROXY_SERVER_ADDR_V6")]
+    tproxy_server_address_v6: Ipv6Addr,
 
     #[arg(short = 'p', long = "sport", default_value_t = 12345, env = "LAND_PROXY_SERVER_PORT")]
     tproxy_server_port: u16,
@@ -62,6 +65,7 @@ async fn main() {
     tracing::info!("attach at: {ifname}, ifindex: {ifindex}, peer_ifindex: {peer_ifindex}");
 
     let proxy_addr: u32 = params.tproxy_server_address.into();
+    let proxy_ipv6_addr: u128 = params.tproxy_server_address_v6.into();
 
     let skel_builder = TproxySkelBuilder::default();
     // skel_builder.obj_builder.debug(true);
@@ -73,6 +77,7 @@ async fn main() {
         open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
     // Set constants
     rodata_data.proxy_addr = proxy_addr.to_be();
+    rodata_data.proxy_ipv6_addr = proxy_ipv6_addr.to_be_bytes();
     rodata_data.proxy_port = params.tproxy_server_port.to_be();
 
     // Load into kernel

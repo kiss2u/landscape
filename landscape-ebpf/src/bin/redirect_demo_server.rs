@@ -1,7 +1,8 @@
+use std::net::Ipv6Addr;
+use std::net::SocketAddrV6;
 use std::net::TcpListener;
 use std::net::TcpStream;
 use std::os::unix::io::AsRawFd as _;
-use std::str::FromStr;
 
 use nix::sys::socket::bind;
 use nix::sys::socket::listen;
@@ -13,7 +14,7 @@ use nix::sys::socket::AddressFamily;
 use nix::sys::socket::Backlog;
 use nix::sys::socket::SockFlag;
 use nix::sys::socket::SockType;
-use nix::sys::socket::SockaddrIn;
+use nix::sys::socket::SockaddrLike;
 
 fn handle_client(client: TcpStream) {
     let local_addr = client.local_addr().unwrap();
@@ -27,7 +28,7 @@ fn handle_client(client: TcpStream) {
 
 fn main() {
     // Create listener socket
-    let fd = socket(AddressFamily::Inet, SockType::Stream, SockFlag::empty(), None).unwrap();
+    let fd = socket(AddressFamily::Inet6, SockType::Stream, SockFlag::empty(), None).unwrap();
 
     // Set some sockopts
     setsockopt(&fd, ReuseAddr, &true).unwrap();
@@ -37,16 +38,17 @@ fn main() {
     // 6.6.y or higher is ok
     setsockopt(&fd, IpTransparent, &true).unwrap();
 
-    // Bind to addr
-    let addr = format!("{}:{}", "0.0.0.0", 12345);
-    let addr = SockaddrIn::from_str(&addr).unwrap();
-    bind(fd.as_raw_fd(), &addr).unwrap();
+    // Bind to SocketAddr
+    let addr: Box<dyn SockaddrLike> = Box::new(nix::sys::socket::SockaddrIn6::from(
+        SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 12345, 0, 0),
+    ));
+    bind(fd.as_raw_fd(), addr.as_ref()).unwrap();
 
     // Start listening
     listen(&fd, Backlog::new(128).unwrap()).unwrap();
+    println!("start fd: {:?}", fd);
     let listener = TcpListener::from(fd);
 
-    println!("start");
     for client in listener.incoming() {
         let client = client.unwrap();
         handle_client(client);

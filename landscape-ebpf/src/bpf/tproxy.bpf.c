@@ -6,6 +6,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
+#include "pkg_scanner.h"
 
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -22,73 +23,55 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define PACKET_MULTICAST 2
 #define PACKET_OTHERHOST 3
 
+volatile const u8 proxy_ipv6_addr[16] = {0};
 volatile const __be32 proxy_addr = 0;
 volatile const __be16 proxy_port = 0;
 
-static __always_inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_protocol,
-                                                        u8 *l4_protocol) {
-    void *data_end = (void *)(long)skb->data_end;
-    void *data = (void *)(long)skb->data;
-    struct bpf_sock_tuple *result;
-    struct ethhdr *eth;
-    __u64 tuple_len;
-    __u8 proto = 0;
-    __u64 ihl_len;
-
-    eth = (struct ethhdr *)(data);
-    if (eth + 1 > data_end) return NULL;
-
-    /* Only support ipv4 */
-    *l3_protocol = eth->h_proto;
-    if (eth->h_proto != ETH_IPV4) return NULL;
-
-    struct iphdr *iph = (struct iphdr *)(data + sizeof(*eth));
-    if (iph + 1 > data_end) return NULL;
-    if (iph->ihl != 5) /* Options are not supported */
-        return NULL;
-    ihl_len = iph->ihl * 4;
-    *l4_protocol = iph->protocol;
-    result = (struct bpf_sock_tuple *)&iph->saddr;
-
-    /* Only support TCP */
-    // if (proto != IPPROTO_TCP) return NULL;
-
-    return result;
-}
-
-static __always_inline int handle_pkg(struct __sk_buff *skb, struct bpf_sock_tuple *tuple,
-                                      u8 *l4_protocol_prt) {
+static __always_inline int handle_pkg(struct __sk_buff *skb, struct packet_offset_info *offset,
+                                      struct inet_pair *ip_pair) {
 #define BPF_LOG_TOPIC "handle_pkg"
-    struct bpf_sock_tuple server = {};
+    struct bpf_sock_tuple server = {0};
     struct bpf_sock *sk;
     size_t tuple_len;
     int ret;
     int change_type_err;
-    u8 l4_protocol = *l4_protocol_prt;
+    u8 l4_protocol = offset->l4_protocol;
 
-    tuple_len = sizeof(tuple->ipv4);
-    if ((void *)tuple + tuple_len > (void *)(long)skb->data_end) {
-        bpf_log_info("tuple_len is error");
-        return TC_ACT_SHOT;
+    if (offset->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        tuple_len = sizeof(server.ipv4);
+        server.ipv4.saddr = ip_pair->src_addr.ip;
+        server.ipv4.daddr = ip_pair->dst_addr.ip;
+        server.ipv4.sport = ip_pair->src_port;
+        server.ipv4.dport = ip_pair->dst_port;
+    } else {
+        tuple_len = sizeof(server.ipv6);
+        COPY_ADDR_FROM(server.ipv6.saddr, ip_pair->src_addr.all);
+        COPY_ADDR_FROM(server.ipv6.daddr, ip_pair->dst_addr.all);
+        server.ipv6.sport = ip_pair->src_port;
+        server.ipv6.dport = ip_pair->dst_port;
     }
 
     /* Reuse existing connection if it exists */
     if (l4_protocol == IPPROTO_TCP) {
-        sk = bpf_skc_lookup_tcp(skb, tuple, tuple_len, BPF_F_CURRENT_NETNS, 0);
+        sk = bpf_skc_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
         if (sk) {
             if (sk->state != BPF_TCP_LISTEN) {
                 // bpf_log_info("reuse exist tcp: %p4I", );
                 goto assign;
             }
             bpf_sk_release(sk);
+            sk = NULL;
         }
     }
 
     /* Lookup port server is listening on */
-    server.ipv4.saddr = tuple->ipv4.saddr;
-    server.ipv4.daddr = proxy_addr;
-    server.ipv4.sport = tuple->ipv4.sport;
-    server.ipv4.dport = proxy_port;
+    if (offset->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+        server.ipv4.daddr = proxy_addr;
+        server.ipv4.dport = proxy_port;
+    } else {
+        COPY_ADDR_FROM(server.ipv6.daddr, &proxy_ipv6_addr);
+        server.ipv6.dport = proxy_port;
+    }
 
     if (l4_protocol == IPPROTO_TCP) {
         sk = bpf_skc_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
@@ -97,16 +80,24 @@ static __always_inline int handle_pkg(struct __sk_buff *skb, struct bpf_sock_tup
     }
 
     if (!sk) {
-        // bpf_log_info("can not find sk: l4_protocol: %d ip: %pI4:%d =>  %pI4:%d", l4_protocol,
-        //              &tuple->ipv4.saddr, bpf_ntohs(tuple->ipv4.sport), &tuple->ipv4.daddr,
-        //              bpf_ntohs(tuple->ipv4.dport));
+        if (offset->l3_protocol == LANDSCAPE_IPV4_TYPE) {
+            bpf_log_info("can not find sk: l4_protocol: %d ip: %pI4:%u =>  %pI4:%u", l4_protocol,
+                         &server.ipv4.saddr, bpf_ntohs(server.ipv4.sport), &server.ipv4.daddr,
+                         bpf_ntohs(server.ipv4.dport));
+        } else {
+            bpf_log_info("can not find sk: l4_protocol: %d ip: %pI6:[%u] =>  %pI6:[%u]",
+                         l4_protocol, &server.ipv6.saddr, bpf_ntohs(server.ipv6.sport),
+                         &server.ipv6.daddr, bpf_ntohs(server.ipv6.dport));
+        }
         return TC_ACT_SHOT;
     }
+
     if (l4_protocol == IPPROTO_TCP && sk->state != BPF_TCP_LISTEN) {
         bpf_sk_release(sk);
         bpf_log_info("sk not ready");
         return TC_ACT_SHOT;
     }
+
 assign:
     skb->mark = 1;
     change_type_err = bpf_skb_change_type(skb, PACKET_HOST);
@@ -123,6 +114,15 @@ assign:
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int is_tproxy_handle_protocol(const u8 protocol) {
+    if (protocol == IPPROTO_TCP || protocol == IPPROTO_UDP || protocol == IPPROTO_ICMP ||
+        protocol == NEXTHDR_ICMP) {
+        return TC_ACT_OK;
+    } else {
+        return TC_ACT_UNSPEC;
+    }
+}
+
 SEC("tc/ingress")
 int tproxy_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "tproxy_ingress"
@@ -133,21 +133,29 @@ int tproxy_ingress(struct __sk_buff *skb) {
     }
     bpf_skb_vlan_pop(skb);
 
-    struct bpf_sock_tuple *tuple;
-    u16 l3_protocol;
-    u8 l4_protocol;
+    struct packet_offset_info pkg_offset = {0};
+    struct inet_pair ip_pair = {0};
+
     int ret = 0;
 
-    tuple = get_tuple(skb, &l3_protocol, &l4_protocol);
-    if (!tuple) return TC_ACT_OK;
-
-    /* Only support TCP/UDP TODO ICMP */
-    if (l4_protocol != IPPROTO_TCP && l4_protocol != IPPROTO_UDP) {
-        bpf_log_info("not support protocol %u", l3_protocol);
-        return TC_ACT_OK;
+    ret = scan_packet(skb, 14, &pkg_offset);
+    if (ret) {
+        bpf_log_info("scan_packet ret %d", ret);
+        return ret;
     }
 
-    ret = handle_pkg(skb, tuple, &l4_protocol);
+    ret = is_tproxy_handle_protocol(pkg_offset.l4_protocol);
+    if (ret != TC_ACT_OK) {
+        bpf_log_info("is_tproxy_handle_protocol ret %d", ret);
+        return ret;
+    }
+
+    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    if (ret) {
+        bpf_log_info("read_packet_info ret %d", ret);
+        return ret;
+    }
+    ret = handle_pkg(skb, &pkg_offset, &ip_pair);
 
     return ret == 0 ? TC_ACT_OK : TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
