@@ -240,7 +240,7 @@ function validate(source: IPV6RaConfigSource[]): boolean {
           </n-form-item-gi>
 
           <!-- flag 部分 -->
-          <n-form-item-gi span="2 m:2" label="使用 DHCPv6 获取 IPv6 地址">
+          <!-- <n-form-item-gi span="2 m:2" label="使用 DHCPv6 获取 IPv6 地址">
             <n-switch
               v-model:value="
                 service_config.config.ra_flag.managed_address_config
@@ -260,7 +260,7 @@ function validate(source: IPV6RaConfigSource[]): boolean {
 
           <n-form-item-gi span="2 m:2" label="邻居发现代理">
             <n-switch v-model:value="service_config.config.ra_flag.nd_proxy" />
-          </n-form-item-gi>
+          </n-form-item-gi> -->
 
           <n-form-item-gi span="4 m:4" label="默认路由优先级">
             <n-radio-group

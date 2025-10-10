@@ -163,6 +163,7 @@ pub async fn icmp_ra_server(
         tracing::info!("ICMP recv loop down");
     });
 
+    let mut static_ip_infos = vec![];
     service_status.just_change_status(ServiceStatus::Running);
 
     let cancle_token = CancellationToken::new();
@@ -177,6 +178,20 @@ pub async fn icmp_ra_server(
                     static_config.sub_prefix_len,
                     static_config.sub_index as u128,
                 );
+                set_iface_ip(sub_router, static_config.sub_prefix_len, &iface_name, None, None);
+                static_ip_infos.push((
+                    sub_router,
+                    static_config.sub_prefix_len,
+                    iface_name.clone(),
+                ));
+                let mut lan_info = lan_info.clone();
+                lan_info.iface_ip = IpAddr::V6(sub_router.clone());
+                lan_info.prefix = static_config.sub_prefix_len;
+                let lan_info_key = LanIPv6RouteKey {
+                    iface_name: iface_name.to_string(),
+                    subnet_index: static_config.sub_index,
+                };
+                route_service.insert_ipv6_lan_route(lan_info_key, lan_info).await;
                 ctx.static_info.push(ICMPv6ConfigInfo {
                     rt_prefix: static_config.base_prefix,
                     rt_prefix_len,
@@ -199,11 +214,27 @@ pub async fn icmp_ra_server(
                 let iface_name_clone = iface_name.clone();
                 let lan_info_cloen = lan_info.clone();
                 let route_service_clone = route_service.clone();
+
+                let mut expire_time = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
+                // 立即检查一次
+                let ia_prefix = ia_config_watch.borrow().clone();
+                if let Some(ia_prefix) = ia_prefix {
+                    pd_prefix_info.store(Arc::new(Some(
+                        update_current_info(
+                            &iface_name_clone,
+                            ia_prefix,
+                            &ipv6_ra_pd_config,
+                            expire_time.as_mut(),
+                            &lan_info_cloen,
+                            &route_service_clone,
+                        )
+                        .await,
+                    )));
+                }
+
                 tokio::spawn(async move {
-                    let mut expire_time = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
                     loop {
                         tokio::select! {
-
                             change_result = ia_config_watch.changed() => {
                                 tracing::info!("IA_PREFIX update");
                                 if let Err(_) = change_result {
@@ -355,6 +386,9 @@ pub async fn icmp_ra_server(
     }
 
     route_service.remove_ipv6_lan_route(&iface_name).await;
+    for (ip, prefix, iface_name) in static_ip_infos {
+        del_iface_ip(ip, prefix, &iface_name)
+    }
 
     std::fs::write(&ipv6_forwarding_path, "0")
         .expect(&format!("set {} ipv6 forwarding error", iface_name));
@@ -390,13 +424,13 @@ async fn update_current_info(
     };
     route_service.insert_ipv6_lan_route(lan_info_key, lan_info).await;
 
-    add_route(sub_prefix, pd_config.prefix_len, iface_name, ia_prefix.valid_lifetime);
+    add_route(sub_prefix, pd_config.prefix_len, iface_name, Some(ia_prefix.valid_lifetime));
     set_iface_ip(
         sub_router,
         pd_config.prefix_len,
         iface_name,
-        ia_prefix.valid_lifetime,
-        ia_prefix.preferred_lifetime,
+        Some(ia_prefix.valid_lifetime),
+        Some(ia_prefix.preferred_lifetime),
     );
 
     ICMPv6ConfigInfo {
@@ -521,19 +555,39 @@ fn allocate_subnet(
     (Ipv6Addr::from(subnet_network), Ipv6Addr::from(router_address))
 }
 
-pub fn add_route(ip: Ipv6Addr, prefix: u8, iface_name: &str, valid_lifetime: u32) {
-    let result = std::process::Command::new("ip")
-        .args([
-            "-6",
-            "route",
-            "replace",
-            &format!("{}/{}", ip, prefix),
-            "dev",
-            &format!("{}", iface_name),
-            "expires",
-            &format!("{}", valid_lifetime),
-        ])
-        .output();
+pub fn add_route(ip: Ipv6Addr, prefix: u8, iface_name: &str, valid_lifetime: Option<u32>) {
+    let mut args = vec![
+        "-6".to_string(),
+        "route".to_string(),
+        "replace".to_string(),
+        format!("{}/{}", ip, prefix),
+        "dev".to_string(),
+        iface_name.to_string(),
+    ];
+
+    if let Some(lifetime) = valid_lifetime {
+        args.push("expires".to_string());
+        args.push(lifetime.to_string());
+    }
+
+    let result = std::process::Command::new("ip").args(&args).output();
+
+    if let Err(e) = result {
+        tracing::error!("{e:?}");
+    }
+}
+
+pub fn del_iface_ip(ip: Ipv6Addr, prefix: u8, iface_name: &str) {
+    let args = vec![
+        "-6".to_string(),
+        "addr".to_string(),
+        "del".to_string(),
+        format!("{}/{}", ip, prefix),
+        "dev".to_string(),
+        iface_name.to_string(),
+    ];
+
+    let result = std::process::Command::new("ip").args(&args).output();
 
     if let Err(e) = result {
         tracing::error!("{e:?}");
@@ -544,23 +598,29 @@ pub fn set_iface_ip(
     ip: Ipv6Addr,
     prefix: u8,
     iface_name: &str,
-    valid_lifetime: u32,
-    preferred_lft: u32,
+    valid_lifetime: Option<u32>,
+    preferred_lft: Option<u32>,
 ) {
-    let result = std::process::Command::new("ip")
-        .args([
-            "-6",
-            "addr",
-            "replace",
-            &format!("{}/{}", ip, prefix),
-            "dev",
-            &format!("{}", iface_name),
-            "valid_lft",
-            &format!("{}", valid_lifetime),
-            "preferred_lft",
-            &format!("{}", preferred_lft),
-        ])
-        .output();
+    let mut args = vec![
+        "-6".to_string(),
+        "addr".to_string(),
+        "replace".to_string(),
+        format!("{}/{}", ip, prefix),
+        "dev".to_string(),
+        iface_name.to_string(),
+    ];
+
+    if let Some(valid) = valid_lifetime {
+        args.push("valid_lft".to_string());
+        args.push(valid.to_string());
+    }
+
+    if let Some(preferred) = preferred_lft {
+        args.push("preferred_lft".to_string());
+        args.push(preferred.to_string());
+    }
+
+    let result = std::process::Command::new("ip").args(&args).output();
 
     if let Err(e) = result {
         tracing::error!("{e:?}");

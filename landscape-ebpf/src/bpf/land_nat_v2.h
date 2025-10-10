@@ -255,7 +255,7 @@ int ret;
     }
 
     COPY_ADDR_FROM(&local_client_prefix, value->client_prefix);
-    bpf_printk("is_allow_reuse: %u", value->is_allow_reuse);
+    // bpf_printk("is_allow_reuse: %u", value->is_allow_reuse);
 
     if (is_icmp_error_pkt(offset_info)) {
         // 修改原数据包的 dst ip， 内部数据包的 src ip

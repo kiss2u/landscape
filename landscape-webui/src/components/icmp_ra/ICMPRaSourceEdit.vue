@@ -34,7 +34,7 @@ function change_mode(mode: "static" | "pd") {
   } else {
     edit_source.value = {
       t: "static",
-      base_prefix: "fd11:2222:3333:4444::",
+      base_prefix: "fd11:2222:3333:4400::",
       sub_prefix_len: 64,
       sub_index: 0,
       ra_preferred_lifetime: 300,
@@ -195,12 +195,27 @@ async function commit() {
         </n-form-item-gi>
       </n-grid>
       <n-grid v-else :x-gap="12" :y-gap="8" cols="4" item-responsive>
-        <n-form-item-gi span="4 m:4 l:4" label="基础前缀定义">
-          <n-input
-            style="flex: 1"
-            v-model:value="edit_source.base_prefix"
-            clearable
-          />
+        <n-form-item-gi span="4 m:4 l:4">
+          <template #label>
+            <Notice>
+              基础前缀定义
+              <template #msg>
+                注意! 最多只可自定义到 /60, 格式需要保持 ::xxx0, 因为低位 0
+                不可省略
+              </template>
+            </Notice>
+          </template>
+          <n-flex style="flex: 1" vertical>
+            <n-alert type="warning">
+              注意! 最多只可自定义到 /60, 格式需要保持 ::xxx0, 因为低位 0
+              不可省略
+            </n-alert>
+            <n-input
+              style="flex: 1"
+              v-model:value="edit_source.base_prefix"
+              clearable
+            />
+          </n-flex>
         </n-form-item-gi>
 
         <n-form-item-gi span="2 m:2 l:2">

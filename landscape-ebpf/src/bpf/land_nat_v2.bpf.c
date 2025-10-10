@@ -730,8 +730,8 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
                 return TC_ACT_SHOT;
             }
             COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->daddr.in6_u.u6_addr32);
-            bpf_printk("src addr: %pI6", ip_pair->src_addr.all);
-            bpf_printk("dst addr: %pI6", ip_pair->dst_addr.all);
+            // bpf_printk("src addr: %pI6", ip_pair->src_addr.all);
+            // bpf_printk("dst addr: %pI6", ip_pair->dst_addr.all);
         }
     } else {
         return TC_ACT_UNSPEC;
