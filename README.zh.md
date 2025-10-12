@@ -20,7 +20,7 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 ---
 
 ## 核心特性
-* 分流控制（SIP-CIDR、Qos(dscp)、DIP、域名、Geo 匹配规则）
+* 分流控制: 入口: (SIP-CIDR、MAC), 分流对象: (DIP、域名、Geo 匹配规则)
 * eBPF 路由
 * 每个流 Flow 独立 dns 配置以及缓存（避免 dns 污染、泄露）
 * 流量导入 Docker 容器
@@ -54,9 +54,9 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
         - ✅ IP 分配展示
     - *IPv6支持*
         - ✅ 使用 DHCPv6-PD 向上级路由请求前缀
-        - ✅ 使用 RA 对下级设备通告前缀
-- <u>流控模块</u>
-    - ✅ 允许使用 IP + QoS(dscp) 值进行区分流.
+        - ✅ 使用 RA 对下级设备通告多个前缀
+- <u>分流模块</u>
+    - ✅ 允许使用 IP / MAC 值进行区分流.
     - ✅ 每个流配置中含有自己独立的 DNS 配置, 以及 DNS 缓存.
     - ✅ 将被标记流量按照标记配置( 直连/丢弃/允许复用端口/重定向到 Docker 容器或者网卡 )进行转发 
     - ❌ 对指定数据设置跟踪标记
@@ -72,7 +72,7 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
     - ❌ DNS 劫持返回多条记录 ( 例如 TXT / CNAME 或者其他的)
     - ✅ 对指定 DNS 解析结果进行 IP 标记, 配置标记模块进行处理
     - ✅ GeoSite 文件支持
-    - ❌ 支持将 Docker 容器设置的域名label 加入 DNS 解析中
+    - ❌ 支持将 Docker 容器设置的域名 label 加入 DNS 解析中
     - ✅ 支持进行测试域名查询
 - <u>NAT (eBPF) 实现</u>
     - ✅ 基础 NAT 
@@ -121,10 +121,11 @@ Landscape 是一个基于 Web UI 的工具，可以轻松将您喜爱的 Linux �
 运行以下命令启动服务 (需要使用 root 权限进行启动)：
    ```shell
    ./landscape-webserver
-   ```
-   默认端口为 6300
-   默认用户名: root
-   密码: root. 
+   ```  
+   默认 HTTP  端口为 `6300`  <br/>
+   默认 HTTPS 端口为 `6443`  <br/>
+   默认用户名: `root` <br/>
+   密码: `root`. <br/>
    其他参数可使用 `./landscape-webserver --help` 查看.
 5. 确认无误之后可以设置为 systemd 服务
     创建 `/etc/systemd/system/landscape-router.service`
