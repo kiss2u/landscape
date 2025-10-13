@@ -23,6 +23,9 @@ pub struct DnsUpstreamConfig {
 
     pub port: Option<u16>,
 
+    #[serde(default)]
+    pub enable_ip_validation: Option<bool>,
+
     #[serde(default = "get_f64_timestamp")]
     #[ts(as = "Option<_>", optional)]
     pub update_at: f64,
@@ -41,6 +44,7 @@ impl Default for DnsUpstreamConfig {
             remark: "Landscape Router Default DNS Upstream".to_string(),
             mode: DnsUpstreamMode::Plaintext,
             ips: vec![IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1))],
+            enable_ip_validation: None,
             port: Some(53),
             update_at: get_f64_timestamp(),
         }

@@ -17,6 +17,8 @@ pub(crate) mod connection;
 pub mod reuseport_chain_server;
 pub mod reuseport_server;
 
+const DEFAULT_ENABLE_IP_VALIDATION: bool = false;
+
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
 static RESOLVER_CONF_LD_BACK: &'static str = "/etc/resolv.conf.ld_back";
 

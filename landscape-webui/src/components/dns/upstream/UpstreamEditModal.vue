@@ -41,6 +41,7 @@ async function enter() {
       mode: { t: DnsUpstreamModeTsEnum.Plaintext },
       ips: [],
       port: 53,
+      enable_ip_validation: false,
     };
   }
   origin_rule_json.value = JSON.stringify(rule.value);
@@ -168,21 +169,38 @@ async function import_rules() {
       style="flex: 1"
       ref="formRef"
       :model="rule"
-      :cols="5"
+      :cols="8"
     >
-      <n-grid :cols="2">
-        <n-form-item-gi :span="2" label="备注">
+      <n-grid :cols="8">
+        <n-form-item-gi :span="4" label="备注">
           <n-input
             placeholder="DNS 规则中进行选择时与其他区分"
             v-model:value="rule.remark"
           />
         </n-form-item-gi>
 
-        <n-form-item-gi :span="5" label="点击按钮可以使用预设填充">
+        <n-form-item-gi :offset="1" :span="2">
+          <template #label>
+            <Notice>
+              是否过滤非法结果
+              <template #msg>
+                开启后将会过滤 DNS 服务端返回的所有私有地址, 回环地址等. <br />
+                假设你使用你自定的上游, 如果有返回私有地址, 就不要开启
+              </template>
+            </Notice>
+          </template>
+
+          <n-switch v-model:value="rule.enable_ip_validation">
+            <template #checked> 过滤 </template>
+            <template #unchecked> 不过滤 </template>
+          </n-switch>
+        </n-form-item-gi>
+
+        <n-form-item-gi :span="8" label="点击按钮可以使用预设填充">
           <DefaultUpstream v-model:rule="rule"></DefaultUpstream>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="1" label="上游请求模式" path="mode.domain">
+        <n-form-item-gi :span="4" label="上游请求模式" path="mode.domain">
           <n-radio-group
             v-model:value="rule.mode.t"
             name="dns_server_upstream_mode"
@@ -204,7 +222,7 @@ async function import_rules() {
           /> -->
         </n-form-item-gi>
 
-        <n-form-item-gi label="端口">
+        <n-form-item-gi :span="4" label="端口">
           <n-input-number
             style="flex: 1"
             :min="1"
@@ -215,6 +233,7 @@ async function import_rules() {
         </n-form-item-gi>
 
         <n-form-item-gi
+          :span="4"
           v-if="rule.mode.t !== DnsUpstreamModeTsEnum.Plaintext"
           label="域名"
         >
@@ -227,6 +246,7 @@ async function import_rules() {
         </n-form-item-gi>
 
         <n-form-item-gi
+          :span="4"
           path="mode.http_endpoint"
           v-if="rule.mode.t === DnsUpstreamModeTsEnum.Https"
           label="URL"
@@ -238,7 +258,7 @@ async function import_rules() {
           </n-input>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="2" label="DNS 服务器 IP" path="ips">
+        <n-form-item-gi :span="8" label="DNS 服务器 IP" path="ips">
           <n-dynamic-input
             v-model:value="rule.ips"
             placeholder="请输入 IP"

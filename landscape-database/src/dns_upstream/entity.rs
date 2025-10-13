@@ -24,6 +24,8 @@ pub struct Model {
 
     pub port: Option<u16>,
 
+    pub enable_ip_validation: Option<bool>,
+
     pub update_at: DBTimestamp,
 }
 
@@ -53,6 +55,7 @@ impl From<Model> for DnsUpstreamConfig {
             ips: serde_json::from_value(entity.ips).unwrap(),
             port: entity.port,
             update_at: entity.update_at,
+            enable_ip_validation: entity.enable_ip_validation,
         }
     }
 }
@@ -73,6 +76,7 @@ impl UpdateActiveModel<ActiveModel> for DnsUpstreamConfig {
         active.mode = Set(serde_json::to_value(self.mode).unwrap().into());
         active.ips = Set(serde_json::to_value(self.ips).unwrap().into());
         active.port = Set(self.port);
+        active.enable_ip_validation = Set(self.enable_ip_validation);
         active.update_at = Set(self.update_at);
     }
 }

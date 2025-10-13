@@ -33,6 +33,7 @@ const DEFAULT_CONFIGS: Record<
     mode: { t: DnsUpstreamModeTsEnum.Plaintext },
     ips: ["223.5.5.5", "223.6.6.6", "2400:3200::1", "2400:3200:baba::1"],
     port: 53,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.ALI_DOH]: {
     mode: {
@@ -42,11 +43,13 @@ const DEFAULT_CONFIGS: Record<
     },
     ips: ["223.5.5.5", "223.6.6.6", "2400:3200::1", "2400:3200:baba::1"],
     port: 443,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.ALI_DOT]: {
     mode: { t: DnsUpstreamModeTsEnum.Tls, domain: "dns.alidns.com" },
     ips: ["223.5.5.5", "223.6.6.6", "2400:3200::1", "2400:3200:baba::1"],
     port: 853,
+    enable_ip_validation: false,
   },
 
   // DNSPod
@@ -61,6 +64,7 @@ const DEFAULT_CONFIGS: Record<
       "2402:4e00::",
     ],
     port: 53,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.DNSPOD_DOH]: {
     mode: {
@@ -70,11 +74,13 @@ const DEFAULT_CONFIGS: Record<
     },
     ips: ["1.12.12.12", "120.53.53.53"],
     port: 443,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.DNSPOD_DOT]: {
     mode: { t: DnsUpstreamModeTsEnum.Tls, domain: "dot.pub" },
     ips: ["1.12.12.12", "120.53.53.53"],
     port: 853,
+    enable_ip_validation: false,
   },
 
   // Cloudflare
@@ -82,6 +88,7 @@ const DEFAULT_CONFIGS: Record<
     mode: { t: DnsUpstreamModeTsEnum.Plaintext },
     ips: ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
     port: 53,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.CLOUDFLARE_DOH]: {
     mode: {
@@ -91,16 +98,19 @@ const DEFAULT_CONFIGS: Record<
     },
     ips: ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
     port: 443,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.CLOUDFLARE_DOT]: {
     mode: { t: DnsUpstreamModeTsEnum.Tls, domain: "cloudflare-dns.com" },
     ips: ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
     port: 853,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.CLOUDFLARE_DOQ]: {
     mode: { t: DnsUpstreamModeTsEnum.Quic, domain: "cloudflare-dns.com" },
     ips: ["1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"],
     port: 784,
+    enable_ip_validation: false,
   },
 
   // Google
@@ -108,6 +118,7 @@ const DEFAULT_CONFIGS: Record<
     mode: { t: DnsUpstreamModeTsEnum.Plaintext },
     ips: ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
     port: 53,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.GOOGLE_DOH]: {
     mode: {
@@ -117,16 +128,19 @@ const DEFAULT_CONFIGS: Record<
     },
     ips: ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
     port: 443,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.GOOGLE_DOT]: {
     mode: { t: DnsUpstreamModeTsEnum.Tls, domain: "dns.google" },
     ips: ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
     port: 853,
+    enable_ip_validation: false,
   },
   [DefaultDnsConfig.GOOGLE_DOQ]: {
     mode: { t: DnsUpstreamModeTsEnum.Quic, domain: "dns.google" },
     ips: ["8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"],
     port: 784,
+    enable_ip_validation: false,
   },
 };
 

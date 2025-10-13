@@ -15,6 +15,7 @@ use landscape_common::{
 
 use crate::connection::LandscapeMarkDNSResolver;
 use crate::reuseport_chain_server::matcher::DomainMatcher;
+use crate::DEFAULT_ENABLE_IP_VALIDATION;
 
 #[derive(Debug)]
 pub struct RedirectSolution {
@@ -66,6 +67,8 @@ pub struct ResolutionRule {
     config: DNSRuntimeRule,
     mark: DnsRuntimeMarkInfo,
     resolver: LandscapeMarkDNSResolver,
+
+    enable_ip_validation: bool,
 }
 
 impl ResolutionRule {
@@ -75,6 +78,8 @@ impl ResolutionRule {
 
         let matcher = DomainMatcher::new(config.source.clone());
 
+        let enable_ip_validation =
+            config.resolve_mode.enable_ip_validation.unwrap_or(DEFAULT_ENABLE_IP_VALIDATION);
         let resolver =
             crate::connection::create_resolver(flow_id, config.mark, config.resolve_mode.clone());
 
@@ -82,7 +87,13 @@ impl ResolutionRule {
             mark: config.mark.clone(),
             priority: config.index as u16,
         };
-        ResolutionRule { matcher, config, resolver, mark }
+        ResolutionRule {
+            matcher,
+            config,
+            resolver,
+            mark,
+            enable_ip_validation,
+        }
     }
 
     pub fn mark(&self) -> &DnsRuntimeMarkInfo {
@@ -115,7 +126,22 @@ impl ResolutionRule {
         query_type: RecordType,
     ) -> Result<Vec<Record>, ResponseCode> {
         match self.resolver.lookup(domain, query_type).await {
-            Ok(lookup) => Ok(lookup.records().to_vec()),
+            Ok(lookup) => {
+                let result = if self.enable_ip_validation {
+                    lookup
+                        .record_iter()
+                        .filter(|ietm| match ietm.data() {
+                            RData::A(A(ipv4)) => is_global_ipv4(ipv4),
+                            RData::AAAA(AAAA(ipv6)) => is_global_ipv6(ipv6),
+                            _ => true,
+                        })
+                        .cloned()
+                        .collect()
+                } else {
+                    lookup.records().to_vec()
+                };
+                Ok(result)
+            }
             Err(e) => {
                 let result = if e.is_no_records_found() {
                     ResponseCode::NoError
@@ -133,4 +159,53 @@ impl ResolutionRule {
             }
         }
     }
+}
+
+// Copy from unstable feature
+fn is_global_ipv4(addr: &std::net::Ipv4Addr) -> bool {
+    !(addr.octets()[0] == 0
+        || addr.is_private()
+        || addr.is_loopback()
+        || addr.is_link_local()
+        || (addr.octets()[0] == 192
+            && addr.octets()[1] == 0
+            && addr.octets()[2] == 0
+            && addr.octets()[3] != 9
+            && addr.octets()[3] != 10)
+        || addr.is_documentation()
+        || addr.is_broadcast())
+}
+
+// Copy from unstable feature
+fn is_global_ipv6(addr: &std::net::Ipv6Addr) -> bool {
+    !(addr.is_unspecified()
+            || addr.is_loopback()
+            // IPv4-mapped Address (`::ffff:0:0/96`)
+            || matches!(addr.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
+            // IPv4-IPv6 Translat. (`64:ff9b:1::/48`)
+            || matches!(addr.segments(), [0x64, 0xff9b, 1, _, _, _, _, _])
+            // Discard-Only Address Block (`100::/64`)
+            || matches!(addr.segments(), [0x100, 0, 0, 0, _, _, _, _])
+            // IETF Protocol Assignments (`2001::/23`)
+            || (matches!(addr.segments(), [0x2001, b, _, _, _, _, _, _] if b < 0x200)
+                && !(
+                    // Port Control Protocol Anycast (`2001:1::1`)
+                    u128::from_be_bytes(addr.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0001
+                    // Traversal Using Relays around NAT Anycast (`2001:1::2`)
+                    || u128::from_be_bytes(addr.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0002
+                    // AMT (`2001:3::/32`)
+                    || matches!(addr.segments(), [0x2001, 3, _, _, _, _, _, _])
+                    // AS112-v6 (`2001:4:112::/48`)
+                    || matches!(addr.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
+                    // ORCHIDv2 (`2001:20::/28`)
+                    // Drone Remote ID Protocol Entity Tags (DETs) Prefix (`2001:30::/28`)`
+                    || matches!(addr.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x3F)
+                ))
+            // 6to4 (`2002::/16`) – it's not explicitly documented as globally reachable,
+            // IANA says N/A.
+            || matches!(addr.segments(), [0x2002, _, _, _, _, _, _, _])
+            // Segment Routing (SRv6) SIDs (`5f00::/16`)
+            || matches!(addr.segments(), [0x5f00, ..])
+            || addr.is_unique_local()
+            || addr.is_unicast_link_local())
 }

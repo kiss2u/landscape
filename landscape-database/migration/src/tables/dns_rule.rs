@@ -36,5 +36,7 @@ pub enum DNSUpstreamConfigs {
     Mode,
     Ips,
     Port,
+    /// Append at 0.8.0
+    EnableIpValidation,
     UpdateAt,
 }

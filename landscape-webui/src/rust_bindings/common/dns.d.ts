@@ -54,6 +54,7 @@ export type DnsUpstreamConfig = {
   mode: DnsUpstreamMode;
   ips: Array<string>;
   port: number | null;
+  enable_ip_validation: boolean | null;
   update_at?: number;
 };
 
