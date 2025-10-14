@@ -265,6 +265,7 @@ static __always_inline int check_ingress_mapping_exist(struct __sk_buff *skb, u8
     struct static_nat_mapping_key ingress_key = {0};
     struct nat_mapping_value *value = NULL;
 
+    __be64 dst_suffix, mapping_suffix;
 
     ingress_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
     ingress_key.l4_protocol = ip_protocol;
@@ -274,12 +275,24 @@ static __always_inline int check_ingress_mapping_exist(struct __sk_buff *skb, u8
 
     value = bpf_map_lookup_elem(&static_nat_mappings, &ingress_key);
     if (value) {
-        if (value->addr.ip == 0) {
+        // 映射到当前的主机, 相对于 suffix 是空的
+        if (value->addr.all[3] == 0 && value->addr.all[2] == 0) {
             return TC_ACT_UNSPEC;
         }
-        
-        COPY_ADDR_FROM(local_client_prefix, value->addr.bits);
-        return TC_ACT_OK;
+
+        // 映射中设置了前缀, 那么要进行修改
+        if (value->addr.ip !=0) {
+            COPY_ADDR_FROM(local_client_prefix, value->addr.bits);
+            return TC_ACT_OK;
+        }
+
+        // 映射中只设置了后缀, 所以就只校验, 不修改
+        COPY_ADDR_FROM(&mapping_suffix, value->addr.bits + 8);
+        COPY_ADDR_FROM(&dst_suffix, pkt_ip_pair->dst_addr.bits + 8);
+
+        if(mapping_suffix == dst_suffix) {
+            return TC_ACT_UNSPEC;
+        }
     }
 
     return TC_ACT_SHOT;
