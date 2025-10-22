@@ -106,13 +106,17 @@ impl IpRouteService {
         }
     }
 
-    pub async fn insert_ipv6_lan_route(&self, key: LanIPv6RouteKey, info: LanRouteInfo) {
+    pub async fn insert_ipv6_lan_route(&self, key: LanIPv6RouteKey, new_info: LanRouteInfo) {
         let mut lock = self.ipv6_lan_ifaces.write().await;
-        add_lan_route(info.clone());
-        let info = lock.insert(key, info);
+        let info = lock.insert(key, new_info.clone());
         drop(lock);
         if let Some(info) = info {
-            del_lan_route(info);
+            if info.is_same_subnet(&new_info) {
+                del_lan_route(info);
+                add_lan_route(new_info);
+            }
+        } else {
+            add_lan_route(new_info);
         }
     }
 
