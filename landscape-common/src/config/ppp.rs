@@ -37,6 +37,7 @@ pub struct PPPDConfig {
     pub default_route: bool,
     pub peer_id: String,
     pub password: String,
+    pub ac: Option<String>,
 }
 
 impl PPPDConfig {
@@ -63,6 +64,14 @@ impl PPPDConfig {
             return Err(());
         };
 
+        let ac_line = self
+            .ac
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|ac| format!("pppoe-ac \"{}\"\n", ac))
+            .unwrap_or_default();
+
         let config = format!(
             r#"
 # 此文件每次启动 pppd 都会被复写, 所以修改此文件不会有任何效果, 仅作为检查启动配置
@@ -78,11 +87,13 @@ maxfail 1
 #holdoff 20
 plugin rp-pppoe.so
 nic-{ifacename}
+{ac_line}
 user "{user}"
 password "{pass}"
 ifname {ppp_iface_name}
 "#,
             ifacename = attach_iface_name,
+            ac_line = ac_line,
             user = self.peer_id,
             pass = self.password,
             ppp_iface_name = ppp_iface_name

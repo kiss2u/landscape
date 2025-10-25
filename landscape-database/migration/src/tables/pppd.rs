@@ -11,4 +11,7 @@ pub enum PPPDServiceConfigs {
     PeerId,
     Password,
     UpdateAt,
+
+    /// Since 0.8.1
+    Ac,
 }

@@ -25,6 +25,9 @@ pub struct Model {
     pub password: String,
 
     pub update_at: DBTimestamp,
+
+    /// Since 0.8.1
+    pub ac: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -44,6 +47,7 @@ impl From<Model> for PPPDServiceConfig {
                 default_route: entity.default_route,
                 peer_id: entity.peer_id,
                 password: entity.password,
+                ac: entity.ac,
             },
         }
     }
@@ -68,5 +72,6 @@ impl UpdateActiveModel<ActiveModel> for PPPDServiceConfig {
         active.peer_id = Set(self.pppd_config.peer_id);
         active.password = Set(self.pppd_config.password);
         active.update_at = Set(self.update_at);
+        active.ac = Set(self.pppd_config.ac);
     }
 }

@@ -1,3 +1,5 @@
+import { PPPDConfig } from "@/rust_bindings/common/ppp";
+
 const ADAY = 60 * 60 * 24;
 
 export class PPPDServiceConfig {
@@ -18,28 +20,11 @@ export class PPPDServiceConfig {
       obj?.iface_name ??
       `ppp-${obj.attach_iface_name}-${date_str}`.substring(0, 15);
     this.enable = obj?.enable ?? true;
-    this.pppd_config = new PPPDConfig(obj?.pppd_config);
-  }
-}
-
-export class PPPDConfig {
-  default_route: boolean;
-  peer_id: string;
-  password: string;
-  //   attach_iface_name: string;
-  //   ppp_iface_name: string;
-
-  constructor(obj?: {
-    default_route?: boolean;
-    peer_id?: string;
-    password?: string;
-    // attach_iface_name?: string;
-    // ppp_iface_name?: string;
-  }) {
-    this.default_route = obj?.default_route ?? true;
-    this.peer_id = obj?.peer_id ?? "";
-    this.password = obj?.password ?? "";
-    // this.attach_iface_name = obj?.attach_iface_name ?? "";
-    // this.ppp_iface_name = obj?.ppp_iface_name ?? "";
+    this.pppd_config = {
+      default_route: obj.pppd_config?.default_route ?? true,
+      peer_id: obj.pppd_config?.peer_id ?? "",
+      password: obj.pppd_config?.password ?? "",
+      ac: obj.pppd_config?.ac ?? null,
+    };
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { update_iface_pppd_config } from "@/api/service_pppd";
-import { PPPDConfig, PPPDServiceConfig } from "@/lib/pppd";
+import { PPPDServiceConfig } from "@/lib/pppd";
 import { computed, ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 
@@ -89,6 +89,14 @@ async function confirm_config() {
           :type="frontEndStore.presentation_mode ? 'password' : 'text'"
           show-password-on="click"
           v-model:value="value.pppd_config.password"
+        />
+      </n-form-item>
+
+      <n-form-item label="请求连接的 AC 名称">
+        <n-input
+          :type="frontEndStore.presentation_mode ? 'password' : 'text'"
+          show-password-on="click"
+          v-model:value="value.pppd_config.ac"
         />
       </n-form-item>
     </n-form>

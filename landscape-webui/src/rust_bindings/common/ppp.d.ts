@@ -4,6 +4,7 @@ export type PPPDConfig = {
   default_route: boolean;
   peer_id: string;
   password: string;
+  ac: string | null;
 };
 
 export type PPPDServiceConfig = {
