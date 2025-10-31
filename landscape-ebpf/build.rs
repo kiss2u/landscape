@@ -17,6 +17,19 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/bpf/*");
 
+    let vmlinux_path = vmlinux::include_path_root().join(&target_arch);
+    let mut clang_args = vec![
+        OsStr::new("-Wall"),
+        OsStr::new("-Wno-compare-distinct-pointer-types"),
+        OsStr::new("-I"),
+        vmlinux_path.as_os_str(),
+        OsStr::new("-mcpu=v2"),
+    ];
+
+    if !cfg!(target_arch = "riscv64") {
+        clang_args.push(OsStr::new("-DLAND_TEST_EBPF"));
+    }
+
     for entry in fs::read_dir("src/bpf/").expect("Failed to read directory: src/bpf/") {
         let path = match entry {
             Ok(entry) => entry.path(),
@@ -48,13 +61,7 @@ fn main() {
 
         SkeletonBuilder::new()
             .source(&path)
-            .clang_args([
-                OsStr::new("-Wall"),
-                OsStr::new("-Wno-compare-distinct-pointer-types"),
-                OsStr::new("-I"),
-                vmlinux::include_path_root().join(&target_arch).as_os_str(),
-                OsStr::new("-mcpu=v2"),
-            ])
+            .clang_args(&clang_args)
             .build_and_generate(&output_file)
             .expect("Failed to build and generate skeleton file");
     }

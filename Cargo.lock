@@ -7676,7 +7676,7 @@ checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
 [[package]]
 name = "vmlinux"
 version = "0.0.0"
-source = "git+https://github.com/libbpf/vmlinux.h.git?rev=a9c092aa771310bf8b00b5018f7d40a1fdb6ec82#a9c092aa771310bf8b00b5018f7d40a1fdb6ec82"
+source = "git+https://github.com/libbpf/vmlinux.h.git?rev=83a228cf37fc65f2d14e4896a04922b5ee531a94#83a228cf37fc65f2d14e4896a04922b5ee531a94"
 
 [[package]]
 name = "vsprintf"
