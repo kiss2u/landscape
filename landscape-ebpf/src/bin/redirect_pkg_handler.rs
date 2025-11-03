@@ -1,6 +1,7 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use landscape_common::docker::DockerTargetEnroll;
 use landscape_common::{NAMESPACE_REGISTER_SOCK, NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER};
+use serde::{Deserialize, Serialize};
 use tokio::net::UnixStream;
 
 use std::mem::MaybeUninit;
@@ -16,6 +17,13 @@ use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::TC_INGRESS;
 
+#[derive(Debug, Clone, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum HandleMode {
+    Tproxy,
+    Route,
+}
+
 #[derive(Debug, Parser)]
 pub struct CmdParams {
     #[arg(short = 's', long = "saddr", default_value = "0.0.0.0", env = "LAND_PROXY_SERVER_ADDR")]
@@ -26,6 +34,9 @@ pub struct CmdParams {
 
     #[arg(short = 'p', long = "sport", default_value_t = 12345, env = "LAND_PROXY_SERVER_PORT")]
     tproxy_server_port: u16,
+
+    #[arg(short = 'm', long = "mode", value_enum, default_value_t = HandleMode::Tproxy, env = "LAND_PROXY_HANDLE_MODE")]
+    handle_mode: HandleMode,
 
     #[arg(long = "sock_path", env = "LAND_SOCK_PATH")]
     sock_path: Option<PathBuf>,
@@ -83,9 +94,13 @@ async fn main() {
     // Load into kernel
     let skel = open_skel.load().unwrap();
 
-    let tproxy_ingress = skel.progs.tproxy_ingress;
+    let handler_function = match params.handle_mode {
+        HandleMode::Tproxy => skel.progs.tproxy_ingress,
+        HandleMode::Route => skel.progs.route_mode_ingress,
+    };
+
     // let tproxy_egress = skel.progs.tproxy_egress;
-    let mut tproxy_ingress_hook = TcHookProxy::new(&tproxy_ingress, ifindex, TC_INGRESS, 1);
+    let mut tproxy_ingress_hook = TcHookProxy::new(&handler_function, ifindex, TC_INGRESS, 1);
     // let mut tproxy_egress_hook = TcHookProxy::new(&tproxy_egress, ifindex, TC_EGRESS, 1);
 
     tproxy_ingress_hook.attach();

@@ -160,3 +160,24 @@ int tproxy_ingress(struct __sk_buff *skb) {
     return ret == 0 ? TC_ACT_OK : TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }
+
+
+SEC("tc/ingress")
+int route_mode_ingress(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "route_mode_ingress"
+
+    u32 vlan_id = skb->vlan_tci;
+    if (vlan_id != LAND_REDIRECT_NETNS_VLAN_ID) {
+        return TC_ACT_OK;
+    }
+    int ret = bpf_skb_vlan_pop(skb);
+    if (ret) {
+        bpf_log_info("remove vlan error %d", ret);
+        return TC_ACT_SHOT;
+    }
+
+    bpf_skb_change_type(skb, PACKET_HOST);
+
+    return TC_ACT_OK ;
+#undef BPF_LOG_TOPIC
+}
