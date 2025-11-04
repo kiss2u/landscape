@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, net::IpAddr};
 use ts_rs::TS;
 
-use crate::net::MacAddr;
+use crate::{dev::get_interface_index_by_name, net::MacAddr, route::LanRouteInfo};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
 #[ts(export, export_to = "docker.ts")]
@@ -14,6 +14,7 @@ pub struct LandscapeDockerNetwork {
     pub containers: HashMap<String, LandscapeDockerNetworkContainer>,
     pub iface_name: String,
     pub options: HashMap<String, String>,
+    pub ip_info: Option<LandscapeDockerIpInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, TS)]
@@ -21,4 +22,33 @@ pub struct LandscapeDockerNetwork {
 pub struct LandscapeDockerNetworkContainer {
     pub name: String,
     pub mac: Option<MacAddr>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[ts(export, export_to = "docker.ts")]
+pub struct LandscapeDockerIpInfo {
+    pub subnet_ip: IpAddr,
+    pub prefix: u8,
+    pub gateway: IpAddr,
+}
+
+impl LandscapeDockerNetwork {
+    pub fn convert_to_lan_info(&self) -> Option<LanRouteInfo> {
+        let Some(ifindex) = get_interface_index_by_name(&self.iface_name) else {
+            tracing::error!("could not read {}'s ifindex", self.iface_name);
+            return None;
+        };
+        // println!("info: {:?}", self);
+        let Some(ip_info) = &self.ip_info else {
+            tracing::error!("{}'s ip info is empty", self.iface_name);
+            return None;
+        };
+        Some(LanRouteInfo {
+            ifindex,
+            iface_name: self.iface_name.clone(),
+            iface_ip: ip_info.gateway,
+            mac: None,
+            prefix: ip_info.prefix,
+        })
+    }
 }

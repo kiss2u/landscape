@@ -1,13 +1,17 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
+    str::FromStr,
+};
 
 use bollard::{
     query_parameters::ListNetworksOptions,
-    secret::{Network, NetworkContainer},
+    secret::{Ipam, Network, NetworkContainer},
     Docker,
 };
 use landscape_common::{
     docker::{
-        network::{LandscapeDockerNetwork, LandscapeDockerNetworkContainer},
+        network::{LandscapeDockerIpInfo, LandscapeDockerNetwork, LandscapeDockerNetworkContainer},
         DOCKER_NETWORK_BRIDGE_NAME_OPTION_KEY,
     },
     net::MacAddr,
@@ -30,7 +34,7 @@ pub async fn inspect_all_networks() -> Vec<LandscapeDockerNetwork> {
     result
 }
 
-fn convert_network(net: Network) -> Option<LandscapeDockerNetwork> {
+pub fn convert_network(net: Network) -> Option<LandscapeDockerNetwork> {
     match (net.name, net.id) {
         (Some(name), Some(id)) => {
             //
@@ -52,6 +56,8 @@ fn convert_network(net: Network) -> Option<LandscapeDockerNetwork> {
                 format!("br-{}", id.get(..12).unwrap_or(&id))
             };
 
+            let ip_info = net.ipam.map(convert_ipam).flatten();
+
             Some(LandscapeDockerNetwork {
                 name,
                 iface_name,
@@ -59,6 +65,7 @@ fn convert_network(net: Network) -> Option<LandscapeDockerNetwork> {
                 containers,
                 options,
                 driver: net.driver,
+                ip_info,
             })
         }
         _ => None,
@@ -72,4 +79,29 @@ fn convert_container(container: NetworkContainer) -> Option<LandscapeDockerNetwo
     } else {
         None
     }
+}
+
+fn convert_ipam(ipam: Ipam) -> Option<LandscapeDockerIpInfo> {
+    let Some(config) = ipam.config.as_ref().map(|c| c.get(0)).flatten() else {
+        return None;
+    };
+
+    let Some(subnet) = config.subnet.as_ref() else {
+        return None;
+    };
+    let Ok(subnet) = cidr::Ipv4Inet::from_str(subnet) else {
+        return None;
+    };
+
+    Some(LandscapeDockerIpInfo {
+        subnet_ip: IpAddr::V4(subnet.address()),
+        prefix: subnet.network_length(),
+        gateway: IpAddr::V4(
+            config
+                .gateway
+                .as_ref()
+                .and_then(|gw| gw.parse::<Ipv4Addr>().ok())
+                .unwrap_or_else(|| subnet.overflowing_add_u32(1).0.address()),
+        ),
+    })
 }

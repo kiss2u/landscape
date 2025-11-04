@@ -1,11 +1,3 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
-
 use bollard::Docker;
 
 use landscape::docker::create_docker_event_spawn;
@@ -31,14 +23,6 @@ async fn main() {
     let route_service = IpRouteService::new(route_rx, flow_repo);
 
     create_docker_event_spawn(route_service).await;
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
 
-    while running.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::new(1, 0)).await;
-    }
+    let _ = tokio::signal::ctrl_c().await;
 }

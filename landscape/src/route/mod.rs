@@ -106,6 +106,18 @@ impl IpRouteService {
         }
     }
 
+    pub async fn print_lan_ifaces(&self) {
+        {
+            let lock = self.ipv4_lan_ifaces.read().await;
+            tracing::info!("ipv4 wan ifaces: {:?}", lock)
+        }
+
+        {
+            let lock = self.ipv6_lan_ifaces.read().await;
+            tracing::info!("ipv6 wan ifaces: {:?}", lock)
+        }
+    }
+
     pub async fn insert_ipv6_lan_route(&self, key: LanIPv6RouteKey, new_info: LanRouteInfo) {
         let mut lock = self.ipv6_lan_ifaces.write().await;
         let info = lock.insert(key, new_info.clone());

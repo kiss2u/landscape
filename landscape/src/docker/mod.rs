@@ -1,5 +1,7 @@
 use bollard::{
-    query_parameters::{EventsOptions, InspectContainerOptions, ListContainersOptions},
+    query_parameters::{
+        EventsOptions, InspectContainerOptions, InspectNetworkOptions, ListContainersOptions,
+    },
     secret::{ContainerSummary, EventMessageTypeEnum},
     Docker,
 };
@@ -46,6 +48,8 @@ impl LandscapeDockerService {
         let status = self.status.clone();
         let route_service = self.route_service.clone();
         let path = self.home_path.clone();
+
+        scan_all_lan_net(&route_service).await;
         tokio::spawn(async move {
             status.just_change_status(ServiceStatus::Staring);
             let docker = Docker::connect_with_socket_defaults();
@@ -201,7 +205,7 @@ pub async fn accept_docker_info(
 
 pub async fn handle_event(
     ip_route_service: &IpRouteService,
-    _docker: &Docker,
+    docker: &Docker,
     emsg: bollard::secret::EventMessage,
 ) {
     match emsg.typ {
@@ -238,40 +242,46 @@ pub async fn handle_event(
                 }
             }
         }
-        // Some(EventMessageTypeEnum::NETWORK) => {
-        //     let Some(action) = emsg.action else {
-        //         return;
-        //     };
+        Some(EventMessageTypeEnum::NETWORK) => {
+            println!("{:?}", emsg);
 
-        //     let Some(id) = emsg.actor else {
-        //         return;
-        //     };
+            let Some(action) = emsg.action else {
+                return;
+            };
 
-        //     let Some(net_id) = id.id else {
-        //         return;
-        //     };
+            let Some(id) = emsg.actor else {
+                return;
+            };
 
-        //     // println!("{:?}", emsg);
+            let Some(net_id) = id.id else {
+                return;
+            };
 
-        //     match action.as_str() {
-        //         "create" => {
-        //             let Ok(net_info) = docker.inspect_network::<String>(&net_id, None).await else {
-        //                 return;
-        //             };
+            match action.as_str() {
+                "create" => {
+                    let Ok(net_info) =
+                        docker.inspect_network(&net_id, None::<InspectNetworkOptions>).await
+                    else {
+                        return;
+                    };
 
-        //             println!("");
-        //             println!("{:?}", net_info);
-        //             println!("");
-        //         }
-        //         "destroy" => {
-        //             println!("");
-        //             // println!("{:?}", emsg);
-        //             ip_route_service.remove_ipv4_lan_route(net_id).await;
-        //             println!("");
-        //         }
-        //         _ => {}
-        //     }
-        // }
+                    // println!("net_info: {:?}", net_info);
+                    if let Some(network_info) = network::convert_network(net_info) {
+                        if let Some(info) = network_info.convert_to_lan_info() {
+                            ip_route_service.insert_ipv4_lan_route(&network_info.id, info).await;
+                        }
+                    }
+                }
+                "destroy" => {
+                    println!("");
+                    // println!("{:?}", emsg);
+                    ip_route_service.remove_ipv4_lan_route(&net_id).await;
+                    ip_route_service.print_lan_ifaces().await;
+                    println!("");
+                }
+                _ => {}
+            }
+        }
         _ => {
             tracing::error!("{:?}", emsg);
         }
@@ -298,18 +308,13 @@ pub async fn create_docker_event_spawn(ip_route_service: IpRouteService) {
     });
 }
 
-// fn get_all_container_info() {}
-
-// pub struct ContainerConfig {
-//     /// 开机启动
-//     pub start_in_boot: bool,
-//     /// 容器名称
-//     pub name: String,
-//     /// 使用的镜像名称
-//     pub image: String,
-// }
-
-// type ConfigStore = Arc<Mutex<StoreFileManager>>;
+async fn scan_all_lan_net(ip_route_service: &IpRouteService) {
+    for network_info in network::inspect_all_networks().await {
+        if let Some(info) = network_info.convert_to_lan_info() {
+            ip_route_service.insert_ipv4_lan_route(&network_info.id, info).await;
+        }
+    }
+}
 
 async fn inspect_container_and_set_route(
     name: &str,
