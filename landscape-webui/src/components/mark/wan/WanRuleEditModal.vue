@@ -15,6 +15,10 @@ import {
   push_dst_ip_rules_rule,
   update_dst_ip_rules_rule,
 } from "@/api/dst_ip_rule";
+import {
+  copy_context_to_clipboard,
+  read_context_from_clipboard,
+} from "@/lib/common";
 
 interface Props {
   flow_id: number;
@@ -98,6 +102,31 @@ async function saveRule() {
     emit("refresh");
   }
 }
+
+async function export_config() {
+  if (rule.value) {
+    let configs = rule.value.source;
+    await copy_context_to_clipboard(message, JSON.stringify(configs, null, 2));
+  }
+}
+
+async function import_rules() {
+  if (rule.value) {
+    try {
+      let rules = JSON.parse(await read_context_from_clipboard());
+      rule.value.source = rules;
+    } catch (e) {}
+  }
+}
+
+async function append_import_rules() {
+  if (rule.value) {
+    try {
+      let rules = JSON.parse(await read_context_from_clipboard());
+      rule.value.source.unshift(...rules);
+    } catch (e) {}
+  }
+}
 </script>
 
 <template>
@@ -136,7 +165,43 @@ async function saveRule() {
       <n-form-item label="备注">
         <n-input v-model:value="rule.remark" type="text" />
       </n-form-item>
-      <n-form-item label="匹配的 IP">
+      <n-form-item>
+        <template #label>
+          <n-flex
+            align="center"
+            justify="space-between"
+            :wrap="false"
+            @click.stop
+          >
+            <n-flex> 匹配的 IP </n-flex>
+            <n-flex>
+              <!-- 不确定为什么点击 label 会触发第一个按钮, 所以放置一个不可见的按钮 -->
+              <button
+                style="
+                  width: 0;
+                  height: 0;
+                  overflow: hidden;
+                  opacity: 0;
+                  position: absolute;
+                "
+              ></button>
+
+              <n-button :focusable="false" size="tiny" @click="export_config">
+                复制
+              </n-button>
+              <n-button :focusable="false" size="tiny" @click="import_rules">
+                替换粘贴
+              </n-button>
+              <n-button
+                :focusable="false"
+                size="tiny"
+                @click="append_import_rules"
+              >
+                增量粘贴
+              </n-button>
+            </n-flex>
+          </n-flex>
+        </template>
         <n-dynamic-input v-model:value="rule.source" :on-create="onCreate">
           <template #create-button-default> 增加一条 Wan 规则 </template>
           <template #default="{ value, index }">
