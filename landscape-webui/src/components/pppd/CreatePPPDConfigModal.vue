@@ -92,7 +92,13 @@ async function confirm_config() {
         />
       </n-form-item>
 
-      <n-form-item label="请求连接的 AC 名称">
+      <n-form-item>
+        <template #label>
+          <Notice>
+            请求连接的 AC 名称 (没有特殊需求的话请留空, 否则可能导致拨号异常)
+            <template #msg> 设置后只会与 AC 名称一致的服务端进行连接 </template>
+          </Notice>
+        </template>
         <n-input
           :type="frontEndStore.presentation_mode ? 'password' : 'text'"
           show-password-on="click"
