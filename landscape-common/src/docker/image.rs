@@ -8,6 +8,7 @@ use uuid::Uuid;
 #[ts(export, export_to = "common/docker.d.ts")]
 pub struct PullImageReq {
     pub image_name: String,
+    #[serde(default)]
     pub tag: Option<String>,
 }
 

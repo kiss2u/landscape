@@ -2,17 +2,17 @@ use crate::LandscapeApp;
 use axum::{
     extract::{Path, State},
     routing::{delete, get, post},
-    Router,
+    Json, Router,
 };
 use bollard::{query_parameters::ListImagesOptions, secret::ImageSummary, Docker};
-use landscape_common::docker::image::PullImgTask;
+use landscape_common::docker::image::{PullImageReq, PullImgTask};
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 pub async fn get_docker_images_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/", get(get_all_images))
-        .route("/{image_name}", post(pull_image_by_image_name))
+        .route("/pull", post(pull_image_by_image_name))
         .route("/id/{image_id}", delete(delete_image_by_id))
         .route("/tasks", get(get_current_task))
 }
@@ -38,9 +38,9 @@ async fn get_all_images() -> LandscapeApiResult<Vec<ImageSummary>> {
 
 async fn pull_image_by_image_name(
     State(state): State<LandscapeApp>,
-    Path(image_name): Path<String>,
+    Json(pull): Json<PullImageReq>,
 ) -> LandscapeApiResult<()> {
-    state.docker_service.pull_manager.pull_img(image_name).await;
+    state.docker_service.pull_manager.pull_img(pull.image_name).await;
     LandscapeApiResp::success(())
 }
 

@@ -64,8 +64,10 @@ export async function get_docker_images(): Promise<DockerImageSummary[]> {
   return data.data.map((d: any) => new DockerImageSummary(d));
 }
 
-export async function pull_docker_image(name: string): Promise<void> {
-  await axiosService.post(`sys_service/docker/images/${name}`);
+export async function pull_docker_image(image_name: string): Promise<void> {
+  await axiosService.post(`sys_service/docker/images/pull`, {
+    image_name,
+  });
 }
 
 export async function get_current_tasks(): Promise<PullImgTask[]> {
