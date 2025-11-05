@@ -47,7 +47,8 @@ impl LandscapeDockerNetwork {
             ifindex,
             iface_name: self.iface_name.clone(),
             iface_ip: ip_info.gateway,
-            mac: None,
+            // TEMP
+            mac: Some(MacAddr::zero()),
             prefix: ip_info.prefix,
         })
     }
