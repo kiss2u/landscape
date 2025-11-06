@@ -53,7 +53,11 @@ impl LandscapeDockerService {
         tokio::spawn(async move {
             status.just_change_status(ServiceStatus::Staring);
             let docker = Docker::connect_with_socket_defaults();
-            let docker = docker.unwrap();
+
+            let Ok(docker) = docker else {
+                tracing::warn!("Docker Connect Fail");
+                return;
+            };
 
             let unix_socket = unix_sock::listen_unix_sock(path).await;
 

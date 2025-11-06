@@ -19,7 +19,11 @@ use landscape_common::{
 
 pub async fn inspect_all_networks() -> Vec<LandscapeDockerNetwork> {
     let docker = Docker::connect_with_socket_defaults();
-    let docker = docker.unwrap();
+
+    let Ok(docker) = docker else {
+        tracing::warn!("Docker Connect Fail");
+        return vec![];
+    };
 
     let query: Option<ListNetworksOptions> = None;
     let networks = docker.list_networks(query).await.unwrap();
