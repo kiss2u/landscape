@@ -96,12 +96,13 @@ Flow 中核心的概念就是这个, 控制当前规则的目标的具体行为.
 当流量进入容器后, 假设流量变为该 容器的 IP 进行发送, 那么可以新建一个 Flow 配置, 将该容器 IP 加入, 这样就能控制该容器发出流量的行为.
 ( 大多数情况应该属于多此一举 ) -->
 ## 如何使用 Docker 容器作为流出口
+下方教程提到的程序
+1. 接应程序: 可从 [release](https://github.com/ThisSeanZhang/landscape/releases/latest) 下载, 选择需要的版本 redirect_pkg_handler.
+2. 工作程序: 可以是任意程序, 比如组网程序, 数据包分析程序, 代理程序. (不同的程序需要使用不同的工作模式启动)
 
-* 仅搭配 [**接应程序**](https://github.com/ThisSeanZhang/landscape/blob/main/landscape-ebpf/src/bin/redirect_pkg_handler.rs) 进行打包的容器，可作为有效的流 **出口容器**  
-* 可挂载任意程序在 `/app/server` 目录下作为 **工作程序**, 需要自行编写 `/app/server/run.sh` 脚本用于启动
-* **工作程序** 需监听 `12345` 端口作为 tproxy 入口, 其他端口需要通过环境变量 `LAND_PROXY_SERVER_PORT` 修改 **接应程序** 默认监听端口
-* **接应程序** 会将待处理流量转发到 **工作程序** 的 tproxy 入口 
-* landscape 0.6.7+ 版本容器出口默认为 Flow 0 出口  
+:::info
+仅搭配 [**接应程序**](https://github.com/ThisSeanZhang/landscape/blob/main/landscape-ebpf/src/bin/redirect_pkg_handler.rs) 进行打包的容器，才可作为有效的流 **出口容器**  
+:::
 
 ### 接应程序（镜像）
 项目提供了一个 **测试接应程序** 以便进行测试, [装有 **接应程序** 的镜像在此](https://github.com/ThisSeanZhang/landscape/pkgs/container/landscape-edge):
@@ -120,7 +121,7 @@ docker run -d \
   --cap-add=PERFMON \
   --privileged \
   -v /root/.landscape-router/unix_link/:/ld_unix_link/:ro \ # 必要映射
-  # 可挂载 任意工作程序及其启动脚本等所需文件
+  # 可挂载 任意工作程序及其启动脚本等所需文件 :/app/server
   ghcr.io/thisseanzhang/landscape-edge:amd64-xx # xx需修改为合适版本
 ```
 
@@ -138,7 +139,7 @@ services:
     privileged: true
     volumes:
       - /root/.landscape-router/unix_link/:/ld_unix_link/:ro # 必要映射
-      # 可挂载 任意工作程序及其启动脚本等所需文件
+      # 可挂载 任意工作程序及其启动脚本等所需文件 :/app/server
 ```
 打包的`landscape-edge:amd64-xx`镜像中包含一个[**演示工作程序** ](https://github.com/ThisSeanZhang/landscape/blob/main/landscape-ebpf/src/bin/redirect_demo_server.rs) 放置在 `/app/server` 中, 程序的作用是创建 TProxy 监听 `12345` 端口.
 
@@ -177,4 +178,3 @@ root@landscape-router:/xx/flow# tree
   ```
 
   
-
