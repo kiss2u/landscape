@@ -26,10 +26,6 @@ fn main() {
         OsStr::new("-mcpu=v2"),
     ];
 
-    if !cfg!(target_arch = "riscv64") {
-        clang_args.push(OsStr::new("-DLAND_TEST_EBPF"));
-    }
-
     for entry in fs::read_dir("src/bpf/").expect("Failed to read directory: src/bpf/") {
         let path = match entry {
             Ok(entry) => entry.path(),
