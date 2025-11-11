@@ -18,7 +18,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/bpf/*");
 
     let vmlinux_path = vmlinux::include_path_root().join(&target_arch);
-    let mut clang_args = vec![
+    let clang_args = vec![
         OsStr::new("-Wall"),
         OsStr::new("-Wno-compare-distinct-pointer-types"),
         OsStr::new("-I"),
