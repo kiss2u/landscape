@@ -35,41 +35,46 @@ async function refresh_cache() {
 const show_geo_drawer_modal = ref(false);
 </script>
 <template>
-  <n-layout :native-scrollbar="false" content-style="padding: 10px;">
-    <n-flex vertical>
-      <n-flex :wrap="false">
-        <!-- {{ filter }} -->
-        <n-button @click="show_geo_drawer_modal = true">
-          IP 规则来源配置
-        </n-button>
-        <n-popconfirm
-          :positive-button-props="{ loading: loading }"
-          @positive-click="refresh_cache"
-        >
-          <template #trigger>
-            <n-button>强制刷新</n-button>
-          </template>
-          强制刷新吗? 将会清空所有 key 并且重新下载. 可能会持续一段时间
-        </n-popconfirm>
+  <n-flex style="flex: 1; overflow: hidden; margin-bottom: 10px" vertical>
+    <n-flex :wrap="false">
+      <!-- {{ filter }} -->
+      <n-button @click="show_geo_drawer_modal = true">
+        IP 规则来源配置
+      </n-button>
+      <n-popconfirm
+        :positive-button-props="{ loading: loading }"
+        @positive-click="refresh_cache"
+      >
+        <template #trigger>
+          <n-button>强制刷新</n-button>
+        </template>
+        强制刷新吗? 将会清空所有 key 并且重新下载. 可能会持续一段时间
+      </n-popconfirm>
 
-        <GeoIpNameSelect
-          v-model:name="filter.name"
-          @refresh="refresh"
-        ></GeoIpNameSelect>
-        <GeoIpKeySelect
-          v-model:geo_key="filter.key"
-          v-model:name="filter.name"
-          @refresh="refresh"
-        ></GeoIpKeySelect>
-      </n-flex>
+      <GeoIpNameSelect
+        v-model:name="filter.name"
+        @refresh="refresh"
+      ></GeoIpNameSelect>
+      <GeoIpKeySelect
+        v-model:geo_key="filter.key"
+        v-model:name="filter.name"
+        @refresh="refresh"
+      ></GeoIpKeySelect>
+    </n-flex>
 
-      <!-- {{ rules }} -->
-      <!-- <n-virtual-list :items="rules" :item-size="rules.length">
+    <!-- {{ rules }} -->
+    <!-- <n-virtual-list :items="rules" :item-size="rules.length">
         <template #default="{ item }">
           <n-flex> <GeoIpCacheCard :geo_site="item"></GeoIpCacheCard></n-flex>
         </template>
       </n-virtual-list> -->
-      <n-grid x-gap="12" y-gap="10" cols="1 600:2 900:3 1200:4 1600:5">
+    <n-virtual-list :item-size="52" :items="rules">
+      <template #default="{ item }">
+        <GeoIpCacheCard :geo_site="item"></GeoIpCacheCard>
+      </template>
+    </n-virtual-list>
+
+    <!-- <n-grid x-gap="12" y-gap="10" cols="1 600:2 900:3 1200:4 1600:5">
         <n-grid-item
           v-for="rule in rules"
           :key="rule.index"
@@ -77,12 +82,11 @@ const show_geo_drawer_modal = ref(false);
         >
           <GeoIpCacheCard :geo_site="rule"></GeoIpCacheCard>
         </n-grid-item>
-      </n-grid>
-    </n-flex>
+      </n-grid> -->
 
     <GeoIpDrawer
       @refresh:keys="refresh"
       v-model:show="show_geo_drawer_modal"
     ></GeoIpDrawer>
-  </n-layout>
+  </n-flex>
 </template>

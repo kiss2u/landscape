@@ -19,15 +19,16 @@ const filter = ref(new ConnectFilter());
 
 // 协议类型选项
 const protocolOptions = [
-  { label: "全部", value: undefined },
+  { label: "全部", value: null },
   { label: "TCP", value: 6 },
   { label: "UDP", value: 17 },
   { label: "ICMP", value: 1 },
+  { label: "ICMPv6", value: 58 },
 ];
 
 // IP 类型选项
 const ipTypeOptions = [
-  { label: "全部", value: undefined },
+  { label: "全部", value: null },
   { label: "IPv4", value: 0 },
   { label: "IPv6", value: 1 },
 ];
@@ -105,7 +106,7 @@ const applyFilter = () => {};
       当前的指标是以 5s 为单位, 并且短链接不会生成图表. 当前为简单版本,
       后续还将修改
     </n-alert>
-    <n-flex :wrap="false">
+    <n-flex align="center">
       <n-flex> 总连接数为: {{ metricStore.firewall_info?.length }} </n-flex>
       <!-- 源 IP -->
       <n-input
@@ -174,8 +175,9 @@ const applyFilter = () => {};
       <n-button @click="resetFilter">重置</n-button>
     </n-flex>
 
-    <n-scrollbar style="flex: 1">
-      <ConnectList :connect_metrics="filteredConnectMetrics" />
-    </n-scrollbar>
+    <ConnectVirtualList
+      v-if="filteredConnectMetrics"
+      :connect_metrics="filteredConnectMetrics"
+    />
   </n-flex>
 </template>

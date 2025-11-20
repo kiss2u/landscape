@@ -38,6 +38,10 @@ async function init_conf_value() {
 
 async function confirm_config() {
   if (isModified) {
+    if (!value.value.iface_name || value.value.iface_name.trim() === "") {
+      window.$message.error("网卡名称不能为空");
+      return;
+    }
     await update_iface_pppd_config(value.value);
     show.value = false;
     emit("refresh");

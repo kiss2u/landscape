@@ -23,17 +23,16 @@ async function refresh() {
     placement="right"
   >
     <n-drawer-content title="规则细节" closable>
-      <n-scrollbar v-if="config">
-        <n-flex>
+      <n-virtual-list v-if="config" :item-size="60" :items="config.values">
+        <template #default="{ item }">
           <n-card
-            v-for="(rule, index) in config.values"
-            :key="index"
-            :title="`${rule.ip}/${rule.prefix}`"
+            style="margin: 5px 0px; height: 50px"
+            :title="`${item.ip}/${item.prefix}`"
             size="small"
           >
           </n-card>
-        </n-flex>
-      </n-scrollbar>
+        </template>
+      </n-virtual-list>
     </n-drawer-content>
   </n-drawer>
 </template>

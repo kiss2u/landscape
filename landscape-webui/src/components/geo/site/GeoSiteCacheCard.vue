@@ -14,28 +14,53 @@ const props = defineProps<Prop>();
 const show_detail_modal = ref(false);
 </script>
 <template>
-  <n-card
-    :title="
-      frontEndStore.presentation_mode ? mask_string(geo_site.key) : geo_site.key
-    "
-    size="small"
-    style="flex: 1"
-  >
-    <n-tag :bordered="false">
-      {{
-        frontEndStore.presentation_mode
-          ? mask_string(geo_site.name)
-          : geo_site.name
-      }}
-    </n-tag>
-    <template #header-extra>
+  <n-card class="box" size="small" style="margin: 5px 0px">
+    <n-flex justify="space-between">
       <n-flex>
-        <n-button type="warning" secondary @click="show_detail_modal = true">
+        <n-flex>
+          <n-tag :bordered="false">
+            {{
+              frontEndStore.presentation_mode
+                ? mask_string(geo_site.name)
+                : geo_site.name
+            }}
+          </n-tag>
+        </n-flex>
+
+        <n-flex>
+          {{
+            frontEndStore.presentation_mode
+              ? mask_string(geo_site.key)
+              : geo_site.key
+          }}
+        </n-flex>
+      </n-flex>
+      <n-flex>
+        <n-button
+          size="small"
+          type="warning"
+          secondary
+          @click="show_detail_modal = true"
+        >
           详情
         </n-button>
+        <GeoSiteDetailDrawer
+          :geo_key="geo_site"
+          v-model:show="show_detail_modal"
+        >
+        </GeoSiteDetailDrawer>
       </n-flex>
-      <GeoSiteDetailDrawer :geo_key="geo_site" v-model:show="show_detail_modal">
-      </GeoSiteDetailDrawer>
-    </template>
+    </n-flex>
   </n-card>
 </template>
+
+<style scoped>
+.box {
+  border: 2px solid transparent;
+  transition: border-color 0.25s ease;
+}
+
+.box:hover {
+  border-color: #4fa3ff; /* 你想要的亮色 */
+}
+</style>

@@ -23,20 +23,15 @@ async function refresh() {
     placement="right"
   >
     <n-drawer-content title="规则细节" closable>
-      <n-scrollbar v-if="config">
-        <n-flex>
-          <n-card
-            v-for="(rule, index) in config.values"
-            :key="index"
-            :title="rule.value"
-            size="small"
-          >
+      <n-virtual-list v-if="config" :item-size="110" :items="config.values">
+        <template #default="{ item }">
+          <n-card style="margin: 5px 0px" :title="item.value" size="small">
             <n-tag :bordered="false" type="info">
-              {{ rule.match_type }}
+              {{ item.match_type }}
             </n-tag>
           </n-card>
-        </n-flex>
-      </n-scrollbar>
+        </template>
+      </n-virtual-list>
     </n-drawer-content>
   </n-drawer>
 </template>

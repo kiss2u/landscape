@@ -264,7 +264,7 @@ function has_source_hook() {
       <!-- <n-divider /> -->
     </n-popover>
 
-    <n-flex style="min-width: 230px; max-width: 230px">
+    <n-flex style="min-width: 240px; max-width: 240px">
       <!-- IP 配置 按钮 -->
       <IPConfigStatusBtn
         v-if="show_switch.ip_config"

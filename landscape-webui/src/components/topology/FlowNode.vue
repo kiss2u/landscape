@@ -144,7 +144,7 @@ const show_switch = computed(() => {
       @update:show="handleUpdateShow"
     >
       <template #trigger>
-        <n-card size="small" style="min-width: 250px; max-width: 250px">
+        <n-card size="small" style="min-width: 240px; max-width: 240px">
           <template #header>
             <n-flex style="gap: 3px" inline align="center">
               <n-icon
@@ -154,7 +154,9 @@ const show_switch = computed(() => {
               >
                 <DotMark />
               </n-icon>
-              {{ node.name }}
+              <n-performant-ellipsis :tooltip="false" style="max-width: 110px">
+                {{ node.name }}
+              </n-performant-ellipsis>
             </n-flex>
           </template>
           <template #header-extra>
@@ -254,6 +256,9 @@ const show_switch = computed(() => {
         </n-card>
       </template>
       <n-descriptions label-placement="left" :column="2" size="small">
+        <n-descriptions-item :span="2" label="网卡名称">
+          {{ node.name }}
+        </n-descriptions-item>
         <n-descriptions-item label="mac地址">
           {{
             frontEndStore.presentation_mode
@@ -307,7 +312,7 @@ const show_switch = computed(() => {
       </n-descriptions>
     </n-popover>
 
-    <n-flex style="min-width: 230px; max-width: 230px">
+    <n-flex style="min-width: 240px; max-width: 240px">
       <!-- IP 配置 按钮 -->
       <MSSClampStatusBtn
         v-if="show_switch.mss_clamp"

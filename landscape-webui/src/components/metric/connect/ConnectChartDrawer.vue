@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { get_connect_metric_info } from "@/api/metric";
 import { useMetricStore } from "@/stores/status_metric";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import {
   ConnectKey,
   ConnectMetric,
@@ -10,6 +11,7 @@ import { computed, ref } from "vue";
 import VueApexCharts from "vue3-apexcharts";
 
 const metricStore = useMetricStore();
+const frontEndStore = useFrontEndStore();
 
 interface Props {
   conn: ConnectKey | null;
@@ -25,7 +27,9 @@ const title = computed(() => {
   if (props.conn == null) {
     return "";
   } else {
-    return `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`;
+    return frontEndStore.MASK_INFO(
+      `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`
+    );
   }
 });
 const interval_number = ref();
