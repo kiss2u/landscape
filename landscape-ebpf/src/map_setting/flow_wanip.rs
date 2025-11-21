@@ -12,7 +12,14 @@ use super::share_map::types::{flow_ip_trie_key, flow_ip_trie_value};
 
 const IP_MATCH_MAX_ENTRIES: u32 = 65536;
 
-fn create_inner_flow_match_map(flow_id: u32, ips: Vec<IpMarkInfo>) -> LdEbpfResult<()> {
+pub(crate) fn create_inner_flow_match_map<'obj, T>(
+    outer_map: &T,
+    flow_id: u32,
+    ips: Vec<IpMarkInfo>,
+) -> LdEbpfResult<()>
+where
+    T: MapCore,
+{
     let sz = size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t;
     #[allow(clippy::needless_update)]
     let opts = libbpf_sys::bpf_map_create_opts {
@@ -36,14 +43,13 @@ fn create_inner_flow_match_map(flow_id: u32, ips: Vec<IpMarkInfo>) -> LdEbpfResu
     add_mark_ip_rules(&map, ips)?;
 
     let map_fd = map.as_fd().as_raw_fd();
-    let flow_ip_match_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_ip_map)?;
 
     let key = flow_id;
     let key_value = unsafe { plain::as_bytes(&key) };
 
     let value_value = unsafe { plain::as_bytes(&map_fd) };
 
-    flow_ip_match_map.update(key_value, value_value, MapFlags::ANY)?;
+    outer_map.update(key_value, value_value, MapFlags::ANY)?;
     Ok(())
 }
 
@@ -54,21 +60,8 @@ pub fn add_wan_ip_mark(flow_id: u32, ips: Vec<IpMarkInfo>) {
 }
 
 fn add_wan_ip_mark_inner(flow_id: u32, ips: Vec<IpMarkInfo>) -> LdEbpfResult<()> {
-    // let flow_ip_match_map =
-    //     libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_ip_map).unwrap();
-    // let key_bytes = unsafe { plain::as_bytes(&flow_id) };
-    // let map_fd = flow_ip_match_map.lookup(key_bytes, MapFlags::ANY)?;
-
-    create_inner_flow_match_map(flow_id, ips)?;
-    // if let Some(map) = map_fd {
-    //     let inner_map_id = vec_u8_to_u32(&map)?;
-    //     let inner_map = libbpf_rs::MapHandle::from_map_id(inner_map_id)?;
-    //     add_mark_ip_rules(&inner_map, ips)?;
-    // } else {
-    //     let inner_map = create_inner_flow_match_map(flow_id)?;
-
-    //     add_mark_ip_rules(&inner_map, ips)?;
-    // }
+    let flow_ip_match_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_ip_map)?;
+    create_inner_flow_match_map(&flow_ip_match_map, flow_id, ips)?;
     Ok(())
 }
 
@@ -105,10 +98,12 @@ where
         match cidr.ip {
             std::net::IpAddr::V4(ipv4_addr) => {
                 key.addr[..4].copy_from_slice(&ipv4_addr.to_bits().to_be_bytes());
+                // key.addr.ip = ipv4_addr.to_bits().to_be();
                 key.l3_protocol = LANDSCAPE_IPV4_TYPE;
             }
             std::net::IpAddr::V6(ipv6_addr) => {
                 key.addr = ipv6_addr.to_bits().to_be_bytes();
+                // key.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
                 key.l3_protocol = LANDSCAPE_IPV6_TYPE;
             }
         };
@@ -158,10 +153,12 @@ where
         match cidr.ip {
             std::net::IpAddr::V4(ipv4_addr) => {
                 key.addr[..4].copy_from_slice(&ipv4_addr.to_bits().to_be_bytes());
+                // key.addr.ip = ipv4_addr.to_bits().to_be();
                 key.l3_protocol = LANDSCAPE_IPV4_TYPE;
             }
             std::net::IpAddr::V6(ipv6_addr) => {
                 key.addr = ipv6_addr.to_bits().to_be_bytes();
+                // key.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
                 key.l3_protocol = LANDSCAPE_IPV6_TYPE;
             }
         };

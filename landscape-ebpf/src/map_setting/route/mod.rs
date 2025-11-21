@@ -70,7 +70,16 @@ pub fn del_lan_route(lan_info: LanRouteInfo) {
 
 pub fn add_wan_route(flow_id: FlowId, wan_info: RouteTargetInfo) {
     let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt_target_map).unwrap();
+    add_wan_route_inner(&rt_target_map, flow_id, wan_info);
+}
 
+pub(crate) fn add_wan_route_inner<'obj, T>(
+    rt_target_map: &T,
+    flow_id: FlowId,
+    wan_info: RouteTargetInfo,
+) where
+    T: MapCore,
+{
     let mut key = route_target_key::default();
     key.flow_id = flow_id;
 

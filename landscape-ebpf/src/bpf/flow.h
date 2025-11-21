@@ -52,6 +52,7 @@ struct flow_ip_trie_key {
     u8 l3_protocol;
     u8 _pad[3];
     u8 addr[16];
+    // union u_inet_addr addr;
 } __flow_ip_trie_key;
 
 struct flow_ip_trie_value {

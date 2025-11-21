@@ -13,6 +13,7 @@ use crate::tests::test_scanner::types::u_inet_addr;
 mod check;
 mod firewall;
 mod nat;
+mod route;
 mod scanner;
 
 pub(crate) mod test_scanner {

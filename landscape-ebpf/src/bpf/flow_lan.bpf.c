@@ -271,6 +271,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
 
     int ret;
     volatile u32 flow_id = *init_flow_id_ & 0xff;
+    u8 flow_action;
 
     if (match_flow_id(skb, current_l3_offset, context, &flow_id)) {
         return TC_ACT_SHOT;
@@ -282,8 +283,8 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
     struct flow_ip_trie_key ip_trie_key = {0};
     ip_trie_key.prefixlen = context->l3_protocol == LANDSCAPE_IPV4_TYPE ? 64 : 160;
     ip_trie_key.l3_protocol = context->l3_protocol;
+    COPY_ADDR_FROM(ip_trie_key.addr, context->daddr.in6_u.u6_addr8);
 
-    COPY_ADDR_FROM(ip_trie_key.addr, context->daddr.in6_u.u6_addr32);
     struct flow_ip_trie_value *ip_flow_mark_value = NULL;
     void *ip_rules_map = bpf_map_lookup_elem(&flow_v_ip_map, &flow_id);
     if (ip_rules_map != NULL) {
@@ -291,12 +292,17 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
         if (ip_flow_mark_value != NULL) {
             flow_mark_action = ip_flow_mark_value->mark;
             priority = ip_flow_mark_value->priority;
-            // bpf_log_info("find ip map mark: %d", flow_mark_action);
-            // bpf_log_info("get_flow_allow_reuse_port: %d",
-            // get_flow_allow_reuse_port(flow_mark_action));
+            //     bpf_log_info("find ip map mark: %d", flow_mark_action);
+            //     bpf_log_info("get_flow_allow_reuse_port: %d",
+            //                  get_flow_allow_reuse_port(flow_mark_action));
+            // } else {
+            //     bpf_log_info("map id: %d", ip_rules_map);
+            //     bpf_log_info("flow_id: %d,inner ip map is empty", flow_id);
+            //     bpf_log_info("222 ip: %pI4", ip_trie_key.addr);
+            //     bpf_log_info("prefixlen: %d", ip_trie_key.prefixlen);
         }
-    } else {
-        // bpf_log_info("flow_id: %d, ip map is empty", *flow_id_ptr);
+        // } else {
+        // bpf_log_info("flow_id: %d, ip map is empty", flow_id);
     }
 
     struct flow_dns_match_key key = {0};
@@ -318,7 +324,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
             }
             // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action,
             // &cache_key.dst_addr.ip);
-        } else {
+            // } else {
             // bpf_log_info("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
         }
     } else {
@@ -326,15 +332,9 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
     }
 
     // bpf_log_info("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
-    u8 flow_action;
-apply_action:
-
-    // skb->mark = flow_mark_action;
-    // skb->mark = replace_flow_id(flow_mark_action, flow_id_u8);
-
     flow_action = get_flow_action(flow_mark_action);
     // dns_flow_id = get_flow_id(flow_mark_action);
-    // bpf_log_info("dns_flow_id %d, flow_action: %d ", dns_flow_id, flow_action);
+    // bpf_log_info("flow_id %d, flow_action: %d ", flow_id, flow_action);
     if (flow_action == FLOW_KEEP_GOING) {
         // 无动作
         // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", context->daddr.in6_u.u6_addr32);

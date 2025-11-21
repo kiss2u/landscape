@@ -1,6 +1,6 @@
 use std::mem::MaybeUninit;
 
-mod flow_lan_bpf {
+pub(crate) mod flow_lan_bpf {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/flow_lan.skel.rs"));
 }
 
