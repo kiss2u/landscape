@@ -1,5 +1,4 @@
 pub mod dhcp_v4;
-pub mod flow_wan_service;
 pub mod ipconfig;
 pub mod ipv6pd;
 pub mod mss_clamp;

@@ -31,17 +31,6 @@ pub async fn update_flow_matchs(rules: Vec<FlowConfig>, old_rules: Vec<FlowConfi
     landscape_ebpf::map_setting::flow::update_flow_match_rule(convert_mark_map_to_vec_mark(rules));
     landscape_ebpf::map_setting::flow::del_flow_match_rule(delete_keys);
 
-    // TODO: 移动到网卡启动时处理, 并且把配置也单独移出, 使用数据库进行配置
-    // for (flow_id, ifindex_name) in net_ifindexs {
-    //     if let Some(iface) = get_iface_by_name(&ifindex_name).await {
-    //         let info = FlowTargetPair {
-    //             key: flow_id,
-    //             value: TargetInterfaceInfo::new_net_iface(iface.index, iface.mac.is_some()),
-    //         };
-    //         landscape_ebpf::map_setting::flow_target::add_flow_target_info(info);
-    //     }
-    // }
-
     // TODO: 应当只清理当前 Flow 的缓存
     landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
 }

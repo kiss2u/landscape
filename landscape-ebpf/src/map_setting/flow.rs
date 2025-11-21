@@ -2,8 +2,8 @@ use landscape_common::flow::{FlowEbpfMatchPair, FlowEntryMatchMode, FlowEntryRul
 use libbpf_rs::{MapCore, MapFlags};
 
 use crate::{
-    flow::verdict::flow_verdict_bpf::types::flow_match_key, LANDSCAPE_IPV4_TYPE,
-    LANDSCAPE_IPV6_TYPE, MAP_PATHS,
+    route::lan::flow_lan_bpf::types::flow_match_key, LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE,
+    MAP_PATHS,
 };
 
 const FLOW_ENTRY_MODE_MAC: u8 = 0;

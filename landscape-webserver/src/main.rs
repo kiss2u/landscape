@@ -313,35 +313,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     // 初始化结束
 
     let tls_config = load_or_generate_cert(home_path.clone()).await;
-    // let tls_config = Arc::new(tls_config);
-    // let acceptor = TlsAcceptor::from(tls_config);
-
-    // need iproute2
-    // if let Err(e) =
-    //     std::process::Command::new("iptables").args(["-A", "FORWARD", "-j", "ACCEPT"]).output()
-    // {
-    //     error!("iptables cmd exec err: {e:#?}");
-    // }
-
-    // need procps
-    // if let Err(e) =
-    //     std::process::Command::new("sysctl").args(["-w", "net.ipv4.ip_forward=1"]).output()
-    // {
-    //     error!("sysctl cmd exec err: {e:#?}");
-    // }
-
-    // if let Err(e) =
-    //     std::process::Command::new("sysctl").args(["-w", "net.ipv6.conf.all.forwarding=1"]).output()
-    // {
-    //     error!("sysctl cmd exec err: {e:#?}");
-    // }
-
-    // if let Err(e) = std::process::Command::new("sysctl")
-    //     .args(["-w", "net.ipv6.conf.default.forwarding=1"])
-    //     .output()
-    // {
-    //     error!("sysctl cmd exec err: {e:#?}");
-    // }
+    landscape_common::sys_config::init_sysctl_setting();
 
     let addr = SocketAddr::from((config.web.address, config.web.https_port));
     // spawn a second server to redirect http requests to this server

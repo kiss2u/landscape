@@ -344,14 +344,6 @@ async fn inspect_container_and_set_route(
                             let (ipv4, ipv6) = RouteTargetInfo::docker_new(dev.index, name);
                             ip_route_service.insert_ipv4_wan_route(name, ipv4).await;
                             ip_route_service.insert_ipv6_wan_route(name, ipv6).await;
-                            // let info = FlowTargetPair {
-                            //     key: redirect_id as u32,
-                            //     value: TargetInterfaceInfo::new_docker(dev.index),
-                            // };
-                            // landscape_ebpf::map_setting::flow_target::add_flow_target_info(
-                            //     info
-                            // );
-                            // tracing::debug!("peer_id is :{:?}", dev.index);
                         }
                     }
                 }

@@ -1,6 +1,8 @@
 use std::net::Ipv4Addr;
 
 pub mod args;
+pub mod sys_config;
+
 pub mod config;
 pub mod database;
 pub mod dev;
@@ -89,6 +91,11 @@ pub const LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME: u32 = 60 * 60 * 12;
 
 pub const SYSCTL_IPV6_RA_ACCEPT_PATTERN: &str = "net.ipv6.conf.{}.accept_ra";
 pub const SYSCTL_IPV4_RP_FILTER_PATTERN: &str = "net.ipv4.conf.{}.rp_filter";
+
+// 1
+pub const SYSCTL_IPV4_ARP_IGNORE_PATTERN: &str = "net.ipv4.conf.{}.arp_ignore";
+// 2
+pub const SYSCTL_IPV4_ARP_ANNOUNCE_PATTERN: &str = "net.ipv4.conf.{}.arp_announce";
 
 pub const LAND_ARP_INFO_SIZE: usize = 24;
 

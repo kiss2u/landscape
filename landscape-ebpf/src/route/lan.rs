@@ -1,6 +1,6 @@
 use std::mem::MaybeUninit;
 
-mod flow_lan_bpf {
+pub(crate) mod flow_lan_bpf {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/flow_lan.skel.rs"));
 }
 
@@ -28,10 +28,6 @@ pub fn attach_match_flow(
     // 检索匹配规则 MAP
     open_skel.maps.flow_match_map.set_pin_path(&MAP_PATHS.flow_match_map)?;
     open_skel.maps.flow_match_map.reuse_pinned_map(&MAP_PATHS.flow_match_map)?;
-
-    // 分流发送目标 MAP
-    open_skel.maps.flow_target_map.set_pin_path(&MAP_PATHS.flow_target_map)?;
-    open_skel.maps.flow_target_map.reuse_pinned_map(&MAP_PATHS.flow_target_map)?;
 
     open_skel.maps.rt_lan_map.set_pin_path(&MAP_PATHS.rt_lan_map)?;
     open_skel.maps.rt_lan_map.reuse_pinned_map(&MAP_PATHS.rt_lan_map)?;

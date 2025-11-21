@@ -5,7 +5,6 @@ use once_cell::sync::Lazy;
 
 pub mod bpf_error;
 pub mod firewall;
-pub mod flow;
 pub mod landscape;
 pub mod map_setting;
 pub mod metric;
@@ -43,7 +42,6 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         flow_verdict_dns_map: PathBuf::from(format!("{}/flow_verdict_dns_map", ebpf_map_path)),
         flow_verdict_ip_map: PathBuf::from(format!("{}/flow_verdict_ip_map", ebpf_map_path)),
         flow_match_map: PathBuf::from(format!("{}/flow_match_map", ebpf_map_path)),
-        flow_target_map: PathBuf::from(format!("{}/flow_target_map", ebpf_map_path)),
         dns_flow_socks: PathBuf::from(format!("{}/dns_flow_socks", ebpf_map_path)),
         // metric
         metric_map: PathBuf::from(format!("{}/metric_map", ebpf_map_path)),
@@ -79,8 +77,7 @@ pub(crate) struct LandscapeMapPath {
     pub flow_verdict_dns_map: PathBuf,
     pub flow_verdict_ip_map: PathBuf,
     pub flow_match_map: PathBuf,
-    /// 存储 flow 目标的主机
-    pub flow_target_map: PathBuf,
+
     /// DNS Socket fd <=> Flow ID
     pub dns_flow_socks: PathBuf,
 
@@ -110,7 +107,7 @@ const WAN_ROUTE_INGRESS_PRIORITY: u32 = 7;
 // const PPPOE_MTU_FILTER_EGRESS_PRIORITY: u32 = 1;
 const WAN_ROUTE_EGRESS_PRIORITY: u32 = 3;
 
-const FLOW_EGRESS_PRIORITY: u32 = 4;
+// const FLOW_EGRESS_PRIORITY: u32 = 4;
 const MSS_CLAMP_EGRESS_PRIORITY: u32 = 5;
 const NAT_EGRESS_PRIORITY: u32 = 6;
 const FIREWALL_EGRESS_PRIORITY: u32 = 7;

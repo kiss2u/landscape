@@ -23,7 +23,6 @@ use crate::{
 pub mod dns;
 pub mod flow;
 pub mod flow_dns;
-pub mod flow_target;
 pub mod flow_wanip;
 pub mod metric;
 pub mod nat;
@@ -50,7 +49,6 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     landscape_open.maps.flow_v_dns_map.set_pin_path(&paths.flow_verdict_dns_map).unwrap();
     landscape_open.maps.flow_v_ip_map.set_pin_path(&paths.flow_verdict_ip_map).unwrap();
     landscape_open.maps.flow_match_map.set_pin_path(&paths.flow_match_map).unwrap();
-    landscape_open.maps.flow_target_map.set_pin_path(&paths.flow_target_map).unwrap();
     landscape_open.maps.dns_flow_socks.set_pin_path(&paths.dns_flow_socks).unwrap();
 
     // metric

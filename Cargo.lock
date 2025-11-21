@@ -3244,6 +3244,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
+ "sysctl",
  "sysinfo 0.37.0",
  "tempfile",
  "thiserror 2.0.16",
