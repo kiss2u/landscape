@@ -189,10 +189,16 @@ static __always_inline int scan_ipv6(struct __sk_buff *skb, struct ip_scanner_ct
     for (int i = 0; i < LD_MAX_IPV6_EXT_NUM; i++) {
         switch (nexthdr) {
         case NEXTHDR_AUTH:
-            // Just passthrough IPSec packet
             return TC_ACT_UNSPEC;
-        case NEXTHDR_FRAGMENT:
+        case NEXTHDR_FRAGMENT: {
+            if (VALIDATE_READ_DATA(skb, &frag_hdr, payload_relative_pos, sizeof(*frag_hdr))) {
+                return TC_ACT_SHOT;
+            }
             frag_hdr_off = payload_relative_pos;
+            nexthdr = frag_hdr->nexthdr;
+            payload_relative_pos += sizeof(*frag_hdr);
+            break;
+        }
         case NEXTHDR_HOP:
         case NEXTHDR_ROUTING:
         case NEXTHDR_DEST: {
@@ -465,7 +471,6 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
 static __always_inline bool is_icmp_error_pkt(const struct packet_offset_info *offset) {
     return offset->icmp_error_l3_offset > 0 && offset->icmp_error_inner_l4_offset > 0;
 }
-
 
 static __always_inline int read_packet_info(struct __sk_buff *skb,
                                             struct packet_offset_info *offset_info,

@@ -522,7 +522,7 @@ insert_new_nat_timer(const struct firewall_conntrack_key *key,
     if (ret) {
         goto delete_timer;
     }
-    ret = bpf_timer_start(&value->timer, key->ip_protocol == CONN_EST_TIMEOUT, 0);
+    ret = bpf_timer_start(&value->timer, key->ip_protocol == IPPROTO_TCP ? CONN_TCP_RELEASE : CONN_UDP_RELEASE , 0);
     if (ret) {
         goto delete_timer;
     }
