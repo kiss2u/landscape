@@ -112,64 +112,69 @@ function onCreateBinding(): MacBindingRecord {
       role="dialog"
       aria-modal="true"
     >
-      <n-form :model="service_config">
-        <n-form-item label="是否启用">
-          <n-switch v-model:value="service_config.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
-          </n-switch>
-        </n-form-item>
+      <n-flex style="flex: 1">
+        <n-alert style="flex: 1" type="warning">
+          关闭 DHCP 服务将导致 LAN 下主机无法访问路由
+        </n-alert>
+        <n-form :model="service_config">
+          <n-form-item label="是否启用">
+            <n-switch v-model:value="service_config.enable">
+              <template #checked> 启用 </template>
+              <template #unchecked> 禁用 </template>
+            </n-switch>
+          </n-form-item>
 
-        <n-grid :cols="5">
-          <n-form-item-gi label="DHCP 服务 IP" :span="5">
-            <NewIpEdit
-              v-model:ip="server_ip_addr"
-              v-model:mask="network_mask"
-              :mask_max="30"
-            ></NewIpEdit>
-          </n-form-item-gi>
-          <n-form-item-gi label="分配 IP起始地址 (包含)" :span="5">
-            <NewIpEdit
-              v-model:ip="service_config.config.ip_range_start"
-            ></NewIpEdit>
-          </n-form-item-gi>
-          <n-form-item-gi label="分配 IP结束地址 (不包含)" :span="5">
-            <NewIpEdit
-              v-model:ip="service_config.config.ip_range_end"
-            ></NewIpEdit>
-          </n-form-item-gi>
-          <n-form-item-gi label="Mac IP 地址绑定" :span="5">
-            <n-dynamic-input
-              v-model:value="service_config.config.mac_binding_records"
-              :on-create="onCreateBinding"
-            >
-              <template #create-button-default>
-                新建 MAC 静态 IP 映射
-              </template>
-              <template #default="{ value }">
-                <n-input-group>
-                  <n-input
-                    v-model:value="value.mac"
-                    type="text"
-                    placeholder="Mac"
-                  />
-                  <n-input
-                    v-model:value="value.ip"
-                    type="text"
-                    placeholder="IPv4"
-                  />
-                  <n-input-number
-                    v-model:value="value.expire_time"
-                    style="width: 230px"
-                    placeholder="过期时间"
-                    :show-button="false"
-                  />
-                </n-input-group>
-              </template>
-            </n-dynamic-input>
-          </n-form-item-gi>
-        </n-grid>
-      </n-form>
+          <n-grid :cols="5">
+            <n-form-item-gi label="DHCP 服务 IP" :span="5">
+              <NewIpEdit
+                v-model:ip="server_ip_addr"
+                v-model:mask="network_mask"
+                :mask_max="30"
+              ></NewIpEdit>
+            </n-form-item-gi>
+            <n-form-item-gi label="分配 IP起始地址 (包含)" :span="5">
+              <NewIpEdit
+                v-model:ip="service_config.config.ip_range_start"
+              ></NewIpEdit>
+            </n-form-item-gi>
+            <n-form-item-gi label="分配 IP结束地址 (不包含)" :span="5">
+              <NewIpEdit
+                v-model:ip="service_config.config.ip_range_end"
+              ></NewIpEdit>
+            </n-form-item-gi>
+            <n-form-item-gi label="Mac IP 地址绑定" :span="5">
+              <n-dynamic-input
+                v-model:value="service_config.config.mac_binding_records"
+                :on-create="onCreateBinding"
+              >
+                <template #create-button-default>
+                  新建 MAC 静态 IP 映射
+                </template>
+                <template #default="{ value }">
+                  <n-input-group>
+                    <n-input
+                      v-model:value="value.mac"
+                      type="text"
+                      placeholder="Mac"
+                    />
+                    <n-input
+                      v-model:value="value.ip"
+                      type="text"
+                      placeholder="IPv4"
+                    />
+                    <n-input-number
+                      v-model:value="value.expire_time"
+                      style="width: 230px"
+                      placeholder="过期时间"
+                      :show-button="false"
+                    />
+                  </n-input-group>
+                </template>
+              </n-dynamic-input>
+            </n-form-item-gi>
+          </n-grid>
+        </n-form>
+      </n-flex>
 
       <template #footer>
         <n-flex justify="space-between" align="center">

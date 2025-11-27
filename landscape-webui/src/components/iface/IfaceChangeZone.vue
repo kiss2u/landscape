@@ -53,21 +53,25 @@ function reflush_zone() {
   >
     <n-spin :show="spin">
       <n-card
-        style="width: 400px; display: flex"
+        style="width: 600px; display: flex"
         title="切换网卡区域"
         :bordered="false"
         role="dialog"
         aria-modal="true"
       >
-        <n-flex justify="center">
-          <n-alert type="warning">
-            切换区域会导致在该网卡上运行的服务全部重置
+        <n-flex style="flex: 1" vertical>
+          <n-alert style="flex: 1" type="warning">
+            切换区域会导致在该网卡上运行的服务全部重置 <br />
+            且建议将当前网卡在 `/etc/network/interfaces` 中的 IP 配置方式设置为
+            manual
           </n-alert>
-          <n-radio-group v-model:value="temp_zone" name="iface_service_type">
-            <n-radio-button :value="ZoneType.Wan" label="WAN" />
-            <n-radio-button :value="ZoneType.Lan" label="LAN" />
-            <n-radio-button :value="ZoneType.Undefined" label="未定义" />
-          </n-radio-group>
+          <n-flex justify="center">
+            <n-radio-group v-model:value="temp_zone" name="iface_service_type">
+              <n-radio-button :value="ZoneType.Wan" label="WAN" />
+              <n-radio-button :value="ZoneType.Lan" label="LAN" />
+              <n-radio-button :value="ZoneType.Undefined" label="未定义" />
+            </n-radio-group>
+          </n-flex>
         </n-flex>
 
         <template #action>
