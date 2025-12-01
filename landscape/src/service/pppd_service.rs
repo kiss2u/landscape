@@ -3,6 +3,7 @@ use std::net::Ipv4Addr;
 use std::process::Command;
 use std::process::Stdio;
 
+use landscape_common::route::LanRouteInfo;
 use landscape_common::route::RouteTargetInfo;
 use landscape_common::SYSCTL_IPV6_RA_ACCEPT_PATTERN;
 use sysctl::Sysctl as _;
@@ -134,6 +135,18 @@ pub async fn create_pppd_thread(
                             .insert_ipv4_wan_route(&ppp_iface_name_clone, info)
                             .await;
 
+                        route_service_clone
+                            .insert_ipv4_lan_route(
+                                &ppp_iface_name_clone,
+                                LanRouteInfo {
+                                    ifindex: new_ip4addr.0,
+                                    iface_name: ppp_iface_name_clone.clone(),
+                                    iface_ip: IpAddr::V4(ip.clone()),
+                                    mac: None,
+                                    prefix: 32,
+                                },
+                            )
+                            .await;
                         if as_router {
                             LD_ALL_ROUTERS
                                 .add_route(RouteInfo {
@@ -211,6 +224,7 @@ pub async fn create_pppd_thread(
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
     route_service.remove_ipv4_wan_route(&iface_name).await;
+    route_service.remove_ipv4_lan_route(&iface_name).await;
     service_status.just_change_status(ServiceStatus::Stop);
 }
 
