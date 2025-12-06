@@ -8,9 +8,9 @@
 #include "packet_def.h"
 
 #define IPV4_EGRESS_PROG_INDEX 0
-#define IPV4_INGRESS_PROG_INDEX 1
-#define IPV6_EGRESS_PROG_INDEX 2
-#define IPV6_INGRESS_PROG_INDEX 3
+#define IPV4_INGRESS_PROG_INDEX 0
+#define IPV6_EGRESS_PROG_INDEX 1
+#define IPV6_INGRESS_PROG_INDEX 1
 
 const volatile u64 TCP_SYN_TIMEOUT = 1E9 * 6;
 const volatile u64 TCP_TCP_TRANS = 1E9 * 60 * 4;

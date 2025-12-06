@@ -22,19 +22,32 @@ SEC("tc/egress") int ipv4_egress_firewall(struct __sk_buff *skb);
 SEC("tc/ingress") int ipv4_ingress_firewall(struct __sk_buff *skb);
 SEC("tc/egress") int ipv6_egress_firewall(struct __sk_buff *skb);
 SEC("tc/ingress") int ipv6_ingress_firewall(struct __sk_buff *skb);
+
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-    __uint(max_entries, 4);
+    __uint(max_entries, 2);
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
     __array(values, int());
-} prog_array SEC(".maps") = {
+} ingress_prog_array SEC(".maps") = {
+    .values =
+        {
+            [IPV4_INGRESS_PROG_INDEX] = (void *)&ipv4_ingress_firewall,
+            [IPV6_INGRESS_PROG_INDEX] = (void *)&ipv6_ingress_firewall,
+        },
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+    __uint(max_entries, 2);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __array(values, int());
+} egress_prog_array SEC(".maps") = {
     .values =
         {
             [IPV4_EGRESS_PROG_INDEX] = (void *)&ipv4_egress_firewall,
-            [IPV4_INGRESS_PROG_INDEX] = (void *)&ipv4_ingress_firewall,
             [IPV6_EGRESS_PROG_INDEX] = (void *)&ipv6_egress_firewall,
-            [IPV6_INGRESS_PROG_INDEX] = (void *)&ipv6_ingress_firewall,
         },
 };
 
@@ -1267,9 +1280,9 @@ int egress_firewall(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        ret = bpf_tail_call(skb, &prog_array, IPV4_EGRESS_PROG_INDEX);
+        ret = bpf_tail_call(skb, &egress_prog_array, IPV4_EGRESS_PROG_INDEX);
     } else {
-        ret = bpf_tail_call(skb, &prog_array, IPV6_EGRESS_PROG_INDEX);
+        ret = bpf_tail_call(skb, &egress_prog_array, IPV6_EGRESS_PROG_INDEX);
     }
     // if (ret) {
     //     bpf_log_info("bpf_tail_call error: %d", ret);
@@ -1289,9 +1302,9 @@ int ingress_firewall(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        ret = bpf_tail_call(skb, &prog_array, IPV4_INGRESS_PROG_INDEX);
+        ret = bpf_tail_call(skb, &ingress_prog_array, IPV4_INGRESS_PROG_INDEX);
     } else {
-        ret = bpf_tail_call(skb, &prog_array, IPV6_INGRESS_PROG_INDEX);
+        ret = bpf_tail_call(skb, &ingress_prog_array, IPV6_INGRESS_PROG_INDEX);
     }
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

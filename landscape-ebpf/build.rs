@@ -50,15 +50,18 @@ fn main() {
         }
 
         let file_stem = file_name.trim_end_matches(".bpf.c");
-        let output_file = project_root.join(format!("{}.skel.rs", file_stem));
+        let output_skel_file = project_root.join(format!("{}.skel.rs", file_stem));
+        // let output_bpf_obj_file = project_root.join(format!("{}.o", file_stem));
 
         println!("Processing input file: {:?}", path);
-        println!("Generating output file: {:?}", output_file);
+        println!("Generating output skeleton file: {:?}", output_skel_file);
+        // println!("Saving BPF object file to: {:?}", output_bpf_obj_file);
 
         SkeletonBuilder::new()
+            // .obj(output_bpf_obj_file)
             .source(&path)
             .clang_args(&clang_args)
-            .build_and_generate(&output_file)
-            .expect("Failed to build and generate skeleton file");
+            .build_and_generate(&output_skel_file)
+            .expect("Failed to build, save object, and generate skeleton file");
     }
 }
