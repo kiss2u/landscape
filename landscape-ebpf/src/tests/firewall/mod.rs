@@ -33,6 +33,7 @@ pub fn test_ingress_and_egress(mut egress_payload: Vec<u8>, mut ingress_payload:
     let result = egress_firewall.test_run(egress_input).expect("test_run failed");
 
     assert_eq!(result.return_value as i32, -1);
+    println!("time: {}", result.duration.as_nanos());
 
     let ingress_input = ProgramInput {
         data_in: Some(&mut ingress_payload),
@@ -45,6 +46,7 @@ pub fn test_ingress_and_egress(mut egress_payload: Vec<u8>, mut ingress_payload:
     let result = ingress_firewall.test_run(ingress_input).expect("test_run failed");
 
     assert_eq!(result.return_value as i32, -1);
+    println!("time: {}", result.duration.as_nanos());
 }
 
 #[cfg(test)]

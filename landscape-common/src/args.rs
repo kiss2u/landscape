@@ -1,6 +1,6 @@
 use std::{net::IpAddr, path::PathBuf};
 
-use clap::{arg, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use once_cell::sync::Lazy;
 
 use crate::LANDSCAPE_CONFIG_DIR_NAME;
