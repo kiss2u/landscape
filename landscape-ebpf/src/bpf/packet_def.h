@@ -153,6 +153,10 @@ static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const unio
            a->all[3] == b->all[3];
 }
 
+// static __always_inline bool ip_addr_equal_v2(const union u_inet_addr *a, const union u_inet_addr *b) {
+//     return __builtin_memcmp(a->all, b->all, sizeof(union u_inet_addr)) == 0;
+// }
+
 static __inline void print_bpf_fib_lookup(const struct bpf_fib_lookup *fib_params) {
 #define BPF_LOG_TOPIC "print_bpf_fib_lookup"
     bpf_log_info("family: %u\n", fib_params->family);

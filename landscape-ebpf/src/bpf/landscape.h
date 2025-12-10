@@ -117,29 +117,35 @@ static __always_inline u8 get_cache_mask(u32 original) { return (original & INGR
     bpf_log_info("mac: %02x:%02x:%02x:%02x:%02x:%02x", (mac)[0], (mac)[1], (mac)[2], (mac)[3],     \
                  (mac)[4], (mac)[5])
 
+#ifndef likely
+#define likely(x) __builtin_expect(!!(x), 1)
+#endif
+
+#ifndef unlikely
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
+
 static __always_inline int _validate_read(struct __sk_buff *skb, void **hdr_, u32 offset, u32 len) {
-    if (offset > 1500) return 1;
-    u8 *data = (u8 *)(__u64)skb->data;
-    u8 *data_end = (u8 *)(__u64)skb->data_end;
-    u8 *hdr = (u8 *)(data + offset);
+    if (offset > 1500 || len > 256 || offset + len > 1500) return 1;
 
-    // ensure hdr pointer is on it's own for validation to work
+    void *data = (void *)(long)skb->data;
+    void *data_end = (void *)(long)skb->data_end;
+    void *hdr = data + offset;
+
     barrier_var(hdr);
-    if (hdr + len > data_end) {
-        if (bpf_skb_pull_data(skb, offset + len)) {
-            return 1;
-        }
-
-        data = (u8 *)(__u64)skb->data;
-        data_end = (u8 *)(__u64)skb->data_end;
-        hdr = (u8 *)(data + offset);
-        if (hdr + len > data_end) {
-            return 1;
-        }
+    if (likely(hdr + len <= data_end)) {
+        *hdr_ = hdr;
+        return 0;
     }
 
-    *hdr_ = (void *)hdr;
+    if (bpf_skb_pull_data(skb, offset + len)) return 1;
 
+    data = (void *)(long)skb->data;
+    hdr = data + offset;
+
+    if (hdr + len > (void *)(long)skb->data_end) return 1;
+
+    *hdr_ = hdr;
     return 0;
 }
 
