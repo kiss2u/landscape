@@ -97,13 +97,6 @@ static __always_inline int search_ipv6_mapping_egress(struct __sk_buff *skb,
     return TC_ACT_OK;
 }
 
-#define READ_SKB_U16(skb_ptr, offset, var)                                                         \
-    do {                                                                                           \
-        u16 *tmp_ptr;                                                                              \
-        if (VALIDATE_READ_DATA(skb_ptr, &tmp_ptr, offset, sizeof(*tmp_ptr))) return TC_ACT_SHOT;   \
-        var = *tmp_ptr;                                                                            \
-    } while (0)
-
 #define L4_CSUM_REPLACE_U64_OR_SHOT(skb_ptr, csum_offset, old_val, new_val, flags)                 \
     do {                                                                                           \
         int _ret;                                                                                  \

@@ -58,114 +58,132 @@ static __always_inline int icmpx_err_l3_offset(int l4_off) {
     return l4_off + sizeof(struct icmphdr);
 }
 
-static __always_inline void ipv4_update_csum(struct __sk_buff *skb, u32 l4_csum_off,
-                                             __be32 from_addr, __be16 from_port, __be32 to_addr,
-                                             __be16 to_port, bool l4_pseudo, bool l4_mangled_0) {
-    bpf_l4_csum_replace(skb, l4_csum_off, from_port, to_port,
-                        2 | (l4_mangled_0 ? BPF_F_MARK_MANGLED_0 : 0));
-    if (l4_pseudo) {
-        bpf_l4_csum_replace(skb, l4_csum_off, from_addr, to_addr,
-                            4 | BPF_F_PSEUDO_HDR | (l4_mangled_0 ? BPF_F_MARK_MANGLED_0 : 0));
-    }
-}
+#define L3_CSUM_REPLACE_OR_SHOT(skb_ptr, csum_offset, old_val, new_val, size)                      \
+    do {                                                                                           \
+        int _ret = bpf_l3_csum_replace(skb_ptr, csum_offset, old_val, new_val, size);              \
+        if (_ret) {                                                                                \
+            bpf_printk("l3_csum_replace err: %d", _ret);                                           \
+            return TC_ACT_SHOT;                                                                    \
+        }                                                                                          \
+    } while (0)
 
-static __always_inline void ipv4_update_csum_inner(struct __sk_buff *skb, u32 l4_csum_off,
-                                                   __be32 from_addr, __be16 from_port,
-                                                   __be32 to_addr, __be16 to_port, bool l4_pseudo,
-                                                   bool l4_mangled_0) {
+#define L4_CSUM_REPLACE_OR_SHOT(skb_ptr, csum_offset, old_val, new_val, len_plus_flags)            \
+    do {                                                                                           \
+        int _ret = bpf_l4_csum_replace(skb_ptr, csum_offset, old_val, new_val, len_plus_flags);    \
+        if (_ret) {                                                                                \
+            bpf_printk("l4_csum_replace err: %d", _ret);                                           \
+            return TC_ACT_SHOT;                                                                    \
+        }                                                                                          \
+    } while (0)
+
+static __always_inline int ipv4_update_csum_inner_macro(struct __sk_buff *skb, u32 l4_csum_off,
+                                                        __be32 from_addr, __be16 from_port,
+                                                        __be32 to_addr, __be16 to_port,
+                                                        bool l4_pseudo, bool l4_mangled_0) {
     u16 csum;
     if (l4_mangled_0) {
-        bpf_skb_load_bytes(skb, l4_csum_off, &csum, sizeof(csum));
+        READ_SKB_U16(skb, l4_csum_off, csum);
     }
+
     if (!l4_mangled_0 || csum != 0) {
-        // use bpf_l3_csum_replace to avoid updating skb csum
-        bpf_l3_csum_replace(skb, l4_csum_off, from_port, to_port, 2);
+        L3_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, from_port, to_port, 2);
 
         if (l4_pseudo) {
-            bpf_l3_csum_replace(skb, l4_csum_off, from_addr, to_addr, 4);
+            L3_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, from_addr, to_addr, 4);
         }
     }
 }
 
-static __always_inline void ipv4_update_csum_icmp_err(struct __sk_buff *skb, u32 icmp_csum_off,
-                                                      u32 err_ip_check_off, u32 err_l4_csum_off,
-                                                      __be32 from_addr, __be16 from_port,
-                                                      __be32 to_addr, __be16 to_port,
-                                                      bool err_l4_pseudo, bool l4_mangled_0) {
+static __always_inline int ipv4_update_csum_icmp_err_macro(struct __sk_buff *skb, u32 icmp_csum_off,
+                                                           u32 err_ip_check_off,
+                                                           u32 err_l4_csum_off, __be32 from_addr,
+                                                           __be16 from_port, __be32 to_addr,
+                                                           __be16 to_port, bool err_l4_pseudo,
+                                                           bool l4_mangled_0) {
     u16 prev_csum;
     u16 curr_csum;
-    bpf_skb_load_bytes(skb, err_ip_check_off, &prev_csum, sizeof(prev_csum));
+    u16 *tmp_ptr;
 
-    bpf_l3_csum_replace(skb, err_ip_check_off, from_addr, to_addr, 4);
-
-    bpf_skb_load_bytes(skb, err_ip_check_off, &curr_csum, sizeof(curr_csum));
-    bpf_l4_csum_replace(skb, icmp_csum_off, prev_csum, curr_csum, 2);
-
-    // update of inner message
-#if 1
-    // the update of embedded layer 4 checksum is not required but may helpful
-    // for packet tracking the TCP checksum might not be included in IPv4
-    // packet, check if it exists first
-    if (bpf_skb_load_bytes(skb, err_l4_csum_off, &prev_csum, sizeof(prev_csum))) {
-        ipv4_update_csum_inner(skb, err_l4_csum_off, from_addr, from_port, to_addr, to_port,
-                               err_l4_pseudo, l4_mangled_0);
-
-        bpf_skb_load_bytes(skb, err_l4_csum_off, &curr_csum, sizeof(curr_csum));
-        bpf_l4_csum_replace(skb, icmp_csum_off, prev_csum, curr_csum, 2);
+    // bpf_skb_load_bytes(skb, err_ip_check_off, &prev_csum, sizeof(prev_csum));
+    if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_ip_check_off, sizeof(*tmp_ptr))) {
+        return 1;
     }
-#endif
-    bpf_l4_csum_replace(skb, icmp_csum_off, from_addr, to_addr, 4);
-    bpf_l4_csum_replace(skb, icmp_csum_off, from_port, to_port, 2);
+    prev_csum = *tmp_ptr;
+
+    // 替换原始 L3 校验和 (4 bytes)
+    L3_CSUM_REPLACE_OR_SHOT(skb, err_ip_check_off, from_addr, to_addr, 4);
+
+    // bpf_skb_load_bytes(skb, err_ip_check_off, &curr_csum, sizeof(curr_csum));
+    if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_ip_check_off, sizeof(*tmp_ptr))) {
+        return 1;
+    }
+    curr_csum = *tmp_ptr;
+    L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, prev_csum, curr_csum, 2);
+
+    // if (bpf_skb_load_bytes(skb, err_l4_csum_off, &prev_csum, sizeof(prev_csum)) == 0) {
+    if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_l4_csum_off, sizeof(*tmp_ptr)) == 0) {
+        prev_csum = *tmp_ptr;
+        ipv4_update_csum_inner_macro(skb, err_l4_csum_off, from_addr, from_port, to_addr, to_port,
+                                     err_l4_pseudo, l4_mangled_0);
+
+        // bpf_skb_load_bytes(skb, err_l4_csum_off, &curr_csum, sizeof(curr_csum));
+        if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_l4_csum_off, sizeof(*tmp_ptr))) {
+            return 1;
+        }
+        curr_csum = *tmp_ptr;
+        L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, prev_csum, curr_csum, 2);
+    }
+
+    L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, from_addr, to_addr, 4);
+
+    L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, from_port, to_port, 2);
+
+    return 0;
 }
 
-static __always_inline int modify_headers(struct __sk_buff *skb, bool is_ipv4, bool is_icmpx_error,
-                                          u8 nexthdr, u32 current_l3_offset, int l4_off,
-                                          int err_l4_off, bool is_modify_source,
-                                          union u_inet_addr *from_addr, __be16 from_port,
-                                          union u_inet_addr *to_addr, __be16 to_port) {
-#define BPF_LOG_TOPIC "modify_headers"
-
+static __always_inline int modify_headers_ipv4_only(struct __sk_buff *skb, bool is_icmpx_error,
+                                                    u8 nexthdr, u32 current_l3_offset, int l4_off,
+                                                    int err_l4_off, bool is_modify_source,
+                                                    union u_inet_addr *from_addr, __be16 from_port,
+                                                    union u_inet_addr *to_addr, __be16 to_port) {
+#define BPF_LOG_TOPIC "modify_headers_ipv4_only"
     int ret;
-    int ip_offset =
-        is_modify_source ? offsetof(struct iphdr, saddr) : offsetof(struct iphdr, daddr);
-    ret = bpf_skb_store_bytes(skb, current_l3_offset + ip_offset, &to_addr->ip, sizeof(to_addr->ip),
-                              0);
-
-    if (ret) {
-        return ret;
-    }
-    ret = bpf_l3_csum_replace(skb, current_l3_offset + offsetof(struct iphdr, check), from_addr->ip,
-                              to_addr->ip, 4);
-    if (ret) {
-        return ret;
-    }
-    if (l4_off == 0) {
-        return 0;
-    }
-
     int l4_to_port_off;
     int l4_to_check_off;
     bool l4_check_pseudo;
     bool l4_check_mangle_0;
+
+    int ip_offset =
+        is_modify_source ? offsetof(struct iphdr, saddr) : offsetof(struct iphdr, daddr);
+
+    ret = bpf_skb_store_bytes(skb, current_l3_offset + ip_offset, &to_addr->ip, sizeof(to_addr->ip),
+                              0);
+    if (ret) return ret;
+
+    L3_CSUM_REPLACE_OR_SHOT(skb, current_l3_offset + offsetof(struct iphdr, check), from_addr->ip,
+                            to_addr->ip, 4);
+
+    if (l4_off == 0) return 0;
+
     switch (nexthdr) {
     case IPPROTO_TCP:
-        l4_to_port_off = is_modify_source ^ is_icmpx_error ? offsetof(struct tcphdr, source)
-                                                           : offsetof(struct tcphdr, dest);
+        l4_to_port_off =
+            is_modify_source ? offsetof(struct tcphdr, source) : offsetof(struct tcphdr, dest);
         l4_to_check_off = offsetof(struct tcphdr, check);
         l4_check_pseudo = true;
         l4_check_mangle_0 = false;
         break;
     case IPPROTO_UDP:
-        l4_to_port_off = is_modify_source ^ is_icmpx_error ? offsetof(struct udphdr, source)
-                                                           : offsetof(struct udphdr, dest);
+        l4_to_port_off =
+            is_modify_source ? offsetof(struct udphdr, source) : offsetof(struct udphdr, dest);
         l4_to_check_off = offsetof(struct udphdr, check);
         l4_check_pseudo = true;
-        l4_check_mangle_0 = is_ipv4;
+        l4_check_mangle_0 = true;
         break;
     case IPPROTO_ICMP:
         l4_to_port_off = offsetof(struct icmphdr, un.echo.id);
         l4_to_check_off = offsetof(struct icmphdr, checksum);
-        l4_check_pseudo = !is_ipv4;
+        l4_check_pseudo = false;
         l4_check_mangle_0 = false;
         break;
     default:
@@ -173,38 +191,40 @@ static __always_inline int modify_headers(struct __sk_buff *skb, bool is_ipv4, b
     }
 
     if (is_icmpx_error) {
+        if (nexthdr == IPPROTO_TCP || nexthdr == IPPROTO_UDP) {
+            l4_to_port_off =
+                is_modify_source ? offsetof(struct tcphdr, dest) : offsetof(struct tcphdr, source);
+        }
+
         int icmpx_error_offset =
             is_modify_source ? offsetof(struct iphdr, daddr) : offsetof(struct iphdr, saddr);
-        ret = bpf_write_inet_addr(skb, is_ipv4, icmpx_err_l3_offset(l4_off) + icmpx_error_offset,
-                                  to_addr);
-        if (ret) {
-            return ret;
-        }
-    }
 
-    ret = bpf_write_port(skb, (is_icmpx_error ? err_l4_off : l4_off) + l4_to_port_off, to_port);
-    if (ret) {
-        return ret;
-    }
+        ret = bpf_skb_store_bytes(skb, icmpx_err_l3_offset(l4_off) + icmpx_error_offset,
+                                  &to_addr->ip, sizeof(to_addr->ip), 0);
+        if (ret) return ret;
 
-    if (is_icmpx_error) {
-        if (is_ipv4) {
-            ipv4_update_csum_icmp_err(skb, l4_off + offsetof(struct icmphdr, checksum),
-                                      icmpx_err_l3_offset(l4_off) + offsetof(struct iphdr, check),
-                                      err_l4_off + l4_to_check_off, from_addr->ip, from_port,
-                                      to_addr->ip, to_port, l4_check_pseudo, l4_check_mangle_0);
-        }
+        ret = bpf_write_port(skb, err_l4_off + l4_to_port_off, to_port);
+        if (ret) return ret;
+
+        if (ipv4_update_csum_icmp_err_macro(
+                skb, l4_off + offsetof(struct icmphdr, checksum),
+                icmpx_err_l3_offset(l4_off) + offsetof(struct iphdr, check),
+                err_l4_off + l4_to_check_off, from_addr->ip, from_port, to_addr->ip, to_port,
+                l4_check_pseudo, l4_check_mangle_0))
+            return TC_ACT_SHOT;
+
     } else {
-        if (is_ipv4) {
-            // __be16 check_sum;
-            // bpf_skb_load_bytes(skb, l4_off + l4_to_check_off, &check_sum, sizeof(u16));
-            // bpf_log_info("tcphdr before update checksum is: %u", bpf_ntohs(check_sum));
+        ret = bpf_write_port(skb, l4_off + l4_to_port_off, to_port);
+        if (ret) return ret;
 
-            ipv4_update_csum(skb, l4_off + l4_to_check_off, from_addr->ip, from_port, to_addr->ip,
-                             to_port, l4_check_pseudo, l4_check_mangle_0);
+        u32 l4_csum_off = l4_off + l4_to_check_off;
+        u32 flags_mangled = l4_check_mangle_0 ? BPF_F_MARK_MANGLED_0 : 0;
 
-            // bpf_skb_load_bytes(skb, l4_off + l4_to_check_off, &check_sum, sizeof(u16));
-            // bpf_log_info("tcphdr before update checksum is: %u", bpf_ntohs(check_sum));
+        L4_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, from_port, to_port, 2 | flags_mangled);
+
+        if (l4_check_pseudo) {
+            L4_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, from_addr->ip, to_addr->ip,
+                                    4 | BPF_F_PSEUDO_HDR | flags_mangled);
         }
     }
 
@@ -689,7 +709,6 @@ static __always_inline int lookup_static_mapping(struct __sk_buff *skb, u8 ip_pr
 #undef BPF_LOG_TOPIC
 }
 
-
 SEC("tc/ingress")
 int ingress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">>> ingress_nat >>>"
@@ -793,9 +812,10 @@ int ingress_nat(struct __sk_buff *skb) {
     // bpf_log_info("nat_ip IP: %pI4:%u", &lan_ip.all, bpf_ntohs(nat_ingress_value->port));
 
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
-                         pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
-                         &ip_pair.dst_addr, ip_pair.dst_port, &lan_ip, nat_ingress_value->port);
+    ret = modify_headers_ipv4_only(skb, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
+                                   pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset,
+                                   false, &ip_pair.dst_addr, ip_pair.dst_port, &lan_ip,
+                                   nat_ingress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
@@ -947,9 +967,10 @@ int egress_nat(struct __sk_buff *skb) {
     // bpf_log_info("nat_ip IP: %pI4:%u", &nat_addr.all, bpf_ntohs(nat_egress_value->port));
 
     // modify source
-    ret = modify_headers(skb, true, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
-                         pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
-                         &ip_pair.src_addr, ip_pair.src_port, &nat_addr, nat_egress_value->port);
+    ret = modify_headers_ipv4_only(skb, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
+                                   pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset,
+                                   true, &ip_pair.src_addr, ip_pair.src_port, &nat_addr,
+                                   nat_egress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;

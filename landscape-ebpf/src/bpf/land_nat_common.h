@@ -3,18 +3,19 @@
 #include "vmlinux.h"
 #include "landscape_log.h"
 
+#define READ_SKB_U16(skb_ptr, offset, var)                                                         \
+    do {                                                                                           \
+        u16 *tmp_ptr;                                                                              \
+        if (VALIDATE_READ_DATA(skb_ptr, &tmp_ptr, offset, sizeof(*tmp_ptr))) return TC_ACT_SHOT;   \
+        var = *tmp_ptr;                                                                            \
+    } while (0)
+
 #define GRESS_MASK (1 << 0)
 
 #define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
 
 static __always_inline int bpf_write_port(struct __sk_buff *skb, int port_off, __be16 to_port) {
     return bpf_skb_store_bytes(skb, port_off, &to_port, sizeof(to_port), 0);
-}
-
-static __always_inline int bpf_write_inet_addr(struct __sk_buff *skb, bool is_ipv4, int addr_off,
-                                               union u_inet_addr *to_addr) {
-    return bpf_skb_store_bytes(skb, addr_off, is_ipv4 ? &to_addr->ip : to_addr->all,
-                               is_ipv4 ? sizeof(to_addr->ip) : sizeof(to_addr->all), 0);
 }
 
 static __always_inline int is_handle_protocol(const u8 protocol) {
@@ -53,17 +54,6 @@ struct nat_mapping_value {
     // 增加一个最后活跃时间
     u64 active_time;
     //
-};
-
-/// 作为静态映射 map
-/// TODO: 支持多 Nat 网卡进行映射
-struct nat_static_mapping_key {
-    // 匹配数据长度
-    __u32 prefixlen;
-    u8 gress;
-    u8 l4proto;
-    __be16 from_port;
-    union u_inet_addr from_addr;
 };
 
 //

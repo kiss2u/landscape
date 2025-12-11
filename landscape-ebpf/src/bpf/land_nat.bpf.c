@@ -75,6 +75,12 @@ static __always_inline int icmpx_err_l3_offset(int l4_off) {
     return l4_off + sizeof(struct icmphdr);
 }
 
+static __always_inline int bpf_write_inet_addr(struct __sk_buff *skb, bool is_ipv4, int addr_off,
+                                               union u_inet_addr *to_addr) {
+    return bpf_skb_store_bytes(skb, addr_off, is_ipv4 ? &to_addr->ip : to_addr->all,
+                               is_ipv4 ? sizeof(to_addr->ip) : sizeof(to_addr->all), 0);
+}
+
 static __always_inline void ipv4_update_csum(struct __sk_buff *skb, u32 l4_csum_off,
                                              __be32 from_addr, __be16 from_port, __be32 to_addr,
                                              __be16 to_port, bool l4_pseudo, bool l4_mangled_0) {
