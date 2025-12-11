@@ -73,29 +73,74 @@ struct packet_info {
         (info)->icmp_error_inner_l4_offset = (skb)->cb[4] & 0xffff;                                \
     } while (0)
 
-static __always_inline void restore_offset_from_cb(struct __sk_buff *skb,
-                                                   struct packet_offset_info *offset,
-                                                   u32 current_offset) {
-    u32 l3_base_offset = 0;
-    CB_TO_PACKET_OFFSET_INFO(skb, offset);
+#define MAX_OFFSET 1500
 
-    if (offset->l3_offset_when_scan == current_offset) {
-        return;
+static inline __always_inline u16 calc_adjusted_offset(int cb_value, int delta)
+{
+    int result = cb_value + delta;
+    
+    if (result < 0 || result > MAX_OFFSET) {
+        return 0;
     }
-    if (offset->l3_offset_when_scan > current_offset) {
-        l3_base_offset = offset->l3_offset_when_scan - current_offset;
-        offset->l3_offset_when_scan -= l3_base_offset;
-        offset->l4_offset -= l3_base_offset;
-        offset->icmp_error_l3_offset -= l3_base_offset;
-        offset->icmp_error_inner_l4_offset -= l3_base_offset;
-    } else if (offset->l3_offset_when_scan < current_offset) {
-        l3_base_offset = current_offset - offset->l3_offset_when_scan;
-        offset->l3_offset_when_scan += l3_base_offset;
-        offset->l4_offset += l3_base_offset;
-        offset->icmp_error_l3_offset += l3_base_offset;
-        offset->icmp_error_inner_l4_offset += l3_base_offset;
+
+    u16 safe_result = (u16)result;
+    if (safe_result > MAX_OFFSET) {
+        return 0;
+    }
+    
+    return safe_result;
+}
+
+static inline __always_inline void cb_to_packet_offset_info(struct __sk_buff *skb,
+                                                            struct packet_offset_info *info,
+                                                            u32 current_offset)
+{
+    int delta = 0;
+    int l3_scan_from_cb = 0;
+    
+    info->icmp_error_l3_protocol = (skb->cb[0] >> 24) & 0xff;
+    info->icmp_error_l4_protocol = (skb->cb[0] >> 16) & 0xff;
+    info->status                 =  skb->cb[0]        & 0xffff;
+
+    info->pkt_type      = (skb->cb[1] >> 24) & 0xff;
+    info->l3_protocol   = (skb->cb[1] >> 16) & 0xff;
+    info->l4_protocol   = (skb->cb[1] >> 8)  & 0xff;
+    info->fragment_type =  skb->cb[1]        & 0xff;
+
+    info->fragment_off  = (skb->cb[2] >> 16) & 0xffff;
+    info->fragment_id   =  skb->cb[2]        & 0xffff;
+
+    l3_scan_from_cb = (int)(skb->cb[3] & 0xffff);
+    
+    if (current_offset > MAX_OFFSET) {
+        delta = 0;
+    } else {
+        delta = (int)current_offset - l3_scan_from_cb;
+    }
+    
+    {
+        int tmp = (int)((skb->cb[3] >> 16) & 0xffff);
+        info->l4_offset = calc_adjusted_offset(tmp, delta);
+    }
+
+    // l3_offset_when_scan
+    {
+        info->l3_offset_when_scan = calc_adjusted_offset(l3_scan_from_cb, delta);
+    }
+
+    // icmp_error_l3_offset
+    {
+        int tmp = (int)((skb->cb[4] >> 16) & 0xffff);
+        info->icmp_error_l3_offset = calc_adjusted_offset(tmp, delta);
+    }
+
+    // icmp_error_inner_l4_offset
+    {
+        int tmp = (int)(skb->cb[4] & 0xffff);
+        info->icmp_error_inner_l4_offset = calc_adjusted_offset(tmp, delta);
     }
 }
+
 
 static __always_inline bool is_offset_cached(struct __sk_buff *skb) {
     return (skb->cb[0] & 0xffff) == 1;
