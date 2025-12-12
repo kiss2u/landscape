@@ -83,25 +83,6 @@ struct packet_info {
             ((u32)(info)->icmp_error_l3_offset << 16) | ((u32)(info)->icmp_error_inner_l4_offset); \
     } while (0)
 
-#define CB_TO_PACKET_OFFSET_INFO(skb, info)                                                        \
-    do {                                                                                           \
-        (info)->icmp_error_l3_protocol = ((skb)->cb[0] >> 24) & 0xff;                              \
-        (info)->icmp_error_l4_protocol = ((skb)->cb[0] >> 16) & 0xff;                              \
-        (info)->status = (skb)->cb[0] & 0xffff;                                                    \
-        (info)->pkt_type = ((skb)->cb[1] >> 24) & 0xff;                                            \
-        (info)->l3_protocol = ((skb)->cb[1] >> 16) & 0xff;                                         \
-        (info)->l4_protocol = ((skb)->cb[1] >> 8) & 0xff;                                          \
-        (info)->fragment_type = (skb)->cb[1] & 0xff;                                               \
-        (info)->fragment_off = ((skb)->cb[2] >> 16) & 0xffff;                                      \
-        (info)->fragment_id = (skb)->cb[2] & 0xffff;                                               \
-        (info)->l4_offset = ((skb)->cb[3] >> 16) & 0xffff;                                         \
-        (info)->l3_offset_when_scan = (skb)->cb[3] & 0xffff;                                       \
-        (info)->icmp_error_l3_offset = ((skb)->cb[4] >> 16) & 0xffff;                              \
-        (info)->icmp_error_inner_l4_offset = (skb)->cb[4] & 0xffff;                                \
-    } while (0)
-
-#define MAX_OFFSET 1500
-
 static inline __always_inline u16 calc_adjusted_offset(int cb_value, int delta) {
     int result = cb_value + delta;
 

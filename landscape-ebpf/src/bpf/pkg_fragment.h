@@ -23,7 +23,7 @@ static __always_inline int frag_info_track(const struct packet_offset_info *offs
 #define BPF_LOG_TOPIC "frag_info_track"
 
     // 没有被分片的数据包, 无需进行记录
-    if (offset->fragment_type == FRAG_SINGLE) {
+    if (likely(offset->fragment_type == FRAG_SINGLE)) {
         return TC_ACT_OK;
     }
 
@@ -40,7 +40,7 @@ static __always_inline int frag_info_track(const struct packet_offset_info *offs
     COPY_ADDR_FROM(key.daddr.all, ip_pair->dst_addr.all);
 
     struct fragment_cache_value *value;
-    if (offset->fragment_type == FRAG_FIRST) {
+    if (unlikely(offset->fragment_type == FRAG_FIRST)) {
         struct fragment_cache_value value_new;
         value_new.dport = ip_pair->dst_port;
         value_new.sport = ip_pair->src_port;

@@ -255,7 +255,7 @@ int scanner_has_offset(struct __sk_buff *skb) {
     struct inet_pair ip_pair;
 
     if (is_offset_cached(skb)) {
-        CB_TO_PACKET_OFFSET_INFO(skb, &pkg_offset);
+        cb_to_packet_offset_info(skb, &pkg_offset, current_l3_offset);
     } else {
         pkg_offset.status = 1;
         ret = scan_packet(skb, current_l3_offset, &pkg_offset);
@@ -385,7 +385,7 @@ int test_scanner(struct __sk_buff *skb) {
 //     struct inet_pair ip_pair;
 
 //     if (skb->cb[0] & 0xFF == 1) {
-//         CB_TO_PACKET_OFFSET_INFO(skb, &pkg_offset);
+//         cb_to_packet_offset_info(skb, &pkg_offset, current_l3_offset);
 //     } else {
 //         pkg_offset.status = 1;
 //         ret = scan_packet(skb, current_l3_offset, &pkg_offset);

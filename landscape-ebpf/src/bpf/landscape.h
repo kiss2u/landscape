@@ -125,8 +125,10 @@ static __always_inline u8 get_cache_mask(u32 original) { return (original & INGR
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #endif
 
+#define MAX_OFFSET 20480
+
 static __always_inline int _validate_read(struct __sk_buff *skb, void **hdr_, u32 offset, u32 len) {
-    if (offset > 1500 || len > 256 || offset + len > 1500) return 1;
+    if (unlikely(offset > MAX_OFFSET || len > 256 || offset + len > MAX_OFFSET)) return 1;
 
     void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
