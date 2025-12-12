@@ -14,6 +14,7 @@
 #define LD_MAX_IPV6_EXT_NUM 6
 
 // size limit 5 u32
+// icmp type
 struct packet_offset_info {
     u8 icmp_error_l3_protocol;
     u8 icmp_error_l4_protocol;
@@ -38,6 +39,32 @@ struct packet_offset_info {
     // ICMP err msg offset ( TCP / UDP )
     u16 icmp_error_inner_l4_offset;
 };
+
+// struct packet_offset_info_v2 {
+//     u8 icmp_error_l3_protocol;
+//     u8 icmp_error_l4_protocol;
+//     u16 status;
+
+//     u8 pkt_type;
+//     /// LANDSCAPE_IPV4_TYPE | LANDSCAPE_IPV6_TYPE
+//     u8 l3_protocol;
+//     u8 l4_protocol;
+//     u8 fragment_type;
+
+//     u16 fragment_off;
+//     u16 fragment_id;
+
+//     u8 icmp_type;
+//     u8 l3_offset_when_scan;
+//     // TCP / UDP / ICMP
+//     u16 l4_offset;
+
+//     // ICMP err msg offset ( IPv4/v6 )
+//     // l4_offset + fix ICMP HDR LEN, maybe can store other info
+//     u16 icmp_error_l3_offset;
+//     // ICMP err msg offset ( TCP / UDP )
+//     u16 icmp_error_inner_l4_offset;
+// };
 
 struct packet_info {
     struct packet_offset_info offset;
@@ -75,10 +102,9 @@ struct packet_info {
 
 #define MAX_OFFSET 1500
 
-static inline __always_inline u16 calc_adjusted_offset(int cb_value, int delta)
-{
+static inline __always_inline u16 calc_adjusted_offset(int cb_value, int delta) {
     int result = cb_value + delta;
-    
+
     if (result < 0 || result > MAX_OFFSET) {
         return 0;
     }
@@ -87,37 +113,36 @@ static inline __always_inline u16 calc_adjusted_offset(int cb_value, int delta)
     if (safe_result > MAX_OFFSET) {
         return 0;
     }
-    
+
     return safe_result;
 }
 
 static inline __always_inline void cb_to_packet_offset_info(struct __sk_buff *skb,
                                                             struct packet_offset_info *info,
-                                                            u32 current_offset)
-{
+                                                            u32 current_offset) {
     int delta = 0;
     int l3_scan_from_cb = 0;
-    
+
     info->icmp_error_l3_protocol = (skb->cb[0] >> 24) & 0xff;
     info->icmp_error_l4_protocol = (skb->cb[0] >> 16) & 0xff;
-    info->status                 =  skb->cb[0]        & 0xffff;
+    info->status = skb->cb[0] & 0xffff;
 
-    info->pkt_type      = (skb->cb[1] >> 24) & 0xff;
-    info->l3_protocol   = (skb->cb[1] >> 16) & 0xff;
-    info->l4_protocol   = (skb->cb[1] >> 8)  & 0xff;
-    info->fragment_type =  skb->cb[1]        & 0xff;
+    info->pkt_type = (skb->cb[1] >> 24) & 0xff;
+    info->l3_protocol = (skb->cb[1] >> 16) & 0xff;
+    info->l4_protocol = (skb->cb[1] >> 8) & 0xff;
+    info->fragment_type = skb->cb[1] & 0xff;
 
-    info->fragment_off  = (skb->cb[2] >> 16) & 0xffff;
-    info->fragment_id   =  skb->cb[2]        & 0xffff;
+    info->fragment_off = (skb->cb[2] >> 16) & 0xffff;
+    info->fragment_id = skb->cb[2] & 0xffff;
 
     l3_scan_from_cb = (int)(skb->cb[3] & 0xffff);
-    
+
     if (current_offset > MAX_OFFSET) {
         delta = 0;
     } else {
         delta = (int)current_offset - l3_scan_from_cb;
     }
-    
+
     {
         int tmp = (int)((skb->cb[3] >> 16) & 0xffff);
         info->l4_offset = calc_adjusted_offset(tmp, delta);
@@ -141,7 +166,6 @@ static inline __always_inline void cb_to_packet_offset_info(struct __sk_buff *sk
     }
 }
 
-
 static __always_inline bool is_offset_cached(struct __sk_buff *skb) {
     return (skb->cb[0] & 0xffff) == 1;
 }
@@ -161,14 +185,10 @@ enum land_scan_result {
 };
 
 enum land_frag_type {
-    // 还有分片
-    // offect 且 more 被设置
-    LD_MORE_F,
-    // 结束分片
-    // offect 的值不为 0
-    LD_END_F,
-    // 没有分片
-    LD_NOT_F
+    FRAG_SINGLE = 0,
+    FRAG_FIRST,
+    FRAG_MIDDLE,
+    FRAG_LAST,
 };
 
 union u_ld_ip {
@@ -196,12 +216,18 @@ static __always_inline int scan_ipv4(struct __sk_buff *skb, struct ip_scanner_ct
     }
 
     scanner_ctx->fragment_off = (bpf_ntohs(iph->frag_off) & LD_IP_OFFSET) << 3;
-    if (iph->frag_off & LD_IP_MF) {
-        scanner_ctx->fragment_type = LD_MORE_F;
-    } else if (scanner_ctx->fragment_off) {
-        scanner_ctx->fragment_type = LD_END_F;
-    } else {
-        scanner_ctx->fragment_type = LD_NOT_F;
+
+    bool mf = iph->frag_off & LD_IP_MF;
+    bool has_offset = scanner_ctx->fragment_off != 0;
+
+    if (!has_offset && !mf) {
+        scanner_ctx->fragment_type = FRAG_SINGLE;
+    } else if (!has_offset && mf) {
+        scanner_ctx->fragment_type = FRAG_FIRST;
+    } else if (has_offset && mf) {
+        scanner_ctx->fragment_type = FRAG_MIDDLE;
+    } else {  // has_offset && !mf
+        scanner_ctx->fragment_type = FRAG_LAST;
     }
 
     scanner_ctx->fragment_id = bpf_ntohs(iph->id);
@@ -274,17 +300,23 @@ found_upper_layer:
             return TC_ACT_SHOT;
         }
         scanner_ctx->fragment_id = bpf_ntohl(frag_hdr->identification);
-        scanner_ctx->fragment_off = bpf_ntohs(frag_hdr->frag_off & bpf_htons(IPV6_FRAG_OFFSET));
 
-        if (frag_hdr->frag_off & bpf_htons(IPV6_FRAG_MF)) {
-            scanner_ctx->fragment_type = LD_MORE_F;
-        } else if (scanner_ctx->fragment_off) {
-            scanner_ctx->fragment_type = LD_END_F;
-        } else {
-            scanner_ctx->fragment_type = LD_NOT_F;
+        // IPv6 offset is already in 8-byte units, do NOT <<3
+        u16 raw_off = bpf_ntohs(frag_hdr->frag_off);
+        scanner_ctx->fragment_off = raw_off & IPV6_FRAG_OFFSET;
+
+        bool mf = raw_off & IPV6_FRAG_MF;
+        bool has_offset = scanner_ctx->fragment_off != 0;
+
+        if (!has_offset && !mf) {
+            scanner_ctx->fragment_type = FRAG_SINGLE;
+        } else if (!has_offset && mf) {
+            scanner_ctx->fragment_type = FRAG_FIRST;
+        } else if (has_offset && mf) {
+            scanner_ctx->fragment_type = FRAG_MIDDLE;
+        } else {  // has_offset && !mf
+            scanner_ctx->fragment_type = FRAG_LAST;
         }
-    } else {
-        scanner_ctx->fragment_type = LD_NOT_F;
     }
 
     scanner_ctx->l4_protocol = nexthdr;
@@ -383,7 +415,7 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
     // offset_info->fragment_id = ctx.fragment_id;
     // offset_info->l4_offset = ctx.l4_offset;
 
-    if (offset_info->fragment_type != LD_NOT_F && offset_info->fragment_off != 0) {
+    if (offset_info->fragment_type >= FRAG_MIDDLE) {
         // 不是第一个数据包， 整个都是 payload
         // 因为没有头部信息, 所以 需要进行查询已有的 track 记录
         offset_info->l4_offset = 0;
