@@ -1,10 +1,10 @@
 use std::mem::MaybeUninit;
 
-pub(crate) mod flow_lan_bpf {
-    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/flow_lan.skel.rs"));
+pub(crate) mod flow_route_bpf {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/flow_route.skel.rs"));
 }
 
-use flow_lan_bpf::*;
+use flow_route_bpf::*;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     TC_EGRESS, TC_INGRESS,
@@ -22,7 +22,7 @@ pub fn wan_route_attach(
     service_status: oneshot::Receiver<()>,
 ) -> LdEbpfResult<()> {
     let mut open_object = MaybeUninit::zeroed();
-    let firewall_builder = FlowLanSkelBuilder::default();
+    let firewall_builder = FlowRouteSkelBuilder::default();
     let mut open_skel = firewall_builder.open(&mut open_object)?;
 
     // 检索匹配规则 MAP

@@ -3,7 +3,7 @@ mod package;
 #[cfg(test)]
 pub mod tests {
     use crate::{
-        route::wan::flow_lan_bpf::FlowLanSkelBuilder, tests::route::package::simple_tcp_syn,
+        route::wan::flow_route_bpf::FlowRouteSkelBuilder, tests::route::package::simple_tcp_syn,
     };
     use std::{
         mem::MaybeUninit,
@@ -24,7 +24,7 @@ pub mod tests {
     fn egress_wan_route() {
         let mut wan_route_open_object = MaybeUninit::zeroed();
 
-        let wan_route_builder = FlowLanSkelBuilder::default();
+        let wan_route_builder = FlowRouteSkelBuilder::default();
 
         let wan_route_open_skel = wan_route_builder.open(&mut wan_route_open_object).unwrap();
 

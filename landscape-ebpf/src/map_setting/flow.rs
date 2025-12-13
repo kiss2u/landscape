@@ -2,7 +2,7 @@ use landscape_common::flow::{FlowEbpfMatchPair, FlowEntryMatchMode, FlowEntryRul
 use libbpf_rs::{MapCore, MapFlags};
 
 use crate::{
-    route::lan::flow_lan_bpf::types::flow_match_key, LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE,
+    route::lan::flow_route_bpf::types::flow_match_key, LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE,
     MAP_PATHS,
 };
 

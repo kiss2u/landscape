@@ -6,7 +6,7 @@ use std::{
 use libbpf_rs::{libbpf_sys, MapCore, MapFlags, MapHandle, MapType};
 
 use crate::{
-    route::lan::flow_lan_bpf::types::{rt_cache_key, rt_cache_value},
+    route::lan::flow_route_bpf::types::{rt_cache_key, rt_cache_value},
     LandscapeMapPath, MAP_PATHS,
 };
 

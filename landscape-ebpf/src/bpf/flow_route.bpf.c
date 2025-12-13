@@ -6,7 +6,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "flow_lan_share.h"
+#include "flow_share.h"
 #include "land_wan_ip.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
