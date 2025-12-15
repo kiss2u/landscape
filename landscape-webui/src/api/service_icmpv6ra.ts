@@ -2,6 +2,7 @@ import api from ".";
 import { ServiceStatus } from "@/lib/services";
 import axiosService from ".";
 import { IPV6RAServiceConfig } from "@/rust_bindings/common/ra";
+import { IPv6NAInfo } from "@/rust_bindings/common/ipv6_ra_server";
 
 export async function get_all_icmpv6ra_status(): Promise<
   Map<string, ServiceStatus>
@@ -34,4 +35,15 @@ export async function update_icmpv6ra_config(
 
 export async function stop_and_del_iface_icmpv6ra(name: string): Promise<void> {
   return axiosService.delete(`services/icmpv6ra/${name}`);
+}
+
+export async function get_icmpra_assigned_ips(): Promise<
+  Map<string, IPv6NAInfo | null>
+> {
+  let data = await axiosService.get(`services/icmpv6ra/assigned_ips`);
+  let map = new Map<string, IPv6NAInfo | null>();
+  for (const [key, value] of Object.entries(data.data)) {
+    map.set(key, value as IPv6NAInfo);
+  }
+  return map;
 }

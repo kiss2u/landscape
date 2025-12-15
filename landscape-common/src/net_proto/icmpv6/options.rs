@@ -1,12 +1,12 @@
 use std::net::Ipv6Addr;
 
-use crate::define_options;
+use crate::{define_options, net::MacAddr};
 use serde::{Deserialize, Serialize};
 
 // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml
 define_options!(IcmpV6Option, u8, u8, {
     {1,   SourceLinkLayerAddress, "Source Link-layer Address", Vec<u8>},
-    {2,   TargetLinkLayerAddress, "Target Link-layer Address", Vec<u8>},
+    {2,   TargetLinkLayerAddress, "Target Link-layer Address", crate::net::MacAddr},
     {3,   PrefixInformation, "Prefix Information", PrefixInformation},
     {4,   RedirectedHeader, "Redirected Header", Vec<u8>},
     {5,   MTU, "MTU", u32},
@@ -74,12 +74,15 @@ impl dhcproto::Encodable for IcmpV6Options {
 impl dhcproto::Decodable for IcmpV6Option {
     fn decode(decoder: &mut dhcproto::Decoder<'_>) -> dhcproto::error::DecodeResult<Self> {
         let code = decoder.read_u8()?.into();
-        let len = decoder.read_u8()? as usize;
+        let len = (decoder.read_u8()? as usize) * 8;
 
         let result = match code {
             IcmpV6OptionCode::SourceLinkLayerAddress => {
-                IcmpV6Option::SourceAddressList(decoder.read_slice(len)?.to_vec())
+                IcmpV6Option::SourceAddressList(decoder.read_slice(len - 2)?.to_vec())
             }
+            IcmpV6OptionCode::TargetLinkLayerAddress => IcmpV6Option::TargetLinkLayerAddress(
+                MacAddr::from_arry(decoder.read_slice(len - 2)?).unwrap(),
+            ),
             code => IcmpV6Option::UnknownOption(code.into(), decoder.read_slice(len)?.to_vec()),
         };
         Ok(result)
@@ -96,7 +99,10 @@ impl dhcproto::Encodable for IcmpV6Option {
                 e.write_u8(len)?;
                 e.write_slice(data)?;
             }
-            IcmpV6Option::TargetLinkLayerAddress(_items) => todo!(),
+            IcmpV6Option::TargetLinkLayerAddress(items) => {
+                e.write_u8(1)?;
+                e.write_slice(&items.octets())?;
+            }
             IcmpV6Option::PrefixInformation(items) => {
                 let mut buf = Vec::new();
                 let mut item_enc = dhcproto::Encoder::new(&mut buf);

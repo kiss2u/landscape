@@ -5,9 +5,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape_common::config::ra::IPV6RAServiceConfig;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::DefaultWatchServiceStatus;
+use landscape_common::{config::ra::IPV6RAServiceConfig, lan_services::ipv6_ra::IPv6NAInfo};
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 use crate::{error::LandscapeApiError, LandscapeApp};
@@ -20,7 +20,24 @@ pub async fn get_iface_icmpv6ra_paths() -> Router<LandscapeApp> {
             "/icmpv6ra/{iface_name}",
             get(get_iface_icmpv6_conifg).delete(delete_and_stop_iface_icmpv6),
         )
+        .route("/icmpv6ra/{iface_name}/assigned_ips", get(get_assigned_ips_by_iface_name))
+        .route("/icmpv6ra/assigned_ips", get(get_all_iface_assigned_ips))
     // .route("/nats/{iface_name}/restart", post(restart_nat_service_status))
+}
+
+async fn get_all_iface_assigned_ips(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<HashMap<String, IPv6NAInfo>> {
+    LandscapeApiResp::success(state.ipv6_ra_service.get_assigned_ips().await)
+}
+
+async fn get_assigned_ips_by_iface_name(
+    State(state): State<LandscapeApp>,
+    Path(iface_name): Path<String>,
+) -> LandscapeApiResult<Option<IPv6NAInfo>> {
+    LandscapeApiResp::success(
+        state.ipv6_ra_service.get_assigned_ips_by_iface_name(iface_name).await,
+    )
 }
 
 async fn get_all_status(

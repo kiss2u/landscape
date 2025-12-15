@@ -2,21 +2,6 @@
 import type { FlowMark } from "../flow";
 import type { GeoConfigKey } from "./geo.d";
 
-export type DNSRedirectRuleConfig = {
-  id: string;
-  remark: string;
-  enable: boolean;
-  /**
-   * DNS Query Result
-   */
-  result: Array<string>;
-  /**
-   * Match Domains
-   */
-  source: Array<DomainConfig>;
-  update_at: number;
-};
-
 /**
  * DNS 配置
  */

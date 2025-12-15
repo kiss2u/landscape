@@ -3,6 +3,8 @@ use std::net::Ipv4Addr;
 pub mod args;
 pub mod sys_config;
 
+pub mod lan_services;
+
 pub mod config;
 pub mod database;
 pub mod dev;

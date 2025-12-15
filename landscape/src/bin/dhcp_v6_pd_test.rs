@@ -14,6 +14,7 @@ use landscape::{
 use landscape_common::{
     config::ra::IPV6RAConfig,
     ipv6_pd::IAPrefixMap,
+    lan_services::ipv6_ra::IPv6NAInfo,
     net::MacAddr,
     route::{LanRouteInfo, RouteTargetInfo},
 };
@@ -21,6 +22,7 @@ use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
+use tokio::sync::RwLock;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -92,6 +94,7 @@ async fn main() {
     let ip_route_service = ip_route.clone();
     let status = icmp_service_status.clone();
     let prefix_map_clone = prefix_map.clone();
+    let assigned_ips = Arc::new(RwLock::new(IPv6NAInfo::init()));
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.icmp_ra_iface).await {
             if let Some(mac) = iface.mac {
@@ -110,6 +113,7 @@ async fn main() {
                     lan_info,
                     ip_route_service,
                     prefix_map_clone,
+                    assigned_ips,
                 )
                 .await
                 .unwrap();

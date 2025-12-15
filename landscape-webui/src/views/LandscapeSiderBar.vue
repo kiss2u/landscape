@@ -58,12 +58,17 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(Dashboard),
     children: [
       {
+        label: "DHCPv4 服务",
+        key: "dhcp-v4",
+        disabled: false,
+      },
+      {
         label: "IPv6-PD  服务",
         key: "ipv6-pd",
       },
       {
-        label: "DHCPv4 服务",
-        key: "dhcp-v4",
+        label: "IPv6 RA 服务",
+        key: "ipv6-ra",
         disabled: false,
       },
     ],

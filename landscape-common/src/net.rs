@@ -121,6 +121,13 @@ impl MacAddr {
             ((eui64[6] as u16) << 8) | eui64[7] as u16,
         )
     }
+
+    pub fn from_arry(slice: &[u8]) -> Option<MacAddr> {
+        if slice.len() != 6 {
+            return None;
+        }
+        Some(MacAddr::new(slice[0], slice[1], slice[2], slice[3], slice[4], slice[5]))
+    }
 }
 
 impl From<EtherAddr> for MacAddr {

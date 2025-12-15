@@ -1,3 +1,5 @@
+use std::net::Ipv6Addr;
+
 use landscape_common::net_proto::icmpv6::options::IcmpV6Options;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -168,6 +170,8 @@ impl From<Icmpv6Type> for u8 {
 pub enum Icmpv6Message {
     RouterSolicitation(RouterSolicitation),
     RouterAdvertisement(RouterAdvertisement),
+    /// 136
+    NeighborAdvertisement(NeighborAdvertisement),
     Unassigned(u8, Vec<u8>),
 }
 
@@ -180,6 +184,9 @@ impl dhcproto::Decodable for Icmpv6Message {
                 Icmpv6Message::RouterSolicitation(RouterSolicitation::decode(decoder)?)
             }
             // Icmpv6Type::RouterAdvertisement => RouterAdvertisement::decode(decoder)?,
+            Icmpv6Type::NeighborAdvertisement => {
+                Icmpv6Message::NeighborAdvertisement(NeighborAdvertisement::decode(decoder)?)
+            }
             msg_type => Icmpv6Message::Unassigned(msg_type.into(), decoder.buffer().to_vec()),
         })
     }
@@ -192,6 +199,7 @@ impl dhcproto::Encodable for Icmpv6Message {
             Icmpv6Message::RouterAdvertisement(router_advertisement) => {
                 router_advertisement.encode(e)?;
             }
+            Icmpv6Message::NeighborAdvertisement(_) => todo!(),
             Icmpv6Message::Unassigned(_, _) => todo!(),
         }
         Ok(())
@@ -301,6 +309,74 @@ impl dhcproto::Encodable for RouterAdvertisement {
         e.write_u16(self.router_lifetime)?;
         e.write_u32(self.reachable_time)?;
         e.write_u32(self.retrans_timer)?;
+        self.opts.encode(e)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct NeighborAdvertisement {
+    /// 8 位消息类型（NA 的类型值为 136）
+    pub msg_type: Icmpv6Type,
+    /// 8 位消息代码（NA 的代码值为 0）
+    pub msg_code: u8,
+    /// 16 位校验和
+    pub checksum: u16,
+    /// 标志位：
+    /// - Bit31: Router Flag (R)
+    /// - Bit30: Solicited Flag (S)
+    /// - Bit29: Override Flag (O)
+    /// - Bit0-28: 保留，必须为 0
+    pub flags: u32,
+    /// 目标 IPv6 地址
+    pub target_address: Ipv6Addr,
+    /// 可变长度选项
+    pub opts: IcmpV6Options,
+}
+
+impl NeighborAdvertisement {
+    pub fn new(flags: u32, target_address: Ipv6Addr, opts: IcmpV6Options) -> Self {
+        Self {
+            msg_type: Icmpv6Type::NeighborAdvertisement,
+            msg_code: 0,
+            checksum: 0,
+            flags,
+            target_address,
+            opts,
+        }
+    }
+
+    /// 便捷函数：构造常见的 Solicited NA
+    pub fn solicited(target_address: Ipv6Addr, override_flag: bool, opts: IcmpV6Options) -> Self {
+        let mut flags = 0;
+        flags |= 1 << 30; // S
+        if override_flag {
+            flags |= 1 << 29; // O
+        }
+
+        Self::new(flags, target_address, opts)
+    }
+}
+impl dhcproto::Decodable for NeighborAdvertisement {
+    fn decode(decoder: &mut dhcproto::Decoder<'_>) -> dhcproto::error::DecodeResult<Self> {
+        Ok(Self {
+            msg_type: decoder.read_u8()?.into(),
+            msg_code: decoder.read_u8()?,
+            checksum: decoder.read_u16()?,
+            flags: decoder.read_u32()?,
+            target_address: decoder.read_ipv6s(16)?.get(0).unwrap().clone(),
+            opts: IcmpV6Options::decode(decoder)?,
+        })
+    }
+}
+
+impl dhcproto::Encodable for NeighborAdvertisement {
+    fn encode(&self, e: &mut dhcproto::Encoder<'_>) -> dhcproto::v6::EncodeResult<()> {
+        e.write_u8(self.msg_type.into())?;
+        e.write_u8(self.msg_code)?;
+        e.write_u16(self.checksum)?;
+        e.write_u32(self.flags)?;
+        e.write_slice(&self.target_address.octets())?;
         self.opts.encode(e)?;
         Ok(())
     }

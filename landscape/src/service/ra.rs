@@ -1,14 +1,18 @@
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::net::Ipv6Addr;
+use std::sync::Arc;
 
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
 use landscape_common::ipv6_pd::IAPrefixMap;
+use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::observer::IfaceObserverAction;
 use landscape_common::route::LanRouteInfo;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::service_manager_v2::ServiceManager;
 use landscape_common::service::service_manager_v2::ServiceStarterTrait;
+use landscape_common::store::storev2::LandscapeStore;
 use landscape_common::{
     config::ra::IPV6RAServiceConfig,
     service::{DefaultServiceStatus, DefaultWatchServiceStatus},
@@ -16,6 +20,7 @@ use landscape_common::{
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::ra::repository::IPV6RAServiceRepository;
 use tokio::sync::broadcast;
+use tokio::sync::RwLock;
 
 use crate::iface::get_iface_by_name;
 use crate::route::IpRouteService;
@@ -25,11 +30,16 @@ use crate::route::IpRouteService;
 pub struct IPV6RAService {
     route_service: IpRouteService,
     prefix_map: IAPrefixMap,
+    iface_lease_map: Arc<RwLock<HashMap<String, Arc<RwLock<IPv6NAInfo>>>>>,
 }
 
 impl IPV6RAService {
     pub fn new(route_service: IpRouteService, prefix_map: IAPrefixMap) -> Self {
-        Self { route_service, prefix_map }
+        Self {
+            route_service,
+            prefix_map,
+            iface_lease_map: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 }
 
@@ -45,6 +55,15 @@ impl ServiceStarterTrait for IPV6RAService {
             let prefix_map = self.prefix_map.clone();
             let status_clone = service_status.clone();
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
+                let store_key = config.get_store_key();
+                let assigned_ips = {
+                    let mut write = self.iface_lease_map.write().await;
+                    write
+                        .entry(store_key.clone())
+                        .or_insert_with(|| Arc::new(RwLock::new(IPv6NAInfo::init())))
+                        .clone()
+                };
+
                 if let Some(mac) = iface.mac {
                     let lan_info = LanRouteInfo {
                         ifindex: iface.index,
@@ -62,6 +81,7 @@ impl ServiceStarterTrait for IPV6RAService {
                             lan_info,
                             route_service,
                             prefix_map,
+                            assigned_ips,
                         )
                         .await;
                     });
@@ -77,6 +97,7 @@ impl ServiceStarterTrait for IPV6RAService {
 pub struct IPV6RAManagerService {
     store: IPV6RAServiceRepository,
     service: ServiceManager<IPV6RAService>,
+    server_starter: IPV6RAService,
 }
 
 impl ControllerService for IPV6RAManagerService {
@@ -103,7 +124,8 @@ impl IPV6RAManagerService {
     ) -> Self {
         let store = store_service.ra_service_store();
         let server_starter = IPV6RAService::new(route_service, prefix_map);
-        let service = ServiceManager::init(store.list().await.unwrap(), server_starter).await;
+        let service =
+            ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 
         let service_clone = service.clone();
         tokio::spawn(async move {
@@ -127,6 +149,35 @@ impl IPV6RAManagerService {
         });
 
         let store = store_service.ra_service_store();
-        Self { service, store }
+        Self { service, store, server_starter }
+    }
+
+    pub async fn get_assigned_ips_by_iface_name(&self, iface_name: String) -> Option<IPv6NAInfo> {
+        let info = {
+            let read_lock = self.server_starter.iface_lease_map.read().await;
+            read_lock.get(&iface_name).map(Clone::clone)
+        };
+
+        let Some(offer_info) = info else { return None };
+
+        let data = offer_info.read().await.clone();
+        return Some(data);
+    }
+
+    pub async fn get_assigned_ips(&self) -> HashMap<String, IPv6NAInfo> {
+        let mut result = HashMap::new();
+
+        let map = {
+            let read_lock = self.server_starter.iface_lease_map.read().await;
+            read_lock.clone()
+        };
+
+        for (iface_name, assigned_ips) in map {
+            if let Ok(read) = assigned_ips.try_read() {
+                result.insert(iface_name, read.clone());
+            }
+        }
+
+        result
     }
 }

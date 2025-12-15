@@ -3,10 +3,12 @@ use dhcproto::{Decodable, Decoder, Encodable, Encoder};
 use landscape_common::config::ra::{IPV6RAConfig, IPV6RaConfigSource, IPv6RaPdConfig, RouterFlags};
 use landscape_common::error::LdResult;
 use landscape_common::ipv6_pd::{IAPrefixMap, LDIAPrefix};
+use landscape_common::lan_services::ipv6_ra::{IPv6NAInfo, IPv6NAInfoItem};
 use landscape_common::route::{LanIPv6RouteKey, LanRouteInfo};
 use landscape_common::service::{DefaultWatchServiceStatus, ServiceStatus};
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
@@ -14,7 +16,7 @@ use crate::iface::ip::addresses_by_iface_name;
 use crate::route::IpRouteService;
 use landscape_common::net::MacAddr;
 use landscape_common::net_proto::icmpv6::options::{
-    IcmpV6Option, IcmpV6Options, PrefixInformation, RouteInformation,
+    IcmpV6Option, IcmpV6OptionCode, IcmpV6Options, PrefixInformation, RouteInformation,
 };
 use socket2::{Domain, Protocol, Socket, Type};
 use std::collections::HashMap;
@@ -39,13 +41,32 @@ pub struct ICMPv6ConfigInfo {
     pub ra_valid_lifetime: u32,
 }
 
-#[derive(Default)]
 pub struct RaIPRuntimeSource {
     static_info: Vec<ICMPv6ConfigInfo>,
     pd_info: HashMap<String, Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>>,
+
+    relative_boot_time: Instant,
 }
 
-#[tracing::instrument(skip(config, mac_addr, service_status, lan_info, route_service, prefix_map))]
+impl RaIPRuntimeSource {
+    fn new() -> Self {
+        RaIPRuntimeSource {
+            relative_boot_time: Instant::now(),
+            static_info: vec![],
+            pd_info: HashMap::new(),
+        }
+    }
+}
+
+#[tracing::instrument(skip(
+    config,
+    mac_addr,
+    service_status,
+    lan_info,
+    route_service,
+    prefix_map,
+    assigned_ips
+))]
 pub async fn icmp_ra_server(
     config: IPV6RAConfig,
     // RA 通告要发送的 网卡 MAC 信息
@@ -56,10 +77,16 @@ pub async fn icmp_ra_server(
     lan_info: LanRouteInfo,
     route_service: IpRouteService,
     prefix_map: IAPrefixMap,
+    assigned_ips: Arc<RwLock<IPv6NAInfo>>,
 ) -> LdResult<()> {
     let IPV6RAConfig { ad_interval, ra_flag, source } = config;
 
-    let mut ctx = RaIPRuntimeSource::default();
+    let mut ctx = RaIPRuntimeSource::new();
+    {
+        let mut ips = assigned_ips.write().await;
+        *ips = IPv6NAInfo::init();
+        drop(ips);
+    }
     // TODO: ip link set ens5 addrgenmode none
     // OR
     // # 禁用IPv6路由器请求
@@ -209,6 +236,7 @@ pub async fn icmp_ra_server(
                 let mut ia_config_watch =
                     prefix_map.get_ia_prefix(&ipv6_ra_pd_config.depend_iface).await;
                 ctx.pd_info.insert(ipv6_ra_pd_config.depend_iface.clone(), pd_prefix_info.clone());
+
                 let trigger_tx_clone = trigger_tx.clone();
 
                 let iface_name_clone = iface_name.clone();
@@ -300,7 +328,8 @@ pub async fn icmp_ra_server(
     // }
 
     // tracing::info!("ICMP v6 RA Server Running, RA interval: {ra_preferred_lifetime:?}s");
-    let mut interval = Box::pin(tokio::time::interval(Duration::from_secs(ad_interval as u64)));
+    let ad_interval = ad_interval as u64;
+    let mut interval = Box::pin(tokio::time::interval(Duration::from_secs(ad_interval)));
 
     let mut service_status_subscribe = service_status.subscribe();
     loop {
@@ -312,6 +341,16 @@ pub async fn icmp_ra_server(
                     &ctx,
                     ra_flag
                 ).await;
+
+                {
+                    let relative_boot_time = ctx.relative_boot_time.elapsed().as_secs();
+                    // println!("clean_expired_entries: {relative_boot_time} > {ad_interval}");
+                    if relative_boot_time > ad_interval {
+                        if let Ok(mut ips) = assigned_ips.try_write() {
+                            ips.clean_expired_entries(relative_boot_time - ad_interval);
+                        }
+                    }
+                };
             }
             _ = trigger_rx.recv() => {
                 interval_msg(
@@ -337,7 +376,8 @@ pub async fn icmp_ra_server(
                             data,
                             &send_socket,
                             &ctx,
-                            ra_flag
+                            ra_flag,
+                            assigned_ips.clone()
                         ).await;
                     }
                     // message_rx close
@@ -465,6 +505,7 @@ async fn handle_rs_msg(
     send_socket: &UdpSocket,
     ctx: &RaIPRuntimeSource,
     ra_flag: RouterFlags,
+    assigned_ips: Arc<RwLock<IPv6NAInfo>>,
 ) {
     let icmp_v6_msg = Icmpv6Message::decode(&mut Decoder::new(&msg));
     let icmp_v6_msg = match icmp_v6_msg {
@@ -493,8 +534,28 @@ async fn handle_rs_msg(
             build_and_send_ra(my_mac_addr, send_socket, target_addr, ctx, ra_flag).await;
         }
         Icmpv6Message::RouterAdvertisement(_) => {}
+        Icmpv6Message::NeighborAdvertisement(neighbor_advertisement) => {
+            if let Some(IcmpV6Option::TargetLinkLayerAddress(mac)) =
+                neighbor_advertisement.opts.get(IcmpV6OptionCode::TargetLinkLayerAddress)
+            {
+                let data = IPv6NAInfoItem {
+                    mac: mac.clone(),
+                    ip: target_ip,
+                    relative_active_time: ctx.relative_boot_time.elapsed().as_secs(),
+                };
+                // tracing::warn!(
+                //     "relative_active_time: {:?}",
+                //     ctx.relative_boot_time.elapsed().as_secs()
+                // );
+                let mut write_lock = assigned_ips.write().await;
+                write_lock.offered_ips.insert(data.get_cache_key(), data);
+                drop(write_lock);
+            } else {
+                tracing::error!("read TargetLinkLayerAddress error: {neighbor_advertisement:?}");
+            }
+        }
         Icmpv6Message::Unassigned(msg_type, _) => {
-            tracing::error!("recv not handle Icmpv6Message msg_type: {msg_type:?}");
+            tracing::warn!("recv not handle Icmpv6Message msg_type: {msg_type:?}");
         }
     }
 }
@@ -724,7 +785,6 @@ mod tests {
 
     #[test]
     fn test_static_setting() {
-        // 示例：假设原始前缀为 2001:db8::/48，我们希望划分出 /64 的子网，并选择第 2 个子网（索引从 0 开始）
         let ldia_prefix = IPv6RaStaticConfig {
             base_prefix: "2001:db8::3".parse().unwrap(),
             sub_prefix_len: 64,

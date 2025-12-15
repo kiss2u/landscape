@@ -12,9 +12,11 @@ use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name};
 use landscape_common::{
     config::ra::IPV6RAConfig,
     ipv6_pd::{IAPrefixMap, LDIAPrefix},
+    lan_services::ipv6_ra::IPv6NAInfo,
     route::LanRouteInfo,
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
+use tokio::sync::RwLock;
 use tracing::Level;
 
 #[derive(Parser, Debug, Clone)]
@@ -63,6 +65,8 @@ async fn main() {
     let status = service_status.clone();
 
     let (_, ip_route) = landscape::route::test_used_ip_route().await;
+
+    let assigned_ips = Arc::new(RwLock::new(IPv6NAInfo::init()));
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.iface_name).await {
             if let Some(mac) = iface.mac {
@@ -74,9 +78,18 @@ async fn main() {
                     mac: Some(mac.clone()),
                     prefix: 128,
                 };
-                icmp_ra_server(config, mac, iface.name, status, lan_info, ip_route, prefix_map)
-                    .await
-                    .unwrap();
+                icmp_ra_server(
+                    config,
+                    mac,
+                    iface.name,
+                    status,
+                    lan_info,
+                    ip_route,
+                    prefix_map,
+                    assigned_ips,
+                )
+                .await
+                .unwrap();
             }
         }
     });
