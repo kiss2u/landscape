@@ -40,6 +40,16 @@ pub fn add_lan_route(lan_info: LanRouteInfo) {
     } else {
         value.has_mac = std::mem::MaybeUninit::new(false);
     }
+
+    match lan_info.mode {
+        landscape_common::route::LanRouteMode::Reachable => {
+            value.is_next_hop = std::mem::MaybeUninit::new(false);
+        }
+        landscape_common::route::LanRouteMode::NextHop => {
+            value.is_next_hop = std::mem::MaybeUninit::new(true);
+        }
+    }
+
     let value = unsafe { plain::as_bytes(&value) };
 
     if let Err(e) = rt_lan_map.update(&key, &value, MapFlags::ANY) {

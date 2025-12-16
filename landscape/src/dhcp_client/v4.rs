@@ -17,7 +17,7 @@ use crate::{
 };
 use landscape_common::{
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
-    route::LanRouteInfo,
+    route::{LanRouteInfo, LanRouteMode},
     service::{DefaultWatchServiceStatus, ServiceStatus},
     SYSCTL_IPV4_RP_FILTER_PATTERN,
 };
@@ -723,6 +723,7 @@ async fn bind_ipv4(
         iface_ip: IpAddr::V4(new_yiaddr),
         mac: Some(mac_addr.clone()),
         prefix: mask as u8,
+        mode: LanRouteMode::Reachable,
     };
     route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
 

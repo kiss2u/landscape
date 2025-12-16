@@ -191,7 +191,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current
             return TC_ACT_UNSPEC;
         }
 
-        if (ip_addr_equal(&lan_info->addr, &context->daddr)) {
+        if (!lan_info->is_next_hop && ip_addr_equal(&lan_info->addr, &context->daddr)) {
             return TC_ACT_UNSPEC;
         }
 
@@ -216,7 +216,12 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current
             param.nh_family = AF_INET6;
         }
 
-        COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
+        if (lan_info->is_next_hop) {
+            COPY_ADDR_FROM(param.ipv6_nh, lan_info->addr.in6_u.u6_addr32);
+        } else {
+            COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
+        }
+        
         ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
         // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
         // bpf_log_info("is_ipv4:  %d", is_ipv4);

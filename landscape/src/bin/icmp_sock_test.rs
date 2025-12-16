@@ -13,7 +13,7 @@ use landscape_common::{
     config::ra::IPV6RAConfig,
     ipv6_pd::{IAPrefixMap, LDIAPrefix},
     lan_services::ipv6_ra::IPv6NAInfo,
-    route::LanRouteInfo,
+    route::{LanRouteInfo, LanRouteMode},
     service::{DefaultWatchServiceStatus, ServiceStatus},
 };
 use tokio::sync::RwLock;
@@ -77,6 +77,7 @@ async fn main() {
                     iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                     mac: Some(mac.clone()),
                     prefix: 128,
+                    mode: LanRouteMode::Reachable,
                 };
                 icmp_ra_server(
                     config,

@@ -9,6 +9,7 @@ use landscape_common::ipv6_pd::IAPrefixMap;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::observer::IfaceObserverAction;
 use landscape_common::route::LanRouteInfo;
+use landscape_common::route::LanRouteMode;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::service_manager_v2::ServiceManager;
 use landscape_common::service::service_manager_v2::ServiceStarterTrait;
@@ -71,6 +72,7 @@ impl ServiceStarterTrait for IPV6RAService {
                         iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                         mac: Some(mac.clone()),
                         prefix: 128,
+                        mode: LanRouteMode::Reachable,
                     };
                     tokio::spawn(async move {
                         let _ = crate::icmp::v6::icmp_ra_server(

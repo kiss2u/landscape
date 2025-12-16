@@ -8,6 +8,7 @@ use landscape_common::dhcp::v4_server::ArpScanInfo;
 use landscape_common::dhcp::v4_server::ArpScanStatus;
 use landscape_common::dhcp::v4_server::DHCPv4OfferInfo;
 use landscape_common::route::LanRouteInfo;
+use landscape_common::route::LanRouteMode;
 use landscape_common::service::controller_service_v2::ControllerService;
 use landscape_common::service::DefaultServiceStatus;
 use landscape_common::service::DefaultWatchServiceStatus;
@@ -77,6 +78,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                         mac: iface.mac,
                         iface_ip: std::net::IpAddr::V4(config.config.server_ip_addr.clone()),
                         prefix: config.config.network_mask,
+                        mode: LanRouteMode::Reachable,
                     };
                     let iface_name = config.iface_name.clone();
                     route_service.insert_ipv4_lan_route(&iface_name, info.clone()).await;

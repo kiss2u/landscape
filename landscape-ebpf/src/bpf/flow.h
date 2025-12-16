@@ -86,10 +86,13 @@ struct lan_route_key {
     struct in6_addr addr;
 };
 
+// TODO: define as flag
 struct lan_route_info {
     bool has_mac;
     u8 mac_addr[6];
-    u8 _pad[2];
+    // 0: current 1: next hop
+    bool is_next_hop;
+    // u8 _pad[1];
     u32 ifindex;
     struct in6_addr addr;
 };

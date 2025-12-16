@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use landscape_common::database::{LandscapeDBTrait, LandscapeServiceDBTrait};
-use landscape_common::route::{LanRouteInfo, RouteTargetInfo};
+use landscape_common::route::{LanRouteInfo, LanRouteMode, RouteTargetInfo};
 use landscape_common::LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT;
 use landscape_common::{
     args::LAND_HOSTNAME,
@@ -93,6 +93,7 @@ async fn init_service_from_config(
                     iface_ip: IpAddr::V4(ipv4),
                     mac: iface.mac,
                     prefix: ipv4_mask,
+                    mode: LanRouteMode::Reachable,
                 };
                 route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
 

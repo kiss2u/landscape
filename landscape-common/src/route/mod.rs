@@ -51,6 +51,13 @@ impl RouteTargetInfo {
     }
 }
 
+#[derive(Eq, Hash, PartialEq, Debug, Default, Clone)]
+pub enum LanRouteMode {
+    #[default]
+    Reachable,
+    NextHop,
+}
+
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct LanRouteInfo {
     pub ifindex: u32,
@@ -59,9 +66,21 @@ pub struct LanRouteInfo {
     pub iface_ip: IpAddr,
     pub mac: Option<MacAddr>,
     pub prefix: u8,
+    pub mode: LanRouteMode,
 }
 
 impl LanRouteInfo {
+    pub fn docker_lan(ifindex: u32, iface_name: &str, gateway: IpAddr, prefix: u8) -> Self {
+        LanRouteInfo {
+            ifindex,
+            iface_name: iface_name.to_string(),
+            iface_ip: gateway,
+            mac: Some(MacAddr::zero()),
+            prefix: prefix,
+            mode: LanRouteMode::Reachable,
+        }
+    }
+
     pub fn is_same_subnet(&self, other: &LanRouteInfo) -> bool {
         if self.prefix != other.prefix {
             return false;
@@ -116,6 +135,7 @@ mod tests {
             iface_ip: IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])),
             mac: None,
             prefix,
+            mode: LanRouteMode::Reachable,
         }
     }
 
@@ -128,6 +148,7 @@ mod tests {
             )),
             mac: None,
             prefix,
+            mode: LanRouteMode::Reachable,
         }
     }
 

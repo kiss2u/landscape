@@ -43,13 +43,7 @@ impl LandscapeDockerNetwork {
             tracing::error!("{}'s ip info is empty", self.iface_name);
             return None;
         };
-        Some(LanRouteInfo {
-            ifindex,
-            iface_name: self.iface_name.clone(),
-            iface_ip: ip_info.gateway,
-            // TEMP
-            mac: Some(MacAddr::zero()),
-            prefix: ip_info.prefix,
-        })
+
+        Some(LanRouteInfo::docker_lan(ifindex, &self.iface_name, ip_info.gateway, ip_info.prefix))
     }
 }

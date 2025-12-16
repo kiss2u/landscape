@@ -16,7 +16,7 @@ use landscape_common::{
     ipv6_pd::IAPrefixMap,
     lan_services::ipv6_ra::IPv6NAInfo,
     net::MacAddr,
-    route::{LanRouteInfo, RouteTargetInfo},
+    route::{LanRouteInfo, LanRouteMode, RouteTargetInfo},
 };
 use landscape_common::{
     service::{DefaultWatchServiceStatus, ServiceStatus},
@@ -104,6 +104,7 @@ async fn main() {
                     iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                     mac: Some(mac.clone()),
                     prefix: 128,
+                    mode: LanRouteMode::Reachable,
                 };
                 icmp_ra_server(
                     config,

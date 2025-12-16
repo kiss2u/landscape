@@ -4,6 +4,7 @@ use std::process::Command;
 use std::process::Stdio;
 
 use landscape_common::route::LanRouteInfo;
+use landscape_common::route::LanRouteMode;
 use landscape_common::route::RouteTargetInfo;
 use landscape_common::SYSCTL_IPV6_RA_ACCEPT_PATTERN;
 use sysctl::Sysctl as _;
@@ -144,6 +145,7 @@ pub async fn create_pppd_thread(
                                     iface_ip: IpAddr::V4(ip.clone()),
                                     mac: None,
                                     prefix: 32,
+                                    mode: LanRouteMode::Reachable,
                                 },
                             )
                             .await;
