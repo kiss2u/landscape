@@ -4,10 +4,29 @@ export type RouteLanServiceConfig = {
   iface_name: string;
   enable: boolean;
   update_at: number;
+  /**
+   * static route in lan
+   */
+  static_routes: Array<StaticRouteConfig> | null;
 };
 
 export type RouteWanServiceConfig = {
   iface_name: string;
   enable: boolean;
   update_at: number;
+};
+
+export type StaticRouteConfig = {
+  /**
+   * Next hop gateway address
+   */
+  next_hop: string;
+  /**
+   * handle subnet
+   */
+  subnet: string;
+  /**
+   * prefix
+   */
+  sub_prefix: number;
 };

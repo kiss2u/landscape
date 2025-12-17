@@ -55,7 +55,9 @@ impl RouteTargetInfo {
 pub enum LanRouteMode {
     #[default]
     Reachable,
-    NextHop,
+    NextHop {
+        next_hop_ip: IpAddr,
+    },
 }
 
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]

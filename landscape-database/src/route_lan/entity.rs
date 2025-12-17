@@ -4,7 +4,7 @@ use landscape_common::{
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
-use crate::DBTimestamp;
+use crate::{DBJson, DBTimestamp};
 
 pub type RouteLanServiceConfigModel = Model;
 pub type RouteLanServiceConfigEntity = Entity;
@@ -18,6 +18,8 @@ pub struct Model {
     pub enable: bool,
 
     pub update_at: DBTimestamp,
+
+    pub static_routes: Option<DBJson>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -32,6 +34,12 @@ impl From<Model> for RouteLanServiceConfig {
             iface_name: entity.iface_name,
             enable: entity.enable,
             update_at: entity.update_at,
+            static_routes: entity
+                .static_routes
+                .map(serde_json::from_value)
+                .transpose()
+                .ok()
+                .flatten(),
         }
     }
 }
@@ -51,5 +59,7 @@ impl UpdateActiveModel<ActiveModel> for RouteLanServiceConfig {
     fn update(self, active: &mut ActiveModel) {
         active.enable = Set(self.enable);
         active.update_at = Set(self.update_at);
+        active.static_routes =
+            Set(self.static_routes.map(serde_json::to_value).transpose().ok().flatten());
     }
 }

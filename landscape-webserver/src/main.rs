@@ -230,8 +230,12 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     )
     .await;
 
-    let route_lan_service =
-        RouteLanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+    let route_lan_service = RouteLanServiceManagerService::new(
+        db_store_provider.clone(),
+        route_service.clone(),
+        dev_obs.resubscribe(),
+    )
+    .await;
     let route_wan_service =
         RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
 

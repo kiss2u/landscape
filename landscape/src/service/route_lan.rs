@@ -13,16 +13,20 @@ use landscape_database::route_lan::repository::RouteLanServiceRepository;
 use tokio::sync::{broadcast, oneshot};
 
 use crate::iface::get_iface_by_name;
+use crate::route::IpRouteService;
 
 #[derive(Clone)]
 #[allow(dead_code)]
-pub struct RouteLanService {}
+pub struct RouteLanService {
+    route_service: IpRouteService,
+}
 
 impl RouteLanService {
-    pub fn new() -> Self {
-        RouteLanService {}
+    pub fn new(route_service: IpRouteService) -> Self {
+        RouteLanService { route_service }
     }
 }
+
 #[async_trait::async_trait]
 impl ServiceStarterTrait for RouteLanService {
     type Status = DefaultServiceStatus;
@@ -34,9 +38,23 @@ impl ServiceStarterTrait for RouteLanService {
 
         if config.enable {
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
+                let route_name = format!("{}-static", &config.iface_name);
+                let route_service = self.route_service.clone();
+                let static_routes: Vec<_> = config
+                    .static_routes
+                    .into_iter()
+                    .flat_map(|routes| routes.into_iter())
+                    .map(|e2| e2.to_lan_info(iface.index, &iface.name))
+                    .collect();
+
+                for info in static_routes {
+                    route_service.insert_ipv4_lan_route(&route_name, info).await;
+                }
+
                 let status_clone = service_status.clone();
                 tokio::spawn(async move {
-                    create_route_lan_service(iface.index, iface.mac.is_some(), status_clone).await
+                    create_route_lan_service(iface.index, iface.mac.is_some(), status_clone).await;
+                    route_service.remove_ipv4_lan_route(&route_name).await;
                 });
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
@@ -100,10 +118,11 @@ impl ControllerService for RouteLanServiceManagerService {
 impl RouteLanServiceManagerService {
     pub async fn new(
         store_service: LandscapeDBServiceProvider,
+        route_service: IpRouteService,
         mut dev_observer: broadcast::Receiver<IfaceObserverAction>,
     ) -> Self {
         let store = store_service.route_lan_service_store();
-        let server_starter = RouteLanService::new();
+        let server_starter = RouteLanService::new(route_service);
         let service =
             ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 

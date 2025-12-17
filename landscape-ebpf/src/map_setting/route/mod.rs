@@ -45,8 +45,17 @@ pub fn add_lan_route(lan_info: LanRouteInfo) {
         landscape_common::route::LanRouteMode::Reachable => {
             value.is_next_hop = std::mem::MaybeUninit::new(false);
         }
-        landscape_common::route::LanRouteMode::NextHop => {
+        landscape_common::route::LanRouteMode::NextHop { next_hop_ip } => {
             value.is_next_hop = std::mem::MaybeUninit::new(true);
+
+            match next_hop_ip {
+                std::net::IpAddr::V4(ipv4_addr) => {
+                    unsafe { value.addr.in6_u.u6_addr32[0] = ipv4_addr.to_bits().to_be() };
+                }
+                std::net::IpAddr::V6(ipv6_addr) => {
+                    value.addr.in6_u.u6_addr8 = ipv6_addr.to_bits().to_be_bytes();
+                }
+            }
         }
     }
 

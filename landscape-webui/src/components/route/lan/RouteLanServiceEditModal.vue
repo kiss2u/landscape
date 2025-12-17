@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
 
-import { RouteLanServiceConfig } from "@/rust_bindings/common/route";
+import {
+  RouteLanServiceConfig,
+  StaticRouteConfig,
+} from "@/rust_bindings/common/route";
 import {
   get_route_lan_config,
   update_route_lans_config,
@@ -29,6 +32,7 @@ async function on_modal_enter() {
       iface_name: iface_info.iface_name,
       enable: true,
       update_at: 0,
+      static_routes: null,
     };
   }
 }
@@ -39,6 +43,14 @@ async function save_config() {
     await routeLanConfigStore.UPDATE_INFO();
     show_model.value = false;
   }
+}
+
+function onCreate(): StaticRouteConfig {
+  return {
+    next_hop: "",
+    subnet: "",
+    sub_prefix: 32,
+  };
 }
 </script>
 
@@ -62,6 +74,38 @@ async function save_config() {
             <template #checked> 启用 </template>
             <template #unchecked> 禁用 </template>
           </n-switch>
+        </n-form-item>
+
+        <n-form-item label="静态路由 (当前只能设置一个)">
+          <n-dynamic-input
+            item-style="padding-right: 15px"
+            :max="1"
+            v-model:value="service_config.static_routes"
+            :on-create="onCreate"
+          >
+            <template #create-button-default> 增加可达子网 </template>
+            <template #default="{ value, index }">
+              <n-input-group>
+                <n-input
+                  placeholder="下一跳"
+                  v-model:value="value.next_hop"
+                  type="text"
+                />
+                <n-input
+                  placeholder="子网范围"
+                  v-model:value="value.subnet"
+                  type="text"
+                />
+                <n-input-group-label>/</n-input-group-label>
+                <n-input-number
+                  :style="{ width: '200px' }"
+                  placeholder=""
+                  v-model:value="value.sub_prefix"
+                  type="text"
+                />
+              </n-input-group>
+            </template>
+          </n-dynamic-input>
         </n-form-item>
       </n-form>
 

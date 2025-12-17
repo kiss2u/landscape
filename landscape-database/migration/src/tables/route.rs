@@ -8,10 +8,22 @@ pub enum RouteWanServiceConfigs {
     UpdateAt,
 }
 
-#[derive(Iden)]
+#[derive(DeriveIden)]
 pub enum RouteLanServiceConfigs {
+    #[sea_orm(iden = "route_lan_service_configs")]
     Table,
     IfaceName,
     Enable,
     UpdateAt,
+}
+
+#[derive(DeriveIden)]
+#[allow(unused)]
+pub enum RouteLanServiceConfigsV2 {
+    #[sea_orm(iden = "route_lan_service_configs")]
+    Table,
+    IfaceName,
+    Enable,
+    UpdateAt,
+    StaticRoutes,
 }
