@@ -48,12 +48,21 @@ pub mod tests {
         crate::map_setting::route::add_wan_route_inner(
             &skel.maps.rt_target_map,
             5,
-            RouteTargetInfo::docker_new(11, "test").0,
+            RouteTargetInfo {
+                weight: 0,
+                ifindex: 11,
+                has_mac: true,
+                default_route: false,
+                is_docker: false,
+                iface_name: "test".to_string(),
+                iface_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                gateway_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            },
         );
 
         let wan_route_egress = skel.progs.wan_route_egress;
 
-        let repeat = 1;
+        let repeat = 10_000;
         let egress_input = ProgramInput {
             data_in: Some(&mut simple_tcp_syn()),
             context_in: None,
@@ -78,6 +87,9 @@ pub mod tests {
 
         println!("lan_result: {}", lan_result.return_value as i32);
         println!("wan_result: {}", wan_result.return_value as i32);
+
+        println!("lan duration: {:?}", lan_result.duration);
+        println!("wan duration: {:?}", wan_result.duration);
 
         assert_eq!(lan_result.return_value as i32, 7);
         assert_eq!(wan_result.return_value as i32, 7);

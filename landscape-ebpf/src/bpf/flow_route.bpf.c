@@ -14,10 +14,10 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 const volatile u32 current_l3_offset = 14;
 
 static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
-    u8 mac[6];
+    u8 *mac;
 
     // 从 skb 中 offset = 0 处读取 6 字节目的 MAC 地址
-    if (bpf_skb_load_bytes(skb, 0, mac, 6) < 0) {
+    if (VALIDATE_READ_DATA(skb, &mac, 0, 6)) {
         return TC_ACT_UNSPEC;
     }
 
@@ -59,12 +59,12 @@ static __always_inline int is_broadcast_ip(const struct route_context *context) 
         __be32 dst = context->daddr.in6_u.u6_addr32[0];
 
         // 255.255.255.255 or 0.0.0.0 (network byte order)
-        if (dst == bpf_htonl(0xffffffff) || dst == 0) {
+        if (dst == 0xffffffff || dst == 0) {
             is_ipv4_broadcast = true;
         }
     }
 
-    if (is_ipv4_broadcast || is_ipv6_broadcast || is_ipv6_locallink) {
+    if (unlikely(is_ipv4_broadcast || is_ipv6_broadcast || is_ipv6_locallink)){
         return TC_ACT_UNSPEC;
     } else {
         return TC_ACT_OK;
@@ -108,30 +108,29 @@ static __always_inline int get_route_context(struct __sk_buff *skb, u32 current_
     }
 
     if (is_ipv4) {
-        struct iphdr iph;
+        struct iphdr *iph;
 
-        ret = bpf_skb_load_bytes(skb, current_l3_offset, &iph, sizeof(iph));
-        if (ret) {
+        if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
             bpf_log_info("ipv4 bpf_skb_load_bytes error");
-            return TC_ACT_SHOT;
+            return TC_ACT_UNSPEC;
         }
+
         context->l3_protocol = LANDSCAPE_IPV4_TYPE;
-        context->l4_protocol = iph.protocol;
-        context->daddr.in6_u.u6_addr32[0] = iph.daddr;
-        context->saddr.in6_u.u6_addr32[0] = iph.saddr;
+        context->l4_protocol = iph->protocol;
+        context->daddr.in6_u.u6_addr32[0] = iph->daddr;
+        context->saddr.in6_u.u6_addr32[0] = iph->saddr;
     } else {
-        struct ipv6hdr ip6h;
+        struct ipv6hdr *ip6h;
         // 读取 IPv6 头部
-        ret = bpf_skb_load_bytes(skb, current_l3_offset, &ip6h, sizeof(ip6h));
-        if (ret) {
+        if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
             bpf_log_info("ipv6 bpf_skb_load_bytes error");
-            return TC_ACT_SHOT;
+            return TC_ACT_UNSPEC;
         }
         context->l3_protocol = LANDSCAPE_IPV6_TYPE;
         // l4 proto
         // context->l4_protocol
-        COPY_ADDR_FROM(context->saddr.in6_u.u6_addr32, ip6h.saddr.in6_u.u6_addr32);
-        COPY_ADDR_FROM(context->daddr.in6_u.u6_addr32, ip6h.daddr.in6_u.u6_addr32);
+        COPY_ADDR_FROM(context->saddr.in6_u.u6_addr32, ip6h->saddr.in6_u.u6_addr32);
+        COPY_ADDR_FROM(context->daddr.in6_u.u6_addr32, ip6h->daddr.in6_u.u6_addr32);
     }
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
@@ -184,9 +183,9 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current
 
     struct lan_route_info *lan_info = bpf_map_lookup_elem(&rt_lan_map, &lan_search_key);
 
-    if (lan_info != NULL) {
+    if (likely(lan_info != NULL)) {
         // is LAN Packet, redirect to lan
-        if (lan_info->ifindex == skb->ifindex) {
+        if (unlikely(lan_info->ifindex == skb->ifindex)) {
             // current iface
             return TC_ACT_UNSPEC;
         }
@@ -216,7 +215,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current
             param.nh_family = AF_INET6;
         }
 
-        if (lan_info->is_next_hop) {
+        if (unlikely(lan_info->is_next_hop)) {
             COPY_ADDR_FROM(param.ipv6_nh, lan_info->addr.in6_u.u6_addr32);
         } else {
             COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
@@ -226,7 +225,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current
         // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
         // bpf_log_info("is_ipv4:  %d", is_ipv4);
         // bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
-        if (ret != 7) {
+        if (unlikely(ret != 7)) {
             bpf_log_info("bpf_redirect_neigh error: %d", ret);
         }
         // bpf_log_info("bpf_redirect_neigh result: %d", ret);
@@ -317,10 +316,8 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
 
     // 查询 DNS 配置信息，查看是否有转发流的配置
     void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
-    if (dns_rules_map != NULL) {
-    }
 
-    if (dns_rules_map != NULL) {
+    if (likely(dns_rules_map != NULL)) {
         dns_rule_value = bpf_map_lookup_elem(dns_rules_map, &key);
         if (dns_rule_value != NULL) {
             if (dns_rule_value->priority <= priority) {
@@ -533,17 +530,17 @@ int lan_route_ingress(struct __sk_buff *skb) {
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return ret;
     }
 
     ret = get_route_context(skb, current_l3_offset, &context);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return TC_ACT_UNSPEC;
     }
 
     ret = is_broadcast_ip(&context);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return TC_ACT_UNSPEC;
     }
 
@@ -593,17 +590,17 @@ int wan_route_ingress(struct __sk_buff *skb) {
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return ret;
     }
 
     ret = get_route_context(skb, current_l3_offset, &context);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return TC_ACT_UNSPEC;
     }
 
     ret = is_broadcast_ip(&context);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return TC_ACT_UNSPEC;
     }
 
@@ -636,22 +633,22 @@ int wan_route_egress(struct __sk_buff *skb) {
     struct route_context context = {0};
 
     ret = is_broadcast_mac(skb);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return ret;
     }
 
-    if (skb->ingress_ifindex != 0) {
+    if (likely(skb->ingress_ifindex != 0)) {
         // 端口转发数据, 相对于是已经决定使用这个出口, 所以直接发送
         return TC_ACT_UNSPEC;
     }
 
     ret = get_route_context(skb, current_l3_offset, &context);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return TC_ACT_UNSPEC;
     }
 
     ret = is_broadcast_ip(&context);
-    if (ret != TC_ACT_OK) {
+    if (unlikely(ret != TC_ACT_OK)) {
         return TC_ACT_UNSPEC;
     }
 
