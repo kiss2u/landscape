@@ -56,10 +56,12 @@ static __always_inline int match_flow_id(struct __sk_buff *skb, u32 current_l3_o
     u32 ret_flow_id = *default_flow_id_;
 
     if (current_l3_offset != 0) {
-        if (bpf_skb_load_bytes(skb, 6, &match_key.mac.mac, 6)) {
+        u8 *mac;
+        if (VALIDATE_READ_DATA(skb, &mac, 6, 6)) {
             bpf_log_info("read mac error");
             return TC_ACT_SHOT;
         }
+        __builtin_memcpy(match_key.mac.mac, mac, 6);
 
         match_key.prefixlen = FLOW_MAC_MATCH_LEN;
         match_key.is_match_ip = FLOW_ENTRY_MODE_MAC;

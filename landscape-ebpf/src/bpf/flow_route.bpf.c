@@ -6,7 +6,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "flow_share.h"
+#include "flow.h"
 #include "land_wan_ip.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -27,7 +27,7 @@ static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
 
     bool is_ipv6_broadcast = mac[0] == 0x33 && mac[1] == 0x33;
 
-    if (is_broadcast || is_ipv6_broadcast) {
+    if (unlikely(is_broadcast || is_ipv6_broadcast)) {
         return TC_ACT_UNSPEC;
     } else {
         return TC_ACT_OK;
@@ -64,7 +64,7 @@ static __always_inline int is_broadcast_ip(const struct route_context *context) 
         }
     }
 
-    if (unlikely(is_ipv4_broadcast || is_ipv6_broadcast || is_ipv6_locallink)){
+    if (unlikely(is_ipv4_broadcast || is_ipv6_broadcast || is_ipv6_locallink)) {
         return TC_ACT_UNSPEC;
     } else {
         return TC_ACT_OK;
@@ -220,7 +220,7 @@ static __always_inline int lan_redirect_check(struct __sk_buff *skb, u32 current
         } else {
             COPY_ADDR_FROM(param.ipv6_nh, lan_search_key.addr.in6_u.u6_addr32);
         }
-        
+
         ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
         // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
         // bpf_log_info("is_ipv4:  %d", is_ipv4);
@@ -317,7 +317,7 @@ static __always_inline int flow_verdict(struct __sk_buff *skb, u32 current_l3_of
     // 查询 DNS 配置信息，查看是否有转发流的配置
     void *dns_rules_map = bpf_map_lookup_elem(&flow_v_dns_map, &flow_id);
 
-    if (likely(dns_rules_map != NULL)) {
+    if (dns_rules_map != NULL) {
         dns_rule_value = bpf_map_lookup_elem(dns_rules_map, &key);
         if (dns_rule_value != NULL) {
             if (dns_rule_value->priority <= priority) {
@@ -628,7 +628,7 @@ int wan_route_ingress(struct __sk_buff *skb) {
 SEC("tc/egress")
 int wan_route_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "wan_route_egress"
-    int ret;
+    int ret = 0;
     u32 flow_mark = skb->mark;
     struct route_context context = {0};
 
@@ -656,6 +656,7 @@ int wan_route_egress(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) {
         return ret;
     }
+
     ret = flow_verdict(skb, current_l3_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
         return ret;
