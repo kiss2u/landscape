@@ -155,7 +155,7 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
     wan_search_key.ifindex = skb->ifindex;
     wan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
 
-    struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+    struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
     if (wan_ip_info == NULL) {
         return TC_ACT_SHOT;
     }

@@ -34,7 +34,7 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     let mut open_object = MaybeUninit::uninit();
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
 
-    landscape_open.maps.wan_ipv4_binding.set_pin_path(&paths.wan_ip).unwrap();
+    landscape_open.maps.wan_ip_binding.set_pin_path(&paths.wan_ip).unwrap();
     landscape_open.maps.static_nat_mappings.set_pin_path(&paths.static_nat_mappings).unwrap();
 
     // firewall
@@ -82,17 +82,17 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
 }
 
 pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, gateway: Option<Ipv6Addr>, mask: u8) {
-    let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
-    add_wan_ip(&wan_ipv4_binding, ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask);
+    let wan_ip_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
+    add_wan_ip(&wan_ip_binding, ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask);
 }
 
 pub fn add_ipv4_wan_ip(ifindex: u32, addr: Ipv4Addr, gateway: Option<Ipv4Addr>, mask: u8) {
-    let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
-    add_wan_ip(&wan_ipv4_binding, ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask);
+    let wan_ip_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
+    add_wan_ip(&wan_ip_binding, ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask);
 }
 
 pub(crate) fn add_wan_ip<'obj, T>(
-    wan_ipv4_binding: &T,
+    wan_ip_binding: &T,
     ifindex: u32,
     addr: IpAddr,
     gateway: Option<IpAddr>,
@@ -130,7 +130,7 @@ pub(crate) fn add_wan_ip<'obj, T>(
     let key = unsafe { plain::as_bytes(&key) };
     let value = unsafe { plain::as_bytes(&value) };
 
-    if let Err(e) = wan_ipv4_binding.update(key, value, MapFlags::ANY) {
+    if let Err(e) = wan_ip_binding.update(key, value, MapFlags::ANY) {
         tracing::error!("setting wan ip error:{e:?}");
     } else {
         tracing::info!("setting wan index: {ifindex:?} addr:{addr:?}");
@@ -147,13 +147,13 @@ pub fn del_ipv4_wan_ip(ifindex: u32) {
 
 fn del_wan_ip(ifindex: u32, l3_protocol: u8) {
     tracing::debug!("del wan index - 1: {ifindex:?}");
-    let wan_ipv4_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
+    let wan_ip_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
     let mut key = wan_ip_info_key::default();
     key.ifindex = ifindex;
     key.l3_protocol = l3_protocol;
 
     let key = unsafe { plain::as_bytes(&key) };
-    if let Err(e) = wan_ipv4_binding.delete(key) {
+    if let Err(e) = wan_ip_binding.delete(key) {
         tracing::error!("delete wan ip error:{e:?}");
     } else {
         tracing::info!("delete wan index: {ifindex:?}");

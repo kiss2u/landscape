@@ -31,7 +31,7 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         }
     }
     let paths = LandscapeMapPath {
-        wan_ip: PathBuf::from(format!("{}/wan_ipv4_binding", ebpf_map_path)),
+        wan_ip: PathBuf::from(format!("{}/wan_ip_binding", ebpf_map_path)),
         static_nat_mappings: PathBuf::from(format!("{}/nat_static_mapping", ebpf_map_path)),
 
         firewall_ipv4_block: PathBuf::from(format!("{}/firewall_block_ip4_map", ebpf_map_path)),

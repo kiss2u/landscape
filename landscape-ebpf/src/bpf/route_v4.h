@@ -324,7 +324,7 @@ static __always_inline int is_current_wan_packet_v4(struct __sk_buff *skb, u32 c
     wan_search_key.ifindex = skb->ingress_ifindex;
     wan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
 
-    struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+    struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
     if (wan_ip_info != NULL) {
         // Check if the current DST IP is the IP that enters the WAN network card
         // bpf_log_info("wan_ip_info ip: %pI6", &wan_ip_info->addr);
@@ -358,7 +358,7 @@ static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb, const u
             wan_search_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
 
             struct wan_ip_info_value *wan_ip_info =
-                bpf_map_lookup_elem(&wan_ipv4_binding, &wan_search_key);
+                bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
             if (wan_ip_info != NULL) {
 
                 bool current_has_mac = current_l3_offset > 0;

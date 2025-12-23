@@ -32,6 +32,6 @@ struct {
     __uint(max_entries, 256);
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
-} wan_ipv4_binding SEC(".maps");
+} wan_ip_binding SEC(".maps");
 
 #endif /* __LD_WAN_IP_H__ */

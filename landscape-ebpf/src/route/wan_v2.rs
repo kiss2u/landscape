@@ -29,8 +29,8 @@ pub fn route_wan(
     open_skel.maps.flow_match_map.set_pin_path(&MAP_PATHS.flow_match_map).unwrap();
     open_skel.maps.flow_match_map.reuse_pinned_map(&MAP_PATHS.flow_match_map).unwrap();
 
-    open_skel.maps.wan_ipv4_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
-    open_skel.maps.wan_ipv4_binding.reuse_pinned_map(&MAP_PATHS.wan_ip).unwrap();
+    open_skel.maps.wan_ip_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
+    open_skel.maps.wan_ip_binding.reuse_pinned_map(&MAP_PATHS.wan_ip).unwrap();
 
     open_skel.maps.rt4_lan_map.set_pin_path(&MAP_PATHS.rt4_lan_map).unwrap();
     open_skel.maps.rt4_lan_map.reuse_pinned_map(&MAP_PATHS.rt4_lan_map).unwrap();

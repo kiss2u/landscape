@@ -22,7 +22,7 @@ pub fn handle_ipv6_egress(mut payload: Vec<u8>) {
     let ifindex = 6;
 
     add_wan_ip(
-        &landscape_skel.maps.wan_ipv4_binding,
+        &landscape_skel.maps.wan_ip_binding,
         ifindex,
         IpAddr::V6(Ipv6Addr::from_str("2409:8888:6666:4f21::").unwrap()),
         None,
