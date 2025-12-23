@@ -117,6 +117,7 @@ static __always_inline u8 get_cache_mask(u32 original) { return (original & INGR
     bpf_log_info("mac: %02x:%02x:%02x:%02x:%02x:%02x", (mac)[0], (mac)[1], (mac)[2], (mac)[3],     \
                  (mac)[4], (mac)[5])
 
+
 #ifndef likely
 #define likely(x) __builtin_expect(!!(x), 1)
 #endif
@@ -168,7 +169,7 @@ struct ipv4_mark_action {
 };
 
 static int prepend_dummy_mac(struct __sk_buff *skb) {
-    char mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x08, 0x00};
+    u8 mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x08, 0x00};
 
     if (bpf_skb_change_head(skb, 14, 0)) return -1;
 
@@ -176,6 +177,58 @@ static int prepend_dummy_mac(struct __sk_buff *skb) {
 
     return 0;
 }
+
+static int prepend_dummy_mac_v4(struct __sk_buff *skb, u8 *dst_mac) {
+    u8 mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x08, 0x00};
+
+    __builtin_memcpy(mac, dst_mac, 6);
+    // if (bpf_skb_change_head(skb, 14, 0)) return -1;
+
+    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
+
+    return 0;
+}
+
+static int store_mac_v4(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
+    u8 mac[14];
+
+    __builtin_memcpy(mac, dst_mac, 6);
+    __builtin_memcpy(mac + 6, src_mac, 6);
+    
+    mac[12] = 0x08;
+    mac[13] = 0x00;
+
+    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
+
+    return 0;
+}
+
+static int prepend_dummy_mac_v6(struct __sk_buff *skb, u8 *dst_mac) {
+    u8 mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x86, 0xdd};
+
+    __builtin_memcpy(mac, dst_mac, 6);
+
+    // if (bpf_skb_change_head(skb, 14, 0)) return -1;
+
+    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
+
+    return 0;
+}
+
+static int store_mac_v6(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
+    u8 mac[14];
+
+    __builtin_memcpy(mac, dst_mac, 6);
+    __builtin_memcpy(mac + 6, src_mac, 6);
+    
+    mac[12] = 0x86;
+    mac[13] = 0xdd;
+
+    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
+
+    return 0;
+}
+
 
 // TEMP
 // ICMPv4 消息类型
@@ -191,6 +244,14 @@ union u_inet_addr {
     __be32 ip;
     __be32 ip6[4];
     u8 bits[16];
+};
+
+// only for ipv6
+union u_inet6_addr {
+    __be32 all[4];
+    __be32 ip;
+    __be32 ip6[4];
+    u8 bytes[16];
 };
 
 struct inet_pair {
@@ -237,4 +298,59 @@ struct fragment_cache_value {
     u16 dport;
 };
 
+static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
+    u8 *mac;
+
+    if (VALIDATE_READ_DATA(skb, &mac, 0, 6)) {
+        return TC_ACT_UNSPEC;
+    }
+
+    // 判断是否是广播地址 ff:ff:ff:ff:ff:ff
+    bool is_broadcast = mac[0] == 0xff && mac[1] == 0xff && mac[2] == 0xff && mac[3] == 0xff &&
+                        mac[4] == 0xff && mac[5] == 0xff;
+
+    bool is_ipv6_broadcast = mac[0] == 0x33 && mac[1] == 0x33;
+
+    if (unlikely(is_broadcast || is_ipv6_broadcast)) {
+        return TC_ACT_UNSPEC;
+    } else {
+        return TC_ACT_OK;
+    }
+}
+
+
+static __always_inline int is_broadcast_ip4(__be32 dst) {
+    // 255.255.255.255 or 0.0.0.0 (network byte order)
+    if (dst == 0xffffffff || dst == 0) {
+        return TC_ACT_UNSPEC;
+    }
+    return TC_ACT_OK;
+}
+
+
+static __always_inline int is_broadcast_ip6(const u8 *bytes) {
+    bool is_ipv6_broadcast = false;
+    bool is_ipv6_locallink = false;
+
+    __u8 first_byte = bytes[0];
+
+    // IPv6 multicast ff00::/8
+    if (first_byte == 0xff) {
+        is_ipv6_broadcast = true;
+    }
+
+    // IPv6 link-local fe80::/10
+    if (first_byte == 0xfe) {
+        __u8 second_byte = bytes[1];
+        if ((second_byte & 0xc0) == 0x80) {  // top 2 bits == 10
+            is_ipv6_locallink = true;
+        }
+    }
+
+    if (unlikely(is_ipv6_broadcast || is_ipv6_locallink)) {
+        return TC_ACT_UNSPEC;
+    } else {
+        return TC_ACT_OK;
+    }
+}
 #endif /* __LD_LANDSCAPE_H__ */

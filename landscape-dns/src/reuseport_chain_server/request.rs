@@ -122,7 +122,7 @@ impl ChainDnsRequestHandle {
             }
             tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
 
-            landscape_ebpf::map_setting::flow_dns::create_flow_dns_inner_map(
+            landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(
                 self.flow_id,
                 update_dns_mark_list.into_iter().collect(),
             );
@@ -276,7 +276,12 @@ impl ChainDnsRequestHandle {
         }
         // 将 mark 写入 mark ebpf map
         if mark.mark.need_insert_in_ebpf_map() {
-            tracing::info!("setting ips: {:?}, Mark: {:?}", update_dns_mark_list, mark);
+            tracing::info!(
+                "[flow_id: {}]setting ips: {:?}, Mark: {:?}",
+                self.flow_id,
+                update_dns_mark_list,
+                mark
+            );
             // TODO: 如果写入错误 返回错误后 向客户端返回查询错误
             landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
                 self.flow_id,

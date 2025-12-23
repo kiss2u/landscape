@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use landscape_common::args::LAND_ARGS;
 use once_cell::sync::Lazy;
 
+pub mod base;
 pub mod bpf_error;
 pub mod firewall;
 pub mod landscape;
@@ -39,9 +40,7 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
             "{}/firewall_allow_rules_map",
             ebpf_map_path
         )),
-        flow_verdict_dns_map: PathBuf::from(format!("{}/flow_verdict_dns_map", ebpf_map_path)),
-        flow_verdict_ip_map: PathBuf::from(format!("{}/flow_verdict_ip_map", ebpf_map_path)),
-        flow_match_map: PathBuf::from(format!("{}/flow_match_map", ebpf_map_path)),
+        // DNS
         dns_flow_socks: PathBuf::from(format!("{}/dns_flow_socks", ebpf_map_path)),
         // metric
         metric_map: PathBuf::from(format!("{}/metric_map", ebpf_map_path)),
@@ -52,10 +51,24 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
             ebpf_map_path
         )),
 
+        flow_match_map: PathBuf::from(format!("{}/flow_match_map", ebpf_map_path)),
         // route
-        rt_lan_map: PathBuf::from(format!("{}/rt_lan_map", ebpf_map_path)),
-        rt_target_map: PathBuf::from(format!("{}/rt_target_map", ebpf_map_path)),
-        rt_cache_map: PathBuf::from(format!("{}/rt_cache_map", ebpf_map_path)),
+        // v4 version map path
+        rt4_lan_map: PathBuf::from(format!("{}/rt4_lan_map", ebpf_map_path)),
+        rt4_target_map: PathBuf::from(format!("{}/rt4_target_map", ebpf_map_path)),
+        flow4_dns_map: PathBuf::from(format!("{}/flow4_dns_map", ebpf_map_path)),
+        flow4_ip_map: PathBuf::from(format!("{}/flow4_ip_map", ebpf_map_path)),
+
+        rt6_lan_map: PathBuf::from(format!("{}/rt6_lan_map", ebpf_map_path)),
+        rt6_target_map: PathBuf::from(format!("{}/rt6_target_map", ebpf_map_path)),
+        flow6_dns_map: PathBuf::from(format!("{}/flow6_dns_map", ebpf_map_path)),
+        flow6_ip_map: PathBuf::from(format!("{}/flow6_ip_map", ebpf_map_path)),
+
+        rt4_cache_map: PathBuf::from(format!("{}/rt4_cache_map", ebpf_map_path)),
+        rt6_cache_map: PathBuf::from(format!("{}/rt6_cache_map", ebpf_map_path)),
+
+        ip_mac_v4: PathBuf::from(format!("{}/ip_mac_v4", ebpf_map_path)),
+        ip_mac_v6: PathBuf::from(format!("{}/ip_mac_v6", ebpf_map_path)),
     };
     tracing::info!("ebpf map paths is: {paths:#?}");
     map_setting::init_path(&paths);
@@ -74,8 +87,6 @@ pub(crate) struct LandscapeMapPath {
     pub firewall_allow_rules_map: PathBuf,
 
     /// Flow
-    pub flow_verdict_dns_map: PathBuf,
-    pub flow_verdict_ip_map: PathBuf,
     pub flow_match_map: PathBuf,
 
     /// DNS Socket fd <=> Flow ID
@@ -90,9 +101,22 @@ pub(crate) struct LandscapeMapPath {
     pub firewall_conn_metric_events: PathBuf,
 
     /// route - LAN
-    pub rt_lan_map: PathBuf,
-    pub rt_target_map: PathBuf,
-    pub rt_cache_map: PathBuf,
+    pub rt4_lan_map: PathBuf,
+    pub rt4_target_map: PathBuf,
+    pub flow4_dns_map: PathBuf,
+    pub flow4_ip_map: PathBuf,
+
+    pub rt6_lan_map: PathBuf,
+    pub rt6_target_map: PathBuf,
+    pub flow6_dns_map: PathBuf,
+    pub flow6_ip_map: PathBuf,
+
+    pub rt4_cache_map: PathBuf,
+    pub rt6_cache_map: PathBuf,
+
+    // IP MAC
+    pub ip_mac_v4: PathBuf,
+    pub ip_mac_v6: PathBuf,
 }
 
 // pppoe -> Fire wall -> nat -> route

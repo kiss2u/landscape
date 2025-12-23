@@ -1,10 +1,7 @@
-mod lan;
-mod package;
-
 #[cfg(test)]
 pub mod tests {
     use crate::{
-        route::wan_v2::route_wan::RouteWanSkelBuilder, tests::route::package::simple_tcp_syn,
+        route::lan_v2::route_lan::RouteLanSkelBuilder, tests::route::package::simple_tcp_syn,
     };
     use std::{
         mem::MaybeUninit,
@@ -22,10 +19,13 @@ pub mod tests {
     };
 
     #[test]
-    fn egress_wan_route() {
+    fn lan_route_ingress() {
         let mut wan_route_open_object = MaybeUninit::zeroed();
-        let wan_route_builder = RouteWanSkelBuilder::default();
+
+        let wan_route_builder = RouteLanSkelBuilder::default();
+
         let wan_route_open_skel = wan_route_builder.open(&mut wan_route_open_object).unwrap();
+
         let skel = wan_route_open_skel.load().unwrap();
 
         let data = vec![IpMarkInfo {
@@ -58,20 +58,8 @@ pub mod tests {
             },
         );
 
-        // let wan_route_egress = skel.progs.wan_route_egress;
-
         let repeat = 100_000;
-        // let egress_input = ProgramInput {
-        //     data_in: Some(&mut simple_tcp_syn()),
-        //     context_in: None,
-        //     context_out: None,
-        //     data_out: None,
-        //     repeat,
-        //     ..Default::default()
-        // };
-        // let wan_result = wan_route_egress.test_run(egress_input).expect("test_run failed");
-
-        let route_wan_ingress = skel.progs.route_wan_ingress;
+        let route_lan_ingress = skel.progs.route_lan_ingress;
 
         let input = ProgramInput {
             data_in: Some(&mut simple_tcp_syn()),
@@ -81,15 +69,9 @@ pub mod tests {
             repeat,
             ..Default::default()
         };
-        let lan_result = route_wan_ingress.test_run(input).expect("test_run failed");
+        let lan_result = route_lan_ingress.test_run(input).expect("test_run failed");
 
         println!("lan_result: {}", lan_result.return_value as i32);
-        // println!("wan_result: {}", wan_result.return_value as i32);
-
         println!("lan duration: {:?}", lan_result.duration);
-        // println!("wan duration: {:?}", wan_result.duration);
-
-        // assert_eq!(lan_result.return_value as i32, 7);
-        // assert_eq!(wan_result.return_value as i32, 7);
     }
 }

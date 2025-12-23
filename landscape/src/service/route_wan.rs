@@ -68,7 +68,7 @@ pub async fn create_route_wan_service(
     });
     std::thread::spawn(move || {
         tracing::info!("start attach_match_flow at ifindex: {:?}", ifindex);
-        landscape_ebpf::route::wan::wan_route_attach(ifindex, has_mac, rx).unwrap();
+        landscape_ebpf::route::wan_v2::route_wan(ifindex, has_mac, rx).unwrap();
         tracing::info!("Send an unblocking signal to an external thread");
         let _ = other_tx.send(());
     });

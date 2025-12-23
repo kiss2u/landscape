@@ -45,9 +45,6 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
         .firewall_allow_rules_map
         .set_pin_path(&paths.firewall_allow_rules_map)
         .unwrap();
-    // flow verdict map
-    landscape_open.maps.flow_v_dns_map.set_pin_path(&paths.flow_verdict_dns_map).unwrap();
-    landscape_open.maps.flow_v_ip_map.set_pin_path(&paths.flow_verdict_ip_map).unwrap();
     landscape_open.maps.flow_match_map.set_pin_path(&paths.flow_match_map).unwrap();
     landscape_open.maps.dns_flow_socks.set_pin_path(&paths.dns_flow_socks).unwrap();
 
@@ -62,9 +59,22 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
         .set_pin_path(&paths.firewall_conn_metric_events)
         .unwrap();
 
-    landscape_open.maps.rt_lan_map.set_pin_path(&paths.rt_lan_map).unwrap();
-    landscape_open.maps.rt_target_map.set_pin_path(&paths.rt_target_map).unwrap();
-    landscape_open.maps.rt_cache_map.set_pin_path(&paths.rt_cache_map).unwrap();
+    // flow verdict and forward
+    landscape_open.maps.rt4_lan_map.set_pin_path(&paths.rt4_lan_map).unwrap();
+    landscape_open.maps.rt4_target_map.set_pin_path(&paths.rt4_target_map).unwrap();
+    landscape_open.maps.flow4_dns_map.set_pin_path(&paths.flow4_dns_map).unwrap();
+    landscape_open.maps.flow4_ip_map.set_pin_path(&paths.flow4_ip_map).unwrap();
+
+    landscape_open.maps.rt6_lan_map.set_pin_path(&paths.rt6_lan_map).unwrap();
+    landscape_open.maps.rt6_target_map.set_pin_path(&paths.rt6_target_map).unwrap();
+    landscape_open.maps.flow6_dns_map.set_pin_path(&paths.flow6_dns_map).unwrap();
+    landscape_open.maps.flow6_ip_map.set_pin_path(&paths.flow6_ip_map).unwrap();
+
+    landscape_open.maps.rt4_cache_map.set_pin_path(&paths.rt4_cache_map).unwrap();
+    landscape_open.maps.rt6_cache_map.set_pin_path(&paths.rt6_cache_map).unwrap();
+
+    landscape_open.maps.ip_mac_v4.set_pin_path(&paths.ip_mac_v4).unwrap();
+    landscape_open.maps.ip_mac_v6.set_pin_path(&paths.ip_mac_v6).unwrap();
 
     let _landscape_skel = landscape_open.load().unwrap();
     route::cache::init_route_wan_cache_inner_map(paths);

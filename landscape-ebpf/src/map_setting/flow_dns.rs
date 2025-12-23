@@ -4,29 +4,51 @@ use landscape_common::flow::FlowMarkInfo;
 use libbpf_rs::{libbpf_sys, MapCore, MapFlags, MapHandle, MapType};
 
 use crate::{
-    map_setting::share_map::types::{flow_dns_match_key, flow_dns_match_value},
-    LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
+    map_setting::share_map::types::{
+        flow_dns_match_key_v4, flow_dns_match_key_v6, flow_dns_match_value_v4,
+        flow_dns_match_value_v6,
+    },
+    MAP_PATHS,
 };
 
-use super::share_map::types::u_inet_addr;
-
-const DNS_MATCH_MAX_ENTRIES: u32 = 4096;
+const DNS_MATCH_MAX_ENTRIES: u32 = 10240;
 
 /// 相当于刷新现有的所有记录
-pub fn create_flow_dns_inner_map(flow_id: u32, data: Vec<FlowMarkInfo>) {
-    tracing::debug!("{:?}", MAP_PATHS.flow_verdict_dns_map);
+pub fn refreash_flow_dns_inner_map(flow_id: u32, data: Vec<FlowMarkInfo>) {
+    let flow_dns_match_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow4_dns_map).unwrap();
+
+    create_flow_dns_inner_map_v4(&flow_dns_match_map, flow_id, &data);
+
+    let flow_dns_match_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow6_dns_map).unwrap();
+
+    create_flow_dns_inner_map_v6(&flow_dns_match_map, flow_id, &data);
+}
+
+// ==================
+// IPv4
+//
+
+pub(crate) fn create_flow_dns_inner_map_v4<'obj, T>(
+    flow_dns_outer_map: &T,
+    flow_id: u32,
+    data: &Vec<FlowMarkInfo>,
+) where
+    T: MapCore,
+{
     #[allow(clippy::needless_update)]
     let opts = libbpf_sys::bpf_map_create_opts {
         sz: size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
         ..Default::default()
     };
 
-    let key_size = size_of::<flow_dns_match_key>() as u32;
-    let value_size = size_of::<flow_dns_match_value>() as u32;
+    let key_size = size_of::<flow_dns_match_key_v4>() as u32;
+    let value_size = size_of::<flow_dns_match_value_v4>() as u32;
 
     let map = MapHandle::create(
         MapType::LruHash,
-        Some(format!("flow_dns_{}", flow_id)),
+        Some(format!("flow4_dns_{}", flow_id)),
         key_size,
         value_size,
         DNS_MATCH_MAX_ENTRIES,
@@ -34,43 +56,24 @@ pub fn create_flow_dns_inner_map(flow_id: u32, data: Vec<FlowMarkInfo>) {
     )
     .unwrap();
 
-    update_flow_dns_rules(&map, data).unwrap();
+    update_flow_dns_rules_v4(&map, data).unwrap();
     tracing::debug!("put data in map");
 
     let map_fd = map.as_fd().as_raw_fd();
-    let flow_dns_match_map =
-        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_dns_map).unwrap();
 
     let key = flow_id;
     let key_value = unsafe { plain::as_bytes(&key) };
 
     let value_value = unsafe { plain::as_bytes(&map_fd) };
 
-    if let Err(e) = flow_dns_match_map.update(key_value, value_value, MapFlags::ANY) {
+    if let Err(e) = flow_dns_outer_map.update(key_value, value_value, MapFlags::ANY) {
         let last_os_error = std::io::Error::last_os_error();
         tracing::error!("Last OS error: {:?}", last_os_error);
         tracing::error!("Last OS error: {e:?}");
     }
 }
 
-/// 只更新部分 DNS 指定的规则
-pub fn update_flow_dns_rule(flow_id: u32, data: Vec<FlowMarkInfo>) {
-    let flow_dns_match_map =
-        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_dns_map).unwrap();
-
-    let key_value = unsafe { plain::as_bytes(&flow_id) };
-    if let Ok(Some(fd_id_arr)) = flow_dns_match_map.lookup(key_value, MapFlags::ANY) {
-        if let Ok(fd) = plain::from_bytes::<i32>(&fd_id_arr) {
-            // Note: Sometimes it crashes
-            let map = libbpf_rs::MapHandle::from_map_id(*fd as u32).unwrap();
-            update_flow_dns_rules(&map, data).unwrap();
-        }
-    } else {
-        create_flow_dns_inner_map(flow_id, data);
-    }
-}
-
-fn update_flow_dns_rules<'obj, T>(map: &T, ips: Vec<FlowMarkInfo>) -> libbpf_rs::Result<()>
+fn update_flow_dns_rules_v4<'obj, T>(map: &T, ips: &Vec<FlowMarkInfo>) -> libbpf_rs::Result<()>
 where
     T: MapCore,
 {
@@ -80,114 +83,142 @@ where
 
     let mut keys = vec![];
     let mut values = vec![];
-    let count = ips.len() as u32;
+    let mut count = 0;
 
-    for FlowMarkInfo { ip, mark, priority } in ips.into_iter() {
-        let mut key = flow_dns_match_key::default();
-        let mut value = flow_dns_match_value::default();
-        value.mark = mark;
-        value.priority = priority;
+    for FlowMarkInfo { ip, mark, priority } in ips.iter() {
+        let mut key = flow_dns_match_key_v4::default();
+        let mut value = flow_dns_match_value_v4::default();
+        value.mark = *mark;
+        value.priority = *priority;
         match ip {
             std::net::IpAddr::V4(ipv4_addr) => {
-                key.addr.ip = ipv4_addr.to_bits().to_be();
-                key.l3_protocol = LANDSCAPE_IPV4_TYPE;
+                key.addr = ipv4_addr.to_bits().to_be();
             }
-            std::net::IpAddr::V6(ipv6_addr) => {
-                key.addr = u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() };
-                key.l3_protocol = LANDSCAPE_IPV6_TYPE;
+            std::net::IpAddr::V6(_) => {
+                continue;
             }
         };
 
         keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
         values.extend_from_slice(unsafe { plain::as_bytes(&value) });
+        count += 1;
     }
-
-    map.update_batch(&keys, &values, count, MapFlags::ANY, MapFlags::ANY)
+    if count > 0 {
+        map.update_batch(&keys, &values, count, MapFlags::ANY, MapFlags::ANY).unwrap();
+    }
+    Ok(())
 }
 
-// pub fn update_flow_dns_mark_rules(flow_id: u32, marks: Vec<FlowMarkInfo>) {
-//     let flow_verdict_dns_map =
-//         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_dns_map).unwrap();
+// ==================
+// IPv6
+//
 
-//     if let Err(e) = update_flow_dns_mark_rules_inner(&flow_verdict_dns_map, flow_id, marks) {
-//         tracing::error!("update_flow_dns_mark_rules: {e:?}");
-//     }
-// }
+pub(crate) fn create_flow_dns_inner_map_v6<'obj, T>(
+    flow_dns_outer_map: &T,
+    flow_id: u32,
+    data: &Vec<FlowMarkInfo>,
+) where
+    T: MapCore,
+{
+    #[allow(clippy::needless_update)]
+    let opts = libbpf_sys::bpf_map_create_opts {
+        sz: size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
+        ..Default::default()
+    };
 
-// fn update_flow_dns_mark_rules_inner<'obj, T>(
-//     map: &T,
-//     flow_id: u32,
-//     data: Vec<FlowMarkInfo>,
-// ) -> libbpf_rs::Result<()>
-// where
-//     T: MapCore,
-// {
-//     if data.is_empty() {
-//         return Ok(());
-//     }
-//     let mut keys = vec![];
-//     let mut values = vec![];
+    let key_size = size_of::<flow_dns_match_key_v6>() as u32;
+    let value_size = size_of::<flow_dns_match_value_v6>() as u32;
 
-//     let counts = data.len() as u32;
-//     for FlowMarkInfo { ip, mark } in data.into_iter() {
-//         let addr = match ip {
-//             std::net::IpAddr::V4(ipv4_addr) => {
-//                 let mut ip = u_inet_addr::default();
-//                 ip.ip = ipv4_addr.to_bits().to_be();
-//                 ip
-//             }
-//             std::net::IpAddr::V6(ipv6_addr) => {
-//                 u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() }
-//             }
-//         };
+    let map = MapHandle::create(
+        MapType::LruHash,
+        Some(format!("flow6_dns_{}", flow_id)),
+        key_size,
+        value_size,
+        DNS_MATCH_MAX_ENTRIES,
+        &opts,
+    )
+    .unwrap();
 
-//         let key = flow_dns_match_key { flow_id, addr };
-//         let mark: u32 = mark.into();
-//         keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
-//         values.extend_from_slice(unsafe { plain::as_bytes(&mark) });
-//     }
+    update_flow_dns_rules_v6(&map, data).unwrap();
+    tracing::debug!("put data in map");
 
-//     map.update_batch(&keys, &values, counts, MapFlags::ANY, MapFlags::ANY)
-// }
+    let map_fd = map.as_fd().as_raw_fd();
 
-// pub fn del_flow_dns_mark_rules(flow_id: u32, marks: Vec<FlowMarkInfo>) {
-//     let flow_verdict_dns_map =
-//         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_verdict_dns_map).unwrap();
+    let key = flow_id;
+    let key_value = unsafe { plain::as_bytes(&key) };
 
-//     if let Err(e) = del_flow_dns_mark_rules_inner(&flow_verdict_dns_map, flow_id, marks) {
-//         tracing::error!("del_flow_dns_mark_rules: {e:?}");
-//     }
-// }
+    let value_value = unsafe { plain::as_bytes(&map_fd) };
 
-// fn del_flow_dns_mark_rules_inner<'obj, T>(
-//     map: &T,
-//     flow_id: u32,
-//     data: Vec<FlowMarkInfo>,
-// ) -> libbpf_rs::Result<()>
-// where
-//     T: MapCore,
-// {
-//     if data.is_empty() {
-//         return Ok(());
-//     }
-//     let mut keys = vec![];
+    if let Err(e) = flow_dns_outer_map.update(key_value, value_value, MapFlags::ANY) {
+        let last_os_error = std::io::Error::last_os_error();
+        tracing::error!("Last OS error: {:?}", last_os_error);
+        tracing::error!("Last OS error: {e:?}");
+    }
+}
 
-//     let counts = data.len() as u32;
-//     for FlowMarkInfo { ip, .. } in data.into_iter() {
-//         let addr = match ip {
-//             std::net::IpAddr::V4(ipv4_addr) => {
-//                 let mut ip = u_inet_addr::default();
-//                 ip.ip = ipv4_addr.to_bits().to_be();
-//                 ip
-//             }
-//             std::net::IpAddr::V6(ipv6_addr) => {
-//                 u_inet_addr { bits: ipv6_addr.to_bits().to_be_bytes() }
-//             }
-//         };
+fn update_flow_dns_rules_v6<'obj, T>(map: &T, ips: &Vec<FlowMarkInfo>) -> libbpf_rs::Result<()>
+where
+    T: MapCore,
+{
+    if ips.is_empty() {
+        return Ok(());
+    }
 
-//         let key = flow_dns_match_key { flow_id, addr };
-//         keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
-//     }
+    let mut keys = vec![];
+    let mut values = vec![];
+    let mut count = 0;
 
-//     map.delete_batch(&keys, counts, MapFlags::ANY, MapFlags::ANY)
-// }
+    for FlowMarkInfo { ip, mark, priority } in ips.iter() {
+        let mut key = flow_dns_match_key_v6::default();
+        let mut value = flow_dns_match_value_v6::default();
+        value.mark = *mark;
+        value.priority = *priority;
+        match ip {
+            std::net::IpAddr::V4(_) => {
+                continue;
+            }
+            std::net::IpAddr::V6(ipv6_addr) => {
+                key.addr.bytes = ipv6_addr.to_bits().to_be_bytes();
+            }
+        };
+
+        keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
+        values.extend_from_slice(unsafe { plain::as_bytes(&value) });
+        count += 1;
+    }
+    if count > 0 {
+        map.update_batch(&keys, &values, count, MapFlags::ANY, MapFlags::ANY).unwrap();
+    }
+    Ok(())
+}
+
+/// 只更新部分 DNS 指定的规则
+pub fn update_flow_dns_rule(flow_id: u32, data: Vec<FlowMarkInfo>) {
+    let flow_dns_match_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow4_dns_map).unwrap();
+
+    let key_value = unsafe { plain::as_bytes(&flow_id) };
+    if let Ok(Some(fd_id_arr)) = flow_dns_match_map.lookup(key_value, MapFlags::ANY) {
+        if let Ok(fd) = plain::from_bytes::<i32>(&fd_id_arr) {
+            // Note: Sometimes it crashes
+            let map = libbpf_rs::MapHandle::from_map_id(*fd as u32).unwrap();
+            update_flow_dns_rules_v4(&map, &data).unwrap();
+        }
+    } else {
+        create_flow_dns_inner_map_v4(&flow_dns_match_map, flow_id, &data);
+    }
+
+    let flow_dns_match_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow6_dns_map).unwrap();
+
+    let key_value = unsafe { plain::as_bytes(&flow_id) };
+    if let Ok(Some(fd_id_arr)) = flow_dns_match_map.lookup(key_value, MapFlags::ANY) {
+        if let Ok(fd) = plain::from_bytes::<i32>(&fd_id_arr) {
+            // Note: Sometimes it crashes
+            let map = libbpf_rs::MapHandle::from_map_id(*fd as u32).unwrap();
+            update_flow_dns_rules_v6(&map, &data).unwrap();
+        }
+    } else {
+        create_flow_dns_inner_map_v6(&flow_dns_match_map, flow_id, &data);
+    }
+}

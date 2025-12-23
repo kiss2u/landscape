@@ -104,7 +104,7 @@ impl LandscapeDnsRequestHandle {
         }
         tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
 
-        landscape_ebpf::map_setting::flow_dns::create_flow_dns_inner_map(
+        landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(
             self.flow_id,
             update_dns_mark_list.into_iter().collect(),
         );

@@ -7,7 +7,7 @@ pub fn main() {
     landscape_common::init_tracing!();
     landscape_ebpf::setting_libbpf_log();
 
-    landscape_ebpf::map_setting::flow_dns::create_flow_dns_inner_map(12, vec![]);
+    landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(12, vec![]);
     landscape_ebpf::map_setting::flow_dns::update_flow_dns_rule(
         12,
         vec![FlowMarkInfo {

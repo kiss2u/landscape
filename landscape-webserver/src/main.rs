@@ -34,7 +34,10 @@ use landscape::{
         ra::IPV6RAManagerService, route_lan::RouteLanServiceManagerService,
         route_wan::RouteWanServiceManagerService,
     },
-    sys_service::{config_service::LandscapeConfigService, dns_service::LandscapeDnsService},
+    sys_service::{
+        config_service::LandscapeConfigService, dns_service::LandscapeDnsService,
+        ebpf_service::LandscapeEbpfService,
+    },
     wifi::WifiServiceManagerService,
 };
 use landscape_common::{
@@ -88,6 +91,7 @@ const ROUTE_EVENT_CHANNEL_SIZE: usize = 128;
 
 const UPLOAD_GEO_FILE_SIZE_LIMIT: usize = 100 * 1024 * 1024;
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct LandscapeApp {
     pub home_path: PathBuf,
@@ -136,6 +140,8 @@ pub struct LandscapeApp {
     firewall_service: FirewallServiceManagerService,
     wifi_service: WifiServiceManagerService,
     nat_service: NatServiceManagerService,
+
+    ebpf_service: LandscapeEbpfService,
 }
 
 impl LandscapeApp {
@@ -277,6 +283,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let nat_service =
         NatServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
 
+    let ebpf_service = LandscapeEbpfService::new();
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;
@@ -313,9 +320,11 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         firewall_service,
         wifi_service,
         nat_service,
+        // ebpf
+        ebpf_service,
     };
-    // 初始化结束
 
+    // 初始化结束
     let tls_config = load_or_generate_cert(home_path.clone()).await;
     landscape_common::sys_config::init_sysctl_setting();
 
