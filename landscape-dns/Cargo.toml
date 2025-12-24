@@ -40,15 +40,15 @@ async-trait = "*"
 
 lru = "*"
 trie-rs = "0.4.2"
-regex = "*"
 aho-corasick = "1.1.3"
+regex = { workspace = true }
 
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing-appender = { workspace = true }
 futures-util = "*"
 
-nix = { version = "0.29.0", features = ["socket", "uio"] }
+nix = { workspace = true, features = ["socket", "uio"] }
 ts-rs = { workspace = true }
 
 

@@ -16,11 +16,7 @@ pnet = { workspace = true }
 once_cell = { workspace = true }
 # self_cell = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-nix = { version = "0.28", default-features = false, features = [
-    "net",
-    "user",
-    "sched",
-] }
+nix = { workspace = true, features = ["net", "user", "sched"] }
 
 socket2 = { workspace = true }
 serde = { workspace = true }

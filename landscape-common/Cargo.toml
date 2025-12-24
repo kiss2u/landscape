@@ -19,7 +19,7 @@ arc-swap = { workspace = true }
 
 tokio = { workspace = true, features = ["full"] }
 homedir = { workspace = true }
-hostname = "0.4.1"
+hostname = { workspace = true }
 dotenvy = { workspace = true }
 
 tracing = { workspace = true }
