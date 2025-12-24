@@ -178,17 +178,6 @@ static int prepend_dummy_mac(struct __sk_buff *skb) {
     return 0;
 }
 
-static int prepend_dummy_mac_v4(struct __sk_buff *skb, u8 *dst_mac) {
-    u8 mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x08, 0x00};
-
-    __builtin_memcpy(mac, dst_mac, 6);
-    // if (bpf_skb_change_head(skb, 14, 0)) return -1;
-
-    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
-
-    return 0;
-}
-
 static int store_mac_v4(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
     u8 mac[14];
 
@@ -197,18 +186,6 @@ static int store_mac_v4(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
     
     mac[12] = 0x08;
     mac[13] = 0x00;
-
-    if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
-
-    return 0;
-}
-
-static int prepend_dummy_mac_v6(struct __sk_buff *skb, u8 *dst_mac) {
-    u8 mac[] = {0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0xf, 0xe, 0xd, 0xc, 0xb, 0xa, 0x86, 0xdd};
-
-    __builtin_memcpy(mac, dst_mac, 6);
-
-    // if (bpf_skb_change_head(skb, 14, 0)) return -1;
 
     if (bpf_skb_store_bytes(skb, 0, mac, sizeof(mac), 0)) return -1;
 

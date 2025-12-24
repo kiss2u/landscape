@@ -3,6 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
+use landscape_common::net::MacAddr;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder as _},
     ProgramInput,
@@ -33,6 +34,7 @@ pub fn test_nat(mut syn_data: Vec<u8>, tcp_data: Vec<u8>) {
         IpAddr::V4(Ipv4Addr::new(192, 168, 101, 201)),
         None,
         24,
+        Some(MacAddr::broadcast()),
     );
 
     let test_nat_read = landscape_skel.progs.egress_nat;
@@ -76,6 +78,7 @@ pub fn test_nat_v2(mut syn_data: Vec<u8>, tcp_data: Vec<u8>) {
         IpAddr::V4(Ipv4Addr::new(192, 168, 101, 201)),
         None,
         24,
+        Some(MacAddr::broadcast()),
     );
 
     let test_nat_read = landscape_skel.progs.egress_nat;
@@ -120,6 +123,7 @@ pub fn test_nat_v3(mut syn_data: Vec<u8>, tcp_data: Vec<u8>) {
         IpAddr::V4(Ipv4Addr::new(192, 168, 101, 201)),
         None,
         24,
+        Some(MacAddr::broadcast()),
     );
 
     let test_nat_read = landscape_skel.progs.egress_nat;

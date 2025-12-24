@@ -736,7 +736,7 @@ async fn bind_ipv4(
                 RouteTargetInfo {
                     ifindex: ifindex,
                     weight: 1,
-                    has_mac: true,
+                    mac: Some(mac_addr.clone()),
                     is_docker: false,
                     default_route: default_router,
                     iface_name: iface_name.to_string(),
@@ -762,6 +762,7 @@ async fn bind_ipv4(
         new_yiaddr.clone(),
         gateway_ip,
         mask as u8,
+        Some(mac_addr.clone()),
     );
 
     let renew_time = tokio::time::Instant::now() + Duration::from_secs(renew_time);

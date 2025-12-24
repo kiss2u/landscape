@@ -66,20 +66,21 @@ async fn main() {
     let prefix_map = IAPrefixMap::new();
     let prefix_map_clone = prefix_map.clone();
     tokio::spawn(async move {
-        let route_info = RouteTargetInfo {
-            ifindex: 6,
-            weight: 1,
-            has_mac: true,
-            is_docker: false,
-            iface_name: "test".to_string(),
-            iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-            default_route: true,
-            gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-        };
         if let Some(iface) = get_iface_by_name(&args.dhcp_client_iface).await {
+            let route_info = RouteTargetInfo {
+                ifindex: 6,
+                weight: 1,
+                mac: iface.mac.clone(),
+                is_docker: false,
+                iface_name: "test".to_string(),
+                iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                default_route: true,
+                gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+            };
             dhcp_v6_pd_client(
                 args.dhcp_client_iface,
                 iface.index,
+                iface.mac,
                 mac_addr,
                 LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
                 status,

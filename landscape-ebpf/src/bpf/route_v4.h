@@ -46,7 +46,6 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
             if (bpf_skb_store_bytes(skb, 0, ethhdr, sizeof(ethhdr), 0)) return TC_ACT_SHOT;
         }
 
-        bool current_has_mac = current_l3_offset > 0;
         bool target_has_mac = lan_info->has_mac;
         struct mac_key_v4 mac_key_search = {0};
         if (unlikely(lan_info->is_next_hop)) {
@@ -55,31 +54,16 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
             mac_key_search.addr = context->daddr;
         }
 
-        if (current_has_mac && target_has_mac) {
-            struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
-            if (mac_value) {
-                ret = bpf_skb_store_bytes(skb, 0, &mac_value->mac, 6, 0);
-                if (!ret) {
-                    ret = bpf_redirect(lan_info->ifindex, 0);
-                    return ret;
-                } else {
-                    bpf_log_info("bpf_skb_store_bytes error: %d", ret);
-                }
-            } else {
-                bpf_log_info("can't find mac, IP: %pI4", &mac_key_search.addr);
-            }
-        } else if (current_has_mac && !target_has_mac) {
-            // 暂不实现
-        } else if (!current_has_mac && target_has_mac) {
+        if (target_has_mac) {
             struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
             if (mac_value) {
                 ret = store_mac_v4(skb, &mac_value->mac, lan_info->mac_addr);
                 if (!ret) {
                     return bpf_redirect(lan_info->ifindex, 0);
                 }
-                bpf_log_info("prepend_dummy_mac_v4 err: %d", ret);
+                bpf_log_info("store_mac_v4 err: %d", ret);
             } else {
-                bpf_log_info("can't find mac: IP: %pI4", &mac_key_search.addr);
+                bpf_log_info("can't find mac, IP: %pI4", &mac_key_search.addr);
             }
         } else {
             return bpf_redirect(lan_info->ifindex, 0);
@@ -249,14 +233,6 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
             bpf_log_error("add dummy_mac fail");
             return TC_ACT_SHOT;
         }
-
-        // 使用 bpf_redirect_neigh 转发时无需进行缩减 mac, docker 时有 mac, 所以也无需缩减 mac 地址
-        // } else if (current_l3_offset != 0 && !target_info->has_mac) {
-        //     // 当前有, 目标网卡没有
-        //     int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
-        //     if (ret < 0) {
-        //         return TC_ACT_SHOT;
-        // }
     }
 
     if (target_info->is_docker) {
@@ -271,32 +247,18 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
         return ret;
     }
 
-    bool current_has_mac = current_l3_offset > 0;
     bool target_has_mac = target_info->has_mac;
 
-    if (current_has_mac && target_has_mac) {
-        struct mac_value_v4 *mac_value =
-            bpf_map_lookup_elem(&ip_mac_v4, &target_info->gate_addr);
-        if (mac_value) {
-            ret = bpf_skb_store_bytes(skb, 0, &mac_value->mac, 6, 0);
-            if (!ret) {
-                return bpf_redirect(target_info->ifindex, 0);
-            }
-        }
-    } else if (current_has_mac && !target_has_mac) {
+    if (!target_has_mac) {
         return bpf_redirect(target_info->ifindex, 0);
-        // 暂不实现
-    } else if (!current_has_mac && target_has_mac) {
-        struct mac_value_v4 *mac_value =
-            bpf_map_lookup_elem(&ip_mac_v4, &target_info->gate_addr);
-        if (mac_value) {
-            ret = prepend_dummy_mac_v4(skb, &mac_value->mac);
-            if (!ret) {
-                return bpf_redirect(target_info->ifindex, 0);
-            }
-        }
     } else {
-        return bpf_redirect(target_info->ifindex, 0);
+        struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &target_info->gate_addr);
+        if (mac_value) {
+            ret = store_mac_v4(skb, &mac_value->mac, target_info->mac);
+            if (!ret) {
+                return bpf_redirect(target_info->ifindex, 0);
+            }
+        }
     }
 
     // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
@@ -316,9 +278,8 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
 }
 
 static __always_inline int is_current_wan_packet_v4(struct __sk_buff *skb, u32 current_l3_offset,
-                                                 struct route_context_v4 *context) {
+                                                    struct route_context_v4 *context) {
 #define BPF_LOG_TOPIC "is_current_wan_packet_v4"
-
 
     struct wan_ip_info_key wan_search_key = {0};
     wan_search_key.ifindex = skb->ingress_ifindex;
@@ -337,10 +298,10 @@ static __always_inline int is_current_wan_packet_v4(struct __sk_buff *skb, u32 c
 #undef BPF_LOG_TOPIC
 }
 
-
-static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb, const u32 current_l3_offset,
-                                               const struct route_context_v4 *context,
-                                               u32 *flow_mark) {
+static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb,
+                                                  const u32 current_l3_offset,
+                                                  const struct route_context_v4 *context,
+                                                  u32 *flow_mark) {
 #define BPF_LOG_TOPIC "search_route_in_lan_v4"
     int ret = 0;
     u32 key = WAN_CACHE;
@@ -360,33 +321,19 @@ static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb, const u
             struct wan_ip_info_value *wan_ip_info =
                 bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
             if (wan_ip_info != NULL) {
-
-                bool current_has_mac = current_l3_offset > 0;
                 bool target_has_mac = target->has_mac;
 
-                if (current_has_mac && target_has_mac) {
-                    struct mac_value_v4 *mac_value =
-                        bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
-                    if (mac_value) {
-                        ret = bpf_skb_store_bytes(skb, 0, &mac_value->mac, 6, 0);
-                        if (!ret) {
-                            return bpf_redirect(target->ifindex, 0);
-                        }
-                    }
-                } else if (current_has_mac && !target_has_mac) {
+                if (!target_has_mac) {
                     return bpf_redirect(target->ifindex, 0);
-                    // 暂不实现
-                } else if (!current_has_mac && target_has_mac) {
-                    struct mac_value_v4 *mac_value =
-                        bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
-                    if (mac_value) {
-                        ret = prepend_dummy_mac_v4(skb, &mac_value->mac);
-                        if (!ret) {
-                            return bpf_redirect(target->ifindex, 0);
-                        }
-                    }
                 } else {
-                    return bpf_redirect(target->ifindex, 0);
+                    struct mac_value_v4 *mac_value =
+                        bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
+                    if (mac_value) {
+                        ret = store_mac_v4(skb, &mac_value->mac, wan_ip_info->mac);
+                        if (!ret) {
+                            return bpf_redirect(target->ifindex, 0);
+                        }
+                    }
                 }
 
                 struct bpf_redir_neigh param;
@@ -406,14 +353,13 @@ static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb, const u
         if (target) {
             *flow_mark = target->mark_value;
             return pick_wan_and_send_by_flow_id_v4(skb, current_l3_offset, context,
-                                                target->mark_value);
+                                                   target->mark_value);
         }
     }
 
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
-
 
 static __always_inline int setting_cache_in_wan_v4(const struct route_context_v4 *context,
                                                    u32 current_l3_offset, u32 ifindex) {
@@ -445,12 +391,20 @@ static __always_inline int setting_cache_in_wan_v4(const struct route_context_v4
     if (wan_cache) {
         target = bpf_map_lookup_elem(wan_cache, &search_key);
         if (target) {
-            target->ifindex = ifindex;
-            target->has_mac = current_l3_offset > 0;
+            if (target->ifindex != ifindex) {
+                bpf_map_delete_elem(wan_cache, &search_key);
+            }
         } else {
             struct rt_cache_value_v4 new_target_cache = {0};
-            new_target_cache.ifindex = ifindex;
             new_target_cache.has_mac = current_l3_offset > 0;
+            new_target_cache.ifindex = ifindex;
+            // if (new_target_cache.has_mac) {
+            //     struct wan_ip_info_value *wan_ip = bpf_map_lookup_elem(wan_cache, &search_key);
+            //     if (wan_ip) {
+
+            //         __builtin_memcpy(match_key.mac.mac, mac, 6);
+            //     }
+            // }
             bpf_map_update_elem(wan_cache, &search_key, &new_target_cache, BPF_ANY);
         }
 

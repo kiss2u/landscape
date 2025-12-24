@@ -4,6 +4,7 @@ use std::{
     str::FromStr,
 };
 
+use landscape_common::net::MacAddr;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder as _},
     ProgramInput,
@@ -27,6 +28,7 @@ pub fn handle_ipv6_egress(mut payload: Vec<u8>) {
         IpAddr::V6(Ipv6Addr::from_str("2409:8888:6666:4f21::").unwrap()),
         None,
         60,
+        Some(MacAddr::broadcast()),
     );
     let handle_ipv6_egress = landscape_skel.progs.handle_ipv6_egress;
 

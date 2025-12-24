@@ -55,7 +55,7 @@ async fn main() {
         let route_info = RouteTargetInfo {
             ifindex: 6,
             weight: 1,
-            has_mac: true,
+            mac: iface.mac.clone(),
             is_docker: false,
             iface_name: "test".to_string(),
             iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
@@ -65,6 +65,7 @@ async fn main() {
         dhcp_v6_pd_client(
             args.iface_name,
             iface.index,
+            iface.mac,
             mac_addr,
             LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
             status,

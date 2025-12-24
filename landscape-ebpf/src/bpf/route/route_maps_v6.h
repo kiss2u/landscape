@@ -95,9 +95,9 @@ struct route_target_key_v6 {
 struct route_target_info_v6 {
     u32 ifindex;
     union u_inet6_addr gate_addr;
-    // 是否有 mac
-    bool has_mac;
-    bool is_docker;
+    u8 has_mac;
+    u8 is_docker;
+    u8 mac[6];
 };
 
 struct {

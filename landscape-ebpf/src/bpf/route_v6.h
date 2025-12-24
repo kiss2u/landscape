@@ -51,7 +51,6 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
         if (bpf_skb_store_bytes(skb, 0, ethhdr, sizeof(ethhdr), 0)) return TC_ACT_SHOT;
     }
 
-    bool current_has_mac = current_l3_offset > 0;
     bool target_has_mac = lan_info->has_mac;
     struct mac_key_v6 mac_key_search = {0};
     if (unlikely(lan_info->is_next_hop)) {
@@ -60,28 +59,16 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
         COPY_ADDR_FROM(mac_key_search.addr.all, context->daddr.all);
     }
 
-    if (current_has_mac && target_has_mac) {
-        struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key_search);
-        if (mac_value) {
-            ret = bpf_skb_store_bytes(skb, 0, &mac_value->mac, 6, 0);
-            if (!ret) {
-                ret = bpf_redirect(lan_info->ifindex, 0);
-                return ret;
-            } else {
-                bpf_log_info("bpf_skb_store_bytes error: %d", ret);
-            }
-        } else {
-            bpf_log_info("can't find mac, IP: %pI6", &mac_key_search.addr);
-        }
-    } else if (current_has_mac && !target_has_mac) {
-        // 暂不实现
-    } else if (!current_has_mac && target_has_mac) {
+    if (target_has_mac) {
         struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key_search);
         if (mac_value) {
             ret = store_mac_v6(skb, &mac_value->mac, lan_info->mac_addr);
             if (!ret) {
                 return bpf_redirect(lan_info->ifindex, 0);
             }
+            bpf_log_info("store_mac_v6 err: %d", ret);
+        } else {
+            bpf_log_info("can't find mac, IP: %pI6", &mac_key_search.addr);
         }
     } else {
         return bpf_redirect(lan_info->ifindex, 0);
@@ -275,32 +262,20 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
     // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
     // bpf_log_info("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
 
-    bool current_has_mac = current_l3_offset > 0;
     bool target_has_mac = target_info->has_mac;
 
-    struct mac_key_v6 search_mac_key = {0};
-    COPY_ADDR_FROM(search_mac_key.addr.all, target_info->gate_addr.all);
-    if (current_has_mac && target_has_mac) {
-        struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &search_mac_key);
-        if (mac_value) {
-            ret = bpf_skb_store_bytes(skb, 0, &mac_value->mac, 6, 0);
-            if (!ret) {
-                return bpf_redirect(target_info->ifindex, 0);
-            }
-        }
-    } else if (current_has_mac && !target_has_mac) {
+    if (!target_has_mac) {
         return bpf_redirect(target_info->ifindex, 0);
-        // 暂不实现
-    } else if (!current_has_mac && target_has_mac) {
-        struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &search_mac_key);
-        if (mac_value) {
-            ret = prepend_dummy_mac_v6(skb, &mac_value->mac);
-            if (!ret) {
-                return bpf_redirect(target_info->ifindex, 0);
-            }
-        }
     } else {
-        return bpf_redirect(target_info->ifindex, 0);
+        struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &target_info->gate_addr);
+        if (mac_value) {
+            ret = store_mac_v6(skb, &mac_value->mac, target_info->mac);
+            if (!ret) {
+                return bpf_redirect(target_info->ifindex, 0);
+            }
+        } else {
+            bpf_log_info("can't find mac by: %pI6", &target_info->gate_addr);
+        }
     }
 
     struct bpf_redir_neigh param;
@@ -362,36 +337,24 @@ static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
             struct wan_ip_info_value *wan_ip_info =
                 bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
             if (wan_ip_info != NULL) {
-                bool current_has_mac = current_l3_offset > 0;
                 bool target_has_mac = target->has_mac;
 
-                struct mac_key_v6 search_mac_key = {0};
-                COPY_ADDR_FROM(search_mac_key.addr.all, wan_ip_info->gateway.all);
-                if (current_has_mac && target_has_mac) {
-                    struct mac_value_v6 *mac_value =
-                        bpf_map_lookup_elem(&ip_mac_v6, &search_mac_key);
-                    if (mac_value) {
-                        ret = bpf_skb_store_bytes(skb, 0, &mac_value->mac, 6, 0);
-                        if (!ret) {
-                            return bpf_redirect(target->ifindex, 0);
-                        }
-                    }
-                } else if (current_has_mac && !target_has_mac) {
+                // struct mac_key_v6 search_mac_key = {0};
+                // COPY_ADDR_FROM(search_mac_key.addr.all, wan_ip_info->gateway.all);
+
+                if (!target_has_mac) {
                     return bpf_redirect(target->ifindex, 0);
-                    // 暂不实现
-                } else if (!current_has_mac && target_has_mac) {
+                } else {
                     struct mac_value_v6 *mac_value =
-                        bpf_map_lookup_elem(&ip_mac_v6, &search_mac_key);
+                        bpf_map_lookup_elem(&ip_mac_v6, &wan_ip_info->gateway);
                     if (mac_value) {
-                        ret = prepend_dummy_mac_v6(skb, &mac_value->mac);
+                        ret = store_mac_v6(skb, &mac_value->mac, wan_ip_info->mac);
                         if (!ret) {
                             return bpf_redirect(target->ifindex, 0);
                         }
                     } else {
-                        bpf_log_info("can't find mac: IP: %pI6", &search_mac_key.addr.all);
+                        bpf_log_info("can't find mac by: %pI6", &wan_ip_info->gateway);
                     }
-                } else {
-                    return bpf_redirect(target->ifindex, 0);
                 }
 
                 struct bpf_redir_neigh param;

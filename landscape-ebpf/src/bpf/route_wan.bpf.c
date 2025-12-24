@@ -121,7 +121,6 @@ SEC("tc/ingress")
 int rt6_wan_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "rt6_wan_ingress"
     int ret = 0;
-    u32 flow_mark = skb->mark;
     struct route_context_v6 context = {0};
 
     struct ipv6hdr *ip6h;

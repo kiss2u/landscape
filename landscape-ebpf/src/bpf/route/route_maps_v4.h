@@ -100,9 +100,9 @@ struct route_target_key_v4 {
 struct route_target_info_v4 {
     u32 ifindex;
     __be32 gate_addr;
-    // 是否有 mac
-    bool has_mac;
-    bool is_docker;
+    u8 has_mac;
+    u8 is_docker;
+    u8 mac[6];
 };
 
 struct {
@@ -128,6 +128,7 @@ struct rt_cache_value_v4 {
         __u32 ifindex;
     };
     u8 has_mac;
+    u8 l2_data[14];
 } _rt_cache_value_v4;
 
 // 缓存

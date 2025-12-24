@@ -120,12 +120,13 @@ pub async fn create_pppd_thread(
                             ip.clone(),
                             Some(peer_ip.clone()),
                             32,
+                            None,
                         );
 
                         let info = RouteTargetInfo {
                             ifindex: new_ip4addr.0,
                             weight: 1,
-                            has_mac: false,
+                            mac: None,
                             is_docker: false,
                             iface_name: ppp_iface_name_clone.clone(),
                             iface_ip: IpAddr::V4(ip.clone()),

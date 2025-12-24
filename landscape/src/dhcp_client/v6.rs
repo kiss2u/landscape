@@ -165,16 +165,19 @@ impl IpV6PdState {
     }
 }
 
-fn gen_client_id(mac_addr: MacAddr) -> Vec<u8> {
+fn gen_client_id(config_mac: MacAddr) -> Vec<u8> {
     let mut result = Vec::with_capacity(10);
     result.extend_from_slice(&[00, 03, 00, 01]);
-    result.extend_from_slice(&mac_addr.octets());
+    result.extend_from_slice(&config_mac.octets());
     result
 }
 pub async fn dhcp_v6_pd_client(
     iface_name: String,
     ifindex: u32,
-    mac_addr: MacAddr,
+    // for ebpf map setting
+    mac_addr: Option<MacAddr>,
+    // for pd request
+    config_mac: MacAddr,
     client_port: u16,
     service_status: DefaultWatchServiceStatus,
     wan_route_info: RouteTargetInfo,
@@ -182,7 +185,7 @@ pub async fn dhcp_v6_pd_client(
     prefix_map: IAPrefixMap,
 ) {
     prefix_map.init(&iface_name).await;
-    let client_id = gen_client_id(mac_addr);
+    let client_id = gen_client_id(config_mac);
     service_status.just_change_status(ServiceStatus::Staring);
 
     // if let Err(e) = std::process::Command::new("sysctl")
@@ -298,7 +301,7 @@ pub async fn dhcp_v6_pd_client(
                 // 处理接收到的数据包
                 match message_result {
                     Some(data) => {
-                        let need_reset_time = handle_packet(&iface_name, ifindex, &client_id, &mut status, data, &wan_route_info, &route_service, &prefix_map).await;
+                        let need_reset_time = handle_packet(&iface_name, ifindex, &client_id, &mut status, data, &wan_route_info, &route_service, &prefix_map, &mac_addr).await;
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                             // current_timeout_time = t2;
@@ -535,6 +538,7 @@ async fn handle_packet(
     wan_route_info: &RouteTargetInfo,
     route_service: &IpRouteService,
     prefix_map: &IAPrefixMap,
+    mac_addr: &Option<MacAddr>,
 ) -> bool {
     let IpAddr::V6(ipv6addr) = msg_addr.ip() else {
         tracing::error!("unexpected IPV4 packet");
@@ -664,7 +668,7 @@ async fn handle_packet(
                             // info.iface_ip =
                             info.gateway_ip = IpAddr::V6(ipv6addr.clone());
                             route_service.insert_ipv6_wan_route(&iface_name, info).await;
-                            replace_ip_route(&ia_prefix, ipv6addr, iface_name, ifindex);
+                            replace_ip_route(&ia_prefix, ipv6addr, iface_name, ifindex, mac_addr);
                             // setting IA prefix to IAPrefixMap
                             prefix_map
                                 .insert_or_replace(
@@ -698,7 +702,13 @@ async fn handle_packet(
     false
 }
 
-fn replace_ip_route(iapd: &IAPrefix, route_ip: Ipv6Addr, iface_name: &str, ifindex: u32) {
+fn replace_ip_route(
+    iapd: &IAPrefix,
+    route_ip: Ipv6Addr,
+    iface_name: &str,
+    ifindex: u32,
+    mac: &Option<MacAddr>,
+) {
     let result = std::process::Command::new("ip")
         .args([
             "-6",
@@ -721,6 +731,7 @@ fn replace_ip_route(iapd: &IAPrefix, route_ip: Ipv6Addr, iface_name: &str, ifind
         iapd.prefix_ip,
         Some(route_ip),
         iapd.prefix_len,
+        mac.clone(),
     );
     if let Err(e) = result {
         tracing::error!("{e:?}");

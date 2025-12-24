@@ -22,6 +22,8 @@ struct wan_ip_info_value {
     union u_inet_addr gateway;
     // mask length
     u8 mask;
+    u8 has_mac;
+    u8 mac[6];
 };
 
 

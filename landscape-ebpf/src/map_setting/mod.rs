@@ -3,7 +3,10 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
-use landscape_common::firewall::{FirewallRuleItem, FirewallRuleMark, LandscapeIpType};
+use landscape_common::{
+    firewall::{FirewallRuleItem, FirewallRuleMark, LandscapeIpType},
+    net::MacAddr,
+};
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, MapFlags,
@@ -81,14 +84,26 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     route::cache::init_route_lan_cache_inner_map(paths);
 }
 
-pub fn add_ipv6_wan_ip(ifindex: u32, addr: Ipv6Addr, gateway: Option<Ipv6Addr>, mask: u8) {
+pub fn add_ipv6_wan_ip(
+    ifindex: u32,
+    addr: Ipv6Addr,
+    gateway: Option<Ipv6Addr>,
+    mask: u8,
+    mac: Option<MacAddr>,
+) {
     let wan_ip_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
-    add_wan_ip(&wan_ip_binding, ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask);
+    add_wan_ip(&wan_ip_binding, ifindex, IpAddr::V6(addr), gateway.map(IpAddr::V6), mask, mac);
 }
 
-pub fn add_ipv4_wan_ip(ifindex: u32, addr: Ipv4Addr, gateway: Option<Ipv4Addr>, mask: u8) {
+pub fn add_ipv4_wan_ip(
+    ifindex: u32,
+    addr: Ipv4Addr,
+    gateway: Option<Ipv4Addr>,
+    mask: u8,
+    mac: Option<MacAddr>,
+) {
     let wan_ip_binding = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.wan_ip).unwrap();
-    add_wan_ip(&wan_ip_binding, ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask);
+    add_wan_ip(&wan_ip_binding, ifindex, IpAddr::V4(addr), gateway.map(IpAddr::V4), mask, mac);
 }
 
 pub(crate) fn add_wan_ip<'obj, T>(
@@ -97,6 +112,7 @@ pub(crate) fn add_wan_ip<'obj, T>(
     addr: IpAddr,
     gateway: Option<IpAddr>,
     mask: u8,
+    mac: Option<MacAddr>,
 ) where
     T: MapCore,
 {
@@ -126,6 +142,16 @@ pub(crate) fn add_wan_ip<'obj, T>(
         }
         None => {}
     };
+
+    match mac {
+        Some(mac) => {
+            value.mac = mac.octets();
+            value.has_mac = 1;
+        }
+        None => {
+            value.has_mac = 0;
+        }
+    }
 
     let key = unsafe { plain::as_bytes(&key) };
     let value = unsafe { plain::as_bytes(&value) };

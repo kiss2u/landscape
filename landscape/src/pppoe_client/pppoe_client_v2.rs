@@ -832,6 +832,7 @@ impl PPPoEClientManager {
                 client_ip,
                 Some(server_ip.clone()),
                 32,
+                None,
             );
             let _ = std::process::Command::new("ip")
                 .args(&["link", "set", "dev", &iface_name, "mtu", &format!("{}", mru)])

@@ -195,13 +195,26 @@ pub(crate) fn add_wan_route_inner_v4<'obj, T>(
 
     let mut value = route_target_info_v4::default();
     value.ifindex = wan_info.ifindex;
-    value.has_mac = std::mem::MaybeUninit::new(wan_info.has_mac);
-    value.is_docker = std::mem::MaybeUninit::new(wan_info.is_docker);
+    if wan_info.is_docker {
+        value.is_docker = 1;
+    } else {
+        value.is_docker = 0;
+    };
 
     match wan_info.gateway_ip {
         std::net::IpAddr::V4(ipv4_addr) => value.gate_addr = ipv4_addr.to_bits().to_be(),
         std::net::IpAddr::V6(_) => {
             return;
+        }
+    }
+
+    match wan_info.mac {
+        Some(mac) => {
+            value.has_mac = 1;
+            value.mac = mac.octets();
+        }
+        None => {
+            value.has_mac = 0;
         }
     }
 
@@ -225,8 +238,11 @@ pub(crate) fn add_wan_route_inner_v6<'obj, T>(
 
     let mut value = route_target_info_v6::default();
     value.ifindex = wan_info.ifindex;
-    value.has_mac = std::mem::MaybeUninit::new(wan_info.has_mac);
-    value.is_docker = std::mem::MaybeUninit::new(wan_info.is_docker);
+    if wan_info.is_docker {
+        value.is_docker = 1;
+    } else {
+        value.is_docker = 0;
+    };
 
     match wan_info.gateway_ip {
         std::net::IpAddr::V4(_) => {
@@ -234,6 +250,16 @@ pub(crate) fn add_wan_route_inner_v6<'obj, T>(
         }
         std::net::IpAddr::V6(ipv6_addr) => {
             value.gate_addr.bytes = ipv6_addr.to_bits().to_be_bytes()
+        }
+    }
+
+    match wan_info.mac {
+        Some(mac) => {
+            value.has_mac = 1;
+            value.mac = mac.octets();
+        }
+        None => {
+            value.has_mac = 0;
         }
     }
 

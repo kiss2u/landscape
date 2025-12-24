@@ -14,6 +14,7 @@ pub mod tests {
     use landscape_common::{
         flow::mark::FlowMark,
         ip_mark::{IpConfig, IpMarkInfo},
+        net::MacAddr,
         route::RouteTargetInfo,
     };
     use libbpf_rs::{
@@ -49,7 +50,7 @@ pub mod tests {
             &RouteTargetInfo {
                 weight: 0,
                 ifindex: 11,
-                has_mac: true,
+                mac: Some(MacAddr::dummy()),
                 default_route: false,
                 is_docker: false,
                 iface_name: "test".to_string(),

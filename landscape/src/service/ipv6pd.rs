@@ -52,7 +52,7 @@ impl ServiceStarterTrait for IPV6PDService {
                 let route_info = RouteTargetInfo {
                     ifindex: iface.index,
                     weight: 1,
-                    has_mac: iface.mac.is_some(),
+                    mac: iface.mac.clone(),
                     is_docker: false,
                     iface_name: iface.name.clone(),
                     iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
@@ -64,6 +64,7 @@ impl ServiceStarterTrait for IPV6PDService {
                     crate::dhcp_client::v6::dhcp_v6_pd_client(
                         config.iface_name,
                         iface.index,
+                        iface.mac,
                         config.config.mac,
                         LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
                         status_clone,

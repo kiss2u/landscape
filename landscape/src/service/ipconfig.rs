@@ -85,6 +85,7 @@ async fn init_service_from_config(
                     ipv4.clone(),
                     default_router_ip.clone(),
                     ipv4_mask,
+                    iface.mac.clone(),
                 );
 
                 let lan_info = LanRouteInfo {
@@ -118,7 +119,7 @@ async fn init_service_from_config(
                         let info = RouteTargetInfo {
                             ifindex: iface.index,
                             weight: 1,
-                            has_mac: iface.mac.is_some(),
+                            mac: iface.mac.clone(),
                             is_docker: false,
                             iface_name: iface_name.clone(),
                             iface_ip: IpAddr::V4(ipv4),

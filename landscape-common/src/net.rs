@@ -33,6 +33,10 @@ impl MacAddr {
         [0xff; ETHER_ADDR_LEN].into()
     }
 
+    pub fn dummy() -> MacAddr {
+        MacAddr::new(0x00, 0x00, 0x5e, 0x00, 0x53, 0x00)
+    }
+
     /// Returns true if a `MacAddr` is an all-zero address.
     pub fn is_zero(&self) -> bool {
         *self == Self::zero()

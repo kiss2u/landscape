@@ -6,7 +6,7 @@ use crate::{flow::FlowTarget, net::MacAddr};
 pub struct RouteTargetInfo {
     pub weight: u32,
     pub ifindex: u32,
-    pub has_mac: bool,
+    pub mac: Option<MacAddr>,
     pub default_route: bool,
     pub is_docker: bool,
 
@@ -22,7 +22,7 @@ impl RouteTargetInfo {
             RouteTargetInfo {
                 weight: 0,
                 ifindex,
-                has_mac: true,
+                mac: Some(MacAddr::dummy()),
                 default_route: false,
                 is_docker: true,
                 iface_name: iface_name.to_string(),
@@ -32,7 +32,7 @@ impl RouteTargetInfo {
             RouteTargetInfo {
                 weight: 0,
                 ifindex,
-                has_mac: true,
+                mac: Some(MacAddr::dummy()),
                 default_route: false,
                 is_docker: true,
                 iface_name: iface_name.to_string(),
