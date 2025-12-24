@@ -47,7 +47,7 @@ const title_name = computed(() =>
         <n-descriptions-item label="匹配规则" span="2">
           <n-scrollbar v-if="rule.source.length > 0" style="max-height: 120px">
             <n-flex>
-              <RuleSourceExhibit v-for="rule in rule.source" :source="rule">
+              <RuleSourceExhibit v-for="item in rule.source" :source="item">
               </RuleSourceExhibit>
             </n-flex>
           </n-scrollbar>

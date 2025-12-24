@@ -56,7 +56,7 @@ async function del() {
       <n-descriptions-item label="匹配规则">
         <n-scrollbar style="height: 90px">
           <n-flex>
-            <RuleSourceExhibit v-for="rule in rule.match_rules" :source="rule">
+            <RuleSourceExhibit v-for="item in rule.match_rules" :source="item">
             </RuleSourceExhibit>
           </n-flex>
         </n-scrollbar>
