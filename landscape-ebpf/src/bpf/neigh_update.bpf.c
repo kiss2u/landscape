@@ -32,6 +32,9 @@ struct trace_event_raw_neigh_event {
     __u32 pid;
 };
 
+#define NEIGH_UPDATE_F_OVERRIDE 0x01
+#define NEIGH_UPDATE_F_WEAK_OVERRIDE 0x02
+
 #define NUD_VALID (0x02 | 0x04 | 0x40 | 0x80)
 #define NUD_FAILED 0x20
 #define AF_INET 2
@@ -39,6 +42,15 @@ struct trace_event_raw_neigh_event {
 
 SEC("tracepoint/neigh/neigh_update")
 int trace_neigh_update(struct trace_event_raw_neigh_event *ctx) {
+    u64 update_flag = 0;
+    if (ctx->update_flags & NEIGH_UPDATE_F_OVERRIDE) {
+        update_flag = BPF_ANY;
+    } else if (ctx->update_flags & NEIGH_UPDATE_F_WEAK_OVERRIDE) {
+        update_flag = BPF_NOEXIST;
+    } else {
+        return 0;
+    }
+
     if (ctx->family == AF_INET) {
         struct mac_key_v4 key = {};
         bpf_probe_read_kernel(&key.addr, sizeof(key.addr), ctx->primary_key4);
@@ -57,7 +69,7 @@ int trace_neigh_update(struct trace_event_raw_neigh_event *ctx) {
             }
 
             if (value.mac[0] != 0 || value.mac[1] != 0 || value.mac[5] != 0) {
-                bpf_map_update_elem(&ip_mac_v4, &key, &value, BPF_ANY);
+                bpf_map_update_elem(&ip_mac_v4, &key, &value, update_flag);
                 // bpf_printk("Update IP:%pI4", &key.addr);
                 // PRINT_MAC_ADDR(value.mac);
             }
@@ -72,7 +84,8 @@ int trace_neigh_update(struct trace_event_raw_neigh_event *ctx) {
         bpf_probe_read_kernel(&key.addr, sizeof(key.addr), ctx->primary_key6);
 
         if (is_broadcast_ip6(key.addr.bytes)) {
-            bpf_printk("SKIP: IP is %pI6 | state: %d -> %d", key.addr.bytes, ctx->nud_state, ctx->new_state);
+            bpf_printk("SKIP: IP is %pI6 | state: %d -> %d", key.addr.bytes, ctx->nud_state,
+                       ctx->new_state);
             return 0;
         }
 
@@ -85,8 +98,11 @@ int trace_neigh_update(struct trace_event_raw_neigh_event *ctx) {
             }
 
             if (value.mac[0] != 0 || value.mac[1] != 0 || value.mac[5] != 0) {
-                bpf_map_update_elem(&ip_mac_v6, &key, &value, BPF_ANY);
-                // bpf_printk("Update IP:%pI6", &key.addr);
+                bpf_map_update_elem(&ip_mac_v6, &key, &value, update_flag);
+                // bpf_printk("Update: IP is %pI6 | state: %d -> %d", key.addr.bytes,
+                // ctx->nud_state, ctx->new_state);
+                // bpf_printk("IP:%pI6 | Flags:0x%x | %d->%d", key.addr.bytes, ctx->update_flags,
+                //            ctx->nud_state, ctx->new_state);
                 // PRINT_MAC_ADDR(value.mac);
             }
         } else if (ctx->new_state == NUD_FAILED) {
