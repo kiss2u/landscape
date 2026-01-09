@@ -7,6 +7,11 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
 type SysStatus = WatchResource<LandscapeStatus>;
 
+async fn get_cpu_count(State(state): State<SysStatus>) -> LandscapeApiResult<usize> {
+    let cpu_count = state.0.borrow().cpus.len();
+    LandscapeApiResp::success(cpu_count)
+}
+
 /// return SYS base info
 pub fn get_sys_info_route() -> Router {
     let watchs = get_sys_running_status();
@@ -14,6 +19,7 @@ pub fn get_sys_info_route() -> Router {
     Router::new()
         .route("/sys", get(basic_sys_info))
         .route("/interval_fetch_info", get(interval_fetch_info))
+        .route("/cpu_count", get(get_cpu_count))
         .with_state(watchs)
         .route("/net_dev", get(net_dev))
 }
