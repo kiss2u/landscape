@@ -8,7 +8,10 @@ struct mac_key_v4 {
 };
 
 struct mac_value_v4 {
+    u32 ifindex;
     u8 mac[6];
+    u8 dev_mac[6];
+    __be16 proto;
 };
 
 struct  {
@@ -23,7 +26,10 @@ struct mac_key_v6 {
 };
 
 struct mac_value_v6 {
+    u32 ifindex;
     u8 mac[6];
+    u8 dev_mac[6];
+    __be16 proto;
 };
 
 struct  {

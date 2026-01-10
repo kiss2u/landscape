@@ -4,10 +4,7 @@ pub(crate) mod neigh_update {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/neigh_update.skel.rs"));
 }
 
-use libbpf_rs::{
-    skel::{OpenSkel, SkelBuilder},
-    TracepointCategory,
-};
+use libbpf_rs::skel::{OpenSkel, SkelBuilder};
 use neigh_update::*;
 use tokio::sync::oneshot;
 
@@ -25,10 +22,9 @@ pub fn neigh_update(service_status: oneshot::Receiver<()>) -> LdEbpfResult<()> {
     open_skel.maps.ip_mac_v6.reuse_pinned_map(&MAP_PATHS.ip_mac_v6).unwrap();
 
     let skel = open_skel.load()?;
-    let trace_neigh_update = skel.progs.trace_neigh_update;
+    let kprobe_neigh_update = skel.progs.kprobe_neigh_update;
 
-    let _link =
-        trace_neigh_update.attach_tracepoint(TracepointCategory::Neigh, "neigh_update").unwrap();
+    let _link = kprobe_neigh_update.attach_kprobe(false, "neigh_update").unwrap();
 
     let _ = service_status.blocking_recv();
     Ok(())
