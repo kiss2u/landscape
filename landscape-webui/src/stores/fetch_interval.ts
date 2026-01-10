@@ -49,7 +49,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
       await sysinfo.UPDATE_INFO();
       await dockerStore.UPDATE_INFO();
       await dnsStore.UPDATE_INFO();
-      // await topologyStore.UPDATE_INFO();
+      await topologyStore.UPDATE_INFO();
       await ifaceNodeStore.UPDATE_INFO();
       await ipConfigStore.UPDATE_INFO();
       await natConfigStore.UPDATE_INFO();

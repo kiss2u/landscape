@@ -8,7 +8,7 @@ import {
   PosotionCalculator,
 } from "@/lib/topology";
 import { DevStateType, NetDev } from "@/lib/dev";
-import { ifaces } from "@/api/iface";
+import { new_ifaces } from "@/api/iface";
 import { get_all_docker_networks } from "@/api/docker/network";
 import { LandscapeDockerNetwork } from "@/lib/docker/network";
 import { UnfoldLessFilled } from "@vicons/material";
@@ -108,7 +108,9 @@ export const useTopologyStore = defineStore("topology", () => {
   //   });
 
   async function UPDATE_INFO() {
-    let { managed, unmanaged } = await ifaces();
+    let { managed, unmanaged } = await new_ifaces();
+    let new_docker_nets = await get_all_docker_networks();
+    
     if (hide_down_dev.value) {
       managed = managed.filter((e) => {
         if (e.status) {
@@ -126,7 +128,6 @@ export const useTopologyStore = defineStore("topology", () => {
         dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.name);
       }
     }
-    let new_docker_nets = await get_all_docker_networks();
     // console.log(new_docker_nets);
     // console.log(managed);
     // console.log(unmanaged);

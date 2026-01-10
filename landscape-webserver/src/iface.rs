@@ -3,7 +3,7 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use landscape::iface::IfaceTopology;
+use landscape::iface::{IfaceTopology, IfacesInfo};
 use landscape_common::{
     config::iface::WifiMode,
     iface::{AddController, ChangeZone},
@@ -18,6 +18,7 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult, LandscapeApp};
 pub async fn get_network_paths() -> Router<LandscapeApp> {
     Router::new()
         .route("/", get(get_ifaces))
+        .route("/new", get(get_new_ifaces))
         .route("/wan_configs", get(get_wan_ifaces))
         .route("/manage/{iface_name}", post(manage_ifaces))
         .route("/bridge", post(create_bridge))
@@ -46,6 +47,11 @@ async fn manage_ifaces(
 
 async fn get_ifaces(State(state): State<LandscapeApp>) -> LandscapeApiResult<Vec<IfaceTopology>> {
     let result = state.iface_config_service.old_read_ifaces().await;
+    LandscapeApiResp::success(result)
+}
+
+async fn get_new_ifaces(State(state): State<LandscapeApp>) -> LandscapeApiResult<IfacesInfo> {
+    let result = state.iface_config_service.read_ifaces().await;
     LandscapeApiResp::success(result)
 }
 

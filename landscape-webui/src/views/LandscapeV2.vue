@@ -49,35 +49,12 @@ const { t } = useI18n({ useScope: "global" });
       content-style="padding: 10px;"
     >
       <n-flex vertical>
-        <n-grid x-gap="12" y-gap="12" cols="1 600:2 1200:4 1900:6">
-          <n-gi :span="1">
-            <SystemInfo></SystemInfo>
-          </n-gi>
-          <n-gi style="display: flex; height: 320px" :span="1">
-            <CPUUsage></CPUUsage>
-          </n-gi>
-          <n-gi style="display: flex; height: 320px" :span="1">
-            <MemUsage></MemUsage>
-          </n-gi>
-          <n-gi style="display: flex; height: 320px" :span="1">
-            <DnsStatusCard></DnsStatusCard>
-          </n-gi>
-          <n-gi style="display: flex; height: 320px" :span="1">
-            <DockerStatusCard></DockerStatusCard>
-          </n-gi>
-          <n-gi style="display: flex; height: 320px" :span="1">
-            <FirewallCard></FirewallCard>
-          </n-gi>
-        </n-grid>
+       
         <n-divider style="margin: 0px 0" title-placement="left">
           {{ t("topology_divider") }}
         </n-divider>
         <!-- <NetFlow></NetFlow> -->
         <NetTopology></NetTopology>
-        <n-divider style="margin: 0px 0" title-placement="left">
-          {{ t("docker_divider") }}
-        </n-divider>
-        <DockerAllContainer></DockerAllContainer>
       </n-flex>
 
       <!-- <n-button @click="show_dump = true">Show DUMP</n-button> -->

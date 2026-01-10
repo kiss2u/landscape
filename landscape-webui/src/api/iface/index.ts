@@ -11,6 +11,12 @@ export async function ifaces(): Promise<IfacesInfo> {
   return data.data;
 }
 
+export async function new_ifaces(): Promise<IfacesInfo> {
+  let data = await axiosService.get("iface/new");
+  // console.log(data.data);
+  return data.data;
+}
+
 // TODO: Fix type
 export async function get_wan_ifaces(): Promise<any[]> {
   let data = await axiosService.get("iface/wan_configs");
