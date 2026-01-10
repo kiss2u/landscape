@@ -1,15 +1,5 @@
 import { convert_flow_mark, MarkType } from "./dns";
 
-export class MarkServiceConfig {
-  iface_name: string;
-  enable: boolean;
-
-  constructor(obj: { iface_name: string; enable?: boolean }) {
-    this.iface_name = obj?.iface_name ?? "";
-    this.enable = obj?.enable ?? true;
-  }
-}
-
 import type { FlowMark, WanIPRuleSource } from "@/rust_bindings/flow";
 import {
   FirewallRuleConfig,

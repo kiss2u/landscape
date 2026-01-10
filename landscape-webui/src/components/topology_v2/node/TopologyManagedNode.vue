@@ -3,7 +3,6 @@ import { Handle, Position, useNodesData } from "@vue-flow/core";
 import { useThemeVars } from "naive-ui";
 
 import IPConfigStatusBtn from "@/components/status_btn/IPConfigStatusBtn.vue";
-import PacketMarkStatusBtn from "@/components/status_btn/PacketMarkStatusBtn.vue";
 import IPv6PDStatusBtn from "@/components/status_btn/IPv6PDStatusBtn.vue";
 import ICMPv6RAStatusBtn from "@/components/status_btn/ICMPv6RAStatusBtn.vue";
 import WifiStatusBtn from "@/components/status_btn/WifiStatusBtn.vue";
@@ -12,7 +11,6 @@ import DHCPv4StatusBtn from "@/components/status_btn/DHCPv4StatusBtn.vue";
 
 import IpConfigModal from "@/components/ipconfig/IpConfigModal.vue";
 import NATEditModal from "@/components/nat/NATEditModal.vue";
-import MarkEditModal from "@/components/mark/MarkEditModal.vue";
 import FirewallServiceEditModal from "@/components/firewall/FirewallServiceEditModal.vue";
 import IPv6PDEditModal from "@/components/ipv6pd/IPv6PDEditModal.vue";
 import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
@@ -53,7 +51,6 @@ const iface_wifi_edit_show = ref(false);
 const iface_firewall_edit_show = ref(false);
 const iface_icmpv6ra_edit_show = ref(false);
 const iface_ipv6pd_edit_show = ref(false);
-const iface_mark_edit_show = ref(false);
 const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
 const show_zone_change = ref(false);
@@ -292,13 +289,6 @@ function has_source_hook() {
         :iface_name="config.iface_name"
         :zone="config.zone_type"
       />
-      <!-- 标记服务配置按钮 -->
-      <PacketMarkStatusBtn
-        v-if="show_switch.mark_config"
-        @click="iface_mark_edit_show = true"
-        :iface_name="config.iface_name"
-        :zone="config.zone_type"
-      />
       <!-- IPV6PD 配置按钮 -->
       <IPv6PDStatusBtn
         v-if="show_switch.ipv6pd"
@@ -347,13 +337,6 @@ function has_source_hook() {
   />
   <IfaceChangeZone
     v-model:show="show_zone_change"
-    :zone="config.zone_type"
-    :iface_name="config.iface_name"
-    @refresh="refresh"
-  />
-
-  <MarkEditModal
-    v-model:show="iface_mark_edit_show"
     :zone="config.zone_type"
     :iface_name="config.iface_name"
     @refresh="refresh"

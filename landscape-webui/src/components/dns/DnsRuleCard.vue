@@ -4,6 +4,7 @@ import DnsRuleEditModal from "@/components/dns/DnsRuleEditModal.vue";
 import { DnsRule } from "@/lib/dns";
 import { delete_dns_rule } from "@/api/dns_rule";
 import { CheckmarkOutline } from "@vicons/carbon";
+import FlowMarkExhibit from "@/components/flow/FlowMarkExhibit.vue";
 const rule = defineModel<DnsRule>("rule", { required: true });
 
 const show_edit_modal = ref(false);
@@ -37,7 +38,7 @@ const title_name = computed(() =>
           {{ rule.index }}
         </n-descriptions-item> -->
         <n-descriptions-item label="流量动作">
-          <MarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></MarkExhibit>
+          <FlowMarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></FlowMarkExhibit>
           <!-- {{ rule.mark }} -->
         </n-descriptions-item>
         <n-descriptions-item label="DNS 上游配置">

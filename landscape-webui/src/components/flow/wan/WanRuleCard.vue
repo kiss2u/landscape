@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import WanRuleEditModal from "./WanRuleEditModal.vue";
+import FlowMarkExhibit from "@/components/flow/FlowMarkExhibit.vue";
 import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
 import { delete_dst_ip_rules_rule } from "@/api/dst_ip_rule";
 import { Warning } from "@vicons/carbon";
@@ -34,7 +35,7 @@ const title_name = computed(() =>
       <!-- {{ rule }} -->
       <n-descriptions bordered label-placement="top" :column="1">
         <n-descriptions-item label="选择流量出口">
-          <MarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></MarkExhibit>
+          <FlowMarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></FlowMarkExhibit>
         </n-descriptions-item>
         <n-descriptions-item label="匹配规则">
           <n-scrollbar v-if="rule.source.length > 0" style="max-height: 120px">

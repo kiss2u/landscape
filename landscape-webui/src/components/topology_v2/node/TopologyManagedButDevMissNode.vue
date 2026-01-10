@@ -3,7 +3,6 @@ import { Handle, Position, useNodesData } from "@vue-flow/core";
 import { useThemeVars } from "naive-ui";
 
 import IPConfigStatusBtn from "@/components/status_btn/IPConfigStatusBtn.vue";
-import PacketMarkStatusBtn from "@/components/status_btn/PacketMarkStatusBtn.vue";
 import IPv6PDStatusBtn from "@/components/status_btn/IPv6PDStatusBtn.vue";
 import ICMPv6RAStatusBtn from "@/components/status_btn/ICMPv6RAStatusBtn.vue";
 import WifiStatusBtn from "@/components/status_btn/WifiStatusBtn.vue";
@@ -12,7 +11,6 @@ import DHCPv4StatusBtn from "@/components/status_btn/DHCPv4StatusBtn.vue";
 
 import IpConfigModal from "@/components/ipconfig/IpConfigModal.vue";
 import NATEditModal from "@/components/nat/NATEditModal.vue";
-import MarkEditModal from "@/components/mark/MarkEditModal.vue";
 import FirewallServiceEditModal from "@/components/firewall/FirewallServiceEditModal.vue";
 import IPv6PDEditModal from "@/components/ipv6pd/IPv6PDEditModal.vue";
 import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
