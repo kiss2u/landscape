@@ -220,56 +220,79 @@ export class PosotionCalculator {
   lan_port: number;
   client: number;
 
-  constructor() {
+  // 位置缓存获取函数
+  private get_cached_position: (nodeId: string) => { x: number; y: number } | null;
+  // 位置保存函数
+  private save_position: (nodeId: string, position: { x: number; y: number }) => void;
+
+  constructor(
+    get_cached_position?: (nodeId: string) => { x: number; y: number } | null,
+    save_position?: (nodeId: string, position: { x: number; y: number }) => void
+  ) {
     this.wan = 0;
     this.lan = 0;
     this.lan_port = 0;
     this.client = 0;
+    this.get_cached_position = get_cached_position || (() => null);
+    this.save_position = save_position || (() => {});
   }
 
   get_position(node: LandscapeFlowNode) {
+    // 检查是否有缓存的位置 - 优先使用缓存
+    const cached = this.get_cached_position(node.id);
+    if (cached) {
+      node.position.x = cached.x;
+      node.position.y = cached.y;
+      return;
+    }
+
+    // 如果有父节点，使用默认的父子布局
     if (node.parent) {
       node.position.x = XPosotion.InnerClient;
       node.position.y = this.client;
       this.client += 100;
-      return;
+    } else {
+      // 根据节点类型设置默认位置
+      switch (get_position(node.data.dev, node.data.t)) {
+        case NodePositionType.Wan: {
+          node.position.x = XPosotion.WAN;
+          node.position.y = this.wan;
+          this.wan += 140;
+          break;
+        }
+        // case NodePositionType.Route: {
+        //   node.position.x = XPosotion.Route;
+        //   node.position.y = 500;
+        //   break;
+        // }
+        case NodePositionType.Lan: {
+          node.position.x = XPosotion.Lan;
+          node.position.y = this.lan;
+          this.lan += 120;
+          break;
+        }
+        case NodePositionType.Other: {
+          node.position.x = XPosotion.Other;
+          node.position.y = this.lan_port;
+          this.lan_port += 120;
+          break;
+        }
+        // case NodePositionType.WifiAp: {
+        //   node.position.x = XPosotion.WifiAp;
+        //   node.position.y = this.lan_port;
+        //   this.lan_port += 120;
+        //   break;
+        // }
+        case NodePositionType.Client: {
+          node.position.x = XPosotion.Client;
+          node.position.y = this.client;
+          this.client += 100;
+          break;
+        }
+      }
     }
-    switch (get_position(node.data.dev, node.data.t)) {
-      case NodePositionType.Wan: {
-        node.position.x = XPosotion.WAN;
-        node.position.y = this.wan;
-        this.wan += 140;
-        break;
-      }
-      // case NodePositionType.Route: {
-      //   node.position.x = XPosotion.Route;
-      //   node.position.y = 500;
-      //   break;
-      // }
-      case NodePositionType.Lan: {
-        node.position.x = XPosotion.Lan;
-        node.position.y = this.lan;
-        this.lan += 120;
-        break;
-      }
-      case NodePositionType.Other: {
-        node.position.x = XPosotion.Other;
-        node.position.y = this.lan_port;
-        this.lan_port += 120;
-        break;
-      }
-      // case NodePositionType.WifiAp: {
-      //   node.position.x = XPosotion.WifiAp;
-      //   node.position.y = this.lan_port;
-      //   this.lan_port += 120;
-      //   break;
-      // }
-      case NodePositionType.Client: {
-        node.position.x = XPosotion.Client;
-        node.position.y = this.client;
-        this.client += 100;
-        break;
-      }
-    }
+
+    // 保存计算出的默认位置到缓存
+    this.save_position(node.id, { x: node.position.x, y: node.position.y });
   }
 }

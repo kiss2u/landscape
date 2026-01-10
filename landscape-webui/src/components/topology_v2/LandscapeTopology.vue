@@ -16,9 +16,15 @@ import { useTopologyStore } from "@/stores/topology";
 const naive_message = useMessage();
 
 let ifaceNodeStore = useTopologyStore();
-const { zoomOnScroll, fitView, onConnect, id } = useVueFlow();
+const { zoomOnScroll, fitView, onConnect, onNodeDragStop, id } = useVueFlow();
 
 zoomOnScroll.value = false;
+
+// 监听节点拖拽结束，保存位置
+onNodeDragStop((event) => {
+  const { node } = event;
+  ifaceNodeStore.save_node_position(node.id, node.position, true);
+});
 
 onMounted(async () => {
   await ifaceNodeStore.UPDATE_INFO();

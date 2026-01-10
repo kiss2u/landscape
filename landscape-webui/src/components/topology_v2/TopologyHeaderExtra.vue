@@ -5,6 +5,7 @@ import { PageFit16Filled } from "@vicons/fluent";
 import { Docker } from "@vicons/fa";
 import HideDocker from "@/components/icon/HideDocker.vue";
 import { useVueFlow } from "@vue-flow/core";
+import { Refresh } from "@vicons/ionicons5";
 // import { CashOutline as CashIcon } from "@vicons/ionicons5";
 import { nextTick, ref } from "vue";
 
@@ -13,6 +14,16 @@ const show_create_dev = ref<boolean>(false);
 const { fitView } = useVueFlow();
 
 let ifaceNodeStore = useTopologyStore();
+
+// 重绘拓扑（清除缓存）
+async function redrawTopology() {
+  ifaceNodeStore.clear_position_cache();
+  await ifaceNodeStore.UPDATE_INFO();
+  window.$message.success('拓扑已重新绘制');
+  setTimeout(() => {
+    fitView({ padding: 0.3 });
+  }, 100);
+}
 async function show_down_dev() {
   ifaceNodeStore.UPDATE_HIDE(!ifaceNodeStore.hide_down_dev);
   await ifaceNodeStore.UPDATE_INFO();
@@ -56,6 +67,9 @@ async function fit_view() {
         <ViewOff v-if="ifaceNodeStore.hide_down_dev" />
         <View v-else />
       </n-icon>
+    </n-float-button>
+    <n-float-button @click="redrawTopology">
+      <n-icon><Refresh /></n-icon>
     </n-float-button>
     <!--<n-float-button>
       <n-icon><cash-icon /></n-icon>

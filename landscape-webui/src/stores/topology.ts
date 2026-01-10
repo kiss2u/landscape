@@ -15,6 +15,11 @@ import { UnfoldLessFilled } from "@vicons/material";
 import { IfaceInfo, RawIfaceInfo } from "@/rust_bindings/iface";
 
 type DevInfo = IfaceInfo | RawIfaceInfo;
+
+type NodePositionCache = {
+  [nodeId: string]: { x: number; y: number };
+};
+
 export const useTopologyStore = defineStore("topology", () => {
   const nodes = ref<LandscapeFlowNode[]>([]);
   const devs = ref<DevInfo[]>([]);
@@ -24,6 +29,50 @@ export const useTopologyStore = defineStore("topology", () => {
 
   const hide_down_dev = ref(true);
   const hide_docker_dev = ref(false);
+
+  // 位置缓存
+  const position_cache = ref<NodePositionCache>({});
+
+  // 从localStorage加载位置缓存
+  function load_position_cache() {
+    try {
+      const cached = localStorage.getItem('topology-position-cache');
+      if (cached) {
+        position_cache.value = JSON.parse(cached);
+      } else {
+        position_cache.value = {};
+      }
+    } catch (error) {
+      console.error('Failed to load position cache:', error);
+      position_cache.value = {};
+    }
+  }
+
+  // 保存位置缓存到localStorage
+  function save_position_cache() {
+    try {
+      localStorage.setItem('topology-position-cache', JSON.stringify(position_cache.value));
+    } catch (error) {
+      console.error('Failed to save position cache:', error);
+    }
+  }
+
+  // 清除位置缓存
+  function clear_position_cache() {
+    position_cache.value = {};
+    localStorage.removeItem('topology-position-cache');
+  }
+
+  // 保存单个节点位置
+  function save_node_position(nodeId: string, position: { x: number; y: number }, isUserDragged: boolean = false) {
+    position_cache.value[nodeId] = position;
+    save_position_cache();
+  }
+
+  // 获取节点缓存位置
+  function get_cached_position(nodeId: string): { x: number; y: number } | null {
+    return position_cache.value[nodeId] || null;
+  }
 
   const nodes_index_map = computed(() => {
     let map = new Map();
@@ -52,7 +101,10 @@ export const useTopologyStore = defineStore("topology", () => {
         }
       }
     }
-    let position = new PosotionCalculator();
+    let position = new PosotionCalculator(
+      (nodeId: string) => get_cached_position(nodeId),
+      (nodeId: string, position: { x: number; y: number }) => save_node_position(nodeId, position, false)
+    );
     if (new_value.length != 0) {
       for (const node of topo_nodes.value) {
         position.get_position(node);
@@ -108,6 +160,9 @@ export const useTopologyStore = defineStore("topology", () => {
   //   });
 
   async function UPDATE_INFO() {
+    // 加载位置缓存
+    load_position_cache();
+
     let { managed, unmanaged } = await new_ifaces();
     let new_docker_nets = await get_all_docker_networks();
     
@@ -212,7 +267,7 @@ export const useTopologyStore = defineStore("topology", () => {
       );
     }
 
-    console.log(docker_ifindexs);
+    // console.log(docker_ifindexs);
     for (const dev of dev_data_unmanaged_with_docker_child) {
       if (dev.status.controller_id) {
         let docker_parent = docker_ifindexs.get(dev.status.controller_id);
@@ -255,8 +310,8 @@ export const useTopologyStore = defineStore("topology", () => {
     }
 
     const new_nodes = [...iface_nodes, ...docker_dev, ...docker_leafs];
-    console.log(new_nodes);
-    console.log(docker_leafs);
+    // console.log(new_nodes);
+    // console.log(docker_leafs);
     await update_topo(new_nodes, nodes.value);
     nodes.value = new_nodes;
     // devs.value = new_devs;
@@ -298,6 +353,9 @@ export const useTopologyStore = defineStore("topology", () => {
     UPDATE_DOCKER_HIDE,
     FIND_BRIDGE_BY_IFNAME,
     FIND_DEV_BY_IFNAME,
+    // 位置缓存相关方法
+    save_node_position,
+    clear_position_cache,
   };
 });
 
