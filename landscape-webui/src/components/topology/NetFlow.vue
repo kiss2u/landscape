@@ -6,9 +6,9 @@ import FlowHeaderExtra from "@/components/topology/FlowHeaderExtra.vue";
 import FlowNode from "@/components/topology/FlowNode.vue";
 import { add_controller } from "@/api/network";
 
-import { useMessage, SelectOption } from "naive-ui";
+import { useMessage } from "naive-ui";
 
-import { onMounted, ref } from "vue";
+import { onMounted } from "vue";
 import { useIfaceNodeStore } from "@/stores/iface_node";
 import { WLANTypeTag } from "@/lib/dev";
 
@@ -76,24 +76,6 @@ onConnect(async (params: any) => {
     naive_message.error("找不到设备");
   }
 });
-const controlelr_config = ref<any>({});
-
-async function create_connection() {
-  let result = await add_controller(controlelr_config.value);
-  controlelr_config.value = {};
-  if (result) {
-    await ifaceNodeStore.UPDATE_INFO();
-  }
-}
-// onConnect((connection) => {
-//   console.log(connection);
-// });
-function handleMasterUpdate(value: string, option: SelectOption) {
-  controlelr_config.value.master_ifindex = option.ifindex;
-}
-function handleIfaceUpdate(value: string, option: SelectOption) {
-  controlelr_config.value.link_ifindex = option.ifindex;
-}
 </script>
 
 <template>

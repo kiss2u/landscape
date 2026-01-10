@@ -1,5 +1,4 @@
 import { ifaces } from "@/api/network";
-import { get_iface_server_status } from "@/api/service_ipconfig";
 import { DevStateType, NetDev } from "@/lib/dev";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { defineStore } from "pinia";
@@ -18,6 +17,8 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
   const eths = ref<any>([]);
 
   const node_call_back = ref<any>();
+  const _view_locked = ref(true);
+  const view_locked = computed(() => _view_locked.value);
 
   watch(net_devs, async (new_value, _old_value) => {
     const tmp_nodes: any[] = [];
@@ -92,7 +93,7 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
     nodes.value = tmp_nodes;
     edges.value = tmp_edges;
 
-    if (node_call_back.value != undefined) {
+    if (node_call_back.value != undefined && _view_locked.value) {
       node_call_back.value();
     }
   });
@@ -127,13 +128,19 @@ export const useIfaceNodeStore = defineStore("iface_node", () => {
     _hide_down_dev.value = value;
   }
 
+  function TOGGLE_VIEW_LOCK() {
+    _view_locked.value = !_view_locked.value;
+  }
+
   return {
     nodes,
     edges,
     bridges,
     eths,
     hide_down_dev,
+    view_locked,
     HIDE_DOWN,
+    TOGGLE_VIEW_LOCK,
     UPDATE_INFO,
     SETTING_CALL_BACK,
     FIND_DEV_BY_IFINDEX,

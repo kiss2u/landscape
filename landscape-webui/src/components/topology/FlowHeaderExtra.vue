@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useIfaceNodeStore } from "@/stores/iface_node";
-import { Add, View, ViewOff } from "@vicons/carbon";
+import { Add, View, ViewOff, Locked, Unlocked } from "@vicons/carbon";
 // import { CashOutline as CashIcon } from "@vicons/ionicons5";
 import { ref } from "vue";
 
@@ -27,6 +27,12 @@ async function show_down_dev() {
       <n-icon>
         <View v-if="ifaceNodeStore.hide_down_dev" />
         <ViewOff v-else />
+      </n-icon>
+    </n-float-button>
+    <n-float-button @click="ifaceNodeStore.TOGGLE_VIEW_LOCK">
+      <n-icon>
+        <Locked v-if="ifaceNodeStore.view_locked" />
+        <Unlocked v-else />
       </n-icon>
     </n-float-button>
     <!-- <n-float-button>
