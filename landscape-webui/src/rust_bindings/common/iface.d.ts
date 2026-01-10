@@ -24,7 +24,7 @@ export type IfaceZoneType = "undefined" | "wan" | "lan";
  * 用于存储网卡信息的结构体
  */
 export type NetworkIfaceConfig = {
-  iface_name: string;
+  name: string;
   create_dev_type: CreateDevType;
   controller_name: string | null;
   zone_type: IfaceZoneType;

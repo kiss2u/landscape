@@ -176,11 +176,11 @@ export const useTopologyStore = defineStore("topology", () => {
     }
     let dev_id_iface_name_map = new Map<number, string>();
     for (const net_dev of unmanaged) {
-      dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.name);
+      dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.iface_name);
     }
     for (const net_dev of managed) {
       if (net_dev.status) {
-        dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.name);
+        dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.iface_name);
       }
     }
     // console.log(new_docker_nets);
@@ -201,12 +201,12 @@ export const useTopologyStore = defineStore("topology", () => {
     let docker_ifindexs = new Map<number, string>();
 
     for (const net_dev of managed) {
-      const docker_data = docker_map.get(net_dev.config.iface_name);
+      const docker_data = docker_map.get(net_dev.config.name);
       if (docker_data) {
         docker_dev.push(
           new LandscapeFlowNode({
-            id: `${net_dev.config.iface_name}`,
-            label: net_dev.config.iface_name,
+            id: `${net_dev.config.name}`,
+            label: net_dev.config.name,
             position: { x: 0, y: 0 },
             data: {
               t: FlowNodeType.ManagedDocker,
@@ -216,7 +216,7 @@ export const useTopologyStore = defineStore("topology", () => {
           })
         );
         if (net_dev.status) {
-          docker_ifindexs.set(net_dev.status.index, net_dev.status.name);
+          docker_ifindexs.set(net_dev.status.index, net_dev.status.iface_name);
         }
       } else {
         dev_data_managed_with_docker_child.push(net_dev);
@@ -224,12 +224,12 @@ export const useTopologyStore = defineStore("topology", () => {
     }
 
     for (const net_dev of unmanaged) {
-      const docker_data = docker_map.get(net_dev.status.name);
+      const docker_data = docker_map.get(net_dev.status.iface_name);
       if (docker_data) {
         docker_dev.push(
           new LandscapeFlowNode({
-            id: `${net_dev.status.name}`,
-            label: net_dev.status.name,
+            id: `${net_dev.status.iface_name}`,
+            label: net_dev.status.iface_name,
             position: { x: 0, y: 0 },
             data: {
               t: FlowNodeType.UnManagedDocker,
@@ -238,7 +238,7 @@ export const useTopologyStore = defineStore("topology", () => {
             },
           })
         );
-        docker_ifindexs.set(net_dev.status.index, net_dev.status.name);
+        docker_ifindexs.set(net_dev.status.index, net_dev.status.iface_name);
       } else {
         dev_data_unmanaged_with_docker_child.push(net_dev);
       }
@@ -258,8 +258,8 @@ export const useTopologyStore = defineStore("topology", () => {
       }
       iface_nodes.push(
         new LandscapeFlowNode({
-          id: `${dev.config.iface_name}`,
-          label: dev.config.iface_name,
+          id: `${dev.config.name}`,
+          label: dev.config.name,
           parent: dev.config.controller_name,
           position: { x: 0, y: 0 },
           data: { t: FlowNodeType.Managed, dev },
@@ -275,8 +275,8 @@ export const useTopologyStore = defineStore("topology", () => {
           /// docker 连接的叶子节点
           docker_leafs.push(
             new LandscapeFlowNode({
-              id: `${dev.status.name}`,
-              label: dev.status.name,
+              id: `${dev.status.iface_name}`,
+              label: dev.status.iface_name,
               parent: docker_parent,
               position: { x: 0, y: 0 },
               data: { t: FlowNodeType.DockerLeaf, dev },
@@ -296,8 +296,8 @@ export const useTopologyStore = defineStore("topology", () => {
       }
       iface_nodes.push(
         new LandscapeFlowNode({
-          id: `${dev.status.name}`,
-          label: dev.status.name,
+          id: `${dev.status.iface_name}`,
+          label: dev.status.iface_name,
           parent,
           position: { x: 0, y: 0 },
           data: { t: FlowNodeType.UnManaged, dev },

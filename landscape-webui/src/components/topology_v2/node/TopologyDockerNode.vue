@@ -39,7 +39,7 @@ const props = defineProps<{
         <n-icon size="16">
           <DotMark />
         </n-icon>
-        {{ node.iface_name }}
+        {{ node.name }}
       </n-flex>
     </template>
   </n-card>

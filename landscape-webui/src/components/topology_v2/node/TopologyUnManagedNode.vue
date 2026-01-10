@@ -7,14 +7,14 @@ const props = defineProps<{
 }>();
 
 async function manage_this_dev() {
-  await manage_iface(props.node.iface_name);
+  await manage_iface(props.node.name);
 }
 </script>
 
 <template>
   <n-card
     size="small"
-    :title="node.iface_name"
+    :title="node.name"
     style="min-width: 220px; max-width: 230px"
   >
     <template #header-extra>

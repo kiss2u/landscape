@@ -7,9 +7,10 @@ use landscape_common::net::MacAddr;
 use ts_rs::TS;
 
 /// 当前硬件状态结构体
-#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[derive(Debug, Serialize, Clone, TS)]
 #[ts(export, export_to = "iface.ts")]
 pub struct LandscapeInterface {
+    #[serde(rename = "iface_name")]
     pub name: String,
     pub index: u32,
     pub mac: Option<MacAddr>,

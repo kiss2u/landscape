@@ -80,7 +80,7 @@ export type IfacesInfo = {
  * 当前硬件状态结构体
  */
 export type LandscapeInterface = {
-  name: string;
+  iface_name: string;
   index: number;
   mac: MacAddr | null;
   perm_mac: MacAddr | null;

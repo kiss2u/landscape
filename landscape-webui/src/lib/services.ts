@@ -176,7 +176,7 @@ export class TopologyServiceExhibitSwitch {
       this.mark_config = true;
       this.ipv6pd = true;
       this.firewall = true;
-    } else if (status.name === "docker0") {
+    } else if (status.iface_name === "docker0") {
       this.zone_type = false;
       this.ip_config = false;
       this.icmpv6ra = true;

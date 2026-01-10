@@ -47,6 +47,9 @@ export type FlowTarget = { "t": "interface"; name: string } | {
   container_name: string;
 };
 
+/**
+ * 可移除
+ */
 export type FlowWanServiceConfig = {
   iface_name: string;
   enable: boolean;

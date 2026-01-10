@@ -39,7 +39,7 @@ const props = defineProps<{
         <n-icon size="16">
           <DotMark />
         </n-icon>
-        {{ config.iface_name }}
+        {{ config.name }}
       </n-flex>
     </template>
     <template #header-extra>

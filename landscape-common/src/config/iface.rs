@@ -11,7 +11,6 @@ use crate::database::repository::LandscapeDBStore;
 #[ts(export, export_to = "common/iface.d.ts")]
 pub struct NetworkIfaceConfig {
     // 名称 关联的网卡名称 相当于网卡的唯一 id
-    #[serde(rename = "iface_name")]
     pub name: String,
 
     #[serde(default)]

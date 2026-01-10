@@ -69,16 +69,16 @@ async function change_dev_status() {
   //   return;
   // }
   if (props.status.dev_status.t == DevStateType.Up) {
-    await change_iface_status(props.config.iface_name, false);
+    await change_iface_status(props.config.name, false);
   } else {
-    await change_iface_status(props.config.iface_name, true);
+    await change_iface_status(props.config.name, true);
   }
   await refresh();
 }
 
 async function remove_controller() {
   await add_controller({
-    link_name: props.status.name as string,
+    link_name: props.status.iface_name as string,
     link_ifindex: props.status.index as number,
     master_name: undefined,
     master_ifindex: undefined,
@@ -149,7 +149,7 @@ function has_source_hook() {
               >
                 <DotMark />
               </n-icon>
-              {{ config.iface_name }}
+              {{ config.name }}
             </n-flex>
           </template>
           <template #header-extra>
@@ -215,7 +215,7 @@ function has_source_hook() {
               </n-button>
 
               <WifiModeChange
-                :iface_name="config.iface_name"
+                :iface_name="config.name"
                 :show_switch="show_switch"
                 @refresh="refresh"
               />
@@ -266,41 +266,41 @@ function has_source_hook() {
       <IPConfigStatusBtn
         v-if="show_switch.ip_config"
         @click="iface_service_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
       <!-- DHCPv4 按钮 -->
       <DHCPv4StatusBtn
         v-if="show_switch.dhcp_v4"
         @click="iface_dhcp_v4_service_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
       <FirewallStatusBtn
         v-if="show_switch.nat_config"
         @click="iface_firewall_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
       <!-- NAT 配置 按钮 -->
       <NetAddrTransBtn
         v-if="show_switch.nat_config"
         @click="iface_nat_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
       <!-- IPV6PD 配置按钮 -->
       <IPv6PDStatusBtn
         v-if="show_switch.ipv6pd"
         @click="iface_ipv6pd_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
       <!-- ICMPv6 RA -->
       <ICMPv6RAStatusBtn
         v-if="show_switch.icmpv6ra"
         @click="iface_icmpv6ra_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
 
@@ -308,7 +308,7 @@ function has_source_hook() {
       <WifiStatusBtn
         v-if="show_switch.wifi"
         @click="iface_wifi_edit_show = true"
-        :iface_name="config.iface_name"
+        :iface_name="config.name"
         :zone="config.zone_type"
       />
     </n-flex>
@@ -320,58 +320,58 @@ function has_source_hook() {
   <IpConfigModal
     v-model:show="iface_service_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     @refresh="refresh"
   />
   <DHCPv4ServiceEditModal
     v-model:show="iface_dhcp_v4_service_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     @refresh="refresh"
   />
   <NATEditModal
     v-model:show="iface_nat_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     @refresh="refresh"
   />
   <IfaceChangeZone
     v-model:show="show_zone_change"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     @refresh="refresh"
   />
 
   <PPPDServiceListDrawer
     v-model:show="show_pppd_drawer"
-    :attach_iface_name="config.iface_name"
+    :attach_iface_name="config.name"
     @refresh="refresh"
   />
   <IPv6PDEditModal
     v-model:show="iface_ipv6pd_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     :mac="status.mac"
     @refresh="refresh"
   />
   <ICMPRaEditModal
     v-model:show="iface_icmpv6ra_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     :mac="status.mac"
     @refresh="refresh"
   />
   <FirewallServiceEditModal
     v-model:show="iface_firewall_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     :mac="status.mac"
     @refresh="refresh"
   />
   <WifiServiceEditModal
     v-model:show="iface_wifi_edit_show"
     :zone="config.zone_type"
-    :iface_name="config.iface_name"
+    :iface_name="config.name"
     :mac="status.mac"
     @refresh="refresh"
   />
