@@ -64,15 +64,6 @@ const ipRule = {
 };
 
 const rules = {
-  result_info: {
-    trigger: ["blur", "change"],
-    validator(_: unknown, value: string[]) {
-      if (!value || value.length === 0) {
-        return new Error("至少需要添加一个返回的 IP 地址");
-      }
-      return true;
-    },
-  },
   match_rules: {
     trigger: ["blur", "change"],
     validator(_: unknown, value: any[]) {
