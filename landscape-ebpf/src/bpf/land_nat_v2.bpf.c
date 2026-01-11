@@ -714,7 +714,7 @@ static __always_inline int lookup_static_mapping(struct __sk_buff *skb, u8 ip_pr
 SEC("tc/ingress")
 int ingress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC ">>> ingress_nat >>>"
-    // struct ip_packet_info_v2 packet_info = {0};
+
     struct packet_offset_info pkg_offset = {0};
     struct inet_pair ip_pair = {0};
     int ret = 0;
@@ -830,8 +830,6 @@ int ingress_nat(struct __sk_buff *skb) {
 SEC("tc/egress")
 int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
-
-    // struct ip_packet_info_v2 packet_info = {0};
 
     struct packet_offset_info pkg_offset = {0};
     struct inet_pair ip_pair = {0};
@@ -986,17 +984,16 @@ SEC("tc/egress")
 int test_nat_read(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< test_nat_read <<<"
 
-    // struct packet_offset_info pkg_offset = {0};
-    // struct inet_pair ip_pair;
-    struct ip_packet_info_v2 packet_info = {0};
+    struct packet_offset_info pkg_offset = {0};
+    struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &packet_info.offset);
+    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
 
-    ret = read_packet_info(skb, &packet_info.offset, &packet_info.pair_ip);
+    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) {
         return ret;
     }
@@ -1009,20 +1006,21 @@ SEC("tc/egress")
 int handle_ipv6_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< handle_ipv6_egress <<<"
 
-    struct ip_packet_info_v2 packet_info = {0};
+    struct packet_offset_info pkg_offset = {0};
+    struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &packet_info.offset);
+    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
 
-    ret = read_packet_info(skb, &packet_info.offset, &packet_info.pair_ip);
+    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) {
         return ret;
     }
 
-    ret = ipv6_egress_prefix_check_and_replace(skb, &packet_info.offset, &packet_info.pair_ip);
+    ret = ipv6_egress_prefix_check_and_replace(skb, &pkg_offset, &ip_pair);
     if (ret) {
         return ret;
     }

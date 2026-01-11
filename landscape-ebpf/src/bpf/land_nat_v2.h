@@ -5,14 +5,8 @@
 #include "pkg_scanner.h"
 #include "pkg_fragment.h"
 #include "land_nat_common.h"
-#include "nat_static.h"
+#include "land_nat_static.h"
 #include "land_wan_ip.h"
-
-///
-struct ip_packet_info_v2 {
-    struct packet_offset_info offset;
-    struct inet_pair pair_ip;
-};
 
 #define LAND_IPV6_NET_PREFIX_TRANS_MASK (0x0FULL << 56)
 

@@ -2,6 +2,7 @@
 #define __LD_LANDSCAPE_H__
 #include "vmlinux.h"
 #include "landscape_log.h"
+#include "base/mark.h"
 
 #define TC_ACT_UNSPEC (-1)
 #define TC_ACT_OK 0
@@ -32,98 +33,10 @@
 #define LANDSCAPE_IPV4_TYPE 0
 #define LANDSCAPE_IPV6_TYPE 1
 
-// EGRESS MARK
-#define OK_MARK 0
-#define DIRECT_MARK 1
-#define DROP_MARK 2
-#define REDIRECT_MARK 3
-#define SYMMETRIC_NAT 4
-#define REDIRECT_NETNS_MARK 5
-
-#define ACTION_MASK 0x00FF
-#define INDEX_MASK 0xFF00
-
-#define FLOW_KEEP_GOING 0
-#define FLOW_DIRECT 1
-#define FLOW_DROP 2
-#define FLOW_REDIRECT 3
-#define FLOW_ALLOW_REUSE 4
-
-#define FLOW_FROM_UNKNOW 0
-#define FLOW_FROM_HOST 1
-#define FLOW_FROM_LAN 2
-#define FLOW_FROM_WAN 4
-
-#define FLOW_SOURCE_MASK 0xFF000000
-#define FLOW_ACTION_MASK 0x00007F00
-#define FLOW_ALLOW_REUSE_PORT_MASK 0x00008000
-#define FLOW_ID_MASK 0x000000FF
-
-// 替换 FLOW_ID_MASK 对应的 0~7 位
-static __always_inline u32 replace_flow_id(u32 original, u8 new_id) {
-    original &= ~FLOW_ID_MASK;         // 清除原来的 ID 部分
-    original |= ((u32)new_id & 0xFF);  // 设置新的 ID 部分
-    return original;
-}
-
-// 替换 FLOW_ACTION_MASK 对应的 8~14 位
-static __always_inline u32 replace_flow_action(u32 original, u8 new_action) {
-    original &= ~FLOW_ACTION_MASK;              // 清除原来的 Action 部分
-    original |= ((u32)new_action & 0x7F) << 8;  // 只取低 7 bit，写入 8~14 位
-    return original;
-}
-
-// 替换 FLOW_ALLOW_REUSE_PORT_MASK 对应的第 15 位
-static __always_inline u32 set_flow_allow_reuse_port(u32 original, bool allow) {
-    original &= ~FLOW_ALLOW_REUSE_PORT_MASK;  // 清除原来的标志位
-    if (allow) {
-        original |= FLOW_ALLOW_REUSE_PORT_MASK;  // 设置为 1
-    }
-    return original;
-}
-
-// 替换 FLOW_SOURCE_MASK 对应的 24~31 位
-static __always_inline u32 replace_flow_source(u32 original, u8 new_source) {
-    original &= ~FLOW_SOURCE_MASK;               // 清除原来的 Source 部分
-    original |= ((u32)new_source & 0xFF) << 24;  // 设置新的 Source 部分
-    return original;
-}
-
-static __always_inline u8 get_flow_id(u32 original) { return (original & FLOW_ID_MASK); }
-
-// 获取 action
-static __always_inline u8 get_flow_action(u32 original) {
-    return (original & FLOW_ACTION_MASK) >> 8;  // 返回 0–127
-}
-
-// 获取 reuse port 标志
-static __always_inline bool get_flow_allow_reuse_port(u32 original) {
-    return (original & FLOW_ALLOW_REUSE_PORT_MASK) != 0;
-}
-
-static __always_inline u8 get_flow_source(u32 original) {
-    return (original & FLOW_SOURCE_MASK) >> 24;
-}
-
-// INGRESS MARK
-#define INGRESS_NO_MARK 0
-#define INGRESS_STATIC_MARK 1
-
-#define INGRESS_CACHE_MASK 0x000000FF
-
-// 替换 INGRESS_CACHE_MASK 对应的 0~7 位
-static __always_inline u32 replace_cache_mask(u32 original, u8 new_mark) {
-    original &= ~INGRESS_CACHE_MASK;
-    original |= ((u32)new_mark & 0xFF);
-    return original;
-}
-
-static __always_inline u8 get_cache_mask(u32 original) { return (original & INGRESS_CACHE_MASK); }
 
 #define PRINT_MAC_ADDR(mac)                                                                        \
     bpf_log_info("mac: %02x:%02x:%02x:%02x:%02x:%02x", (mac)[0], (mac)[1], (mac)[2], (mac)[3],     \
                  (mac)[4], (mac)[5])
-
 
 #ifndef likely
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -213,8 +126,6 @@ static int store_mac_v6(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
     return 0;
 }
 
-
-// TEMP
 // ICMPv4 消息类型
 enum {
     ICMP_ERROR_MSG,
@@ -243,29 +154,6 @@ struct inet_pair {
     union u_inet_addr dst_addr;
     __be16 src_port;
     __be16 dst_port;
-};
-
-enum fragment_type {
-    // 还有分片
-    // offect 且 more 被设置
-    MORE_F,
-    // 结束分片
-    // offect 的值不为 0
-    END_F,
-    // 没有分片
-    NOT_F
-};
-
-// 数据包所属的连接类型
-enum {
-    // 无连接
-    PKT_CONNLESS,
-    //
-    PKT_TCP_DATA,
-    PKT_TCP_SYN,
-    PKT_TCP_RST,
-    PKT_TCP_FIN,
-    PKT_TCP_ACK,
 };
 
 /// 作为 fragment 缓存的 key
@@ -338,7 +226,44 @@ static __always_inline int is_broadcast_ip6(const u8 *bytes) {
     }
 }
 
-// TEMP
+
+struct inet4_addr {
+    __be32 addr;
+};
+
+struct inet4_pair {
+    struct inet4_addr src_addr;
+    struct inet4_addr dst_addr;
+    __be16 src_port;
+    __be16 dst_port;
+};
+
+struct inet6_addr {
+    __be32 all[4];
+    __be32 ip;
+    __be32 ip6[4];
+    u8 bytes[16];
+};
+
+struct inet6_pair {
+    struct inet6_addr src_addr;
+    struct inet6_addr dst_addr;
+    __be16 src_port;
+    __be16 dst_port;
+};
+
+static __always_inline bool inet4_addr_equal(const struct inet4_addr *a,
+                                            const struct inet4_addr *b) {
+    return a->addr == b->addr;
+}
+
+static __always_inline bool inet6_addr_equal(const struct inet6_addr *a,
+                                             const struct inet6_addr *b) {
+    return a->all[0] == b->all[0] && a->all[1] == b->all[2] && a->all[2] == b->all[2] &&
+           a->all[3] == b->all[3];
+}
+
+
 static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const union u_inet_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];

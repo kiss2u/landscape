@@ -65,7 +65,7 @@ static __always_inline bool is_icmp_error_pkt(const struct packet_context *pkt) 
 }
 
 static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
-    return pkt_type == PKT_CONNLESS || pkt_type == PKT_TCP_SYN;
+    return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
 }
 
 /// IP Fragment Related Start
@@ -73,8 +73,7 @@ static __always_inline int fragment_track(struct __sk_buff *skb, struct ip_conte
 #define BPF_LOG_TOPIC "fragment_track"
 
     // 没有被分片的数据包, 无需进行记录
-    if (likely(pkt->fragment_type == NOT_F ||
-               (pkt->fragment_type == END_F && pkt->fragment_off == 0))) {
+    if (likely(pkt->fragment_type == FRAG_SINGLE)) {
         return TC_ACT_OK;
     }
 
@@ -88,7 +87,7 @@ static __always_inline int fragment_track(struct __sk_buff *skb, struct ip_conte
     };
 
     struct fragment_cache_value *value;
-    if (pkt->fragment_type == MORE_F && pkt->fragment_off == 0) {
+    if (pkt->fragment_type == FRAG_FIRST) {
         struct fragment_cache_value value_new;
         value_new.dport = pkt->pair_ip.dst_port;
         value_new.sport = pkt->pair_ip.src_port;
@@ -139,15 +138,21 @@ static __always_inline int extract_iphdr_info(struct __sk_buff *skb, u32 *l3_off
     ip_cxt->pair_ip.dst_addr.ip = iph->daddr;
 
     ip_cxt->fragment_off = (bpf_ntohs(iph->frag_off) & LD_IP_OFFSET) << 3;
-    if (iph->frag_off & LD_IP_MF) {
-        ip_cxt->fragment_type = MORE_F;
-    } else if (ip_cxt->fragment_off) {
-        ip_cxt->fragment_type = END_F;
-    } else {
-        ip_cxt->fragment_type = NOT_F;
-    }
-    ip_cxt->fragment_id = bpf_ntohs(iph->id);
 
+    bool mf = iph->frag_off & LD_IP_MF;
+    bool has_offset = ip_cxt->fragment_off != 0;
+
+    if (!has_offset && !mf) {
+        ip_cxt->fragment_type = FRAG_SINGLE;
+    } else if (!has_offset && mf) {
+        ip_cxt->fragment_type = FRAG_FIRST;
+    } else if (has_offset && mf) {
+        ip_cxt->fragment_type = FRAG_MIDDLE;
+    } else {  // has_offset && !mf
+        ip_cxt->fragment_type = FRAG_LAST;
+    }
+
+    ip_cxt->fragment_id = bpf_ntohs(iph->id);
     ip_cxt->ip_protocol = iph->protocol;
     *l3_offset += (iph->ihl * 4);
 
@@ -221,17 +226,22 @@ found_upper_layer:
             return TC_ACT_SHOT;
         }
         ip_cxt->fragment_id = bpf_ntohl(frag_hdr->identification);
-        ip_cxt->fragment_off = bpf_ntohs(frag_hdr->frag_off & bpf_htons(IPV6_FRAG_OFFSET));
+        
+        u16 raw_off = bpf_ntohs(frag_hdr->frag_off);
+        ip_cxt->fragment_off = raw_off & IPV6_FRAG_OFFSET;
 
-        if (frag_hdr->frag_off & bpf_htons(IPV6_FRAG_MF)) {
-            ip_cxt->fragment_type = MORE_F;
-        } else if (ip_cxt->fragment_off) {
-            ip_cxt->fragment_type = END_F;
-        } else {
-            ip_cxt->fragment_type = NOT_F;
+        bool mf = raw_off & IPV6_FRAG_MF;
+        bool has_offset = ip_cxt->fragment_off != 0;
+
+        if (!has_offset && !mf) {
+            ip_cxt->fragment_type = FRAG_SINGLE;
+        } else if (!has_offset && mf) {
+            ip_cxt->fragment_type = FRAG_FIRST;
+        } else if (has_offset && mf) {
+            ip_cxt->fragment_type = FRAG_MIDDLE;
+        } else {  // has_offset && !mf
+            ip_cxt->fragment_type = FRAG_LAST;
         }
-    } else {
-        ip_cxt->fragment_type = NOT_F;
     }
 
     ip_cxt->ip_protocol = nexthdr;
@@ -408,15 +418,15 @@ ct_state_transition(u8 l4proto, u8 pkt_type, struct firewall_conntrack_action_v2
     //         return TC_ACT_SHOT; \
     //     }
 
-    //     if (pkt_type == PKT_CONNLESS) {
+    //     if (pkt_type == PKT_CONNLESS_V2) {
     //         NEW_STATE(OTHER_EST);
     //     }
 
-    //     if (pkt_type == PKT_TCP_RST) {
+    //     if (pkt_type == PKT_TCP_RST_V2) {
     //         NEW_STATE(TIMER_INIT);
     //     }
 
-    //     if (pkt_type == PKT_TCP_SYN) {
+    //     if (pkt_type == PKT_TCP_SYN_V2) {
     //         NEW_STATE(TIMER_INIT);
     //     }
 
@@ -642,10 +652,10 @@ extract_v4_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         return TC_ACT_SHOT;
     }
 
-    pcxt->ip_hdr.pkt_type = PKT_CONNLESS;
+    pcxt->ip_hdr.pkt_type = PKT_CONNLESS_V2;
     pcxt->icmp_error_payload_offset = -1;
 
-    if (pcxt->ip_hdr.fragment_type != NOT_F && pcxt->ip_hdr.fragment_off != 0) {
+    if (pcxt->ip_hdr.fragment_type >= FRAG_MIDDLE) {
         // 不是第一个数据包， 整个都是 payload
         // 因为没有头部信息, 所以 需要进行查询已有的 track 记录
         pcxt->l4_payload_offset = -1;
@@ -663,13 +673,13 @@ extract_v4_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         pcxt->ip_hdr.pair_ip.dst_port = tcph->dest;
         // bpf_log_info("packet dst_port: %d", bpf_ntohs(tcph->dest));
         if (tcph->fin) {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_FIN;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_FIN_V2;
         } else if (tcph->rst) {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_RST;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_RST_V2;
         } else if (tcph->syn) {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_SYN;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_SYN_V2;
         } else {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_DATA;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_DATA_V2;
         }
     } else if (pcxt->ip_hdr.ip_protocol == IPPROTO_UDP) {
         struct udphdr *udph;
@@ -753,10 +763,10 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         return ret;
     }
 
-    pcxt->ip_hdr.pkt_type = PKT_CONNLESS;
+    pcxt->ip_hdr.pkt_type = PKT_CONNLESS_V2;
     pcxt->icmp_error_payload_offset = -1;
 
-    if (pcxt->ip_hdr.fragment_type != NOT_F && pcxt->ip_hdr.fragment_off != 0) {
+    if (pcxt->ip_hdr.fragment_type >= FRAG_MIDDLE) {
         // 不是第一个数据包， 整个都是 payload
         // 因为没有头部信息, 所以 需要进行查询已有的 track 记录
         pcxt->l4_payload_offset = -1;
@@ -776,13 +786,13 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         pcxt->ip_hdr.pair_ip.dst_port = tcph->dest;
         // bpf_log_info("packet dst_port: %d", bpf_ntohs(tcph->dest));
         if (tcph->fin) {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_FIN;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_FIN_V2;
         } else if (tcph->rst) {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_RST;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_RST_V2;
         } else if (tcph->syn) {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_SYN;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_SYN_V2;
         } else {
-            pcxt->ip_hdr.pkt_type = PKT_TCP_DATA;
+            pcxt->ip_hdr.pkt_type = PKT_TCP_DATA_V2;
         }
     } else if (pcxt->ip_hdr.ip_protocol == IPPROTO_UDP) {
         struct udphdr *udph;
@@ -1313,9 +1323,9 @@ int egress_firewall(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        ret = bpf_tail_call(skb, &egress_prog_array, IPV4_EGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &egress_prog_array, IPV4_EGRESS_PROG_INDEX);
     } else {
-        ret = bpf_tail_call(skb, &egress_prog_array, IPV6_EGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &egress_prog_array, IPV6_EGRESS_PROG_INDEX);
     }
     // if (ret) {
     //     bpf_log_info("bpf_tail_call error: %d", ret);
@@ -1335,9 +1345,9 @@ int ingress_firewall(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        ret = bpf_tail_call(skb, &ingress_prog_array, IPV4_INGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &ingress_prog_array, IPV4_INGRESS_PROG_INDEX);
     } else {
-        ret = bpf_tail_call(skb, &ingress_prog_array, IPV6_INGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &ingress_prog_array, IPV6_INGRESS_PROG_INDEX);
     }
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

@@ -12,8 +12,6 @@
 
 #define GRESS_MASK (1 << 0)
 
-#define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
-
 static __always_inline int bpf_write_port(struct __sk_buff *skb, int port_off, __be16 to_port) {
     return bpf_skb_store_bytes(skb, port_off, &to_port, sizeof(to_port), 0);
 }

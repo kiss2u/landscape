@@ -22,6 +22,27 @@ const volatile u64 CONN_EST_TIMEOUT = 1E9 * 5;
 const volatile u64 CONN_TCP_RELEASE = 1E9 * 60 * 10;
 const volatile u64 CONN_UDP_RELEASE = 1E9 * 60 * 5;
 
+// struct pkg_offset_info {
+//     // ICMP Type
+//     u8 icmp_type;
+//     // ip 报文承载的协议类型: TCP / UDP / ICMP
+//     u8 ip_protocol;
+//     // 数据包的处理类型 (例如, 非链接, SYN FIN)
+//     u8 pkt_type;
+//     // 是否还有分片
+//     u8 fragment_type;
+//     // 分片偏移量
+//     u16 fragment_off;
+//     // 当前分片 id
+//     u16 fragment_id;
+//     // l3 的负载偏移位置 当为 0 时表示没有 ip 的负载 也就是没有 TCP ICMP UDP 头部信息
+//     // 为 0 表示为 IP 的分片
+//     u16 l4_payload_offset;
+//     // icmp 错误时 icmp payload 的负载位置
+//     // 不为 0 表示 这个是 icmp 错误 包
+//     u16 icmp_inner_l4_offset;
+// };
+
 /// @brief 持有解析的 IP 信息
 struct ip_context {
     // ip 报文承载的协议类型: TCP / UDP / ICMP
