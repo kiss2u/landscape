@@ -5,7 +5,7 @@
 #include "vmlinux.h"
 #include "landscape_log.h"
 #include "landscape.h"
-#include "packet_def.h"
+#include "pkg_def.h"
 
 #define IPV4_EGRESS_PROG_INDEX 0
 #define IPV4_INGRESS_PROG_INDEX 0

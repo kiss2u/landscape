@@ -6,7 +6,7 @@ use landscape_common::{event::nat::NatEvent, metric::MetricData};
 use tokio::sync::oneshot::{self, error::TryRecvError};
 
 use crate::firewall::firewall_bpf::types::{firewall_conn_event, firewall_conn_metric_event};
-use crate::{nat::land_nat::types::nat_conn_event, MAP_PATHS};
+use crate::{nat::v2::land_nat_v2::types::nat_conn_event, MAP_PATHS};
 
 pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: MetricData) {
     let nat_conn_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_conn_events).unwrap();

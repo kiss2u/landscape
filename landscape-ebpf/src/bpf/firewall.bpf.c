@@ -138,8 +138,8 @@ static __always_inline int extract_iphdr_info(struct __sk_buff *skb, u32 *l3_off
     ip_cxt->pair_ip.src_addr.ip = iph->saddr;
     ip_cxt->pair_ip.dst_addr.ip = iph->daddr;
 
-    ip_cxt->fragment_off = (bpf_ntohs(iph->frag_off) & IP_OFFSET) << 3;
-    if (iph->frag_off & IP_MF) {
+    ip_cxt->fragment_off = (bpf_ntohs(iph->frag_off) & LD_IP_OFFSET) << 3;
+    if (iph->frag_off & LD_IP_MF) {
         ip_cxt->fragment_type = MORE_F;
     } else if (ip_cxt->fragment_off) {
         ip_cxt->fragment_type = END_F;
@@ -178,7 +178,7 @@ static __always_inline int extract_ipv6hdr_info(struct __sk_buff *skb, u32 *l3_o
     struct ipv6_opt_hdr *opthdr;
     struct frag_hdr *frag_hdr;
 
-    for (int i = 0; i < MAX_IPV6_EXT_NUM; i++) {
+    for (int i = 0; i < LD_MAX_IPV6_EXT_NUM; i++) {
         switch (nexthdr) {
         case NEXTHDR_AUTH:
             return TC_ACT_UNSPEC;

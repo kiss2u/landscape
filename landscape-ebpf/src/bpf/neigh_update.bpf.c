@@ -5,7 +5,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "ip_neigh.h"
+#include "neigh_ip.h"
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -14,8 +14,6 @@ char LICENSE[] SEC("license") = "GPL";
 
 #define NUD_VALID (0x02 | 0x04 | 0x40 | 0x80)
 #define NUD_FAILED 0x20
-#define AF_INET 2
-#define AF_INET6 10
 
 SEC("kprobe/neigh_update")
 int BPF_KPROBE(kprobe_neigh_update, struct neighbour *n, const u8 *new_lladdr, u8 new_state,

@@ -1,13 +1,11 @@
-
-
-#include "vmlinux.h"
-#include "pkg_def.h"
-#include "land_wan_ip.h"
-#include "land_nat_common.h"
+#ifndef __LD_NAT_STATIC_H__
+#define __LD_NAT_STATIC_H__
 #include <bpf/bpf_helpers.h>
 
-#define STATIC_NAT_MAPPING_CACHE_SIZE 1024 * 64
+#include "vmlinux.h"
+#include "landscape.h"
 
+#define STATIC_NAT_MAPPING_CACHE_SIZE 1024 * 64
 
 struct static_nat_mapping_key {
     u32 prefixlen;
@@ -52,3 +50,5 @@ struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
 } nat_conn_events SEC(".maps");
+
+#endif /* __LD_NAT_STATIC_H__ */

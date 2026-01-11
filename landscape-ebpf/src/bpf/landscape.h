@@ -25,6 +25,13 @@
 // L4 proto number
 #define IPPROTO_ICMPV6 58
 
+// timer
+#define CLOCK_MONOTONIC 1
+
+// LAND TYPE
+#define LANDSCAPE_IPV4_TYPE 0
+#define LANDSCAPE_IPV6_TYPE 1
+
 // EGRESS MARK
 #define OK_MARK 0
 #define DIRECT_MARK 1
@@ -330,4 +337,13 @@ static __always_inline int is_broadcast_ip6(const u8 *bytes) {
         return TC_ACT_OK;
     }
 }
+
+// TEMP
+static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const union u_inet_addr *b) {
+    return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
+           a->all[3] == b->all[3];
+}
+
+#define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
+
 #endif /* __LD_LANDSCAPE_H__ */

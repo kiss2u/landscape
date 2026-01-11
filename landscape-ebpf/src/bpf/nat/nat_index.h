@@ -1,18 +1,17 @@
-#ifndef LD_NAT_H
-#define LD_NAT_H
+#ifndef LD_NAT_INDEX_H
+#define LD_NAT_INDEX_H
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 #include "vmlinux.h"
-#include "landscape_log.h"
-#include "packet_def.h"
-#include "land_nat_common.h"
+#include "../landscape.h"
 
 #define GRESS_MASK (1 << 0)
 
-#define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
-static __always_inline void inet_addr_set_ip(union u_inet_addr *addr, __be32 ip) { addr->ip = ip; }
 static __always_inline bool inet_addr_equal(const union u_inet_addr *a,
                                             const union u_inet_addr *b) {
     return a->ip == b->ip;
 }
+
 
 /// @brief  解析的 ip 数据包载体
 struct ip_packet_info {
@@ -59,4 +58,4 @@ static __always_inline int is_broadcast_ip(const struct ip_packet_info *pkt) {
     }
 }
 
-#endif /* LD_NAT_H */
+#endif /* LD_NAT_INDEX_H */

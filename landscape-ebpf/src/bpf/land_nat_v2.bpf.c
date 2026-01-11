@@ -22,6 +22,8 @@ const volatile u64 TCP_TCP_TRANS = 1E9 * 60 * 4;
 const volatile u64 TCP_TIMEOUT = 1E9 * 60 * 10;
 const volatile u64 UDP_TIMEOUT = 1E9 * 60 * 5;
 
+const volatile u64 REPORT_INTERVAL = 1E9 * 5;
+
 static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
     return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
 }

@@ -8,7 +8,7 @@
 #include "route/route_maps_v4.h"
 #include "route/route_maps_v6.h"
 
-#include "ip_neigh.h"
+#include "neigh_ip.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 

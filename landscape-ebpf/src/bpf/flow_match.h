@@ -2,7 +2,6 @@
 #define __LD_FLOW_MATCH_H__
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
-#include "packet_def.h"
 #include "landscape.h"
 
 #define FLOW_ENTRY_MODE_MAC 0
@@ -15,6 +14,10 @@
 
 // IPV4 32 + 48 = 80
 #define FLOW_MAC_MATCH_LEN 80
+
+struct imac_addr {
+    u8 mac[6];
+};
 
 struct flow_match_key {
     u32 prefixlen;

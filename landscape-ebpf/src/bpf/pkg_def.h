@@ -6,8 +6,29 @@
 #include "landscape_log.h"
 #include "landscape.h"
 
+#define LD_IP_MF bpf_htons(0x2000)     /* Flag: "More Fragments"	*/
+#define LD_IP_OFFSET bpf_htons(0x1FFF) /* "Fragment Offset" part	*/
+
 // RFC 8200 要求支持至少 6 个扩展头
-#define MAX_IPV6_EXT_NUM 6
+#define LD_MAX_IPV6_EXT_NUM 6
+
+enum land_frag_type {
+    FRAG_SINGLE = 0,
+    FRAG_FIRST,
+    FRAG_MIDDLE,
+    FRAG_LAST,
+};
+
+// Timer 状态
+enum {
+    TIMER_INIT = 0ULL,  // 0ULL ensures the value is of type u64
+    TCP_SYN = 1ULL,
+    TCP_SYN_ACK = 2ULL,
+    TCP_EST = 3ULL,
+    OTHER_EST = 4ULL
+};
+// Timer 创建情况
+enum { TIMER_EXIST, TIMER_NOT_FOUND, TIMER_ERROR, TIMER_CREATED };
 
 /*
  *	NextHeader field of IPv6 header
@@ -71,12 +92,6 @@ struct route_context_test {
 };
 
 #define ICMP_HDR_LEN sizeof(struct icmphdr)
-
-#define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
-
-// LAND TYPE
-#define LANDSCAPE_IPV4_TYPE 0
-#define LANDSCAPE_IPV6_TYPE 1
 
 static __always_inline void print_route_context(struct route_context_test *ctx) {
 #define BPF_LOG_TOPIC "print_route_context"

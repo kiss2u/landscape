@@ -11,7 +11,7 @@
 #include "route/route_maps_v6.h"
 
 #include "flow_match.h"
-#include "ip_neigh.h"
+#include "neigh_ip.h"
 
 // TODO: split two function
 static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 current_l3_offset,

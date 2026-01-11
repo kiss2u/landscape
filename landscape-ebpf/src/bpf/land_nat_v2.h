@@ -5,7 +5,8 @@
 #include "pkg_scanner.h"
 #include "pkg_fragment.h"
 #include "land_nat_common.h"
-#include "share_ifindex_ip.h"
+#include "nat_static.h"
+#include "land_wan_ip.h"
 
 ///
 struct ip_packet_info_v2 {

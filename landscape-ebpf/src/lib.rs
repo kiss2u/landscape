@@ -148,12 +148,6 @@ const LANDSCAPE_IPV6_TYPE: u8 = 1;
 const NAT_MAPPING_INGRESS: u8 = 0;
 const NAT_MAPPING_EGRESS: u8 = 1;
 
-pub fn init_ebpf() {
-    std::thread::spawn(|| {
-        landscape::test();
-    });
-}
-
 fn bump_memlock_rlimit() {
     let rlimit = libc::rlimit { rlim_cur: 1024 << 20, rlim_max: 1024 << 20 };
 

@@ -2,7 +2,6 @@
 #define __LD_DNS_DISPATCHER_H__
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
-#include "packet_def.h"
 #include "landscape.h"
 
 struct {

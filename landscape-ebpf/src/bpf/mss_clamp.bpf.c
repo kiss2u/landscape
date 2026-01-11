@@ -6,7 +6,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "packet_def.h"
+#include "pkg_def.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -41,7 +41,7 @@ static __always_inline int extract_ipv6_tcp_offset(struct __sk_buff *skb, u32 l3
     bool seen_fragment = false;
 
 #pragma unroll
-    for (int i = 0; i < MAX_IPV6_EXT_NUM; i++) {
+    for (int i = 0; i < LD_MAX_IPV6_EXT_NUM; i++) {
         switch (nexthdr) {
         case NEXTHDR_FRAGMENT:
             seen_fragment = true;

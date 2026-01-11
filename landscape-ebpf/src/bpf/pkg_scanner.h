@@ -7,12 +7,6 @@
 #include "landscape.h"
 #include "pkg_def.h"
 
-#define LD_IP_MF bpf_htons(0x2000)     /* Flag: "More Fragments"	*/
-#define LD_IP_OFFSET bpf_htons(0x1FFF) /* "Fragment Offset" part	*/
-
-// RFC 8200 要求支持至少 6 个扩展头
-#define LD_MAX_IPV6_EXT_NUM 6
-
 // size limit 5 u32
 // icmp type
 struct packet_offset_info {
@@ -163,13 +157,6 @@ enum land_scan_result {
     LD_SCAN_OK = 0,
     LD_SCAN_ERR = 2,
     LD_SCAN_UNSPEC = -1,
-};
-
-enum land_frag_type {
-    FRAG_SINGLE = 0,
-    FRAG_FIRST,
-    FRAG_MIDDLE,
-    FRAG_LAST,
 };
 
 union u_ld_ip {
