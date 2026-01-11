@@ -1,5 +1,5 @@
-#ifndef LD_NAT_V2_H
-#define LD_NAT_V2_H
+#ifndef LD_NAT_V6_H
+#define LD_NAT_V6_H
 #include "vmlinux.h"
 #include "landscape_log.h"
 #include "pkg_scanner.h"
@@ -409,4 +409,4 @@ ipv6_ingress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offse
 #undef BPF_LOG_TOPIC
 }
 
-#endif /* LD_NAT_V2_H */
+#endif /* LD_NAT_V6_H */

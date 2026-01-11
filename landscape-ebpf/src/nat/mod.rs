@@ -6,6 +6,7 @@ use crate::nat::v2::land_nat_v2::types::{nat_conn_event, u_inet_addr};
 
 use landscape_common::event::nat::{NatEvent, NatEventType};
 
+pub mod test;
 pub mod v2;
 
 unsafe impl plain::Plain for nat_conn_event {}

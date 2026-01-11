@@ -2,6 +2,7 @@
 #define LD_NAT_COMMON_H
 #include "vmlinux.h"
 #include "landscape_log.h"
+#include "pkg_def.h"
 
 #define READ_SKB_U16(skb_ptr, offset, var)                                                         \
     do {                                                                                           \

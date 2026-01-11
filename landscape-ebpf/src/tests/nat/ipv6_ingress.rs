@@ -7,9 +7,9 @@ use libbpf_rs::{
 use zerocopy::IntoBytes;
 
 use crate::{
-    nat::v2::land_nat_v2::{
+    nat::test::test_nat::{
         types::{ipv6_prefix_mapping_key, ipv6_prefix_mapping_value},
-        LandNatV2SkelBuilder,
+        TestNatSkelBuilder,
     },
     tests::TestSkb,
 };
@@ -66,7 +66,7 @@ fn add_ipv6_mapping<'obj, T>(
 }
 
 pub fn handle_ipv6_ingress(mut payload: Vec<u8>) {
-    let builder = LandNatV2SkelBuilder::default();
+    let builder = TestNatSkelBuilder::default();
     let mut open_object = MaybeUninit::uninit();
     let open = builder.open(&mut open_object).unwrap();
 

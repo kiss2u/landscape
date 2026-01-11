@@ -11,10 +11,10 @@ use libbpf_rs::{
 };
 use zerocopy::IntoBytes;
 
-use crate::{map_setting::add_wan_ip, nat::v2::land_nat_v2::LandNatV2SkelBuilder, tests::TestSkb};
+use crate::{map_setting::add_wan_ip, nat::test::test_nat::TestNatSkelBuilder, tests::TestSkb};
 
 pub fn handle_ipv6_egress(mut payload: Vec<u8>) {
-    let landscape_builder = LandNatV2SkelBuilder::default();
+    let landscape_builder = TestNatSkelBuilder::default();
     let mut open_object = MaybeUninit::uninit();
     let landscape_open = landscape_builder.open(&mut open_object).unwrap();
 

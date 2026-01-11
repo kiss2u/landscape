@@ -6,7 +6,9 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "land_nat_v2.h"
+#include "land_nat_common.h"
+#include "land_nat_static.h"
+#include "land_nat_v6.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
@@ -23,10 +25,6 @@ const volatile u64 TCP_TIMEOUT = 1E9 * 60 * 10;
 const volatile u64 UDP_TIMEOUT = 1E9 * 60 * 5;
 
 const volatile u64 REPORT_INTERVAL = 1E9 * 5;
-
-static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
-    return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
-}
 
 #define NAT_MAPPING_CACHE_SIZE 1024 * 64 * 2
 #define NAT_MAPPING_TIMER_SIZE 1024 * 64 * 2
@@ -55,6 +53,10 @@ volatile const u16 udp_range_end = 65535;
 
 volatile const u16 icmp_range_start = 32768;
 volatile const u16 icmp_range_end = 65535;
+
+static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
+    return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
+}
 
 static __always_inline int icmpx_err_l3_offset(int l4_off) {
     return l4_off + sizeof(struct icmphdr);
@@ -977,90 +979,5 @@ int egress_nat(struct __sk_buff *skb) {
     }
 
     return TC_ACT_UNSPEC;
-#undef BPF_LOG_TOPIC
-}
-
-SEC("tc/egress")
-int test_nat_read(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "<<< test_nat_read <<<"
-
-    struct packet_offset_info pkg_offset = {0};
-    struct inet_pair ip_pair = {0};
-    int ret = 0;
-
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
-    if (ret) {
-        return ret;
-    }
-
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
-    if (ret) {
-        return ret;
-    }
-
-    return TC_ACT_OK;
-#undef BPF_LOG_TOPIC
-}
-
-SEC("tc/egress")
-int handle_ipv6_egress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "<<< handle_ipv6_egress <<<"
-
-    struct packet_offset_info pkg_offset = {0};
-    struct inet_pair ip_pair = {0};
-    int ret = 0;
-
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
-    if (ret) {
-        return ret;
-    }
-
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
-    if (ret) {
-        return ret;
-    }
-
-    ret = ipv6_egress_prefix_check_and_replace(skb, &pkg_offset, &ip_pair);
-    if (ret) {
-        return ret;
-    }
-
-    return TC_ACT_OK;
-#undef BPF_LOG_TOPIC
-}
-
-SEC("tc/ingress")
-int handle_ipv6_ingress(struct __sk_buff *skb) {
-#define BPF_LOG_TOPIC "<<< handle_ipv6_ingress <<<"
-
-    struct packet_offset_info pkg_offset = {0};
-    struct inet_pair ip_pair = {0};
-    int ret = 0;
-
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
-    if (ret) {
-        return ret;
-    }
-
-    ret = is_handle_protocol(pkg_offset.l4_protocol);
-    if (ret != TC_ACT_OK) {
-        return ret;
-    }
-
-    if (pkg_offset.l3_protocol != LANDSCAPE_IPV6_TYPE) {
-        return TC_ACT_OK;
-    }
-
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
-    if (ret) {
-        return ret;
-    }
-
-    ret = ipv6_ingress_prefix_check_and_replace(skb, &pkg_offset, &ip_pair);
-    if (ret) {
-        return ret;
-    }
-
-    return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }
