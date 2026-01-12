@@ -230,21 +230,11 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
         return TC_ACT_UNSPEC;
     }
 
-    // 依据配置发往具体的网卡， 检查 MAC 地址
     if (current_l3_offset == 0 && target_info->has_mac) {
-        // 当前数据包没有 mac 目标网卡有 mac
-        if (prepend_dummy_mac(skb) != 0) {
+        if (prepend_dummy_mac_v6(skb) != 0) {
             bpf_log_error("add dummy_mac fail");
             return TC_ACT_SHOT;
         }
-
-        // 使用 bpf_redirect_neigh 转发时无需进行缩减 mac, docker 时有 mac, 所以也无需缩减 mac 地址
-        // } else if (current_l3_offset != 0 && !target_info->has_mac) {
-        //     // 当前有, 目标网卡没有
-        //     int ret = bpf_skb_adjust_room(skb, -14, BPF_ADJ_ROOM_MAC, 0);
-        //     if (ret < 0) {
-        //         return TC_ACT_SHOT;
-        // }
     }
 
     if (target_info->is_docker) {

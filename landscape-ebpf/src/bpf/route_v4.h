@@ -226,9 +226,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
         return TC_ACT_UNSPEC;
     }
 
-    // 依据配置发往具体的网卡， 检查 MAC 地址
     if (current_l3_offset == 0 && target_info->has_mac) {
-        // 当前数据包没有 mac 目标网卡有 mac
         if (prepend_dummy_mac(skb) != 0) {
             bpf_log_error("add dummy_mac fail");
             return TC_ACT_SHOT;
