@@ -90,7 +90,7 @@ impl MacAddr {
 
         let mut bytes = [0u8; 6];
         for (i, part) in parts.iter().enumerate() {
-            if let Ok(num) = u8::from_str_radix(part, 16) {
+            if let Ok(num) = u8::from_str_radix(&part[..2], 16) {
                 bytes[i] = num;
             } else {
                 return None;
