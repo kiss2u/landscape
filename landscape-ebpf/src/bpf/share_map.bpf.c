@@ -1,3 +1,5 @@
+#include <bpf/bpf_endian.h>
+
 #include "landscape.h"
 #include "share_ifindex_ip.h"
 #include "firewall_share.h"
