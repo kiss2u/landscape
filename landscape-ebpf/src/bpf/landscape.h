@@ -158,7 +158,8 @@ struct inet_pair {
 
 /// 作为 fragment 缓存的 key
 struct fragment_cache_key {
-    u8 _pad[3];
+    u8 _pad[2];
+    u8 l3proto;
     u8 l4proto;
     u32 id;
     union u_inet_addr saddr;
@@ -270,5 +271,50 @@ static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const unio
 }
 
 #define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
+
+
+static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
+                                            bool *is_ipv4_) {
+    bool is_ipv4;
+    if (current_l3_offset != 0) {
+        struct ethhdr *eth;
+        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
+            return TC_ACT_UNSPEC;
+        }
+
+        if (eth->h_proto == ETH_IPV4) {
+            is_ipv4 = true;
+        } else if (eth->h_proto == ETH_IPV6) {
+            is_ipv4 = false;
+        } else {
+            return TC_ACT_UNSPEC;
+        }
+    } else {
+        u8 *p_version;
+        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
+            return TC_ACT_UNSPEC;
+        }
+        u8 ip_version = (*p_version) >> 4;
+        if (ip_version == 4) {
+            is_ipv4 = true;
+        } else if (ip_version == 6) {
+            is_ipv4 = false;
+        } else {
+            return TC_ACT_UNSPEC;
+        }
+    }
+    *is_ipv4_ = is_ipv4;
+    return TC_ACT_OK;
+}
+
+static __always_inline int is_broadcast_ip4_pair(const struct inet4_pair *ip_pair) {
+    if (is_broadcast_ip4(ip_pair->src_addr.addr)) {
+        return TC_ACT_UNSPEC;
+    } else if (is_broadcast_ip4(ip_pair->dst_addr.addr)) {
+        return TC_ACT_UNSPEC;
+    }
+    return TC_ACT_OK;
+}
+
 
 #endif /* __LD_LANDSCAPE_H__ */

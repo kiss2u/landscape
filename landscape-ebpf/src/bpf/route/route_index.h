@@ -29,39 +29,4 @@ struct route_context_v6 {
     u8 smac[6];
 };
 
-
-static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
-                                            bool *is_ipv4_) {
-    bool is_ipv4;
-    if (current_l3_offset != 0) {
-        struct ethhdr *eth;
-        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-            return TC_ACT_UNSPEC;
-        }
-
-        if (eth->h_proto == ETH_IPV4) {
-            is_ipv4 = true;
-        } else if (eth->h_proto == ETH_IPV6) {
-            is_ipv4 = false;
-        } else {
-            return TC_ACT_UNSPEC;
-        }
-    } else {
-        u8 *p_version;
-        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
-            return TC_ACT_UNSPEC;
-        }
-        u8 ip_version = (*p_version) >> 4;
-        if (ip_version == 4) {
-            is_ipv4 = true;
-        } else if (ip_version == 6) {
-            is_ipv4 = false;
-        } else {
-            return TC_ACT_UNSPEC;
-        }
-    }
-    *is_ipv4_ = is_ipv4;
-    return TC_ACT_OK;
-}
-
 #endif /* __LD_ROUTE_INDEX_H__ */

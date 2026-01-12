@@ -32,8 +32,8 @@ struct {
 } ingress_prog_array SEC(".maps") = {
     .values =
         {
-            [IPV4_INGRESS_PROG_INDEX] = (void *)&ipv4_ingress_firewall,
-            [IPV6_INGRESS_PROG_INDEX] = (void *)&ipv6_ingress_firewall,
+            [IPV4_FIREWALL_INGRESS_PROG_INDEX] = (void *)&ipv4_ingress_firewall,
+            [IPV6_FIREWALL_INGRESS_PROG_INDEX] = (void *)&ipv6_ingress_firewall,
         },
 };
 
@@ -46,8 +46,8 @@ struct {
 } egress_prog_array SEC(".maps") = {
     .values =
         {
-            [IPV4_EGRESS_PROG_INDEX] = (void *)&ipv4_egress_firewall,
-            [IPV6_EGRESS_PROG_INDEX] = (void *)&ipv6_egress_firewall,
+            [IPV4_FIREWALL_EGRESS_PROG_INDEX] = (void *)&ipv4_egress_firewall,
+            [IPV6_FIREWALL_EGRESS_PROG_INDEX] = (void *)&ipv6_egress_firewall,
         },
 };
 
@@ -860,40 +860,6 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
-                                            bool *is_ipv4_) {
-    bool is_ipv4;
-    if (current_l3_offset != 0) {
-        struct ethhdr *eth;
-        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-            return TC_ACT_UNSPEC;
-        }
-
-        if (eth->h_proto == ETH_IPV4) {
-            is_ipv4 = true;
-        } else if (eth->h_proto == ETH_IPV6) {
-            is_ipv4 = false;
-        } else {
-            return TC_ACT_UNSPEC;
-        }
-    } else {
-        u8 *p_version;
-        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
-            return TC_ACT_UNSPEC;
-        }
-        u8 ip_version = (*p_version) >> 4;
-        if (ip_version == 4) {
-            is_ipv4 = true;
-        } else if (ip_version == 6) {
-            is_ipv4 = false;
-        } else {
-            return TC_ACT_UNSPEC;
-        }
-    }
-    *is_ipv4_ = is_ipv4;
-    return TC_ACT_OK;
-}
-
 SEC("tc/egress")
 int ipv4_egress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ipv4_egress_firewall <<<"
@@ -1323,9 +1289,9 @@ int egress_firewall(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        bpf_tail_call_static(skb, &egress_prog_array, IPV4_EGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &egress_prog_array, IPV4_FIREWALL_EGRESS_PROG_INDEX);
     } else {
-        bpf_tail_call_static(skb, &egress_prog_array, IPV6_EGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &egress_prog_array, IPV6_FIREWALL_EGRESS_PROG_INDEX);
     }
     // if (ret) {
     //     bpf_log_info("bpf_tail_call error: %d", ret);
@@ -1345,9 +1311,9 @@ int ingress_firewall(struct __sk_buff *skb) {
     }
 
     if (is_ipv4) {
-        bpf_tail_call_static(skb, &ingress_prog_array, IPV4_INGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &ingress_prog_array, IPV4_FIREWALL_INGRESS_PROG_INDEX);
     } else {
-        bpf_tail_call_static(skb, &ingress_prog_array, IPV6_INGRESS_PROG_INDEX);
+        bpf_tail_call_static(skb, &ingress_prog_array, IPV6_FIREWALL_INGRESS_PROG_INDEX);
     }
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC
