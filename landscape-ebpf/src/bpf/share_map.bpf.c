@@ -1,7 +1,8 @@
 #include <bpf/bpf_endian.h>
 
 #include "landscape.h"
-#include "share_ifindex_ip.h"
+#include "nat/nat_maps.h"
+#include "land_wan_ip.h"
 #include "firewall_share.h"
 #include "metric.h"
 #include "flow_match.h"

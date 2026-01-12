@@ -3,7 +3,8 @@
 #include <bpf/bpf_helpers.h>
 
 #include "vmlinux.h"
-#include "landscape.h"
+#include "../landscape.h"
+#include "../land_nat_common.h"
 
 #define STATIC_NAT_MAPPING_CACHE_SIZE 1024 * 64
 
@@ -30,6 +31,16 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } static_nat_mappings SEC(".maps");
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __type(key, struct nat4_ct_key);
+    __type(value, struct nat4_ct_value);
+    __uint(max_entries, NAT_MAPPING_TIMER_SIZE);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} nat4_conn_map SEC(".maps");
+
 
 #define NAT_CREATE_CONN 1
 #define NAT_DELETE_CONN 2

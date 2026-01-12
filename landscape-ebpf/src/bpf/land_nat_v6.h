@@ -5,7 +5,7 @@
 #include "pkg_scanner.h"
 #include "pkg_fragment.h"
 #include "land_nat_common.h"
-#include "land_nat_static.h"
+#include "nat/nat_maps.h"
 #include "land_wan_ip.h"
 
 #define LAND_IPV6_NET_PREFIX_TRANS_MASK (0x0FULL << 56)

@@ -25,7 +25,8 @@ enum {
     TCP_SYN = 1ULL,
     TCP_SYN_ACK = 2ULL,
     TCP_EST = 3ULL,
-    OTHER_EST = 4ULL
+    OTHER_EST = 4ULL,
+    TCP_FIN = 5ULL,
 };
 // Timer 创建情况
 enum { TIMER_EXIST, TIMER_NOT_FOUND, TIMER_ERROR, TIMER_CREATED };

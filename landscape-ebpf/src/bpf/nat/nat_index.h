@@ -15,7 +15,7 @@ static __always_inline bool inet_addr_equal(const union u_inet_addr *a,
 
 /// @brief  解析的 ip 数据包载体
 struct ip_packet_info {
-    u8 _pad;
+    u8 icmp_type;
     // ip 报文承载的协议类型: TCP / UDP / ICMP
     u8 ip_protocol;
     // 数据包的处理类型 (例如, 非链接, SYN FIN)

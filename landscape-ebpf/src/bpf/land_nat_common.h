@@ -2,7 +2,14 @@
 #define LD_NAT_COMMON_H
 #include "vmlinux.h"
 #include "landscape_log.h"
+#include "landscape.h"
 #include "pkg_def.h"
+
+#define NAT_MAPPING_CACHE_SIZE 1024 * 64 * 2
+#define NAT_MAPPING_TIMER_SIZE 1024 * 64 * 2
+
+#define NAT_MAPPING_INGRESS 0
+#define NAT_MAPPING_EGRESS 1
 
 #define READ_SKB_U16(skb_ptr, offset, var)                                                         \
     do {                                                                                           \
@@ -27,16 +34,15 @@ static __always_inline int is_handle_protocol(const u8 protocol) {
     }
 }
 
-enum {
-    NAT_MAPPING_INGRESS = 0,
-    NAT_MAPPING_EGRESS = 1,
-};
 
-/// 作为 发出 和 接收 数据包时查询的 key
 struct nat_mapping_key {
     u8 gress;
     u8 l4proto;
+    // egress: Cp
+    // ingress: Np
     __be16 from_port;
+    // egress: Ca
+    // ingress: Na , maybe change to ifindex
     union u_inet_addr from_addr;
 };
 
@@ -52,7 +58,30 @@ struct nat_mapping_value {
     u8 _pad[2];
     // 增加一个最后活跃时间
     u64 active_time;
-    //
+};
+
+struct nat_mapping_key_v4 {
+    u8 gress;
+    u8 l4proto;
+    // egress: Cp
+    // ingress: Np
+    __be16 from_port;
+    // egress: Ca
+    // ingress: Na , maybe change to ifindex
+    __be32 from_addr;
+};
+
+struct nat_mapping_value_v4 {
+    __be32 addr;
+    // TODO： 触发这个关系的 ip 或者端口
+    // 单独一张检查表， 使用这个 ip 获取是否需要检查
+    __be32 trigger_addr;
+    __be16 port;
+    __be16 trigger_port;
+    u8 is_static;
+    u8 is_allow_reuse;
+    u8 _pad[2];
+    u64 active_time;
 };
 
 //
@@ -76,6 +105,25 @@ struct nat_timer_value {
     u8 _pad;
 };
 
+struct nat4_ct_key {
+    u8 l4proto;
+    u8 _pad[3];
+    // Ac:Pc_An:Pn
+    struct inet4_pair pair_ip;
+};
+
+//
+struct nat4_ct_value {
+    u64 client_status;
+    u64 server_status;
+    // As
+    __be32 trigger_saddr;
+    // Ps
+    u16 trigger_port;
+    u8 gress;
+    u8 _pad;
+};
+
 // 所能映射的范围
 struct mapping_range {
     u16 start;
@@ -85,6 +133,16 @@ struct mapping_range {
 // 用于搜寻可用的端口
 struct search_port_ctx {
     struct nat_mapping_key ingress_key;
+    struct mapping_range range;
+    u16 remaining_size;
+    // 小端序的端口
+    u16 curr_port;
+    bool found;
+    u64 timeout_interval;
+};
+
+struct search_port_ctx_v4 {
+    struct nat_mapping_key_v4 ingress_key;
     struct mapping_range range;
     u16 remaining_size;
     // 小端序的端口

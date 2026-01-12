@@ -38,7 +38,9 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
 
     landscape_open.maps.wan_ip_binding.set_pin_path(&paths.wan_ip).unwrap();
+    // NAT
     landscape_open.maps.static_nat_mappings.set_pin_path(&paths.static_nat_mappings).unwrap();
+    landscape_open.maps.nat4_conn_map.set_pin_path(&paths.nat4_conn_map).unwrap();
 
     // firewall
     landscape_open.maps.firewall_block_ip4_map.set_pin_path(&paths.firewall_ipv4_block).unwrap();

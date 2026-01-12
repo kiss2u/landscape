@@ -633,4 +633,98 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
 #undef BPF_LOG_TOPIC
 }
 
+
+static __always_inline int read_packet_info4(struct __sk_buff *skb,
+                                            struct packet_offset_info *offset_info,
+                                            struct inet4_pair *ip_pair) {
+#define BPF_LOG_TOPIC "read_packet_info4"
+
+    int ret;
+    struct iphdr *iph;
+    if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
+        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        return TC_ACT_SHOT;
+    }
+    ip_pair->dst_addr.addr = iph->daddr;
+    ip_pair->src_addr.addr = iph->saddr;
+
+    if (offset_info->icmp_error_l3_offset > 0) {
+        if (VALIDATE_READ_DATA(skb, &iph, offset_info->icmp_error_l3_offset,
+                                sizeof(struct iphdr))) {
+            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            return TC_ACT_SHOT;
+        }
+        ip_pair->src_addr.addr = iph->daddr;
+    }
+ 
+
+    if (offset_info->icmp_error_l4_protocol == IPPROTO_TCP) {
+        struct tcphdr *tcph;
+        if (VALIDATE_READ_DATA(skb, &tcph, offset_info->icmp_error_inner_l4_offset,
+                               sizeof(*tcph))) {
+            return TC_ACT_SHOT;
+        }
+        ip_pair->dst_port = tcph->source;
+        ip_pair->src_port = tcph->dest;
+
+        if (tcph->fin) {
+            offset_info->pkt_type = PKT_TCP_FIN_V2;
+        } else if (tcph->rst) {
+            offset_info->pkt_type = PKT_TCP_RST_V2;
+        } else if (tcph->syn) {
+            offset_info->pkt_type = PKT_TCP_SYN_V2;
+        } else {
+            offset_info->pkt_type = PKT_TCP_DATA_V2;
+        }
+    } else if (offset_info->l4_protocol == IPPROTO_TCP) {
+        struct tcphdr *tcph;
+        if (VALIDATE_READ_DATA(skb, &tcph, offset_info->l4_offset, sizeof(*tcph))) {
+            return TC_ACT_SHOT;
+        }
+        ip_pair->src_port = tcph->source;
+        ip_pair->dst_port = tcph->dest;
+
+        if (tcph->fin) {
+            offset_info->pkt_type = PKT_TCP_FIN_V2;
+        } else if (tcph->rst) {
+            offset_info->pkt_type = PKT_TCP_RST_V2;
+        } else if (tcph->syn) {
+            offset_info->pkt_type = PKT_TCP_SYN_V2;
+        } else {
+            offset_info->pkt_type = PKT_TCP_DATA_V2;
+        }
+    } else if (offset_info->icmp_error_l4_protocol == IPPROTO_UDP) {
+        struct udphdr *udph;
+        if (VALIDATE_READ_DATA(skb, &udph, offset_info->icmp_error_inner_l4_offset,
+                               sizeof(*udph))) {
+            return TC_ACT_SHOT;
+        }
+        ip_pair->dst_port = udph->source;
+        ip_pair->src_port = udph->dest;
+    } else if (offset_info->l4_protocol == IPPROTO_UDP) {
+        struct udphdr *udph;
+        if (VALIDATE_READ_DATA(skb, &udph, offset_info->l4_offset, sizeof(*udph))) {
+            return TC_ACT_SHOT;
+        }
+        ip_pair->src_port = udph->source;
+        ip_pair->dst_port = udph->dest;
+    } else if (offset_info->l4_protocol == IPPROTO_ICMP ||
+               offset_info->l4_protocol == IPPROTO_ICMPV6) {
+        u32 offset = offset_info->l4_offset;
+        if (offset_info->icmp_error_inner_l4_offset > 0) {
+            offset = offset_info->icmp_error_inner_l4_offset;
+        }
+        struct icmphdr *icmph;
+        if (VALIDATE_READ_DATA(skb, &icmph, offset, sizeof(struct icmphdr))) {
+            return TC_ACT_SHOT;
+        }
+
+        ip_pair->src_port = ip_pair->dst_port = icmph->un.echo.id;
+    } else {
+        return TC_ACT_UNSPEC;
+    }
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
 #endif /* __LD_PACKET_SCANNER_H__ */

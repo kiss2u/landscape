@@ -27,22 +27,22 @@ pub fn init_nat(
     let mut open_object = MaybeUninit::uninit();
     let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
     // println!("reuse_pinned_map: {:?}", MAP_PATHS.wan_ip);
-    landscape_open.maps.wan_ip_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
-    landscape_open.maps.static_nat_mappings.set_pin_path(&MAP_PATHS.static_nat_mappings).unwrap();
-    landscape_open.maps.nat_conn_events.set_pin_path(&MAP_PATHS.nat_conn_events).unwrap();
-    if let Err(e) = landscape_open.maps.wan_ip_binding.reuse_pinned_map(&MAP_PATHS.wan_ip) {
-        tracing::error!("error: {e:?}");
-    }
-    if let Err(e) =
-        landscape_open.maps.static_nat_mappings.reuse_pinned_map(&MAP_PATHS.static_nat_mappings)
-    {
-        tracing::error!("error: {e:?}");
-    }
 
-    if let Err(e) = landscape_open.maps.nat_conn_events.reuse_pinned_map(&MAP_PATHS.nat_conn_events)
-    {
-        tracing::error!("error: {e:?}");
-    }
+    landscape_open.maps.wan_ip_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
+    landscape_open.maps.wan_ip_binding.reuse_pinned_map(&MAP_PATHS.wan_ip).unwrap();
+
+    landscape_open.maps.static_nat_mappings.set_pin_path(&MAP_PATHS.static_nat_mappings).unwrap();
+    landscape_open
+        .maps
+        .static_nat_mappings
+        .reuse_pinned_map(&MAP_PATHS.static_nat_mappings)
+        .unwrap();
+
+    landscape_open.maps.nat4_conn_map.set_pin_path(&MAP_PATHS.nat4_conn_map).unwrap();
+    landscape_open.maps.nat4_conn_map.reuse_pinned_map(&MAP_PATHS.nat4_conn_map).unwrap();
+
+    landscape_open.maps.nat_conn_events.set_pin_path(&MAP_PATHS.nat_conn_events).unwrap();
+    landscape_open.maps.nat_conn_events.reuse_pinned_map(&MAP_PATHS.nat_conn_events).unwrap();
 
     let rodata_data =
         landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
