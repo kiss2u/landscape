@@ -11,11 +11,10 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 
 [简体中文](./README.zh.md) | [English](./README.md)
 
----
-
+> For more information, please read the [documentation](https://landscape.whileaway.dev/en/introduction.html).
 
 ## Screenshot
-![](docs/images/1.png)
+![](main.png)
 
 ---
 
@@ -133,18 +132,18 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
 ### System Requirements
 
 * Supported Linux Kernel: `6.9` or later
+* The Linux kernel enables BTF/BPF functionality. See the [documentation](https://landscape.whileaway.dev/attention.html) for details.
 * (Optional) `docker`
 
 ### Manual Startup
-
 1. Create config directory:
 
    ```bash
    mkdir -p /root/.landscape-router
    ```
 2. Download **static.zip** from [release](https://github.com/ThisSeanZhang/landscape/releases) and extract to `/root/.landscape-router/static`
-3. If you have a desktop environment and browser, you can skip this step.
-   Otherwise, refer to [Config](https://landscape.whileaway.dev/config/) to create `landscape_init.toml`
+3. It can be started without configuring any files, but if you want to initialize it automatically via a configuration file.
+   refer to [Config](https://landscape.whileaway.dev/config/) to create `landscape_init.toml`
 4. Start the service by downloading a release binary from [Releases](https://github.com/ThisSeanZhang/landscape/releases)
    Then run (as root):
 
@@ -152,9 +151,10 @@ Landscape is a web-based tool that helps you easily configure your favorite Linu
    ./landscape-webserver
    ```
 
-   Default port: **6300**
-   Default username: **root**
-   Default password: **root**
+   Default HTTP port: **6300**  <br/>
+   Default HTTPS port: **6443**  <br/>
+   Default username: **root**  <br/>
+   Default password: **root**  <br/>
    Use `./landscape-webserver --help` for other options.
 5. Once everything is confirmed to work, you can set it up as a systemd service.
    Create `/etc/systemd/system/landscape-router.service` with the following content:
