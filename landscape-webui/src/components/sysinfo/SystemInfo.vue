@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { get_sysinfo } from "@/api/sys";
 import { SysInfo } from "@/lib/sys";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, computed } from "vue";
 
 const sysinfo = ref<SysInfo>({
   host_name: undefined,
@@ -23,6 +23,13 @@ onMounted(async () => {
   sysinfo.value = await get_sysinfo();
 });
 const ui_version = __APP_VERSION__;
+
+const isVersionMismatch = computed(() => {
+  if (!sysinfo.value.landscape_version || !ui_version) {
+    return false;
+  }
+  return sysinfo.value.landscape_version !== ui_version;
+});
 </script>
 <template>
   <n-card title="系统">
@@ -52,7 +59,15 @@ const ui_version = __APP_VERSION__;
         <n-time :to="now" :time="sysinfo.start_at * 1000" type="relative" />
       </n-descriptions-item> -->
       <n-descriptions-item :span="2" label="Landscape Router 版本">
-        {{ sysinfo.landscape_version }} {{ `( UI 版本: ${ui_version} )` }}
+        <n-tooltip v-if="isVersionMismatch" trigger="hover" placement="top">
+          <template #trigger>
+            <n-gradient-text :bordered="false" type="error">
+              {{ sysinfo.landscape_version }} {{ `( UI 版本: ${ui_version} )` }}
+            </n-gradient-text>
+          </template>
+          <span> 前端与后端版本不一致, 可能导致使用问题! <br /> 请检查前端静态文件, 或者清理浏览器缓存 </span>
+        </n-tooltip>
+        <span v-else>{{ sysinfo.landscape_version }} {{ `( UI 版本: ${ui_version} )` }}</span>
       </n-descriptions-item>
     </n-descriptions>
   </n-card>
