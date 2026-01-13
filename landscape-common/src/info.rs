@@ -1,13 +1,11 @@
-use std::env;
-
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tokio::sync::watch;
 
-pub static LAND_SYS_BASE_INFO: Lazy<LandscapeSystemInfo> = Lazy::new(LandscapeSystemInfo::new);
+use crate::VERSION;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub static LAND_SYS_BASE_INFO: Lazy<LandscapeSystemInfo> = Lazy::new(LandscapeSystemInfo::new);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LandscapeSystemInfo {

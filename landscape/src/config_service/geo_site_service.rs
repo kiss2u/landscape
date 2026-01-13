@@ -57,11 +57,11 @@ impl GeoSiteService {
         let service = Self { store, file_cache, dns_events_tx };
         let service_clone = service.clone();
         tokio::spawn(async move {
-            //
             let mut ticker = tokio::time::interval(Duration::from_secs(A_DAY));
+            // The current network may not be ready; delaying the update check.
+            tokio::time::sleep(Duration::from_secs(30)).await;
             loop {
                 service_clone.refresh(false).await;
-                // 等待下一次 tick
                 ticker.tick().await;
             }
         });

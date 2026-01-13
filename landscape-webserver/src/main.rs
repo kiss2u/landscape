@@ -46,6 +46,7 @@ use landscape_common::{
     error::LdResult,
     ipv6_pd::IAPrefixMap,
     service::controller_service_v2::ControllerService,
+    VERSION,
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use sys_service::dns_service::get_dns_paths;
@@ -442,7 +443,8 @@ async fn handle_404() -> (StatusCode, &'static str) {
 }
 
 fn banner(config: &RuntimeConfig) {
-    let banner = r#"
+    let banner = format!(
+        r#"
 ██╗      █████╗ ███╗   ██╗██████╗ ███████╗ ██████╗ █████╗ ██████╗ ███████╗
 ██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝
 ██║     ███████║██╔██╗ ██║██║  ██║███████╗██║     ███████║██████╔╝█████╗  
@@ -455,14 +457,21 @@ fn banner(config: &RuntimeConfig) {
 ██████╔╝██║   ██║██║   ██║   ██║   █████╗  ██████╔╝                       
 ██╔══██╗██║   ██║██║   ██║   ██║   ██╔══╝  ██╔══██╗                       
 ██║  ██║╚██████╔╝╚██████╔╝   ██║   ███████╗██║  ██║                       
-╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝                       
-    "#;
-    let banner = banner.bright_blue().bold();
-    let config_str = config.to_string_summary().green();
-    info!("{}", banner);
-    info!("{}", config_str);
+╚═╝  ╚═╝ ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝ (v{version})                      
+
+Landscape Router is licensed under the GPL-3.0 License
+
+Github: https://github.com/ThisSeanZhang/landscape
+Doc   : https://landscape.whileaway.dev
+"#,
+        version = VERSION
+    );
+    let config_str = config.to_string_summary();
+    info!("{}{}", banner, config_str);
     if !config.log.log_output_in_terminal {
         // 当日志不在 terminal 直接展示时, 仅输出一些信息
+        let banner = banner.bright_blue().bold();
+        let config_str = config_str.green();
         println!("{}", banner);
         println!("{}", config_str);
     }

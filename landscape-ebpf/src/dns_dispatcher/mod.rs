@@ -28,8 +28,8 @@ pub fn attach_reuseport_ebpf(sock_fd: i32) -> LdEbpfResult<()> {
     let reuseport_dns_dispatcher = skel.progs.reuseport_dns_dispatcher;
     let prog_fd: i32 = reuseport_dns_dispatcher.as_fd().as_raw_fd();
 
-    // println!("is_supported {:?}", reuseport_dns_dispatcher.prog_type().is_supported());
-    // println!("{:?}", reuseport_dns_dispatcher.attach_type());
+    // tracing::info!("is_supported {:?}", reuseport_dns_dispatcher.prog_type().is_supported());
+    // tracing::info!("{:?}", reuseport_dns_dispatcher.attach_type());
 
     unsafe {
         let ret = setsockopt(
@@ -40,9 +40,9 @@ pub fn attach_reuseport_ebpf(sock_fd: i32) -> LdEbpfResult<()> {
             std::mem::size_of::<i32>() as socklen_t,
         );
         if ret != 0 {
-            println!("{:?}", std::io::Error::last_os_error());
+            tracing::error!("{:?}", std::io::Error::last_os_error());
         } else {
-            println!("success");
+            tracing::info!("attach DNS eBPF success");
         }
     }
 

@@ -34,6 +34,8 @@ pub mod pty;
 
 pub mod dns;
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Home Path
 pub const LANDSCAPE_CONFIG_DIR_NAME: &str = ".landscape-router";
 
