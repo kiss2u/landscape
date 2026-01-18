@@ -45,7 +45,10 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         dns_flow_socks: PathBuf::from(format!("{}/dns_flow_socks", ebpf_map_path)),
         // metric
         metric_map: PathBuf::from(format!("{}/metric_map", ebpf_map_path)),
+
         nat_conn_events: PathBuf::from(format!("{}/nat_conn_events", ebpf_map_path)),
+        nat_conn_metric_events: PathBuf::from(format!("{}/nat_conn_metric_events", ebpf_map_path)),
+
         firewall_conn_events: PathBuf::from(format!("{}/firewall_conn_events", ebpf_map_path)),
         firewall_conn_metric_events: PathBuf::from(format!(
             "{}/firewall_conn_metric_events",
@@ -97,6 +100,8 @@ pub(crate) struct LandscapeMapPath {
 
     /// metric
     pub metric_map: PathBuf,
+    pub nat_conn_metric_events: PathBuf,
+
     /// nat
     pub nat_conn_events: PathBuf,
     /// firewall

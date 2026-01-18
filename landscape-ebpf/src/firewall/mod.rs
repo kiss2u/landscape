@@ -17,8 +17,6 @@ use crate::{
     FIREWALL_INGRESS_PRIORITY, MAP_PATHS,
 };
 
-mod metric;
-
 pub fn new_firewall(
     ifindex: i32,
     has_mac: bool,

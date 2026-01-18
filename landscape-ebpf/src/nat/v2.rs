@@ -44,6 +44,17 @@ pub fn init_nat(
     landscape_open.maps.nat_conn_events.set_pin_path(&MAP_PATHS.nat_conn_events).unwrap();
     landscape_open.maps.nat_conn_events.reuse_pinned_map(&MAP_PATHS.nat_conn_events).unwrap();
 
+    landscape_open
+        .maps
+        .nat_conn_metric_events
+        .set_pin_path(&MAP_PATHS.nat_conn_metric_events)
+        .unwrap();
+    landscape_open
+        .maps
+        .nat_conn_metric_events
+        .reuse_pinned_map(&MAP_PATHS.nat_conn_metric_events)
+        .unwrap();
+
     let rodata_data =
         landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
 

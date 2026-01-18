@@ -246,7 +246,7 @@ static __always_inline void nat_metric_accumulate(struct __sk_buff *skb, bool in
 
 static __always_inline int nat_metric_try_report_v4(struct nat_timer_key *timer_key,
                                                     struct nat_timer_value *timer_value) {
-#define BPF_LOG_TOPIC "nat_metric_try_report"
+#define BPF_LOG_TOPIC "nat_metric_try_report_v4"
 
     struct nat_conn_metric_event *event;
     event = bpf_ringbuf_reserve(&nat_conn_metric_events, sizeof(struct nat_conn_metric_event), 0);
@@ -350,7 +350,7 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
                                              struct nat_mapping_value_v4 *nat_egress_value,
                                              struct nat_mapping_value_v4 *nat_ingress_value,
                                              struct nat4_ct_value **timer_value_) {
-#define BPF_LOG_TOPIC "lookup_or_new_ct"
+#define BPF_LOG_TOPIC "lookup_or_new_ct4"
 
     struct nat4_ct_key ct4_key = {
         .l4proto = l4proto,
@@ -394,21 +394,21 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
     // bpf_log_debug("insert new CT");
 
     // 发送 event
-    // struct nat_conn_event *event;
-    // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-    // if (event != NULL) {
-    //     COPY_ADDR_FROM(event->dst_addr.all, nat_egress_value->trigger_addr.all);
-    //     COPY_ADDR_FROM(event->src_addr.all, nat_ingress_value->addr.all);
-    //     event->src_port = nat_ingress_value->port;
-    //     event->dst_port = nat_egress_value->trigger_port;
-    //     event->l4_proto = l4proto;
-    //     event->l3_proto = LANDSCAPE_IPV4_TYPE;
-    //     event->flow_id = 0;
-    //     event->trace_id = 0;
-    //     event->time = bpf_jiffies64();
-    //     event->event_type = NAT_CREATE_CONN;
-    //     bpf_ringbuf_submit(event, 0);
-    // }
+    struct nat_conn_event *event;
+    event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    if (event != NULL) {
+        event->dst_addr.ip = nat_egress_value->trigger_addr;
+        event->src_addr.ip = nat_ingress_value->addr;
+        event->src_port = nat_ingress_value->port;
+        event->dst_port = nat_egress_value->trigger_port;
+        event->l4_proto = l4proto;
+        event->l3_proto = LANDSCAPE_IPV4_TYPE;
+        event->flow_id = 0;
+        event->trace_id = 0;
+        event->time = bpf_jiffies64();
+        event->event_type = NAT_CREATE_CONN;
+        bpf_ringbuf_submit(event, 0);
+    }
 
     *timer_value_ = ct4_value;
     return TIMER_CREATED;
@@ -438,22 +438,18 @@ static __always_inline int ct_state_transition(u8 l4proto, u8 pkt_type, u8 gress
 
     if (pkt_type == PKT_CONNLESS_V2) {
         NEW_STATE(CT_LESS_EST);
-        return TC_ACT_OK;
     }
 
     if (pkt_type == PKT_TCP_RST_V2) {
         NEW_STATE(CT_INIT);
-        return TC_ACT_OK;
     }
 
     if (pkt_type == PKT_TCP_SYN_V2) {
         NEW_STATE(CT_SYN);
-        return TC_ACT_OK;
     }
 
     if (pkt_type == PKT_TCP_FIN_V2) {
         NEW_STATE(CT_FIN);
-        return TC_ACT_OK;
     }
 
     u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
@@ -480,9 +476,30 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
     u64 next_timeout = REPORT_INTERVAL;
     int ret;
 
+    if (value->trigger_port == TEST_PORT) {
+        bpf_log_info("timer_clean_callback: %pI4, current_status: %llu", &value->trigger_saddr.addr,
+                     current_status);
+    }
+
     if (current_status == TIMER_RELEASE) {
         if (value->trigger_port == TEST_PORT) {
             bpf_log_info("release CONNECT");
+        }
+
+        struct nat_conn_event *event;
+        event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+        if (event != NULL) {
+            event->dst_addr.ip = value->trigger_saddr.addr;
+            event->src_addr.ip = key->pair_ip.src_addr.addr;
+            event->src_port = key->pair_ip.src_port;
+            event->dst_port = value->trigger_port;
+            event->l4_proto = key->l4proto;
+            event->l3_proto = LANDSCAPE_IPV4_TYPE;
+            event->flow_id = 0;
+            event->trace_id = 0;
+            event->time = bpf_ktime_get_ns();
+            event->event_type = NAT_DELETE_CONN;
+            bpf_ringbuf_submit(event, 0);
         }
         goto release;
     }
@@ -523,6 +540,9 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
             u64 show = (next_timeout / 1000000000ULL);
             bpf_log_info("change next status TIMER_RELEASE, next_timeout: %d", show);
         }
+    } else {
+        next_status = TIMER_TIMEOUT_2;
+        next_timeout = REPORT_INTERVAL;
     }
 
     if (__sync_val_compare_and_swap(&value->status, current_status, next_status) !=
@@ -596,7 +616,7 @@ delete_timer:
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new, u8 flow_id,
+static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, bool do_new,
                                             const struct inet4_pair *pkt_ip_pair,
                                             struct nat_mapping_value_v4 *nat_egress_value,
                                             struct nat_mapping_value_v4 *nat_ingress_value,
@@ -604,6 +624,8 @@ static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new, u8 flow_id,
 #define BPF_LOG_TOPIC "lookup_or_new_ct"
 
     struct nat_timer_key timer_key = {0};
+    u8 flow_id = get_flow_id(skb->mark);
+
     timer_key.l4proto = l4proto;
     timer_key.pair_ip.src_port = nat_ingress_value->port;
     timer_key.pair_ip.dst_port = nat_egress_value->port;
@@ -640,21 +662,21 @@ static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new, u8 flow_id,
     // bpf_log_debug("insert new CT");
 
     // 发送 event
-    // struct nat_conn_event *event;
-    // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-    // if (event != NULL) {
-    //     COPY_ADDR_FROM(event->dst_addr.all, nat_egress_value->trigger_addr.all);
-    //     COPY_ADDR_FROM(event->src_addr.all, nat_ingress_value->addr.all);
-    //     event->src_port = nat_ingress_value->port;
-    //     event->dst_port = nat_egress_value->trigger_port;
-    //     event->l4_proto = l4proto;
-    //     event->l3_proto = LANDSCAPE_IPV4_TYPE;
-    //     event->flow_id = 0;
-    //     event->trace_id = 0;
-    //     event->time = bpf_ktime_get_ns();
-    //     event->event_type = NAT_CREATE_CONN;
-    //     bpf_ringbuf_submit(event, 0);
-    // }
+    struct nat_conn_event *event;
+    event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    if (event != NULL) {
+        event->dst_addr.ip = nat_egress_value->trigger_addr;
+        event->src_addr.ip = nat_ingress_value->addr;
+        event->src_port = nat_ingress_value->port;
+        event->dst_port = nat_egress_value->trigger_port;
+        event->l4_proto = l4proto;
+        event->l3_proto = LANDSCAPE_IPV4_TYPE;
+        event->flow_id = 0;
+        event->trace_id = 0;
+        event->time = bpf_jiffies64();
+        event->event_type = NAT_CREATE_CONN;
+        bpf_ringbuf_submit(event, 0);
+    }
 
     *timer_value_ = timer_value;
     return TIMER_CREATED;

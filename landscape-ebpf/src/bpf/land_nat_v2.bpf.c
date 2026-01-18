@@ -139,11 +139,10 @@ int nat_v4_egress(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat4_ct_value *ct_value;
-            u8 flow_id = get_flow_id(skb->mark);
             // ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
             //                         nat_egress_value, nat_ingress_value, &ct_value);
 
-            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair, flow_id,
+            ret = lookup_or_new_ct(skb, pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
                                    nat_egress_value, nat_ingress_value, &ct_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 return TC_ACT_SHOT;
@@ -153,7 +152,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
                 //                        NAT_MAPPING_INGRESS, ct_value);
                 ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
                                     ct_value);
-                nat_metric_accumulate(skb, false, &ct_value);
+                nat_metric_accumulate(skb, false, ct_value);
             }
         }
     }
@@ -262,10 +261,9 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat_timer_value *ct_timer_value;
-            u8 flow_id = get_flow_id(skb->mark);
             // ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
             //                        nat_egress_value, nat_ingress_value, &ct_timer_value);
-            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair, flow_id,
+            ret = lookup_or_new_ct(skb, pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
                                    nat_egress_value, nat_ingress_value, &ct_timer_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 bpf_log_info("connect ret :%u", ret);
@@ -278,7 +276,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
                 ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type,
                                     NAT_MAPPING_INGRESS, ct_timer_value);
-                nat_metric_accumulate(skb, true, &ct_timer_value);
+                nat_metric_accumulate(skb, true, ct_timer_value);
             }
         }
         // } else {
