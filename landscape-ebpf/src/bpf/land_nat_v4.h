@@ -230,10 +230,51 @@ static __always_inline int modify_headers_v4(struct __sk_buff *skb, bool is_icmp
 #undef BPF_LOG_TOPIC
 }
 
-// static __always_inline bool ct_change_state(struct nat4_ct_value *timer_track_value,
-//                                             u64 curr_state, u64 next_state) {
-//     return __sync_bool_compare_and_swap(&timer_track_value->status, curr_state, next_state);
-// }
+static __always_inline bool try_report() {}
+
+static __always_inline void nat_metric_accumulate(struct __sk_buff *skb, bool ingress,
+                                                  struct nat_timer_value *value) {
+    u64 bytes = skb->len;
+    if (ingress) {
+        __sync_fetch_and_add(&value->ingress_bytes, bytes);
+        __sync_fetch_and_add(&value->ingress_packets, 1);
+    } else {
+        __sync_fetch_and_add(&value->egress_bytes, bytes);
+        __sync_fetch_and_add(&value->egress_packets, 1);
+    }
+}
+
+static __always_inline int nat_metric_try_report_v4(struct nat_timer_key *timer_key,
+                                                    struct nat_timer_value *timer_value) {
+#define BPF_LOG_TOPIC "nat_metric_try_report"
+
+    struct nat_conn_metric_event *event;
+    event = bpf_ringbuf_reserve(&nat_conn_metric_events, sizeof(struct nat_conn_metric_event), 0);
+    if (event == NULL) {
+        return -1;
+    }
+
+    event->src_addr.ip = timer_key->pair_ip.src_addr.addr;
+    event->dst_addr.ip = timer_value->trigger_saddr.addr;
+
+    event->src_port = timer_key->pair_ip.src_port;
+    event->dst_port = timer_value->trigger_port;
+
+    event->l4_proto = timer_key->l4proto;
+    event->l3_proto = LANDSCAPE_IPV4_TYPE;
+    event->flow_id = timer_value->flow_id;
+    event->trace_id = 0;
+    event->time = bpf_ktime_get_ns();
+    event->create_time = timer_value->create_time;
+    event->ingress_bytes = timer_value->ingress_bytes;
+    event->ingress_packets = timer_value->ingress_packets;
+    event->egress_bytes = timer_value->egress_bytes;
+    event->egress_packets = timer_value->egress_packets;
+    bpf_ringbuf_submit(event, 0);
+
+    return 0;
+#undef BPF_LOG_TOPIC
+}
 
 static __always_inline int ct_state_transition_v4(u8 l4proto, u8 pkt_type, u8 gress,
                                                   struct nat4_ct_value *ct_timer_value) {
@@ -243,20 +284,17 @@ static __always_inline int ct_state_transition_v4(u8 l4proto, u8 pkt_type, u8 gr
         if (pkt_type == PKT_CONNLESS_V2) {
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_RST_V2) {
-            if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state,
-                                              CT_FIN)) {
+            if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state, CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_SYN_V2) {
-            if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state,
-                                              CT_SYN)) {
+            if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state, CT_SYN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_FIN_V2) {
-            if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state,
-                                              CT_FIN)) {
+            if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state, CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
@@ -267,20 +305,17 @@ static __always_inline int ct_state_transition_v4(u8 l4proto, u8 pkt_type, u8 gr
         if (pkt_type == PKT_CONNLESS_V2) {
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_RST_V2) {
-            if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state,
-                                              CT_FIN)) {
+            if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state, CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_SYN_V2) {
-            if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state,
-                                              CT_SYN)) {
+            if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state, CT_SYN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_FIN_V2) {
-            if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state,
-                                              CT_FIN)) {
+            if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state, CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
@@ -421,10 +456,9 @@ static __always_inline int ct_state_transition(u8 l4proto, u8 pkt_type, u8 gress
         return TC_ACT_OK;
     }
 
-    
     u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
     if (prev_state != TIMER_ACTIVE) {
-        if  (ct_timer_value->trigger_port == TEST_PORT) {
+        if (ct_timer_value->trigger_port == TEST_PORT) {
             bpf_log_info("flush status to TIMER_ACTIVE: 20");
         }
         bpf_timer_start(&ct_timer_value->timer, REPORT_INTERVAL, 0);
@@ -447,31 +481,31 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
     int ret;
 
     if (current_status == TIMER_RELEASE) {
-        if  (value->trigger_port == TEST_PORT) {
+        if (value->trigger_port == TEST_PORT) {
             bpf_log_info("release CONNECT");
         }
         goto release;
     }
 
-    // ret = try_report(key, value);
-    // if (ret) {
-    //     bpf_log_info("call back report fail");
-    //     bpf_timer_start(&value->timer, next_timeout, 0);
-    //     return 0;
-    // }
+    ret = nat_metric_try_report_v4(key, value);
+    if (ret) {
+        bpf_log_info("call back report fail");
+        bpf_timer_start(&value->timer, next_timeout, 0);
+        return 0;
+    }
 
     if (current_status == TIMER_ACTIVE) {
         next_status = TIMER_TIMEOUT_1;
         next_timeout = REPORT_INTERVAL;
-        
-        if  (value->trigger_port == TEST_PORT) {
+
+        if (value->trigger_port == TEST_PORT) {
             bpf_log_info("change next status TIMER_TIMEOUT_1");
         }
     } else if (current_status == TIMER_TIMEOUT_1) {
         next_status = TIMER_TIMEOUT_2;
         next_timeout = REPORT_INTERVAL;
-        
-        if  (value->trigger_port == TEST_PORT) {
+
+        if (value->trigger_port == TEST_PORT) {
             bpf_log_info("change next status TIMER_TIMEOUT_2");
         }
     } else if (current_status == TIMER_TIMEOUT_2) {
@@ -485,7 +519,7 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
         } else {
             next_timeout = UDP_TIMEOUT;
         }
-        if  (value->trigger_port == TEST_PORT) {
+        if (value->trigger_port == TEST_PORT) {
             u64 show = (next_timeout / 1000000000ULL);
             bpf_log_info("change next status TIMER_RELEASE, next_timeout: %d", show);
         }
@@ -493,13 +527,13 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
 
     if (__sync_val_compare_and_swap(&value->status, current_status, next_status) !=
         current_status) {
-        bpf_log_info("call back modify status fail, current status: %d new status: %d", current_status,
-                     next_status);
+        bpf_log_info("call back modify status fail, current status: %d new status: %d",
+                     current_status, next_status);
         // 更新状态失败, 说明有新的数据包到达
         bpf_timer_start(&value->timer, REPORT_INTERVAL, 0);
         return 0;
     }
-    
+
     bpf_timer_start(&value->timer, next_timeout, 0);
 
     return 0;
@@ -562,7 +596,7 @@ delete_timer:
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new,
+static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new, u8 flow_id,
                                             const struct inet4_pair *pkt_ip_pair,
                                             struct nat_mapping_value_v4 *nat_egress_value,
                                             struct nat_mapping_value_v4 *nat_ingress_value,
@@ -597,6 +631,8 @@ static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new,
     timer_value_new.server_status = CT_INIT;
     timer_value_new.gress = NAT_MAPPING_EGRESS;
     timer_value_new.trigger_saddr.addr = nat_egress_value->trigger_addr;
+    timer_value_new.create_time = nat_egress_value->active_time;
+    timer_value_new.flow_id = flow_id;
     timer_value = insert_new_nat_timer(l4proto, &timer_key, &timer_value_new);
     if (timer_value == NULL) {
         return TIMER_ERROR;

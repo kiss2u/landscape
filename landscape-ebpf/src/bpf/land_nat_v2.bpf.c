@@ -139,19 +139,21 @@ int nat_v4_egress(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat4_ct_value *ct_value;
+            u8 flow_id = get_flow_id(skb->mark);
             // ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
             //                         nat_egress_value, nat_ingress_value, &ct_value);
-                                    
-            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
-                                    nat_egress_value, nat_ingress_value, &ct_value);
+
+            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair, flow_id,
+                                   nat_egress_value, nat_ingress_value, &ct_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 return TC_ACT_SHOT;
             }
             if (!is_icmpx_error || ct_value != NULL) {
                 // ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type,
                 //                        NAT_MAPPING_INGRESS, ct_value);
-                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type,
-                                       NAT_MAPPING_INGRESS, ct_value);
+                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
+                                    ct_value);
+                nat_metric_accumulate(skb, false, &ct_value);
             }
         }
     }
@@ -192,8 +194,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
     // modify source
     ret = modify_headers_v4(skb, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
-                            &ip_pair.src_addr, ip_pair.src_port, &nat_addr,
-                            nat_egress_value->port);
+                            &ip_pair.src_addr, ip_pair.src_port, &nat_addr, nat_egress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
@@ -245,10 +246,10 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
     // 先检查是否有静态映射
     ret = lookup_static_mapping_v4(skb, pkg_offset.l4_protocol, NAT_MAPPING_INGRESS, &ip_pair,
-                                &nat_ingress_value, &nat_egress_value);
+                                   &nat_ingress_value, &nat_egress_value);
     if (ret != TC_ACT_OK) {
         ret = ingress_lookup_or_new_mapping4(skb, pkg_offset.l4_protocol, allow_create_mapping,
-                                            &ip_pair, &nat_egress_value, &nat_ingress_value);
+                                             &ip_pair, &nat_egress_value, &nat_ingress_value);
 
         if (ret != TC_ACT_OK) {
             return TC_ACT_SHOT;
@@ -261,20 +262,23 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat_timer_value *ct_timer_value;
+            u8 flow_id = get_flow_id(skb->mark);
             // ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
             //                        nat_egress_value, nat_ingress_value, &ct_timer_value);
-            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair, flow_id,
                                    nat_egress_value, nat_ingress_value, &ct_timer_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 bpf_log_info("connect ret :%u", ret);
                 return TC_ACT_SHOT;
             }
             if (!is_icmpx_error || ct_timer_value != NULL) {
-                // ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
+                // ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type,
+                // NAT_MAPPING_EGRESS,
                 //                     ct_timer_value);
-                                    
-                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
-                                    ct_timer_value);
+
+                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type,
+                                    NAT_MAPPING_INGRESS, ct_timer_value);
+                nat_metric_accumulate(skb, true, &ct_timer_value);
             }
         }
         // } else {
@@ -308,9 +312,8 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
     // modify source
     ret = modify_headers_v4(skb, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
-                                   pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset,
-                                   false, &ip_pair.dst_addr, ip_pair.dst_port, &lan_ip,
-                                   nat_ingress_value->port);
+                            pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
+                            &ip_pair.dst_addr, ip_pair.dst_port, &lan_ip, nat_ingress_value->port);
     if (ret) {
         bpf_log_error("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
@@ -426,7 +429,7 @@ int ingress_nat(struct __sk_buff *skb) {
 }
 
 SEC("tc/egress")
-int egress_nat(struct __sk_buff *skb){
+int egress_nat(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< egress_nat <<<"
 
     bool is_ipv4;

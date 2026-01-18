@@ -103,7 +103,13 @@ struct nat_timer_value {
     // Ps
     u16 trigger_port;
     u8 gress;
-    u8 _pad;
+    u8 flow_id;
+
+    u64 create_time;
+    u64 ingress_bytes;
+    u64 ingress_packets;
+    u64 egress_bytes;
+    u64 egress_packets;
 };
 
 enum timer_status {
