@@ -19,15 +19,11 @@ enum land_frag_type {
     FRAG_LAST,
 };
 
-// Timer 状态
-enum {
-    TIMER_INIT = 0ULL,  // 0ULL ensures the value is of type u64
-    TCP_SYN = 1ULL,
-    TCP_SYN_ACK = 2ULL,
-    TCP_EST = 3ULL,
-    OTHER_EST = 4ULL,
-    TCP_FIN = 5ULL,
-};
+#define CT_INIT 0
+#define CT_SYN 1
+#define CT_FIN 2
+#define CT_LESS_EST 3
+
 // Timer 创建情况
 enum { TIMER_EXIST, TIMER_NOT_FOUND, TIMER_ERROR, TIMER_CREATED };
 

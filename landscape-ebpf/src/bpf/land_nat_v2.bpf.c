@@ -59,13 +59,6 @@ struct {
 #define NAT_MAPPING_CACHE_SIZE 1024 * 64 * 2
 #define NAT_MAPPING_TIMER_SIZE 1024 * 64 * 2
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct nat_mapping_key);
-    __type(value, struct nat_mapping_value);
-    __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
-} nat_mappings SEC(".maps");
-
 SEC("tc/egress")
 int nat_v4_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "nat_v4_egress <<<"
@@ -146,14 +139,19 @@ int nat_v4_egress(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat4_ct_value *ct_value;
-            ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+            // ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+            //                         nat_egress_value, nat_ingress_value, &ct_value);
+                                    
+            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
                                     nat_egress_value, nat_ingress_value, &ct_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 return TC_ACT_SHOT;
             }
             if (!is_icmpx_error || ct_value != NULL) {
-                ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type,
-                                       NAT_MAPPING_EGRESS, ct_value);
+                // ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type,
+                //                        NAT_MAPPING_INGRESS, ct_value);
+                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type,
+                                       NAT_MAPPING_INGRESS, ct_value);
             }
         }
     }
@@ -263,14 +261,19 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
         if (!nat_egress_value->is_static) {
             struct nat_timer_value *ct_timer_value;
-            ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+            // ret = lookup_or_new_ct4(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
+            //                        nat_egress_value, nat_ingress_value, &ct_timer_value);
+            ret = lookup_or_new_ct(pkg_offset.l4_protocol, allow_create_mapping, &ip_pair,
                                    nat_egress_value, nat_ingress_value, &ct_timer_value);
             if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
                 bpf_log_info("connect ret :%u", ret);
                 return TC_ACT_SHOT;
             }
             if (!is_icmpx_error || ct_timer_value != NULL) {
-                ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
+                // ct_state_transition_v4(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
+                //                     ct_timer_value);
+                                    
+                ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
                                     ct_timer_value);
             }
         }

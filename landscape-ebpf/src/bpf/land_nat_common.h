@@ -89,20 +89,29 @@ struct nat_timer_key {
     u8 l4proto;
     u8 _pad[3];
     // Ac:Pc_An:Pn
-    struct inet_pair pair_ip;
+    struct inet4_pair pair_ip;
 };
 
 //
 struct nat_timer_value {
-    // 只关注 Timer 的状态
+    u64 server_status;
+    u64 client_status;
     u64 status;
     struct bpf_timer timer;
     // As
-    union u_inet_addr trigger_saddr;
+    struct inet4_addr trigger_saddr;
     // Ps
     u16 trigger_port;
     u8 gress;
     u8 _pad;
+};
+
+enum timer_status {
+    TIMER_INIT = 0ULL,
+    TIMER_ACTIVE = 20ULL,
+    TIMER_TIMEOUT_1 = 30ULL,
+    TIMER_TIMEOUT_2 = 31ULL,
+    TIMER_RELEASE = 40ULL,
 };
 
 struct nat4_ct_key {

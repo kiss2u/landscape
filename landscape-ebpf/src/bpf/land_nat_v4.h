@@ -15,13 +15,27 @@ struct {
     __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
 } nat4_mappings SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct nat_timer_key);
+    __type(value, struct nat_timer_value);
+    __uint(max_entries, NAT_MAPPING_TIMER_SIZE);
+    __uint(map_flags, BPF_F_NO_PREALLOC);
+} nat_mapping_timer SEC(".maps");
+
+// 33333
+volatile const __be16 TEST_PORT = 0x3582;
+
 const volatile u32 current_l3_offset = 14;
 
+// 未建立连接时
 const volatile u64 TCP_SYN_TIMEOUT = 1E9 * 6;
-const volatile u64 TCP_TCP_TRANS = 1E9 * 60 * 4;
+// TCP 超时时间
 const volatile u64 TCP_TIMEOUT = 1E9 * 60 * 10;
+// UDP 超时时间
 const volatile u64 UDP_TIMEOUT = 1E9 * 60 * 5;
 
+// 检查间隔时间
 const volatile u64 REPORT_INTERVAL = 1E9 * 5;
 
 volatile const u16 tcp_range_start = 32768;
@@ -125,11 +139,11 @@ static __always_inline int ipv4_update_csum_icmp_err_macro(struct __sk_buff *skb
     return 0;
 }
 
-static __always_inline int modify_headers_v4(struct __sk_buff *skb, bool is_icmpx_error,
-                                                    u8 nexthdr, u32 current_l3_offset, int l4_off,
-                                                    int err_l4_off, bool is_modify_source,
-                                                    struct inet4_addr *from_addr, __be16 from_port,
-                                                    struct inet4_addr *to_addr, __be16 to_port) {
+static __always_inline int modify_headers_v4(struct __sk_buff *skb, bool is_icmpx_error, u8 nexthdr,
+                                             u32 current_l3_offset, int l4_off, int err_l4_off,
+                                             bool is_modify_source, struct inet4_addr *from_addr,
+                                             __be16 from_port, struct inet4_addr *to_addr,
+                                             __be16 to_port) {
 #define BPF_LOG_TOPIC "modify_headers_v4"
     int ret;
     int l4_to_port_off;
@@ -140,8 +154,8 @@ static __always_inline int modify_headers_v4(struct __sk_buff *skb, bool is_icmp
     int ip_offset =
         is_modify_source ? offsetof(struct iphdr, saddr) : offsetof(struct iphdr, daddr);
 
-    ret = bpf_skb_store_bytes(skb, current_l3_offset + ip_offset, &to_addr->addr, sizeof(to_addr->addr),
-                              0);
+    ret = bpf_skb_store_bytes(skb, current_l3_offset + ip_offset, &to_addr->addr,
+                              sizeof(to_addr->addr), 0);
     if (ret) return ret;
 
     L3_CSUM_REPLACE_OR_SHOT(skb, current_l3_offset + offsetof(struct iphdr, check), from_addr->addr,
@@ -223,26 +237,26 @@ static __always_inline int modify_headers_v4(struct __sk_buff *skb, bool is_icmp
 
 static __always_inline int ct_state_transition_v4(u8 l4proto, u8 pkt_type, u8 gress,
                                                   struct nat4_ct_value *ct_timer_value) {
-#define BPF_LOG_TOPIC "ct_state_transition"
+#define BPF_LOG_TOPIC "ct_state_transition_v4"
     if (gress == NAT_MAPPING_INGRESS) {
         u64 curr_state = ct_timer_value->server_status;
         if (pkt_type == PKT_CONNLESS_V2) {
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_RST_V2) {
             if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state,
-                                              TCP_FIN)) {
+                                              CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_SYN_V2) {
             if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state,
-                                              TCP_SYN)) {
+                                              CT_SYN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_FIN_V2) {
             if (!__sync_bool_compare_and_swap(&ct_timer_value->server_status, curr_state,
-                                              TCP_FIN)) {
+                                              CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
@@ -254,19 +268,19 @@ static __always_inline int ct_state_transition_v4(u8 l4proto, u8 pkt_type, u8 gr
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_RST_V2) {
             if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state,
-                                              TCP_FIN)) {
+                                              CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_SYN_V2) {
             if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state,
-                                              TCP_SYN)) {
+                                              CT_SYN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
         } else if (pkt_type == PKT_TCP_FIN_V2) {
             if (!__sync_bool_compare_and_swap(&ct_timer_value->client_status, curr_state,
-                                              TCP_FIN)) {
+                                              CT_FIN)) {
                 return TC_ACT_SHOT;
             }
             return TC_ACT_OK;
@@ -326,6 +340,7 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
         *timer_value_ = ct4_value;
         return TIMER_EXIST;
     }
+
     if (!ct4_value && !do_new) {
         return TIMER_NOT_FOUND;
     }
@@ -361,6 +376,251 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
     // }
 
     *timer_value_ = ct4_value;
+    return TIMER_CREATED;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline bool ct_change_state(u64 *status_in_value, u64 curr_state, u64 next_state) {
+    return __sync_bool_compare_and_swap(status_in_value, curr_state, next_state);
+}
+
+static __always_inline int ct_state_transition(u8 l4proto, u8 pkt_type, u8 gress,
+                                               struct nat_timer_value *ct_timer_value) {
+#define BPF_LOG_TOPIC "ct_state_transition"
+    u64 curr_state, *modify_status = NULL;
+    if (gress == NAT_MAPPING_INGRESS) {
+        curr_state = ct_timer_value->server_status;
+        modify_status = &ct_timer_value->server_status;
+    } else {
+        curr_state = ct_timer_value->client_status;
+        modify_status = &ct_timer_value->client_status;
+    }
+
+#define NEW_STATE(__state)                                                                         \
+    if (!ct_change_state(modify_status, curr_state, (__state))) {                                  \
+        return TC_ACT_SHOT;                                                                        \
+    }
+
+    if (pkt_type == PKT_CONNLESS_V2) {
+        NEW_STATE(CT_LESS_EST);
+        return TC_ACT_OK;
+    }
+
+    if (pkt_type == PKT_TCP_RST_V2) {
+        NEW_STATE(CT_INIT);
+        return TC_ACT_OK;
+    }
+
+    if (pkt_type == PKT_TCP_SYN_V2) {
+        NEW_STATE(CT_SYN);
+        return TC_ACT_OK;
+    }
+
+    if (pkt_type == PKT_TCP_FIN_V2) {
+        NEW_STATE(CT_FIN);
+        return TC_ACT_OK;
+    }
+
+    
+    u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
+    if (prev_state != TIMER_ACTIVE) {
+        if  (ct_timer_value->trigger_port == TEST_PORT) {
+            bpf_log_info("flush status to TIMER_ACTIVE: 20");
+        }
+        bpf_timer_start(&ct_timer_value->timer, REPORT_INTERVAL, 0);
+    }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
+static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *key,
+                                struct nat_timer_value *value) {
+#define BPF_LOG_TOPIC "timer_clean_callback"
+
+    // bpf_log_info("timer_clean_callback: %d", bpf_ntohs(value->trigger_port));
+    u64 client_status = value->client_status;
+    u64 server_status = value->server_status;
+    u64 current_status = value->status;
+    u64 next_status = current_status;
+    u64 next_timeout = REPORT_INTERVAL;
+    int ret;
+
+    if (current_status == TIMER_RELEASE) {
+        if  (value->trigger_port == TEST_PORT) {
+            bpf_log_info("release CONNECT");
+        }
+        goto release;
+    }
+
+    // ret = try_report(key, value);
+    // if (ret) {
+    //     bpf_log_info("call back report fail");
+    //     bpf_timer_start(&value->timer, next_timeout, 0);
+    //     return 0;
+    // }
+
+    if (current_status == TIMER_ACTIVE) {
+        next_status = TIMER_TIMEOUT_1;
+        next_timeout = REPORT_INTERVAL;
+        
+        if  (value->trigger_port == TEST_PORT) {
+            bpf_log_info("change next status TIMER_TIMEOUT_1");
+        }
+    } else if (current_status == TIMER_TIMEOUT_1) {
+        next_status = TIMER_TIMEOUT_2;
+        next_timeout = REPORT_INTERVAL;
+        
+        if  (value->trigger_port == TEST_PORT) {
+            bpf_log_info("change next status TIMER_TIMEOUT_2");
+        }
+    } else if (current_status == TIMER_TIMEOUT_2) {
+        next_status = TIMER_RELEASE;
+        if (key->l4proto == IPPROTO_TCP) {
+            if (client_status == CT_SYN && server_status == CT_SYN) {
+                next_timeout = TCP_TIMEOUT;
+            } else {
+                next_timeout = TCP_SYN_TIMEOUT;
+            }
+        } else {
+            next_timeout = UDP_TIMEOUT;
+        }
+        if  (value->trigger_port == TEST_PORT) {
+            u64 show = (next_timeout / 1000000000ULL);
+            bpf_log_info("change next status TIMER_RELEASE, next_timeout: %d", show);
+        }
+    }
+
+    if (__sync_val_compare_and_swap(&value->status, current_status, next_status) !=
+        current_status) {
+        bpf_log_info("call back modify status fail, current status: %d new status: %d", current_status,
+                     next_status);
+        // 更新状态失败, 说明有新的数据包到达
+        bpf_timer_start(&value->timer, REPORT_INTERVAL, 0);
+        return 0;
+    }
+    
+    bpf_timer_start(&value->timer, next_timeout, 0);
+
+    return 0;
+release:;
+    struct nat_mapping_key_v4 egress_mapping_key = {0};
+    egress_mapping_key.l4proto = key->l4proto;
+    egress_mapping_key.gress = NAT_MAPPING_EGRESS;
+    egress_mapping_key.from_addr = key->pair_ip.src_addr.addr;
+    egress_mapping_key.from_port = key->pair_ip.src_port;
+
+    struct nat_mapping_key_v4 ingress_mapping_key = {0};
+    ingress_mapping_key.l4proto = key->l4proto;
+    ingress_mapping_key.gress = NAT_MAPPING_INGRESS;
+    ingress_mapping_key.from_addr = key->pair_ip.dst_addr.addr;
+    ingress_mapping_key.from_port = key->pair_ip.dst_port;
+
+    bpf_map_delete_elem(&nat4_mappings, &egress_mapping_key);
+    bpf_map_delete_elem(&nat4_mappings, &ingress_mapping_key);
+
+    bpf_map_delete_elem(&nat_mapping_timer, key);
+    return 0;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline struct nat_timer_value *
+insert_new_nat_timer(u8 l4proto, const struct nat_timer_key *key,
+                     const struct nat_timer_value *val) {
+#define BPF_LOG_TOPIC "insert_new_nat_timer"
+    // bpf_log_info("protocol: %u, src_port: %u -> dst_port: %u", l4proto,
+    // bpf_ntohs(key->pair_ip.src_port), bpf_ntohs(key->pair_ip.dst_port)); bpf_log_info("src_ip:
+    // %lu -> dst_ip: %lu", bpf_ntohl(key->pair_ip.src_addr.ip),
+    // bpf_ntohl(key->pair_ip.dst_addr.ip));
+
+    int ret = bpf_map_update_elem(&nat_mapping_timer, key, val, BPF_NOEXIST);
+    if (ret) {
+        bpf_log_error("failed to insert conntrack entry, err:%d", ret);
+        return NULL;
+    }
+    struct nat_timer_value *value = bpf_map_lookup_elem(&nat_mapping_timer, key);
+    if (!value) return NULL;
+
+    ret = bpf_timer_init(&value->timer, &nat_mapping_timer, CLOCK_MONOTONIC);
+    if (ret) {
+        goto delete_timer;
+    }
+    ret = bpf_timer_set_callback(&value->timer, timer_clean_callback);
+    if (ret) {
+        goto delete_timer;
+    }
+    ret = bpf_timer_start(&value->timer, REPORT_INTERVAL, 0);
+    if (ret) {
+        goto delete_timer;
+    }
+
+    return value;
+delete_timer:
+    bpf_log_error("setup timer err:%d", ret);
+    bpf_map_delete_elem(&nat_mapping_timer, key);
+    return NULL;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline int lookup_or_new_ct(u8 l4proto, bool do_new,
+                                            const struct inet4_pair *pkt_ip_pair,
+                                            struct nat_mapping_value_v4 *nat_egress_value,
+                                            struct nat_mapping_value_v4 *nat_ingress_value,
+                                            struct nat_timer_value **timer_value_) {
+#define BPF_LOG_TOPIC "lookup_or_new_ct"
+
+    struct nat_timer_key timer_key = {0};
+    timer_key.l4proto = l4proto;
+    timer_key.pair_ip.src_port = nat_ingress_value->port;
+    timer_key.pair_ip.dst_port = nat_egress_value->port;
+    timer_key.pair_ip.src_addr.addr = nat_ingress_value->addr;
+    timer_key.pair_ip.dst_addr.addr = nat_egress_value->addr;
+
+    // bpf_log_info("protocol: %u, src_port: %u -> dst_port: %u", l4proto,
+    //              bpf_ntohs(timer_key.pair_ip.src_port), bpf_ntohs(timer_key.pair_ip.dst_port));
+    // bpf_log_info("src_ip: %lu -> dst_ip: %lu", bpf_ntohl(timer_key.pair_ip.src_addr.ip),
+    //              bpf_ntohl(timer_key.pair_ip.dst_addr.ip));
+
+    struct nat_timer_value *timer_value = bpf_map_lookup_elem(&nat_mapping_timer, &timer_key);
+    // bpf_log_info("timer_value: %u", timer_value);
+    if (timer_value) {
+        *timer_value_ = timer_value;
+        return TIMER_EXIST;
+    }
+    if (!timer_value && !do_new) {
+        return TIMER_NOT_FOUND;
+    }
+
+    struct nat_timer_value timer_value_new = {0};
+    timer_value_new.trigger_port = nat_ingress_value->trigger_port;
+    timer_value_new.client_status = CT_INIT;
+    timer_value_new.server_status = CT_INIT;
+    timer_value_new.gress = NAT_MAPPING_EGRESS;
+    timer_value_new.trigger_saddr.addr = nat_egress_value->trigger_addr;
+    timer_value = insert_new_nat_timer(l4proto, &timer_key, &timer_value_new);
+    if (timer_value == NULL) {
+        return TIMER_ERROR;
+    }
+    // bpf_log_debug("insert new CT");
+
+    // 发送 event
+    // struct nat_conn_event *event;
+    // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    // if (event != NULL) {
+    //     COPY_ADDR_FROM(event->dst_addr.all, nat_egress_value->trigger_addr.all);
+    //     COPY_ADDR_FROM(event->src_addr.all, nat_ingress_value->addr.all);
+    //     event->src_port = nat_ingress_value->port;
+    //     event->dst_port = nat_egress_value->trigger_port;
+    //     event->l4_proto = l4proto;
+    //     event->l3_proto = LANDSCAPE_IPV4_TYPE;
+    //     event->flow_id = 0;
+    //     event->trace_id = 0;
+    //     event->time = bpf_ktime_get_ns();
+    //     event->event_type = NAT_CREATE_CONN;
+    //     bpf_ringbuf_submit(event, 0);
+    // }
+
+    *timer_value_ = timer_value;
     return TIMER_CREATED;
 #undef BPF_LOG_TOPIC
 }
@@ -435,12 +695,11 @@ static int search_port_callback_v4(u32 index, struct search_port_ctx_v4 *ctx) {
 #undef BPF_LOG_TOPIC
 }
 
-
 static __always_inline int
 ingress_lookup_or_new_mapping4(struct __sk_buff *skb, u8 ip_protocol, bool allow_create_mapping,
-                              const struct inet4_pair *pkt_ip_pair,
-                              struct nat_mapping_value_v4 **nat_egress_value_,
-                              struct nat_mapping_value_v4 **nat_ingress_value_) {
+                               const struct inet4_pair *pkt_ip_pair,
+                               struct nat_mapping_value_v4 **nat_egress_value_,
+                               struct nat_mapping_value_v4 **nat_ingress_value_) {
 #define BPF_LOG_TOPIC "ingress_lookup_or_new_mapping"
     u64 current_time = bpf_ktime_get_ns();
     if (pkt_ip_pair == NULL) {
@@ -455,7 +714,8 @@ ingress_lookup_or_new_mapping4(struct __sk_buff *skb, u8 ip_protocol, bool allow
     };
 
     // 倒置的值
-    struct nat_mapping_value_v4 *nat_ingress_value = bpf_map_lookup_elem(&nat4_mappings, &ingress_key);
+    struct nat_mapping_value_v4 *nat_ingress_value =
+        bpf_map_lookup_elem(&nat4_mappings, &ingress_key);
     struct nat_mapping_value_v4 *nat_egress_value = NULL;
     if (!nat_ingress_value) {
         if (!allow_create_mapping) {
@@ -547,7 +807,7 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
             ctx.range.start = tcp_range_start;
             ctx.range.end = tcp_range_end;
             ctx.remaining_size = tcp_range_end - tcp_range_start;
-            ctx.timeout_interval -= TCP_TCP_TRANS;
+            ctx.timeout_interval -= TCP_TIMEOUT;
         } else if (ip_protocol == IPPROTO_UDP) {
             ctx.range.start = udp_range_start;
             ctx.range.end = udp_range_end;
@@ -610,10 +870,11 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int lookup_static_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
-                                                    const struct inet4_pair *pkt_ip_pair,
-                                                    struct nat_mapping_value_v4 **nat_ingress_value_,
-                                                    struct nat_mapping_value_v4 **nat_egress_value_) {
+static __always_inline int
+lookup_static_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
+                         const struct inet4_pair *pkt_ip_pair,
+                         struct nat_mapping_value_v4 **nat_ingress_value_,
+                         struct nat_mapping_value_v4 **nat_egress_value_) {
 #define BPF_LOG_TOPIC "lk_static_map_v4"
     struct static_nat_mapping_key egress_key = {0};
     struct static_nat_mapping_key ingress_key = {0};
