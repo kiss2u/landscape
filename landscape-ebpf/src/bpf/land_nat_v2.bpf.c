@@ -23,6 +23,8 @@ const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 #define IPV6_NAT_EGRESS_PROG_INDEX 1
 #define IPV6_NAT_INGRESS_PROG_INDEX 1
 
+const volatile u32 current_l3_offset = 14;
+
 SEC("tc/egress") int nat_v4_egress(struct __sk_buff *skb);
 SEC("tc/ingress") int nat_v4_ingress(struct __sk_buff *skb);
 SEC("tc/egress") int nat_v6_egress(struct __sk_buff *skb);

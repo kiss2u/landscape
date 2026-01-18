@@ -4,9 +4,10 @@
 
 #include "vmlinux.h"
 #include "../landscape.h"
-#include "../land_nat_common.h"
 
 #define STATIC_NAT_MAPPING_CACHE_SIZE 1024 * 64
+#define NAT_MAPPING_CACHE_SIZE 1024 * 64 * 2
+#define NAT_MAPPING_TIMER_SIZE 1024 * 64 * 2
 
 struct static_nat_mapping_key {
     u32 prefixlen;
@@ -23,6 +24,39 @@ struct static_nat_mapping_key {
     union u_inet_addr addr;
 };
 
+struct nat_mapping_value {
+    union u_inet_addr addr;
+    // TODO： 触发这个关系的 ip 或者端口
+    // 单独一张检查表， 使用这个 ip 获取是否需要检查
+    union u_inet_addr trigger_addr;
+    __be16 port;
+    __be16 trigger_port;
+    u8 is_static;
+    u8 is_allow_reuse;
+    u8 _pad[2];
+    // 增加一个最后活跃时间
+    u64 active_time;
+};
+
+struct nat4_ct_key {
+    u8 l4proto;
+    u8 _pad[3];
+    // Ac:Pc_An:Pn
+    struct inet4_pair pair_ip;
+};
+
+//
+struct nat4_ct_value {
+    u64 client_status;
+    u64 server_status;
+    // As
+    __be32 trigger_saddr;
+    // Ps
+    u16 trigger_port;
+    u8 gress;
+    u8 _pad;
+};
+
 struct {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
     __type(key, struct static_nat_mapping_key);
@@ -31,7 +65,6 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } static_nat_mappings SEC(".maps");
-
 
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);

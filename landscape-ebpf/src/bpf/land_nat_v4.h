@@ -23,20 +23,6 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } nat_mapping_timer SEC(".maps");
 
-// 33333
-volatile const __be16 TEST_PORT = 0x3582;
-
-const volatile u32 current_l3_offset = 14;
-
-// 未建立连接时
-const volatile u64 TCP_SYN_TIMEOUT = 1E9 * 6;
-// TCP 超时时间
-const volatile u64 TCP_TIMEOUT = 1E9 * 60 * 10;
-// UDP 超时时间
-const volatile u64 UDP_TIMEOUT = 1E9 * 60 * 5;
-
-// 检查间隔时间
-const volatile u64 REPORT_INTERVAL = 1E9 * 5;
 
 volatile const u16 tcp_range_start = 32768;
 // volatile const u16 tcp_range_end = 32770;
