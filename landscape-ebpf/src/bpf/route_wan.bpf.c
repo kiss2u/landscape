@@ -46,7 +46,7 @@ int rt4_wan_ingress(struct __sk_buff *skb) {
     context.daddr = iph->daddr;
     context.saddr = iph->saddr;
 
-    if (unlikely(context.daddr == 0xffffffff || context.daddr == 0)) {
+    if (should_not_forward(context.daddr)) {
         return TC_ACT_UNSPEC;
     }
 
@@ -93,7 +93,7 @@ int rt4_wan_egress(struct __sk_buff *skb) {
     context.daddr = iph->daddr;
     context.saddr = iph->saddr;
 
-    if (unlikely(context.daddr == 0xffffffff || context.daddr == 0)) {
+    if (should_not_forward(context.daddr)) {
         return TC_ACT_UNSPEC;
     }
 

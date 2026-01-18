@@ -44,9 +44,10 @@ int rt4_lan_ingress(struct __sk_buff *skb) {
     context.daddr = iph->daddr;
     context.saddr = iph->saddr;
 
-    if (unlikely(context.daddr == 0xffffffff || context.daddr == 0)) {
+    if (should_not_forward(context.daddr)) {
         return TC_ACT_UNSPEC;
     }
+
 
     ret = search_route_in_lan_v4(skb, current_l3_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {

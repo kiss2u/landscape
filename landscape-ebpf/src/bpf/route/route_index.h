@@ -1,6 +1,7 @@
 #ifndef __LD_ROUTE_INDEX_H__
 #define __LD_ROUTE_INDEX_H__
 #include "vmlinux.h"
+#include <bpf/bpf_endian.h>
 
 #define WAN_CACHE 0
 #define LAN_CACHE 1
@@ -28,5 +29,13 @@ struct route_context_v6 {
     // u16 dst_port;
     u8 smac[6];
 };
+
+#define IP_LLMCAST_BASE_NBO bpf_ntohl(0xE0000000)
+#define IP_LLMCAST_MASK_NBO bpf_ntohl(0xFFFFFF00)
+
+static __always_inline bool should_not_forward(__be32 daddr) {
+    return unlikely(daddr == 0xffffffff || daddr == 0 ||
+                    (daddr & IP_LLMCAST_MASK_NBO) == IP_LLMCAST_BASE_NBO);
+}
 
 #endif /* __LD_ROUTE_INDEX_H__ */
