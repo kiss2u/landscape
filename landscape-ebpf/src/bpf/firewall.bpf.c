@@ -455,22 +455,22 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
     __u8 report_result;
     // 说明是 release 超时, 上报后释放 CONN
     if (conn_status == FIREWALL_RELEASE) {
-        struct firewall_conn_event *event;
-        event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
-        if (event != NULL) {
-            COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.all);
-            COPY_ADDR_FROM(event->src_addr.all, key->local_addr.all);
-            event->src_port = key->local_port;
-            event->dst_port = value->trigger_port;
-            event->l4_proto = key->ip_protocol;
-            event->l3_proto = key->ip_type;
-            event->flow_id = value->flow_id;
-            event->trace_id = 0;
-            event->create_time = value->create_time;
-            event->report_time = bpf_ktime_get_ns();
-            event->event_type = FIREWALL_DELETE_CONN;
-            bpf_ringbuf_submit(event, 0);
-        }
+        // struct firewall_conn_event *event;
+        // event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
+        // if (event != NULL) {
+        //     COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.all);
+        //     COPY_ADDR_FROM(event->src_addr.all, key->local_addr.all);
+        //     event->src_port = key->local_port;
+        //     event->dst_port = value->trigger_port;
+        //     event->l4_proto = key->ip_protocol;
+        //     event->l3_proto = key->ip_type;
+        //     event->flow_id = value->flow_id;
+        //     event->trace_id = 0;
+        //     event->create_time = value->create_time;
+        //     event->report_time = bpf_ktime_get_ns();
+        //     event->event_type = FIREWALL_DELETE_CONN;
+        //     bpf_ringbuf_submit(event, 0);
+        // }
 
         // bpf_log_info("call back remove conn");
         ret = bpf_map_delete_elem(&fire2_conn_map, key);
@@ -483,12 +483,12 @@ static int timer_clean_callback(void *map_mapping_timer_, struct firewall_conntr
     }
 
     // 尝试进行上报
-    report_result = firewall_metric_try_report(key, value);
-    if (report_result != FIREWALL_REPORT_SUCCESS) {
-        bpf_log_info("call back report fail");
-        bpf_timer_start(&value->timer, CONN_EST_TIMEOUT, 0);
-        return 0;
-    }
+    // report_result = firewall_metric_try_report(key, value);
+    // if (report_result != FIREWALL_REPORT_SUCCESS) {
+    //     bpf_log_info("call back report fail");
+    //     bpf_timer_start(&value->timer, CONN_EST_TIMEOUT, 0);
+    //     return 0;
+    // }
 
     if (conn_status == FIREWALL_ACTIVE) {
         // bpf_log_info("call back turn to timeout1");
@@ -610,22 +610,22 @@ static __always_inline int lookup_or_create_ct(struct __sk_buff *skb, bool allow
     }
 
     // 发送 event
-    struct firewall_conn_event *event;
-    event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
-    if (event != NULL) {
-        COPY_ADDR_FROM(event->dst_addr.all, action.trigger_addr.all);
-        COPY_ADDR_FROM(event->src_addr.all, timer_key->local_addr.all);
-        event->src_port = timer_key->local_port;
-        event->dst_port = action.trigger_port;
-        event->l4_proto = timer_key->ip_protocol;
-        event->l3_proto = timer_key->ip_type;
-        event->flow_id = action.flow_id;
-        event->trace_id = 0;
-        event->create_time = action.create_time;
-        event->report_time = action.create_time;
-        event->event_type = FIREWALL_CREATE_CONN;
-        bpf_ringbuf_submit(event, 0);
-    }
+    // struct firewall_conn_event *event;
+    // event = bpf_ringbuf_reserve(&firewall_conn_events, sizeof(struct firewall_conn_event), 0);
+    // if (event != NULL) {
+    //     COPY_ADDR_FROM(event->dst_addr.all, action.trigger_addr.all);
+    //     COPY_ADDR_FROM(event->src_addr.all, timer_key->local_addr.all);
+    //     event->src_port = timer_key->local_port;
+    //     event->dst_port = action.trigger_port;
+    //     event->l4_proto = timer_key->ip_protocol;
+    //     event->l3_proto = timer_key->ip_type;
+    //     event->flow_id = action.flow_id;
+    //     event->trace_id = 0;
+    //     event->create_time = action.create_time;
+    //     event->report_time = action.create_time;
+    //     event->event_type = FIREWALL_CREATE_CONN;
+    //     bpf_ringbuf_submit(event, 0);
+    // }
 
     // bpf_log_debug("insert new CT, type: %d, ip_protocol: %d, port: %d", timer_key->ip_type,
     //               timer_key->ip_protocol, bpf_ntohs(timer_key->local_port));
