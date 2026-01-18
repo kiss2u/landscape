@@ -150,7 +150,7 @@ int tproxy_ingress(struct __sk_buff *skb) {
 
     ret = is_tproxy_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) {
-        bpf_log_info("is_tproxy_handle_protocol ret %d", ret);
+        bpf_log_info("is_tproxy_handle_protocol ret %d protocol: %u", ret, pkg_offset.l4_protocol);
         return ret;
     }
 
