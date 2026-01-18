@@ -1,5 +1,5 @@
-#ifndef LD_IPV4_H
-#define LD_IPV4_H
+#ifndef LD_MARK_H
+#define LD_MARK_H
 #include <bpf/bpf_helpers.h>
 #include "vmlinux.h"
 
@@ -80,4 +80,4 @@ static __always_inline u32 replace_cache_mask(u32 original, u8 new_mark) {
 
 static __always_inline u8 get_cache_mask(u32 original) { return (original & INGRESS_CACHE_MASK); }
 
-#endif /* LD_IPV4_H */
+#endif /* LD_MARK_H */

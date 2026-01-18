@@ -17,11 +17,12 @@ use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::TC_INGRESS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, ValueEnum)]
+#[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMode {
     Tproxy,
     Route,
+    MultipleTproxy,
 }
 
 #[derive(Debug, Parser)]
@@ -89,7 +90,12 @@ async fn main() {
     // Set constants
     rodata_data.proxy_addr = proxy_addr.to_be();
     rodata_data.proxy_ipv6_addr = proxy_ipv6_addr.to_be_bytes();
-    rodata_data.proxy_port = params.tproxy_server_port.to_be();
+    if HandleMode::MultipleTproxy == params.handle_mode {
+        // Using Flow id to find server port
+        rodata_data.proxy_port = 0;
+    } else {
+        rodata_data.proxy_port = params.tproxy_server_port.to_be();
+    }
 
     // Load into kernel
     let skel = open_skel.load().unwrap();
@@ -97,6 +103,7 @@ async fn main() {
     let handler_function = match params.handle_mode {
         HandleMode::Tproxy => skel.progs.tproxy_ingress,
         HandleMode::Route => skel.progs.route_mode_ingress,
+        HandleMode::MultipleTproxy => skel.progs.tproxy_ingress,
     };
 
     // let tproxy_egress = skel.progs.tproxy_egress;

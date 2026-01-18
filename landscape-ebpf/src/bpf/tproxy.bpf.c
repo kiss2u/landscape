@@ -28,7 +28,7 @@ volatile const __be32 proxy_addr = 0;
 volatile const __be16 proxy_port = 0;
 
 static __always_inline int handle_pkg(struct __sk_buff *skb, struct packet_offset_info *offset,
-                                      struct inet_pair *ip_pair) {
+                                      struct inet_pair *ip_pair, __be16 flow_port) {
 #define BPF_LOG_TOPIC "handle_pkg"
     struct bpf_sock_tuple server = {0};
     struct bpf_sock *sk;
@@ -67,10 +67,10 @@ static __always_inline int handle_pkg(struct __sk_buff *skb, struct packet_offse
     /* Lookup port server is listening on */
     if (offset->l3_protocol == LANDSCAPE_IPV4_TYPE) {
         server.ipv4.daddr = proxy_addr;
-        server.ipv4.dport = proxy_port;
+        server.ipv4.dport = proxy_port ? proxy_port : flow_port;
     } else {
         COPY_ADDR_FROM(server.ipv6.daddr, &proxy_ipv6_addr);
-        server.ipv6.dport = proxy_port;
+        server.ipv6.dport = proxy_port ? proxy_port : flow_port;
     }
 
     if (l4_protocol == IPPROTO_TCP) {
@@ -128,9 +128,13 @@ int tproxy_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "tproxy_ingress"
 
     u32 vlan_id = skb->vlan_tci;
-    if (vlan_id != LAND_REDIRECT_NETNS_VLAN_ID) {
+    if (!is_landscape_tag(vlan_id)) {
         return TC_ACT_OK;
     }
+    u8 flow_id = get_flow_id_in_vlan_id(vlan_id);
+    u16 flow_port = 12000 + flow_id;
+    __u16 be_flow_port = bpf_ntohs(flow_port);
+
     bpf_skb_vlan_pop(skb);
 
     struct packet_offset_info pkg_offset = {0};
@@ -155,12 +159,11 @@ int tproxy_ingress(struct __sk_buff *skb) {
         bpf_log_info("read_packet_info ret %d", ret);
         return ret;
     }
-    ret = handle_pkg(skb, &pkg_offset, &ip_pair);
+    ret = handle_pkg(skb, &pkg_offset, &ip_pair, be_flow_port);
 
     return ret == 0 ? TC_ACT_OK : TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }
-
 
 SEC("tc/ingress")
 int route_mode_ingress(struct __sk_buff *skb) {
@@ -178,6 +181,6 @@ int route_mode_ingress(struct __sk_buff *skb) {
 
     bpf_skb_change_type(skb, PACKET_HOST);
 
-    return TC_ACT_OK ;
+    return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
 }

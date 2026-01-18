@@ -76,7 +76,8 @@ static inline struct bpf_sock_tuple *get_tuple(struct __sk_buff *skb, u16 *l3_pr
     return result;
 }
 
-static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple, u8 *l4_protocol) {
+static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple, u8 *l4_protocol,
+                             u8 flow_id) {
 #define BPF_LOG_TOPIC "handle_tcp"
     struct bpf_sock_tuple server = {};
     struct bpf_sock *sk;
@@ -136,7 +137,7 @@ static inline int handle_tcp(struct __sk_buff *skb, struct bpf_sock_tuple *tuple
     server.ipv4.saddr = tuple->ipv4.saddr;
     server.ipv4.daddr = proxy_addr;
     server.ipv4.sport = tuple->ipv4.sport;
-    server.ipv4.dport = proxy_port;
+    server.ipv4.dport = proxy_port ? proxy_port : 12000 + flow_id;
     bpf_log_info("Source IP: %d.%d.%d.%d, Source Port: %d, Dest IP: %d.%d.%d.%d, Dest Port: %d\n",
                  server.ipv4.saddr & 0xFF,          // 获取第四个字节
                  (server.ipv4.saddr >> 8) & 0xFF,   // 获取第三个字节
@@ -271,11 +272,13 @@ int ns_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "ns_inner_ingress"
 
     u32 vlan_id = skb->vlan_tci;
-    if (vlan_id != LAND_REDIRECT_NETNS_VLAN_ID) {
+    if (!is_landscape_tag(vlan_id)) {
         return TC_ACT_OK;
     }
     bpf_printk("vlan_id: %x", vlan_id);
     bpf_skb_vlan_pop(skb);
+
+    u8 flow_id = get_flow_id_in_vlan_id(vlan_id);
 
     struct bpf_sock_tuple *tuple;
     u16 l3_protocol;
@@ -291,7 +294,7 @@ int ns_ingress(struct __sk_buff *skb) {
         return TC_ACT_OK;
     }
 
-    ret = handle_tcp(skb, tuple, &l4_protocol);
+    ret = handle_tcp(skb, tuple, &l4_protocol, flow_id);
     return ret == 0 ? TC_ACT_OK : TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }

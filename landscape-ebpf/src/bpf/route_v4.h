@@ -234,7 +234,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
     }
 
     if (target_info->is_docker) {
-        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, LAND_REDIRECT_NETNS_VLAN_ID);
+        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, get_flow_vlan_id(wan_key.flow_id));
         if (ret) {
             bpf_log_info("bpf_skb_vlan_push error");
         }

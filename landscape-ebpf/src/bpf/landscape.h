@@ -3,6 +3,7 @@
 #include "vmlinux.h"
 #include "landscape_log.h"
 #include "base/mark.h"
+#include "base/tp.h"
 
 #define TC_ACT_UNSPEC (-1)
 #define TC_ACT_OK 0
@@ -12,9 +13,6 @@
 
 #define BPF_LOOP_RET_CONTINUE 0
 #define BPF_LOOP_RET_BREAK 1
-
-#define ETH_P_8021Q 0x8100
-#define LAND_REDIRECT_NETNS_VLAN_ID 0x1d
 
 #define ETH_IPV4 bpf_htons(0x0800) /* ETH IPV4 packet */
 #define ETH_IPV6 bpf_htons(0x86DD) /* ETH IPv6 packet */
