@@ -23,7 +23,6 @@ struct {
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } nat_mapping_timer SEC(".maps");
 
-
 volatile const u16 tcp_range_start = 32768;
 // volatile const u16 tcp_range_end = 32770;
 volatile const u16 tcp_range_end = 65535;
@@ -33,10 +32,6 @@ volatile const u16 udp_range_end = 65535;
 
 volatile const u16 icmp_range_start = 32768;
 volatile const u16 icmp_range_end = 65535;
-
-static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
-    return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
-}
 
 static __always_inline int icmpx_err_l3_offset(int l4_off) {
     return l4_off + sizeof(struct icmphdr);
@@ -372,6 +367,7 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
     ct4_value_new.server_status = TIMER_INIT;
     ct4_value_new.gress = NAT_MAPPING_EGRESS;
     ct4_value_new.trigger_saddr = nat_egress_value->trigger_addr;
+    ct4_value_new.create_time = bpf_ktime_get_ns();
 
     ct4_value = insert_new_nat4_conn(l4proto, &ct4_key, &ct4_value_new);
     if (ct4_value == NULL) {
@@ -391,7 +387,7 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
         event->l3_proto = LANDSCAPE_IPV4_TYPE;
         event->flow_id = 0;
         event->trace_id = 0;
-        event->time = bpf_jiffies64();
+        event->create_time = ct4_value_new.create_time;
         event->event_type = NAT_CREATE_CONN;
         bpf_ringbuf_submit(event, 0);
     }
@@ -481,9 +477,9 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
             event->dst_port = value->trigger_port;
             event->l4_proto = key->l4proto;
             event->l3_proto = LANDSCAPE_IPV4_TYPE;
-            event->flow_id = 0;
+            event->flow_id = value->flow_id;
             event->trace_id = 0;
-            event->time = bpf_ktime_get_ns();
+            event->create_time = value->create_time;
             event->event_type = NAT_DELETE_CONN;
             bpf_ringbuf_submit(event, 0);
         }
@@ -657,9 +653,9 @@ static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, b
         event->dst_port = nat_egress_value->trigger_port;
         event->l4_proto = l4proto;
         event->l3_proto = LANDSCAPE_IPV4_TYPE;
-        event->flow_id = 0;
+        event->flow_id = flow_id;
         event->trace_id = 0;
-        event->time = bpf_jiffies64();
+        event->create_time = timer_value_new.create_time;
         event->event_type = NAT_CREATE_CONN;
         bpf_ringbuf_submit(event, 0);
     }

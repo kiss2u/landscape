@@ -35,7 +35,7 @@ impl From<&nat_conn_event> for NatEvent {
             flow_id: ev.flow_id,
             trace_id: ev.trace_id,
             l3_proto: ev.l3_proto,
-            time: ev.time,
+            time: ev.create_time,
         }
     }
 }

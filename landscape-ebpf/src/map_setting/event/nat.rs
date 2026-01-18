@@ -13,12 +13,12 @@ impl From<&nat_conn_event> for ConnectInfo {
             flow_id: ev.flow_id,
             trace_id: ev.trace_id,
             l3_proto: ev.l3_proto,
-            create_time: ev.time,
+            create_time: ev.create_time,
         };
         ConnectInfo {
             key,
             event_type: ConnectEventType::from(ev.event_type),
-            report_time: ev.time,
+            report_time: ev.create_time,
         }
     }
 }

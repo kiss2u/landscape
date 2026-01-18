@@ -55,6 +55,7 @@ struct nat4_ct_value {
     u16 trigger_port;
     u8 gress;
     u8 _pad;
+    u64 create_time;
 };
 
 struct {
@@ -74,7 +75,6 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_conn_map SEC(".maps");
 
-
 #define NAT_CREATE_CONN 1
 #define NAT_DELETE_CONN 2
 
@@ -83,7 +83,7 @@ struct nat_conn_event {
     union u_inet_addr dst_addr;
     u16 src_port;
     u16 dst_port;
-    u64 time;
+    u64 create_time;
     u8 l4_proto;
     u8 l3_proto;
     u8 event_type;
@@ -117,6 +117,5 @@ struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
 } nat_conn_metric_events SEC(".maps");
-
 
 #endif /* __LD_NAT_STATIC_H__ */

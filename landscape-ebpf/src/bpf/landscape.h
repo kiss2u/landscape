@@ -33,7 +33,6 @@
 #define LANDSCAPE_IPV4_TYPE 0
 #define LANDSCAPE_IPV6_TYPE 1
 
-
 #define PRINT_MAC_ADDR(mac)                                                                        \
     bpf_log_info("mac: %02x:%02x:%02x:%02x:%02x:%02x", (mac)[0], (mac)[1], (mac)[2], (mac)[3],     \
                  (mac)[4], (mac)[5])
@@ -113,7 +112,7 @@ static int store_mac_v4(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
 
     __builtin_memcpy(mac, dst_mac, 6);
     __builtin_memcpy(mac + 6, src_mac, 6);
-    
+
     mac[12] = 0x08;
     mac[13] = 0x00;
 
@@ -127,7 +126,7 @@ static int store_mac_v6(struct __sk_buff *skb, u8 *dst_mac, u8 *src_mac) {
 
     __builtin_memcpy(mac, dst_mac, 6);
     __builtin_memcpy(mac + 6, src_mac, 6);
-    
+
     mac[12] = 0x86;
     mac[13] = 0xdd;
 
@@ -201,7 +200,6 @@ static __always_inline int is_broadcast_mac(struct __sk_buff *skb) {
     }
 }
 
-
 static __always_inline int is_broadcast_ip4(__be32 dst) {
     // 255.255.255.255 or 0.0.0.0 (network byte order)
     if (dst == 0xffffffff || dst == 0) {
@@ -209,7 +207,6 @@ static __always_inline int is_broadcast_ip4(__be32 dst) {
     }
     return TC_ACT_OK;
 }
-
 
 static __always_inline int is_broadcast_ip6(const u8 *bytes) {
     bool is_ipv6_broadcast = false;
@@ -237,7 +234,6 @@ static __always_inline int is_broadcast_ip6(const u8 *bytes) {
     }
 }
 
-
 struct inet4_addr {
     __be32 addr;
 };
@@ -249,7 +245,7 @@ struct inet4_pair {
     __be16 dst_port;
 };
 
-struct inet6_addr {
+union inet6_addr {
     __be32 all[4];
     __be32 ip;
     __be32 ip6[4];
@@ -257,23 +253,21 @@ struct inet6_addr {
 };
 
 struct inet6_pair {
-    struct inet6_addr src_addr;
-    struct inet6_addr dst_addr;
+    union inet6_addr src_addr;
+    union inet6_addr dst_addr;
     __be16 src_port;
     __be16 dst_port;
 };
 
 static __always_inline bool inet4_addr_equal(const struct inet4_addr *a,
-                                            const struct inet4_addr *b) {
+                                             const struct inet4_addr *b) {
     return a->addr == b->addr;
 }
 
-static __always_inline bool inet6_addr_equal(const struct inet6_addr *a,
-                                             const struct inet6_addr *b) {
+static __always_inline bool inet6_addr_equal(const union inet6_addr *a, const union inet6_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[2] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];
 }
-
 
 static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const union u_inet_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
@@ -281,7 +275,6 @@ static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const unio
 }
 
 #define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
-
 
 static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
                                             bool *is_ipv4_) {
@@ -325,6 +318,5 @@ static __always_inline int is_broadcast_ip4_pair(const struct inet4_pair *ip_pai
     }
     return TC_ACT_OK;
 }
-
 
 #endif /* __LD_LANDSCAPE_H__ */

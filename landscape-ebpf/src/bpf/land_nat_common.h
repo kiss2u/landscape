@@ -44,7 +44,6 @@ static __always_inline int is_handle_protocol(const u8 protocol) {
     }
 }
 
-
 struct nat_mapping_key {
     u8 gress;
     u8 l4proto;
@@ -122,7 +121,7 @@ struct nat_timer_value_v6 {
     u64 server_status;
     u64 client_status;
     u64 status;
-    struct inet6_addr trigger_addr;
+    union inet6_addr trigger_addr;
     u16 trigger_port;
     u8 is_allow_reuse;
     u8 flow_id;
@@ -134,7 +133,6 @@ struct nat_timer_value_v6 {
     u64 egress_packets;
     u8 client_prefix[8];
 };
-
 
 enum timer_status {
     TIMER_INIT = 0ULL,
@@ -170,5 +168,9 @@ struct search_port_ctx_v4 {
     bool found;
     u64 timeout_interval;
 };
+
+static __always_inline bool pkt_allow_initiating_ct(u8 pkt_type) {
+    return pkt_type == PKT_CONNLESS_V2 || pkt_type == PKT_TCP_SYN_V2;
+}
 
 #endif /* LD_NAT_COMMON_H */

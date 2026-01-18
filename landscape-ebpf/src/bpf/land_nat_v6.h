@@ -10,31 +10,31 @@
 
 #define LAND_IPV6_NET_PREFIX_TRANS_MASK (0x0FULL << 56)
 
-struct ipv6_prefix_mapping_key {
-    u8 client_suffix[8];
-    u16 client_port;
-    // client suffix is 8 byte + 4 bit
-    u8 id_byte;
-    // TCP / UDP / ICMP6
-    u8 l4_protocol;
-};
+// struct ipv6_prefix_mapping_key {
+//     u8 client_suffix[8];
+//     u16 client_port;
+//     // client suffix is 8 byte + 4 bit
+//     u8 id_byte;
+//     // TCP / UDP / ICMP6
+//     u8 l4_protocol;
+// };
 
-struct ipv6_prefix_mapping_value {
-    // client prefix is 7 byte + 4 bit
-    u8 client_prefix[8];
-    union u_inet_addr trigger_addr;
-    u16 trigger_port;
-    u8 is_allow_reuse;
-    u8 _pad;
-};
+// struct ipv6_prefix_mapping_value {
+//     // client prefix is 7 byte + 4 bit
+//     u8 client_prefix[8];
+//     union u_inet_addr trigger_addr;
+//     u16 trigger_port;
+//     u8 is_allow_reuse;
+//     u8 _pad;
+// };
 
-#define CLIENT_PREFIX_CACHE_SIZE 65536 * 3
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __type(key, struct ipv6_prefix_mapping_key);
-    __type(value, struct ipv6_prefix_mapping_value);
-    __uint(max_entries, CLIENT_PREFIX_CACHE_SIZE);
-} ip6_client_map SEC(".maps");
+// #define CLIENT_PREFIX_CACHE_SIZE 65536 * 3
+// struct {
+//     __uint(type, BPF_MAP_TYPE_LRU_HASH);
+//     __type(key, struct ipv6_prefix_mapping_key);
+//     __type(value, struct ipv6_prefix_mapping_value);
+//     __uint(max_entries, CLIENT_PREFIX_CACHE_SIZE);
+// } ip6_client_map SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -72,6 +72,7 @@ static __always_inline int update_ipv6_cache_value(struct __sk_buff *skb, struct
     value->is_allow_reuse = allow_reuse_port ? 1 : 0;
     COPY_ADDR_FROM(value->trigger_addr.all, ip_pair->dst_addr.all);
     value->trigger_port = ip_pair->dst_port;
+    value->flow_id = get_flow_id(skb->mark);
 }
 
 static __always_inline void nat6_metric_accumulate(struct __sk_buff *skb, bool ingress,
@@ -151,9 +152,9 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
             event->dst_port = value->trigger_port;
             event->l4_proto = key->l4_protocol;
             event->l3_proto = LANDSCAPE_IPV6_TYPE;
-            event->flow_id = 0;
+            event->flow_id = value->flow_id;
             event->trace_id = 0;
-            event->time = bpf_ktime_get_ns();
+            event->create_time = value->create_time;
             event->event_type = NAT_DELETE_CONN;
             bpf_ringbuf_submit(event, 0);
         }
@@ -252,15 +253,15 @@ delete_timer:
 #undef BPF_LOG_TOPIC
 }
 
-static __always_inline int update_ipv6_hash_cache_value(struct __sk_buff *skb,
-                                                        struct inet_pair *ip_pair,
-                                                        struct nat_timer_value_v6 *value) {
-    COPY_ADDR_FROM(value->client_prefix, ip_pair->src_addr.bits);
-    bool allow_reuse_port = get_flow_allow_reuse_port(skb->mark);
-    value->is_allow_reuse = allow_reuse_port ? 1 : 0;
-    COPY_ADDR_FROM(value->trigger_addr.bytes, ip_pair->dst_addr.all);
-    value->trigger_port = ip_pair->dst_port;
-}
+// static __always_inline int update_ipv6_hash_cache_value(struct __sk_buff *skb,
+//                                                         struct inet_pair *ip_pair,
+//                                                         struct nat_timer_value_v6 *value) {
+//     COPY_ADDR_FROM(value->client_prefix, ip_pair->src_addr.bits);
+//     bool allow_reuse_port = get_flow_allow_reuse_port(skb->mark);
+//     value->is_allow_reuse = allow_reuse_port ? 1 : 0;
+//     COPY_ADDR_FROM(value->trigger_addr.bytes, ip_pair->dst_addr.all);
+//     value->trigger_port = ip_pair->dst_port;
+// }
 
 static __always_inline int ct6_state_transition(u8 pkt_type, u8 gress,
                                                 struct nat_timer_value_v6 *ct_timer_value) {
@@ -310,6 +311,9 @@ static __always_inline int ct6_state_transition(u8 pkt_type, u8 gress,
 static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb,
                                                            struct packet_offset_info *offset_info,
                                                            struct inet_pair *ip_pair) {
+    bool is_icmpx_error = is_icmp_error_pkt(&offset_info);
+    bool allow_create_mapping = pkt_allow_initiating_ct(offset_info->pkt_type);
+
     struct nat_timer_key_v6 key = {0};
     key.client_port = ip_pair->src_port;
     COPY_ADDR_FROM(key.client_suffix, ip_pair->src_addr.bits + 8);
@@ -325,6 +329,10 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
             update_ipv6_cache_value(skb, ip_pair, value);
         }
     } else {
+        if (!allow_create_mapping) {
+            return TC_ACT_SHOT;
+        }
+
         struct nat_timer_value_v6 new_value = {0};
         update_ipv6_cache_value(skb, ip_pair, &new_value);
         value = insert_ct6_timer(&key, &new_value);
@@ -340,9 +348,9 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
                 event->dst_port = value->trigger_port;
                 event->l4_proto = key.l4_protocol;
                 event->l3_proto = LANDSCAPE_IPV6_TYPE;
-                event->flow_id = 0;
+                event->flow_id = get_flow_id(skb->mark);
                 event->trace_id = 0;
-                event->time = bpf_ktime_get_ns();
+                event->create_time = value->create_time;
                 event->event_type = NAT_CREATE_CONN;
                 bpf_ringbuf_submit(event, 0);
             }
@@ -352,9 +360,10 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
     if (value) {
         ct6_state_transition(offset_info->pkt_type, NAT_MAPPING_EGRESS, value);
         nat6_metric_accumulate(skb, false, value);
+        return TC_ACT_OK;
     }
 
-    return TC_ACT_OK;
+    return TC_ACT_SHOT;
 }
 
 // static __always_inline int search_ipv6_mapping_egress(struct __sk_buff *skb,
