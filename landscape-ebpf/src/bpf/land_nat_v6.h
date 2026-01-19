@@ -311,7 +311,7 @@ static __always_inline int ct6_state_transition(u8 pkt_type, u8 gress,
 static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb,
                                                            struct packet_offset_info *offset_info,
                                                            struct inet_pair *ip_pair) {
-    bool is_icmpx_error = is_icmp_error_pkt(&offset_info);
+    bool is_icmpx_error = is_icmp_error_pkt(offset_info);
     bool allow_create_mapping = pkt_allow_initiating_ct(offset_info->pkt_type);
 
     struct nat_timer_key_v6 key = {0};
@@ -333,7 +333,10 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
             return TC_ACT_SHOT;
         }
 
-        struct nat_timer_value_v6 new_value = {0};
+        struct nat_timer_value_v6 new_value = {};
+        __builtin_memset(&new_value, 0, sizeof(new_value));
+        new_value.create_time = bpf_ktime_get_ns();
+        new_value.flow_id = get_flow_id(skb->mark);
         update_ipv6_cache_value(skb, ip_pair, &new_value);
         value = insert_ct6_timer(&key, &new_value);
 
@@ -348,7 +351,7 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
                 event->dst_port = value->trigger_port;
                 event->l4_proto = key.l4_protocol;
                 event->l3_proto = LANDSCAPE_IPV6_TYPE;
-                event->flow_id = get_flow_id(skb->mark);
+                event->flow_id = value->flow_id;
                 event->trace_id = 0;
                 event->create_time = value->create_time;
                 event->event_type = NAT_CREATE_CONN;
