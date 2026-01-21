@@ -19,6 +19,8 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
 
     int ret;
     struct lan_route_key_v4 lan_search_key = {0};
+    struct mac_key_v4 mac_key_search = {0};
+    struct mac_value_v4 *mac_value = NULL;
 
     lan_search_key.prefixlen = 32;
     lan_search_key.addr = context->daddr;
@@ -28,6 +30,15 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
     if (likely(lan_info != NULL)) {
         // is LAN Packet, redirect to lan
         if (unlikely(lan_info->ifindex == skb->ifindex)) {
+            if (lan_info->has_mac && lan_info->addr != 0 && lan_info->addr != context->daddr) {
+                mac_key_search.addr = context->daddr;
+                mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
+                if (mac_value) {
+                    if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
+                        return bpf_redirect(lan_info->ifindex, 0);
+                    }
+                }
+            }
             // current iface
             return TC_ACT_UNSPEC;
         }
@@ -47,7 +58,6 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
         }
 
         bool target_has_mac = lan_info->has_mac;
-        struct mac_key_v4 mac_key_search = {0};
         if (unlikely(lan_info->is_next_hop)) {
             mac_key_search.addr = lan_info->addr;
         } else {
@@ -55,7 +65,7 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
         }
 
         if (target_has_mac) {
-            struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
+            mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
             if (mac_value) {
                 ret = store_mac_v4(skb, &mac_value->mac, lan_info->mac_addr);
                 if (!ret) {
