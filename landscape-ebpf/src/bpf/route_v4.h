@@ -314,6 +314,7 @@ static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb,
     int ret = 0;
     u32 key = WAN_CACHE;
     struct rt_cache_key_v4 search_key = {0};
+    struct mac_value_v4 *mac_value = NULL;
     search_key.local_addr = context->saddr;
     search_key.remote_addr = context->daddr;
 
@@ -334,12 +335,21 @@ static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb,
                 if (!target_has_mac) {
                     return bpf_redirect(target->ifindex, 0);
                 } else {
-                    struct mac_value_v4 *mac_value =
-                        bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
+                    mac_value = bpf_map_lookup_elem(&ip_mac_v4, &search_key.remote_addr);
                     if (mac_value) {
-                        ret = store_mac_v4(skb, &mac_value->mac, wan_ip_info->mac);
-                        if (!ret) {
+                        bpf_log_info("find ip: %pI4 mac, send to ifindex: %d",
+                                     &search_key.remote_addr, target->ifindex);
+                        if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
                             return bpf_redirect(target->ifindex, 0);
+                        }
+                    } else {
+                        mac_value = bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
+                        if (mac_value) {
+                            bpf_log_info("find ip: %pI4 mac, send to ifindex: %d",
+                                         &wan_ip_info->gateway.ip, target->ifindex);
+                            if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
+                                return bpf_redirect(target->ifindex, 0);
+                            }
                         }
                     }
                 }

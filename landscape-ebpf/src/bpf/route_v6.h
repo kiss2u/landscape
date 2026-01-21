@@ -310,6 +310,7 @@ static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
     int ret = 0;
     u32 key = WAN_CACHE;
     struct rt_cache_key_v6 search_key = {0};
+    struct mac_value_v4 *mac_value = NULL;
     struct rt_cache_value_v6 *target = NULL;
 
     __builtin_memcpy(search_key.local_addr.bytes, context->saddr.bytes, 16);
@@ -335,15 +336,18 @@ static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
                 if (!target_has_mac) {
                     return bpf_redirect(target->ifindex, 0);
                 } else {
-                    struct mac_value_v6 *mac_value =
-                        bpf_map_lookup_elem(&ip_mac_v6, &wan_ip_info->gateway);
+                    mac_value = bpf_map_lookup_elem(&ip_mac_v4, &search_key.remote_addr);
                     if (mac_value) {
-                        ret = store_mac_v6(skb, &mac_value->mac, wan_ip_info->mac);
-                        if (!ret) {
+                        if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
                             return bpf_redirect(target->ifindex, 0);
                         }
                     } else {
-                        bpf_log_info("can't find mac by: %pI6", &wan_ip_info->gateway);
+                        mac_value = bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
+                        if (mac_value) {
+                            if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
+                                return bpf_redirect(target->ifindex, 0);
+                            }
+                        }
                     }
                 }
 
