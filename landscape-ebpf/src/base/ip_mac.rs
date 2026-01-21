@@ -35,16 +35,22 @@ pub fn neigh_update(mut service_status: oneshot::Receiver<()>) -> LdEbpfResult<(
 
     let _link = kprobe_neigh_update.attach_kprobe(false, "neigh_update").unwrap();
 
+    let mut times = 0_u8;
     'm: loop {
         tracing::info!("syn curren arpv4 info");
         sync_arp_table_to_ebpf_map();
 
-        for _ in 0..60 {
+        let wait_time = if times < 10 { 10_u8 } else { 60_u8 };
+
+        for _ in 0..wait_time {
             if let Ok(_) | Err(oneshot::error::TryRecvError::Closed) = service_status.try_recv() {
                 tracing::info!("neigh_update service stopping...");
                 break 'm;
             }
             std::thread::sleep(Duration::from_secs(1));
+        }
+        if times < 20 {
+            times += 1;
         }
     }
     Ok(())
