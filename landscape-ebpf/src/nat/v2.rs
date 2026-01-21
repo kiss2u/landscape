@@ -38,6 +38,9 @@ pub fn init_nat(
         .reuse_pinned_map(&MAP_PATHS.static_nat_mappings)
         .unwrap();
 
+    landscape_open.maps.nat4_static_map.set_pin_path(&MAP_PATHS.nat4_static_map).unwrap();
+    landscape_open.maps.nat4_static_map.reuse_pinned_map(&MAP_PATHS.nat4_static_map).unwrap();
+
     landscape_open.maps.nat4_conn_map.set_pin_path(&MAP_PATHS.nat4_conn_map).unwrap();
     landscape_open.maps.nat4_conn_map.reuse_pinned_map(&MAP_PATHS.nat4_conn_map).unwrap();
 

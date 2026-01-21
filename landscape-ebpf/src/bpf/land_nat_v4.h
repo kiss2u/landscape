@@ -916,24 +916,22 @@ lookup_static_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
                          struct nat_mapping_value_v4 **nat_ingress_value_,
                          struct nat_mapping_value_v4 **nat_egress_value_) {
 #define BPF_LOG_TOPIC "lk_static_map_v4"
-    struct static_nat_mapping_key egress_key = {0};
-    struct static_nat_mapping_key ingress_key = {0};
+    struct static_nat_mapping_key_v4 egress_key = {0};
+    struct static_nat_mapping_key_v4 ingress_key = {0};
 
-    egress_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
     egress_key.l4_protocol = ip_protocol;
-    ingress_key.l3_protocol = LANDSCAPE_IPV4_TYPE;
     ingress_key.l4_protocol = ip_protocol;
 
     struct nat_mapping_value_v4 *nat_gress_value = NULL;
     struct nat_mapping_value_v4 *nat_gress_value_rev = NULL;
     if (gress == NAT_MAPPING_EGRESS) {
         egress_key.gress = NAT_MAPPING_EGRESS;
-        egress_key.prefixlen = 192;
+        egress_key.prefixlen = 96;
         egress_key.port = pkt_ip_pair->src_port;
-        egress_key.addr.ip = pkt_ip_pair->src_addr.addr;
+        egress_key.addr = pkt_ip_pair->src_addr.addr;
 
         // 倒置的值
-        nat_gress_value = bpf_map_lookup_elem(&static_nat_mappings, &egress_key);
+        nat_gress_value = bpf_map_lookup_elem(&nat4_static_map, &egress_key);
         if (nat_gress_value) {
             // bpf_log_info("find egress value: nat_port: %u", bpf_htons(nat_gress_value->port));
             *nat_egress_value_ = nat_gress_value;
@@ -942,19 +940,19 @@ lookup_static_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
             return TC_ACT_SHOT;
         }
     } else {
-        ingress_key.prefixlen = 96;
+        ingress_key.prefixlen = 64;
         ingress_key.gress = NAT_MAPPING_INGRESS;
         ingress_key.port = pkt_ip_pair->dst_port;
         // using current ifindex to query
         // egress_key.addr.ip = skb->ifindex;
-        nat_gress_value_rev = bpf_map_lookup_elem(&static_nat_mappings, &ingress_key);
+        nat_gress_value_rev = bpf_map_lookup_elem(&nat4_static_map, &ingress_key);
 
         if (!nat_gress_value_rev) {
             // bpf_log_info("can't find ingress key: target port: %u, protocol: %u",
             // bpf_htons(ingress_key.port), ip_protocol);
             return TC_ACT_SHOT;
         }
-        // bpf_log_info("find ingress value: target %pI4:%u", nat_gress_value_rev->addr.all,
+        // bpf_log_info("find ingress value: target %pI4:%u", nat_gress_value_rev->addr,
         //              bpf_htons(nat_gress_value_rev->port));
         *nat_ingress_value_ = nat_gress_value_rev;
     }

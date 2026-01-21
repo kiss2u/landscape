@@ -66,19 +66,6 @@ struct nat_mapping_key_v4 {
     __be32 from_addr;
 };
 
-struct nat_mapping_value_v4 {
-    __be32 addr;
-    // TODO： 触发这个关系的 ip 或者端口
-    // 单独一张检查表， 使用这个 ip 获取是否需要检查
-    __be32 trigger_addr;
-    __be16 port;
-    __be16 trigger_port;
-    u8 is_static;
-    u8 is_allow_reuse;
-    u8 _pad[2];
-    u64 active_time;
-};
-
 //
 struct nat_timer_key {
     u8 l4proto;

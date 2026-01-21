@@ -42,6 +42,8 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     landscape_open.maps.wan_ip_binding.set_pin_path(&paths.wan_ip).unwrap();
     // NAT
     landscape_open.maps.static_nat_mappings.set_pin_path(&paths.static_nat_mappings).unwrap();
+    landscape_open.maps.nat4_static_map.set_pin_path(&paths.nat4_static_map).unwrap();
+
     landscape_open.maps.nat4_conn_map.set_pin_path(&paths.nat4_conn_map).unwrap();
 
     // firewall
