@@ -404,6 +404,7 @@ static __always_inline int setting_cache_in_wan_v4(const struct route_context_v4
             //     }
             // }
             bpf_map_update_elem(wan_cache, &search_key, &new_target_cache, BPF_ANY);
+            // bpf_log_info("wan_cache new new_target_cache.ifindex: %d", new_target_cache.ifindex);
         }
 
         // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {

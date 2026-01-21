@@ -598,6 +598,9 @@ ipv6_ingress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offse
 
     ret = check_ingress_mapping_exist(skb, offset_info->l4_protocol, ip_pair, &local_client_prefix);
     if (ret == TC_ACT_UNSPEC) {
+        u32 mark = skb->mark;
+        barrier_var(mark);
+        skb->mark = replace_cache_mask(mark, INGRESS_STATIC_MARK);
         return TC_ACT_UNSPEC;
     }
 

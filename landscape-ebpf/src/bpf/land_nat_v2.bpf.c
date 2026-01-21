@@ -290,6 +290,10 @@ int nat_v4_ingress(struct __sk_buff *skb) {
         //     bpf_log_info("src IP: %pI4,", &ip_pair.src_addr);
         //     bpf_log_info("dst IP: %pI4,", &ip_pair.dst_addr);
         //     bpf_log_info("real IP: %pI4,", &nat_ingress_value->addr);
+    } else {
+        u32 mark = skb->mark;
+        barrier_var(mark);
+        skb->mark = replace_cache_mask(mark, INGRESS_STATIC_MARK);
     }
 
     if (nat_ingress_value == NULL) {

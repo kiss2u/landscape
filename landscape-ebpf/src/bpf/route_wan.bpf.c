@@ -13,20 +13,17 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
-
 const volatile u32 current_l3_offset = 14;
 
 #undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
 #define BPF_LOG_LEVEL LOG_LEVEL
 
-
 #define IPV4_WAN_INGRESS_PROG_INDEX 0
 #define IPV6_WAN_INGRESS_PROG_INDEX 1
 
 #define IPV4_WAN_EGRESS_PROG_INDEX 0
 #define IPV6_WAN_EGRESS_PROG_INDEX 1
-
 
 SEC("tc/ingress")
 int rt4_wan_ingress(struct __sk_buff *skb) {
@@ -56,14 +53,14 @@ int rt4_wan_ingress(struct __sk_buff *skb) {
     }
 
     ret = lan_redirect_check_v4(skb, current_l3_offset, &context);
-   if (ret == TC_ACT_REDIRECT) {
+    if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
             // bpf_log_info("get wan ingress mark: %u", mark);
             setting_cache_in_wan_v4(&context, current_l3_offset, skb->ifindex);
         }
     }
-   
+
     return ret == TC_ACT_OK ? TC_ACT_UNSPEC : ret;
 #undef BPF_LOG_TOPIC
 }
@@ -97,7 +94,7 @@ int rt4_wan_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-      ret = lan_redirect_check_v4(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v4(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }
@@ -115,7 +112,6 @@ int rt4_wan_egress(struct __sk_buff *skb) {
     return ret;
 #undef BPF_LOG_TOPIC
 }
-
 
 SEC("tc/ingress")
 int rt6_wan_ingress(struct __sk_buff *skb) {
@@ -145,14 +141,14 @@ int rt6_wan_ingress(struct __sk_buff *skb) {
     }
 
     ret = lan_redirect_check_v6(skb, current_l3_offset, &context);
-   if (ret == TC_ACT_REDIRECT) {
+    if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
             // bpf_log_info("get wan ingress mark: %u", mark);
             setting_cache_in_wan_v6(&context, current_l3_offset, skb->ifindex);
         }
     }
-   
+
     // bpf_log_info("lan_redirect_check_v6 ret: %d", ret);
     return ret == TC_ACT_OK ? TC_ACT_UNSPEC : ret;
 #undef BPF_LOG_TOPIC
@@ -180,7 +176,7 @@ int rt6_wan_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-      ret = lan_redirect_check_v6(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v6(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
         return ret;
     }
@@ -199,7 +195,6 @@ int rt6_wan_egress(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
     __uint(max_entries, 2);
@@ -213,7 +208,6 @@ struct {
             [IPV6_WAN_INGRESS_PROG_INDEX] = (void *)&rt6_wan_ingress,
         },
 };
-
 
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
@@ -255,7 +249,7 @@ int route_wan_ingress(struct __sk_buff *skb) {
         bpf_tail_call_static(skb, &ls_wan_in_tails, IPV6_WAN_INGRESS_PROG_INDEX);
         bpf_printk("bpf_tail_call_static error");
     }
-    
+
     return TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }
@@ -291,8 +285,7 @@ int route_wan_egress(struct __sk_buff *skb) {
         bpf_tail_call_static(skb, &ls_wan_e_tails, IPV6_WAN_EGRESS_PROG_INDEX);
         bpf_printk("bpf_tail_call_static error");
     }
-    
+
     return TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }
-
