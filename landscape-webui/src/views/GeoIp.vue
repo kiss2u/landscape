@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { refresh_geo_cache_key, search_geo_ip_cache } from "@/api/geo/ip";
+import { sortGeoKeys } from "@/lib/geo_utils";
 import { QueryGeoKey } from "@/rust_bindings/common/geo";
 import { sleep } from "seemly";
 import { onMounted, ref } from "vue";
@@ -16,7 +17,8 @@ const filter = ref<QueryGeoKey>({
 });
 
 async function refresh() {
-  rules.value = await search_geo_ip_cache(filter.value);
+  const result = await search_geo_ip_cache(filter.value);
+  rules.value = sortGeoKeys(result, filter.value.key || "");
 }
 
 const loading = ref(false);
