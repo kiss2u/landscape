@@ -211,12 +211,12 @@ async function append_import_rules() {
                   <ChangeCatalog />
                 </n-icon>
               </n-button>
-              <WanIpGeoSelect
+              <GeoIpKeySelect
                 v-model:geo_key="value.key"
                 v-model:geo_name="value.name"
                 v-if="value.t === 'geo_key'"
               >
-              </WanIpGeoSelect>
+              </GeoIpKeySelect>
               <!-- <n-input
                 v-model:value="value.key"
                 placeholder="geo key"
