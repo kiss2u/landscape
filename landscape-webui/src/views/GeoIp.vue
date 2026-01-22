@@ -51,13 +51,9 @@ const show_geo_drawer_modal = ref(false);
         强制刷新吗? 将会清空所有 key 并且重新下载. 可能会持续一段时间
       </n-popconfirm>
 
-      <GeoIpNameSelect
-        v-model:name="filter.name"
-        @refresh="refresh"
-      ></GeoIpNameSelect>
       <GeoIpKeySelect
         v-model:geo_key="filter.key"
-        v-model:name="filter.name"
+        v-model:geo_name="filter.name"
         @refresh="refresh"
       ></GeoIpKeySelect>
     </n-flex>

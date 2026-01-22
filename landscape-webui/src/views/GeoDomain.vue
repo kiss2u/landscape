@@ -49,13 +49,9 @@ const show_geo_drawer_modal = ref(false);
         </template>
         强制刷新吗? 将会清空所有 key 并且重新下载
       </n-popconfirm>
-      <GeoSiteNameSelect
-        v-model:name="filter.name"
-        @refresh="refresh"
-      ></GeoSiteNameSelect>
       <GeoSiteKeySelect
         v-model:geo_key="filter.key"
-        v-model:name="filter.name"
+        v-model:geo_name="filter.name"
         @refresh="refresh"
       ></GeoSiteKeySelect>
     </n-flex>
