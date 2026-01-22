@@ -5,11 +5,13 @@ import { GeoConfigKey } from "@/rust_bindings/common/geo";
 import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
 import { computed, ref } from "vue";
 
-const key = defineModel<string | null | undefined>("geo_key", {
+const key = defineModel<string | null>("geo_key", {
   required: true,
+  default: null,
 });
-const name = defineModel<string | null | undefined>("geo_name", {
+const name = defineModel<string | null>("geo_name", {
   required: true,
+  default: null,
 });
 const emit = defineEmits(["refresh"]);
 
