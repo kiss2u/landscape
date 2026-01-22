@@ -1,8 +1,8 @@
 import {
   LandscapeInterface,
   LandscapeWifiInterface,
-} from "@/rust_bindings/iface";
-import { NetworkIfaceConfig } from "@/rust_bindings/common/iface";
+} from "landscape-types/iface";
+import { NetworkIfaceConfig } from "landscape-types/common/iface";
 import { NetDev, WLANTypeTag } from "./dev";
 import { ZoneType } from "./service_ipconfig";
 

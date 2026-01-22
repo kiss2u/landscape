@@ -1,4 +1,4 @@
-import { DHCPv4OfferInfo } from "@/rust_bindings/common/dhcp_v4_server";
+import { DHCPv4OfferInfo } from "landscape-types/common/dhcp_v4_server";
 import { IPv4, IPv4CidrRange } from "ip-num";
 
 export class DHCPv4ServiceConfig {

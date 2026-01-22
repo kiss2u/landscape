@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FlowEntryRule } from "@/rust_bindings/common/flow";
+import { FlowEntryRule } from "landscape-types/common/flow";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { ChangeCatalog } from "@vicons/carbon";
 import { formatMacAddress } from "@/lib/util";

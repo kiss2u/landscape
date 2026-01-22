@@ -5,7 +5,7 @@ import { useFrontEndStore } from "@/stores/front_end_config";
 import {
   ConnectKey,
   ConnectMetric,
-} from "@/rust_bindings/common/metric/connect";
+} from "landscape-types/common/metric/connect";
 import { ApexOptions } from "apexcharts";
 import { computed, ref } from "vue";
 import VueApexCharts from "vue3-apexcharts";

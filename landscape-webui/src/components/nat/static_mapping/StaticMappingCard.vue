@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { delete_static_nat_mapping } from "@/api/static_nat_mapping";
-import { StaticNatMappingConfig } from "@/rust_bindings/common/nat";
+import { StaticNatMappingConfig } from "landscape-types/common/nat";
 import { computed, ref } from "vue";
 import { DotMark } from "@vicons/carbon";
 import { useFrontEndStore } from "@/stores/front_end_config";

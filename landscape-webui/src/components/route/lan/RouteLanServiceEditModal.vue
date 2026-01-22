@@ -4,7 +4,7 @@ import { ref } from "vue";
 import {
   RouteLanServiceConfig,
   StaticRouteConfig,
-} from "@/rust_bindings/common/route";
+} from "landscape-types/common/route";
 import {
   get_route_lan_config,
   update_route_lans_config,

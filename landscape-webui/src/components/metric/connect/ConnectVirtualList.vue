@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ConnectKey } from "@/rust_bindings/common/metric/connect";
+import { ConnectKey } from "landscape-types/common/metric/connect";
 
 interface Props {
   connect_metrics: ConnectKey[];

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { refresh_geo_cache_key, search_geo_ip_cache } from "@/api/geo/ip";
 import { sortGeoKeys } from "@/lib/geo_utils";
-import { QueryGeoKey } from "@/rust_bindings/common/geo";
+import { QueryGeoKey } from "landscape-types/common/geo";
 import { sleep } from "seemly";
 import { onMounted, ref } from "vue";
 

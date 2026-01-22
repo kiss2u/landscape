@@ -5,8 +5,8 @@ import {
   get_iface_mss_clamp_config,
   update_mss_clamp_config,
 } from "@/api/service/mss_clamp";
-import { IfaceZoneType } from "@/rust_bindings/common/iface";
-import { MSSClampServiceConfig } from "@/rust_bindings/common/mss_clamp";
+import { IfaceZoneType } from "landscape-types/common/iface";
+import { MSSClampServiceConfig } from "landscape-types/common/mss_clamp";
 
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);

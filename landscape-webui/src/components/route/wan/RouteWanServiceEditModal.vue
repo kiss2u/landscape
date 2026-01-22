@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 
-import { IfaceZoneType } from "@/rust_bindings/common/iface";
-import { RouteWanServiceConfig } from "@/rust_bindings/common/route";
+import { IfaceZoneType } from "landscape-types/common/iface";
+import { RouteWanServiceConfig } from "landscape-types/common/route";
 import { useRouteWanConfigStore } from "@/stores/status_route_wan";
 import {
   get_route_wan_config,

@@ -1,7 +1,7 @@
 import { ServiceStatus } from "@/lib/services";
 import { DockerContainerSummary, DockerImageSummary } from "@/lib/docker";
 import axiosService from "@/api";
-import { DockerCmd, PullImgTask } from "@/rust_bindings/common/docker";
+import { DockerCmd, PullImgTask } from "landscape-types/common/docker";
 
 export async function get_docker_status(): Promise<ServiceStatus> {
   let data = await axiosService.get("sys_service/docker/status");

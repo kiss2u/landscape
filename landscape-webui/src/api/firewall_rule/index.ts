@@ -1,6 +1,6 @@
 import axiosService from "@/api";
 import { FirewallRule } from "@/lib/mark";
-import { FirewallRuleConfig } from "@/rust_bindings/common/firewall";
+import { FirewallRuleConfig } from "landscape-types/common/firewall";
 
 export async function get_firewall_rules(): Promise<FirewallRuleConfig[]> {
   let data = await axiosService.get(`config/firewall_rules`);

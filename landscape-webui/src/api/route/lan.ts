@@ -1,6 +1,6 @@
 import axiosService from "@/api";
 import { ServiceStatus } from "@/lib/services";
-import { RouteLanServiceConfig } from "@/rust_bindings/common/route";
+import { RouteLanServiceConfig } from "landscape-types/common/route";
 
 export async function get_all_route_lan_status(): Promise<
   Map<string, ServiceStatus>

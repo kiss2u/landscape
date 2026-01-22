@@ -2,8 +2,8 @@ import axiosService from "@/api";
 import {
   IfaceCpuSoftBalance,
   NetworkIfaceConfig,
-} from "@/rust_bindings/common/iface";
-import { IfacesInfo } from "@/rust_bindings/iface";
+} from "landscape-types/common/iface";
+import { IfacesInfo } from "landscape-types/iface";
 
 export async function ifaces(): Promise<IfacesInfo> {
   let data = await axiosService.get("iface");

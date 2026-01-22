@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { get_static_nat_mappings } from "@/api/static_nat_mapping";
-import { StaticNatMappingConfig } from "@/rust_bindings/common/nat";
+import { StaticNatMappingConfig } from "landscape-types/common/nat";
 import { ref, onMounted } from "vue";
 
 const mapping_rules = ref<StaticNatMappingConfig[]>([]);

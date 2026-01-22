@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { get_geo_site_configs, search_geo_site_cache } from "@/api/geo/site";
 import { renderGeoSelectLabel, sortGeoKeys } from "@/lib/geo_utils";
-import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
+import { GeoConfigKey } from "landscape-types/common/geo";
+import { GeoSiteSourceConfig } from "landscape-types/common/geo_site";
 import { computed, ref } from "vue";
 
 const key = defineModel<string | null>("geo_key", {

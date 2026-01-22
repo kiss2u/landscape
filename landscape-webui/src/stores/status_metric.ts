@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { get_connects_info, get_metric_status } from "@/api/metric";
 import { ServiceStatus, ServiceStatusType } from "@/lib/services";
-import { ConnectKey } from "@/rust_bindings/common/metric/connect";
+import { ConnectKey } from "landscape-types/common/metric/connect";
 
 export const useMetricStore = defineStore("dns_metric", () => {
   const enable = ref(false);

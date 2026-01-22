@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { get_geo_ip_configs } from "@/api/geo/ip";
-import { GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
+import { GeoIpSourceConfig } from "landscape-types/common/geo_ip";
 import { computed, onMounted, ref } from "vue";
 
 const name = defineModel<string | null>("name", { required: true });

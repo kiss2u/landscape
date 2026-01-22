@@ -1,6 +1,6 @@
 import { IpConfigMode, NetworkConfig } from "@lib/network_config";
 import { NetDev, WifiMode } from "@/lib/dev";
-import { IfaceZoneType } from "@/rust_bindings/common/iface";
+import { IfaceZoneType } from "landscape-types/common/iface";
 import axiosService from "../api";
 
 export async function ifaces(): Promise<NetDev[]> {

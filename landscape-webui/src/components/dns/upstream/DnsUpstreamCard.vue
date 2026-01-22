@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
+import { DnsUpstreamConfig } from "landscape-types/common/dns";
 import { DnsUpstreamModeTsEnum, upstream_mode_exhibit_name } from "@/lib/dns";
 import { delete_dns_upstream } from "@/api/dns_rule/upstream";
 import { useFrontEndStore } from "@/stores/front_end_config";

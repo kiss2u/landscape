@@ -3,11 +3,11 @@ import {
   GeoConfigKey,
   GeoFileCacheKey,
   QueryGeoKey,
-} from "@/rust_bindings/common/geo";
+} from "landscape-types/common/geo";
 import {
   GeoDomainConfig,
   GeoSiteSourceConfig,
-} from "@/rust_bindings/common/geo_site";
+} from "landscape-types/common/geo_site";
 
 export async function get_geo_site_configs(
   name?: string

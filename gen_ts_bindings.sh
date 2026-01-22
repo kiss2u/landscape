@@ -1,3 +1,3 @@
 #!/bin/sh
-rm -rf ./landscape-webui/src/rust_bindings
+rm -rf ./landscape-types/src
 cargo test --workspace  export_bindings

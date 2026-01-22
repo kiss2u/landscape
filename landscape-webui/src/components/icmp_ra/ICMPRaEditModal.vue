@@ -12,7 +12,7 @@ import {
   IPv6RaPdConfig,
   IPV6RAServiceConfig,
   IPv6RaStaticConfig,
-} from "@/rust_bindings/common/ra";
+} from "landscape-types/common/ra";
 import { indexMap } from "seemly";
 
 let ipv6PDStore = useIPv6PDStore();

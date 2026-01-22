@@ -4,7 +4,7 @@ import {
   ArpScanInfo,
   DHCPv4OfferInfo,
   DHCPv4OfferInfoItem,
-} from "@/rust_bindings/common/dhcp_v4_server";
+} from "landscape-types/common/dhcp_v4_server";
 import { CountdownInst } from "naive-ui";
 import { computed, nextTick, ref, watch } from "vue";
 

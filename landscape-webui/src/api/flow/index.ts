@@ -1,6 +1,6 @@
 import axiosService from "@/api";
 import api from "@/api";
-import { FlowConfig } from "@/rust_bindings/common/flow";
+import { FlowConfig } from "landscape-types/common/flow";
 
 export async function get_flow_rules(): Promise<FlowConfig[]> {
   let data = await axiosService.get("config/flow_rules");

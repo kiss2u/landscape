@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ConnectKey } from "@/rust_bindings/common/metric/connect";
+import { ConnectKey } from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { ChartLine } from "@vicons/carbon";
 import { mask_string } from "@/lib/common";

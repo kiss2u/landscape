@@ -1,6 +1,6 @@
 import axiosService from "@/api";
-import { GeoConfigKey, QueryGeoKey } from "@/rust_bindings/common/geo";
-import { GeoIpConfig, GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
+import { GeoConfigKey, QueryGeoKey } from "landscape-types/common/geo";
+import { GeoIpConfig, GeoIpSourceConfig } from "landscape-types/common/geo_ip";
 
 export async function get_geo_ip_configs(
   name?: string

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { get_flow_rules } from "@/api/flow";
 import { FlowMarkType } from "@/lib/default_value";
-import { FlowMark } from "@/rust_bindings/flow";
+import { FlowMark } from "landscape-types/flow";
 import { computed, onMounted, ref } from "vue";
 
 const mark = defineModel<FlowMark>("mark", { required: true });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMessage } from "naive-ui";
-import { StaticNatMappingConfig } from "@/rust_bindings/common/nat";
+import { StaticNatMappingConfig } from "landscape-types/common/nat";
 
 import { computed } from "vue";
 import { ref } from "vue";

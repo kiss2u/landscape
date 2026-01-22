@@ -1,5 +1,5 @@
 import axiosService from "@/api";
-import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
+import { DnsUpstreamConfig } from "landscape-types/common/dns";
 
 export async function get_dns_upstreams(): Promise<DnsUpstreamConfig[]> {
   let data = await axiosService.get(`config/dns_upstreams`);

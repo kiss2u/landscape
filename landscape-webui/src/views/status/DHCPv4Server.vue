@@ -6,7 +6,7 @@ import {
 import {
   ArpScanInfo,
   DHCPv4OfferInfo,
-} from "@/rust_bindings/common/dhcp_v4_server";
+} from "landscape-types/common/dhcp_v4_server";
 import { info } from "console";
 import { computed, onMounted, ref } from "vue";
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { get_geo_ip_cache_detail } from "@/api/geo/ip";
-import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import { GeoIpConfig } from "@/rust_bindings/common/geo_ip";
+import { GeoConfigKey } from "landscape-types/common/geo";
+import { GeoIpConfig } from "landscape-types/common/geo_ip";
 import { onMounted, ref } from "vue";
 
 const key = defineModel<GeoConfigKey>("geo_key", {

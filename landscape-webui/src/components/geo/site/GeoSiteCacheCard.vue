@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GeoDomainConfig } from "@/rust_bindings/common/geo_site";
+import { GeoDomainConfig } from "landscape-types/common/geo_site";
 import { ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";

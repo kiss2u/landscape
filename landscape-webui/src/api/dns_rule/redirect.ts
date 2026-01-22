@@ -1,5 +1,5 @@
 import axiosService from "@/api";
-import { DNSRedirectRule } from "@/rust_bindings/common/dns_redirect";
+import { DNSRedirectRule } from "landscape-types/common/dns_redirect";
 
 export async function get_dns_redirects(): Promise<DNSRedirectRule[]> {
   let data = await axiosService.get(`config/dns_redirects`);

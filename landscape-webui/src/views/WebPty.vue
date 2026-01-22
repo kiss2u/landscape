@@ -3,7 +3,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
-import { LandscapePtyConfig, PtyOutMessage } from "@/rust_bindings/common/pty";
+import { LandscapePtyConfig, PtyOutMessage } from "landscape-types/common/pty";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 

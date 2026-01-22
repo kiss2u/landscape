@@ -5,8 +5,8 @@ import {
   search_geo_site_cache,
 } from "@/api/geo/site";
 import { renderGeoSelectLabel, sortGeoKeys } from "@/lib/geo_utils";
-import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
+import { GeoConfigKey } from "landscape-types/common/geo";
+import { GeoSiteSourceConfig } from "landscape-types/common/geo_site";
 import { computed, onMounted, ref } from "vue";
 
 const key = defineModel<string | null>("geo_key", {
@@ -32,7 +32,9 @@ const loading_attrs = ref(false);
 onMounted(async () => {
   await typing_name_key("");
   await typing_key("");
-  await typing_attribute(name.value, key.value);
+  if (name.value && key.value) {
+    await typing_attribute(name.value, key.value);
+  }
 });
 
 const configs = ref<GeoSiteSourceConfig[]>();

@@ -3,7 +3,7 @@ import {
   delete_geo_site_config,
   update_geo_site_by_upload,
 } from "@/api/geo/site";
-import { GeoSiteSourceConfig } from "@/rust_bindings/common/geo_site";
+import { GeoSiteSourceConfig } from "landscape-types/common/geo_site";
 import { computed, ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";

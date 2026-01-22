@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { get_current_ip_prefix_info } from "@/api/service_ipv6pd";
-import { LDIAPrefix } from "@/rust_bindings/common/ipv6_pd";
+import { LDIAPrefix } from "landscape-types/common/ipv6_pd";
 import { computed, onMounted, ref } from "vue";
 
 onMounted(async () => {

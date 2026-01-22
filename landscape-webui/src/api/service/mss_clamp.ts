@@ -1,6 +1,6 @@
 import axiosService from "@/api";
 import { ServiceStatus } from "@/lib/services";
-import { MSSClampServiceConfig } from "@/rust_bindings/common/mss_clamp";
+import { MSSClampServiceConfig } from "landscape-types/common/mss_clamp";
 
 export async function get_all_mss_clamp_status(): Promise<
   Map<string, ServiceStatus>

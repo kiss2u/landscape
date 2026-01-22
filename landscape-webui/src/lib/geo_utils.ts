@@ -1,4 +1,4 @@
-import { GeoConfigKey } from "@/rust_bindings/common/geo";
+import { GeoConfigKey } from "landscape-types/common/geo";
 import { NTag, NText, SelectOption } from "naive-ui";
 import { h } from "vue";
 

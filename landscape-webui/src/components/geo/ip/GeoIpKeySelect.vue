@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { get_geo_ip_configs, search_geo_ip_cache } from "@/api/geo/ip";
 import { renderGeoSelectLabel, sortGeoKeys } from "@/lib/geo_utils";
-import { GeoConfigKey } from "@/rust_bindings/common/geo";
-import { GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
+import { GeoConfigKey } from "landscape-types/common/geo";
+import { GeoIpSourceConfig } from "landscape-types/common/geo_ip";
 import { computed, ref } from "vue";
 
 const key = defineModel<string | null>("geo_key", {

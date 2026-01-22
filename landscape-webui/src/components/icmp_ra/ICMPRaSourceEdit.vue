@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { get_all_ipv6pd_status } from "@/api/service_ipv6pd";
 import { ServiceStatus } from "@/lib/services";
-import { IPV6RaConfigSource } from "@/rust_bindings/common/ra";
+import { IPV6RaConfigSource } from "landscape-types/common/ra";
 import { computed, ref } from "vue";
 
 const show = defineModel<boolean>("show", { required: true });

@@ -1,4 +1,4 @@
-import { PPPDConfig } from "@/rust_bindings/common/ppp";
+import { PPPDConfig } from "landscape-types/common/ppp";
 
 const ADAY = 60 * 60 * 24;
 

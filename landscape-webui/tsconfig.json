@@ -3,9 +3,12 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true,
-
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -13,22 +16,46 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "preserve",
-
     /* Linting */
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@api/*": ["./src/api/*"],
-      "@store/*": ["./src/store/*"],
-      "@router/*": ["./src/router/*"],
-      "@lib/*": ["./src/lib/*"],
-      "@views/*": ["./src/views/*"],
-      "@components/*": ["./src/components/*"],
+      "@/*": [
+        "./src/*"
+      ],
+      "@api/*": [
+        "./src/api/*"
+      ],
+      "@store/*": [
+        "./src/store/*"
+      ],
+      "@router/*": [
+        "./src/router/*"
+      ],
+      "@lib/*": [
+        "./src/lib/*"
+      ],
+      "@views/*": [
+        "./src/views/*"
+      ],
+      "@components/*": [
+        "./src/components/*"
+      ],
+      "landscape-types/*": [
+        "../landscape-types/src/*"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }

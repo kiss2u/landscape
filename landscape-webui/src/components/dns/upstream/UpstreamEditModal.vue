@@ -3,7 +3,7 @@ import { useMessage } from "naive-ui";
 import { isIP } from "is-ip";
 import { computed } from "vue";
 import { ref } from "vue";
-import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
+import { DnsUpstreamConfig } from "landscape-types/common/dns";
 import { get_dns_upstream, push_dns_upstream } from "@/api/dns_rule/upstream";
 import { DnsUpstreamModeTsEnum, UPSTREAM_OPTIONS } from "@/lib/dns";
 import {

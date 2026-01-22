@@ -8,7 +8,7 @@ import {
   copy_context_to_clipboard,
   read_context_from_clipboard,
 } from "@/lib/common";
-import { DNSRedirectRule } from "@/rust_bindings/common/dns_redirect";
+import { DNSRedirectRule } from "landscape-types/common/dns_redirect";
 import { get_dns_redirect, push_dns_redirect } from "@/api/dns_rule/redirect";
 import { get_flow_rules } from "@/api/flow";
 

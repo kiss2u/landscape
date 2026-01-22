@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { RuleSource } from "@/rust_bindings/common/dns";
+import { RuleSource } from "landscape-types/common/dns";
 import { DomainMatchTypeEnum, RuleSourceEnum } from "@/lib/dns";
 import { useFrontEndStore } from "@/stores/front_end_config";
 

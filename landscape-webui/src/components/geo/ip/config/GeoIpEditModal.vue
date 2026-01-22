@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { get_geo_ip_config, push_geo_ip_config } from "@/api/geo/ip";
-import { GeoIpSourceConfig } from "@/rust_bindings/common/geo_ip";
+import { GeoIpSourceConfig } from "landscape-types/common/geo_ip";
 import { computed, ref } from "vue";
 import { FormInst, FormRules } from "naive-ui";
 

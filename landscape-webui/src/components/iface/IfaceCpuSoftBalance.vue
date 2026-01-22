@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { get_iface_cpu_balance, set_iface_cpu_balance } from "@/api/iface";
 import { get_cpu_count } from "@/api/sys";
-import { IfaceCpuSoftBalance } from "@/rust_bindings/common/iface";
+import { IfaceCpuSoftBalance } from "landscape-types/common/iface";
 import { ref, computed } from "vue";
 
 const show_model = defineModel<boolean>("show", { required: true });

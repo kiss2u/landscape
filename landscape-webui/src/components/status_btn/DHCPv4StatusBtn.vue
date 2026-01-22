@@ -5,7 +5,7 @@ import StatusBtn from "@/components/status_btn/StatusBtn.vue";
 import { useDHCPv4ConfigStore } from "@/stores/status_dhcp_v4";
 import { computed, h, ref } from "vue";
 import { ServiceStatusType } from "@/lib/services";
-import { IfaceZoneType } from "@/rust_bindings/common/iface";
+import { IfaceZoneType } from "landscape-types/common/iface";
 
 const dhcpv4ConfigStore = useDHCPv4ConfigStore();
 

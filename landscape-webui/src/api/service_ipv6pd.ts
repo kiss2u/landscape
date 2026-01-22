@@ -1,7 +1,7 @@
 import { IPV6PDServiceConfig } from "@/lib/ipv6pd";
 import { ServiceStatus } from "@/lib/services";
 import axiosService from ".";
-import { LDIAPrefix } from "@/rust_bindings/common/ipv6_pd";
+import { LDIAPrefix } from "landscape-types/common/ipv6_pd";
 
 export async function get_all_ipv6pd_status(): Promise<
   Map<string, ServiceStatus>

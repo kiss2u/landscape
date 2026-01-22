@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PullImgTask, PullImgTaskItem } from "@/rust_bindings/common/docker";
+import { PullImgTask, PullImgTaskItem } from "landscape-types/common/docker";
 import { Task } from "@vicons/carbon";
 import { computed } from "vue";
 

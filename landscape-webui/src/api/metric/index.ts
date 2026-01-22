@@ -3,7 +3,7 @@ import { ServiceStatus } from "@/lib/services";
 import {
   ConnectKey,
   ConnectMetric,
-} from "@/rust_bindings/common/metric/connect";
+} from "landscape-types/common/metric/connect";
 
 export async function get_metric_status(): Promise<ServiceStatus> {
   let data = await axiosService.get("metric/status");

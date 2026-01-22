@@ -1,5 +1,5 @@
 import axiosService from "@/api";
-import { StaticNatMappingConfig } from "@/rust_bindings/common/nat";
+import { StaticNatMappingConfig } from "landscape-types/common/nat";
 
 export async function get_static_nat_mappings(): Promise<
   StaticNatMappingConfig[]

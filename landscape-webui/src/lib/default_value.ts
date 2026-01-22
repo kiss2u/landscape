@@ -1,4 +1,4 @@
-import { FlowConfig } from "@/rust_bindings/common/flow";
+import { FlowConfig } from "landscape-types/common/flow";
 
 export function flow_config_default(): FlowConfig {
   return {

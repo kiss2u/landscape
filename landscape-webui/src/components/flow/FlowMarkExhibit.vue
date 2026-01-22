@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { FlowMark } from "@/rust_bindings/flow";
+import { FlowMark } from "landscape-types/flow";
 
 type Props = {
   mark: FlowMark;

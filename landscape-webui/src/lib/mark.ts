@@ -1,12 +1,12 @@
 import { convert_flow_mark, MarkType } from "./dns";
 
-import type { FlowMark, WanIPRuleSource } from "@/rust_bindings/flow";
+import type { FlowMark, WanIPRuleSource } from "landscape-types/flow";
 import {
   FirewallRuleConfig,
   FirewallRuleConfigItem,
   LandscapeIpProtocolCode,
-} from "@/rust_bindings/common/firewall";
-import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+} from "landscape-types/common/firewall";
+import { WanIpRuleConfig } from "landscape-types/common/flow";
 export class WanIpRuleConfigClass implements WanIpRuleConfig {
   id: string | null;
   index: number;

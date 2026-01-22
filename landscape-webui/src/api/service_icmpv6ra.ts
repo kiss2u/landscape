@@ -1,8 +1,8 @@
 import api from ".";
 import { ServiceStatus } from "@/lib/services";
 import axiosService from ".";
-import { IPV6RAServiceConfig } from "@/rust_bindings/common/ra";
-import { IPv6NAInfo } from "@/rust_bindings/common/ipv6_ra_server";
+import { IPV6RAServiceConfig } from "landscape-types/common/ra";
+import { IPv6NAInfo } from "landscape-types/common/ipv6_ra_server";
 
 export async function get_all_icmpv6ra_status(): Promise<
   Map<string, ServiceStatus>

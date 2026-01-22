@@ -2,12 +2,12 @@
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { SearchLocate } from "@vicons/carbon";
-import { CheckChainDnsResult, CheckDnsReq } from "@/rust_bindings/dns";
+import { CheckChainDnsResult, CheckDnsReq } from "landscape-types/dns";
 import { check_domain } from "@/api/dns_service";
-import { LandscapeDnsRecordType } from "@/rust_bindings/common/dns_record_type";
+import { LandscapeDnsRecordType } from "landscape-types/common/dns_record_type";
 import { DnsRule } from "@/lib/dns";
 import { get_dns_rule } from "@/api/dns_rule";
-import { DNSRedirectRule } from "@/rust_bindings/common/dns_redirect";
+import { DNSRedirectRule } from "landscape-types/common/dns_redirect";
 import { get_dns_redirect } from "@/api/dns_rule/redirect";
 const message = useMessage();
 

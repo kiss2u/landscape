@@ -1,10 +1,10 @@
-import { FlowMark } from "@/rust_bindings/flow";
+import { FlowMark } from "landscape-types/flow";
 import { FlowMarkType } from "./default_value";
 import {
   DNSRuleConfig,
   FilterResult,
   RuleSource,
-} from "@/rust_bindings/common/dns";
+} from "landscape-types/common/dns";
 
 export enum DnsUpstreamModeTsEnum {
   Plaintext = "plaintext",

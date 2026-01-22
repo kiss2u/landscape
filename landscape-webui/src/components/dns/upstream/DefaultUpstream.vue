@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DnsUpstreamConfig } from "@/rust_bindings/common/dns";
+import { DnsUpstreamConfig } from "landscape-types/common/dns";
 import { DnsUpstreamModeTsEnum } from "@/lib/dns";
 
 const rule = defineModel<DnsUpstreamConfig>("rule", { required: true });

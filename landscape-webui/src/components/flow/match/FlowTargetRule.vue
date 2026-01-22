@@ -2,7 +2,7 @@
 import { get_docker_container_summarys } from "@/api/docker";
 import { get_wan_ifaces } from "@/api/iface";
 import { get_all_iface_pppd_config } from "@/api/service_pppd";
-import { FlowTarget } from "@/rust_bindings/common/flow";
+import { FlowTarget } from "landscape-types/common/flow";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { computed, onMounted, ref } from "vue";
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GeoIpConfig } from "@/rust_bindings/common/geo_ip";
+import { GeoIpConfig } from "landscape-types/common/geo_ip";
 import { ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";

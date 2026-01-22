@@ -4,7 +4,7 @@ import { ServiceStatus } from "@/lib/services";
 import {
   ArpScanInfo,
   DHCPv4OfferInfo,
-} from "@/rust_bindings/common/dhcp_v4_server";
+} from "landscape-types/common/dhcp_v4_server";
 
 export async function get_all_dhcp_v4_status(): Promise<
   Map<string, ServiceStatus>

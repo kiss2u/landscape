@@ -1,5 +1,5 @@
 import { get_current_tasks } from "@/api/docker";
-import { ImgPullEvent, PullImgTask } from "@/rust_bindings/common/docker";
+import { ImgPullEvent, PullImgTask } from "landscape-types/common/docker";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";

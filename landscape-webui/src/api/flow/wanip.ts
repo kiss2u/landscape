@@ -1,7 +1,7 @@
 import api from "@/api";
 import { WanIpRuleConfigClass } from "@/lib/mark";
 
-import { WanIpRuleConfig } from "@/rust_bindings/common/flow";
+import { WanIpRuleConfig } from "landscape-types/common/flow";
 
 // export async function get_wan_ip_rules(
 //   flow_id: number
