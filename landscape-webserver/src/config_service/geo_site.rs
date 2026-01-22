@@ -55,7 +55,7 @@ async fn search_geo_site_cache(
         .await
         .into_iter()
         .filter(|e| key.as_ref().map_or(true, |key| e.key.contains(key)))
-        .filter(|e| name.as_ref().map_or(true, |name| e.name.contains(name)))
+        .filter(|e| name.as_ref().map_or(true, |name| &e.name == name))
         .collect();
 
     tracing::debug!("keys len: {}", result.len());
