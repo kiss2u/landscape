@@ -52,15 +52,21 @@ impl Default for NatConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "common/nat.d.ts")]
+pub struct StaticMapPair {
+    pub wan_port: u16,
+    pub lan_port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/nat.d.ts")]
 pub struct StaticNatMappingConfig {
     #[serde(default = "gen_database_uuid")]
     #[ts(as = "Option<_>", optional)]
     pub id: Uuid,
     pub enable: bool,
     pub remark: String,
-    pub wan_port: u16,
     pub wan_iface_name: Option<String>,
-    pub lan_port: u16,
+    pub mapping_pair_ports: Vec<StaticMapPair>,
     /// If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
     /// the router's own address instead of an internal host.
     pub lan_ipv4: Option<Ipv4Addr>,
@@ -78,25 +84,28 @@ impl StaticNatMappingConfig {
         let mut result = Vec::with_capacity(4);
         for l4_protocol in self.ipv4_l4_protocol.iter() {
             if let Some(ipv4) = self.lan_ipv4 {
-                result.push(StaticNatMappingItem {
-                    wan_port: self.wan_port,
+                let items = self.mapping_pair_ports.iter().map(|pair_port| StaticNatMappingItem {
+                    wan_port: pair_port.wan_port,
                     wan_iface_name: self.wan_iface_name.clone(),
-                    lan_port: self.lan_port,
+                    lan_port: pair_port.lan_port,
                     lan_ip: IpAddr::V4(ipv4),
                     l4_protocol: *l4_protocol,
                 });
+                result.extend(items);
             }
         }
 
         for l4_protocol in self.ipv6_l4_protocol.iter() {
             if let Some(ipv6) = self.lan_ipv6 {
-                result.push(StaticNatMappingItem {
-                    wan_port: self.wan_port,
+                let items = self.mapping_pair_ports.iter().map(|pair_port| StaticNatMappingItem {
+                    wan_port: pair_port.wan_port,
                     wan_iface_name: self.wan_iface_name.clone(),
-                    lan_port: self.lan_port,
+                    lan_port: pair_port.lan_port,
                     lan_ip: IpAddr::V6(ipv6),
                     l4_protocol: *l4_protocol,
                 });
+
+                result.extend(items);
             }
         }
         result

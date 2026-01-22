@@ -68,15 +68,17 @@ async function del() {
         </n-descriptions-item>
 
         <n-descriptions-item label="IPv4 映射">
-          {{
-            rule.lan_ipv4
-              ? `${frontEndStore.MASK_INFO(
-                  rule.wan_port.toString()
-                )} => ${frontEndStore.MASK_INFO(rule.lan_ipv4)}:${
-                  rule.lan_port
-                }`
-              : "无映射"
-          }}
+          <n-flex vertical v-if="rule.lan_ipv4" style="gap: 4px">
+            <span 
+              v-for="(pair, index) in rule.mapping_pair_ports" 
+              :key="index"
+              style="font-size: 13px"
+            >
+              {{ frontEndStore.MASK_INFO(pair.wan_port.toString()) }} → 
+              {{ frontEndStore.MASK_INFO(rule.lan_ipv4) }}:{{ pair.lan_port }}
+            </span>
+          </n-flex>
+          <span v-else>无映射</span>
         </n-descriptions-item>
 
         <n-descriptions-item label="IPv6 协议" content-style="width:120px">
@@ -96,15 +98,17 @@ async function del() {
         </n-descriptions-item>
 
         <n-descriptions-item label="IPv6 映射" span="2">
-          {{
-            rule.lan_ipv6
-              ? `${frontEndStore.MASK_INFO(
-                  rule.wan_port.toString()
-                )} => [${frontEndStore.MASK_INFO(rule.lan_ipv6)}]:${
-                  rule.lan_port
-                }`
-              : "无映射"
-          }}
+          <n-flex vertical v-if="rule.lan_ipv6" style="gap: 4px">
+            <span 
+              v-for="(pair, index) in rule.mapping_pair_ports" 
+              :key="index"
+              style="font-size: 13px"
+            >
+              {{ frontEndStore.MASK_INFO(pair.wan_port.toString()) }} → 
+              [{{ frontEndStore.MASK_INFO(rule.lan_ipv6) }}]:{{ pair.lan_port }}
+            </span>
+          </n-flex>
+          <span v-else>无映射</span>
         </n-descriptions-item>
         <!-- <n-descriptions-item label="备注">
           {{ rule.remark === "" ? "无备注" : rule.remark }}

@@ -13,13 +13,14 @@ export type NatServiceConfig = {
   update_at: number;
 };
 
+export type StaticMapPair = { wan_port: number; lan_port: number };
+
 export type StaticNatMappingConfig = {
   id?: string;
   enable: boolean;
   remark: string;
-  wan_port: number;
   wan_iface_name: string | null;
-  lan_port: number;
+  mapping_pair_ports: Array<StaticMapPair>;
   /**
    * If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
    * the router's own address instead of an internal host.

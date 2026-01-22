@@ -22,6 +22,7 @@ pub enum StaticNatMappingConfigs {
     Enable,
     Remark,
     WanPort,
+    MappingPairPorts,
     WanIfaceName,
     LanPort,
     #[sea_orm(iden = "lan_ipv4")]

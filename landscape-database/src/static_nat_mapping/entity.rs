@@ -22,14 +22,11 @@ pub struct Model {
 
     pub remark: String,
 
-    /// External (WAN) port for the NAT rule
-    pub wan_port: u16,
-
     /// Optional name of the WAN interface this rule applies to
     pub wan_iface_name: Option<String>,
 
-    /// Internal (LAN) port to which traffic will be forwarded
-    pub lan_port: u16,
+    /// Port Pair for the NAT rule
+    pub mapping_pair_ports: DBJson,
 
     /// Internal IP address to forward traffic to
     /// If set to `UNSPECIFIED` (0.0.0.0 or ::), the mapping targets the router itself
@@ -63,9 +60,8 @@ impl From<Model> for StaticNatMappingConfig {
             id: model.id,
             enable: model.enable,
             remark: model.remark,
-            wan_port: model.wan_port,
+            mapping_pair_ports: serde_json::from_value(model.mapping_pair_ports).unwrap(),
             wan_iface_name: model.wan_iface_name,
-            lan_port: model.lan_port,
             lan_ipv4: model.lan_ipv4.map(|e| e.parse().ok()).unwrap_or(None),
             lan_ipv6: model.lan_ipv6.map(|e| e.parse().ok()).unwrap_or(None),
             ipv4_l4_protocol: serde_json::from_value(model.ipv4_l4_protocol).unwrap(),
@@ -87,9 +83,9 @@ impl UpdateActiveModel<ActiveModel> for StaticNatMappingConfig {
     fn update(self, active: &mut ActiveModel) {
         active.enable = Set(self.enable);
         active.remark = Set(self.remark);
-        active.wan_port = Set(self.wan_port);
         active.wan_iface_name = Set(self.wan_iface_name);
-        active.lan_port = Set(self.lan_port);
+        active.mapping_pair_ports = Set(serde_json::to_value(&self.mapping_pair_ports).unwrap());
+
         active.lan_ipv4 = Set(self.lan_ipv4.map(|ip| ip.to_string()));
         active.lan_ipv6 = Set(self.lan_ipv6.map(|ip| ip.to_string()));
         active.ipv4_l4_protocol = Set(serde_json::to_value(&self.ipv4_l4_protocol).unwrap());

@@ -4,7 +4,7 @@ use std::{
 };
 
 use landscape_common::{
-    config::nat::{StaticNatMappingConfig, StaticNatMappingItem},
+    config::nat::{StaticMapPair, StaticNatMappingConfig, StaticNatMappingItem},
     service::controller_service_v2::ConfigController,
     utils::time::get_f64_timestamp,
     LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
@@ -102,9 +102,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
     let mut result = Vec::with_capacity(5);
     // DHCPv4 Clinet
     result.push(StaticNatMappingConfig {
-        wan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
         wan_iface_name: None,
-        lan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
         lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
         lan_ipv6: None,
         ipv4_l4_protocol: vec![17],
@@ -113,12 +111,14 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
         enable: true,
         remark: "Default DHCPv4 Client Port".to_string(),
         update_at: get_f64_timestamp(),
+        mapping_pair_ports: vec![StaticMapPair {
+            wan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
+            lan_port: LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT,
+        }],
     });
     // DHCPv6 Clinet
     result.push(StaticNatMappingConfig {
-        wan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
         wan_iface_name: None,
-        lan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
         lan_ipv4: None,
         lan_ipv6: Some(Ipv6Addr::UNSPECIFIED),
         ipv4_l4_protocol: vec![],
@@ -127,13 +127,15 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
         enable: true,
         remark: "Default DHCPv6 Client Port".to_string(),
         update_at: get_f64_timestamp(),
+        mapping_pair_ports: vec![StaticMapPair {
+            wan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+            lan_port: LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
+        }],
     });
     #[cfg(debug_assertions)]
     {
         result.push(StaticNatMappingConfig {
-            wan_port: 8080,
             wan_iface_name: None,
-            lan_port: 8081,
             lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
             lan_ipv6: None,
             ipv4_l4_protocol: vec![6, 17],
@@ -142,12 +144,11 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             enable: true,
             remark: "For Test".to_string(),
             update_at: get_f64_timestamp(),
+            mapping_pair_ports: vec![StaticMapPair { wan_port: 8080, lan_port: 8081 }],
         });
 
         result.push(StaticNatMappingConfig {
-            wan_port: 5173,
             wan_iface_name: None,
-            lan_port: 5173,
             lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
             lan_ipv6: None,
             ipv4_l4_protocol: vec![6],
@@ -156,12 +157,11 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             enable: true,
             remark: "".to_string(),
             update_at: get_f64_timestamp(),
+            mapping_pair_ports: vec![StaticMapPair { wan_port: 5173, lan_port: 5173 }],
         });
 
         result.push(StaticNatMappingConfig {
-            wan_port: 22,
             wan_iface_name: None,
-            lan_port: 22,
             lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
             lan_ipv6: None,
             ipv4_l4_protocol: vec![6],
@@ -170,6 +170,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
             enable: true,
             remark: "".to_string(),
             update_at: get_f64_timestamp(),
+            mapping_pair_ports: vec![StaticMapPair { wan_port: 22, lan_port: 22 }],
         });
     }
     result
