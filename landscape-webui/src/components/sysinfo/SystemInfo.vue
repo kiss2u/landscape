@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { get_sysinfo } from "@/api/sys";
-import { SysInfo } from "@/lib/sys";
+import { LandscapeSystemInfo } from "@/lib/sys";
 import { onMounted, ref, computed } from "vue";
 import { useThemeVars } from "naive-ui";
+import { InformationFilled, WarningAltFilled } from "@vicons/carbon"
 
 const themeVars = useThemeVars();
 
-const sysinfo = ref<SysInfo>({
+const sysinfo = ref<LandscapeSystemInfo>({
   host_name: undefined,
   system_name: undefined,
   kernel_version: undefined,
   os_version: undefined,
-  landscape_version: undefined,
-  cpu_arch: undefined,
+  landscape_version: "",
+  cpu_arch: "",
   start_at: 0,
 });
 
@@ -42,7 +43,7 @@ const uptime = computed(() => {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  
+
   if (days > 0) {
     return `${days}d ${hours}h ${minutes}m`;
   } else if (hours > 0) {
@@ -98,10 +99,9 @@ const uptime = computed(() => {
           <n-text class="info-value uptime">{{ uptime || '--' }}</n-text>
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
+
               <n-icon size="14" style="opacity: 0.5; cursor: help;">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-                </svg>
+                <InformationFilled></InformationFilled>
               </n-icon>
             </template>
             <n-flex vertical :size="2">
@@ -124,9 +124,7 @@ const uptime = computed(() => {
             <n-tag size="small" type="error" :bordered="false">
               {{ sysinfo.landscape_version }}
               <n-icon size="12" style="margin-left: 4px;">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-                </svg>
+                <WarningAltFilled></WarningAltFilled>
               </n-icon>
             </n-tag>
           </template>

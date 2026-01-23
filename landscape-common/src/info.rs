@@ -2,19 +2,34 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tokio::sync::watch;
+use ts_rs::TS;
 
 use crate::VERSION;
 
 pub static LAND_SYS_BASE_INFO: Lazy<LandscapeSystemInfo> = Lazy::new(LandscapeSystemInfo::new);
 
-#[derive(Clone, Serialize, Deserialize)]
+/// System Basic Information
+#[derive(Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "common/sys_info.d.ts")]
 pub struct LandscapeSystemInfo {
+    /// Hostname
+    #[ts(optional)]
     pub host_name: Option<String>,
+    /// System Name (e.g., Linux)
+    #[ts(optional)]
     pub system_name: Option<String>,
+    /// Kernel Version
+    #[ts(optional)]
     pub kernel_version: Option<String>,
+    /// OS Version
+    #[ts(optional)]
     pub os_version: Option<String>,
+    /// Landscape Version
     pub landscape_version: String,
+    /// CPU Architecture
     pub cpu_arch: String,
+    /// System Start Time (Timestamp)
+    #[ts(type = "number")]
     pub start_at: u64,
 }
 
@@ -38,6 +53,95 @@ impl LandscapeSystemInfo {
             cpu_arch,
         }
     }
+}
+
+/// CPU Usage Information
+#[derive(Clone, Serialize, Deserialize, Default, TS)]
+#[ts(export, export_to = "common/sys_info.d.ts")]
+pub struct CpuUsage {
+    /// CPU Usage Percentage
+    pub usage: f32,
+    /// CPU Name
+    pub name: String,
+    /// Vendor ID
+    pub vendor_id: String,
+    /// Brand
+    pub brand: String,
+    /// Frequency in MHz
+    #[ts(type = "number")]
+    pub frequency: u64,
+    /// Temperature in Celsius (Optional)
+    #[ts(optional)]
+    pub temperature: Option<f32>,
+}
+
+impl From<&sysinfo::Cpu> for CpuUsage {
+    fn from(cpu: &sysinfo::Cpu) -> Self {
+        CpuUsage {
+            usage: cpu.cpu_usage(),
+            name: cpu.name().to_string(),
+            vendor_id: cpu.vendor_id().to_string(),
+            brand: cpu.brand().to_string(),
+            frequency: cpu.frequency(),
+            temperature: None, // Populated later via Components
+        }
+    }
+}
+
+/// Memory Usage Information
+#[derive(Clone, Serialize, Deserialize, Default, TS)]
+#[ts(export, export_to = "common/sys_info.d.ts")]
+pub struct MemUsage {
+    /// Total Memory in Bytes
+    #[ts(type = "number")]
+    pub total_mem: u64,
+    /// Used Memory in Bytes
+    #[ts(type = "number")]
+    pub used_mem: u64,
+    /// Total Swap in Bytes
+    #[ts(type = "number")]
+    pub total_swap: u64,
+    /// Used Swap in Bytes
+    #[ts(type = "number")]
+    pub used_swap: u64,
+}
+
+/// System Load Average
+#[derive(Clone, Serialize, Deserialize, Default, TS)]
+#[ts(export, export_to = "common/sys_info.d.ts")]
+pub struct LoadAvg {
+    /// Average load within one minute.
+    pub one: f64,
+    /// Average load within five minutes.
+    pub five: f64,
+    /// Average load within fifteen minutes.
+    pub fifteen: f64,
+}
+
+impl From<sysinfo::LoadAvg> for LoadAvg {
+    fn from(sysinfo::LoadAvg { one, five, fifteen }: sysinfo::LoadAvg) -> Self {
+        LoadAvg { one, five, fifteen }
+    }
+}
+
+/// Landscape Runtime Status
+#[derive(Clone, Serialize, Deserialize, Default, TS)]
+#[ts(export, export_to = "common/sys_info.d.ts")]
+pub struct LandscapeStatus {
+    /// Global CPU Usage Percentage
+    pub global_cpu_info: f32,
+    /// Global/Package CPU Temperature in Celsius
+    #[ts(optional)]
+    pub global_cpu_temp: Option<f32>,
+    /// Per-CPU Usage Information
+    pub cpus: Vec<CpuUsage>,
+    /// Memory Usage Information
+    pub mem: MemUsage,
+    /// System Uptime in Seconds
+    #[ts(type = "number")]
+    pub uptime: u64,
+    /// Load Average Information
+    pub load_avg: LoadAvg,
 }
 
 pub trait WatchResourceTrait: Clone + Serialize + Default {}

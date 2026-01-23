@@ -1,68 +1,7 @@
-use landscape_common::info::WatchResource;
-use serde::{Deserialize, Serialize};
+use landscape_common::info::{CpuUsage, LandscapeStatus, LoadAvg, MemUsage, WatchResource};
+
 use std::time::Duration;
 use sysinfo::{Components, CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
-
-/// CPU Usage
-#[derive(Clone, Serialize, Deserialize, Default)]
-pub struct CpuUsage {
-    usage: f32,
-    name: String,
-    vendor_id: String,
-    brand: String,
-    frequency: u64,
-    /// Temperature in Celsius (Optional)
-    pub temperature: Option<f32>,
-}
-
-impl From<&sysinfo::Cpu> for CpuUsage {
-    fn from(cpu: &sysinfo::Cpu) -> Self {
-        CpuUsage {
-            usage: cpu.cpu_usage(),
-            name: cpu.name().to_string(),
-            vendor_id: cpu.vendor_id().to_string(),
-            brand: cpu.brand().to_string(),
-            frequency: cpu.frequency(),
-            temperature: None, // Populated later via Components
-        }
-    }
-}
-
-/// 内存使用
-#[derive(Clone, Serialize, Deserialize, Default)]
-pub struct MemUsage {
-    total_mem: u64,
-    used_mem: u64,
-    total_swap: u64,
-    used_swap: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize, Default)]
-pub struct LoadAvg {
-    /// Average load within one minute.
-    pub one: f64,
-    /// Average load within five minutes.
-    pub five: f64,
-    /// Average load within fifteen minutes.
-    pub fifteen: f64,
-}
-
-impl From<sysinfo::LoadAvg> for LoadAvg {
-    fn from(sysinfo::LoadAvg { one, five, fifteen }: sysinfo::LoadAvg) -> Self {
-        LoadAvg { one, five, fifteen }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Default)]
-pub struct LandscapeStatus {
-    pub global_cpu_info: f32,
-    /// Global/Package CPU Temperature in Celsius
-    pub global_cpu_temp: Option<f32>,
-    pub cpus: Vec<CpuUsage>,
-    pub mem: MemUsage,
-    pub uptime: u64,
-    pub load_avg: LoadAvg,
-}
 
 pub fn get_sys_running_status() -> WatchResource<LandscapeStatus> {
     let status = WatchResource::new();

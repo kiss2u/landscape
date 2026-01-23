@@ -10,8 +10,6 @@ use landscape_common::config::iface::{CreateDevType, NetworkIfaceConfig, WifiMod
 use netlink_packet_route::{address::AddressAttribute, AddressFamily};
 use rtnetlink::new_connection;
 
-pub use routerstatus::*;
-
 pub mod boot;
 
 pub mod arp;
@@ -30,7 +28,6 @@ pub mod metric;
 pub mod observer;
 pub mod pppoe_client;
 pub mod route;
-pub mod routerstatus;
 pub mod service;
 pub mod sys_service;
 pub mod wifi;
