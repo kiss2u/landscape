@@ -6,18 +6,18 @@ import { DockerCmd, PullImgTask } from "landscape-types/common/docker";
 export async function get_docker_status(): Promise<ServiceStatus> {
   let data = await axiosService.get("sys_service/docker/status");
   //   console.log(data.data);
-  return new ServiceStatus(data.data);
+  return data.data;
 }
 
 export async function start_docker_service(): Promise<ServiceStatus> {
   let data = await axiosService.post("sys_service/docker/status");
   //   console.log(data.data);
-  return new ServiceStatus(data.data);
+  return data.data;
 }
 export async function stop_docker_service(): Promise<ServiceStatus> {
   let data = await axiosService.delete("sys_service/docker/status");
   //   console.log(data.data);
-  return new ServiceStatus(data.data);
+  return data.data;
 }
 
 export async function get_docker_container_summarys(): Promise<

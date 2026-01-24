@@ -12,7 +12,7 @@ export async function get_all_dhcp_v4_status(): Promise<
   let data = await axiosService.get(`services/dhcp_v4/status`);
   let map = new Map<string, ServiceStatus>();
   for (const [key, value] of Object.entries(data.data)) {
-    map.set(key, new ServiceStatus(value as any));
+    map.set(key, value as ServiceStatus);
   }
   // console.log(map);
   return map;

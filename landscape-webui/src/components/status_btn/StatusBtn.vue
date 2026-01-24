@@ -39,9 +39,6 @@ const control_show = computed(() => {
       }
       case ServiceStatusType.Stop: {
         info.btn_type = "error";
-        if (iface_info.status.message != undefined) {
-          info.disabled_popover = false;
-        }
         info.btn_message = "停止";
         break;
       }
@@ -55,22 +52,11 @@ const emit = defineEmits(["click", "hover", "update:show"]);
 </script>
 
 <template>
-  <n-popover
-    trigger="hover"
-    :show-arrow="false"
-    @update:show="(show:boolean) => emit('update:show', show)"
-    :disabled="popover_show"
-  >
+  <n-popover trigger="hover" :show-arrow="false" @update:show="(show: boolean) => emit('update:show', show)"
+    :disabled="popover_show">
     <template #trigger>
-      <n-button
-        size="tiny"
-        strong
-        ghost
-        @click="emit('click')"
-        :focusable="false"
-        :type="control_show.btn_type"
-        style="min-width: 67px"
-      >
+      <n-button size="tiny" strong ghost @click="emit('click')" :focusable="false" :type="control_show.btn_type"
+        style="min-width: 67px">
         <template #icon>
           <slot name="btn-icon"> </slot>
         </template>
@@ -80,7 +66,7 @@ const emit = defineEmits(["click", "hover", "update:show"]);
     </template>
     <n-flex vertical>
       <slot name="popover-panel">
-        {{ iface_info.status?.message ?? "" }}
+        <!-- {{ iface_info.status?.message ?? "" }} -->
       </slot>
     </n-flex>
   </n-popover>

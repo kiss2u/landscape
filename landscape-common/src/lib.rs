@@ -30,6 +30,8 @@ pub mod store;
 pub mod test;
 pub mod utils;
 
+pub mod auth;
+
 pub mod pty;
 
 pub mod dns;

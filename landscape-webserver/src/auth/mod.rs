@@ -10,6 +10,8 @@ use axum::Json;
 use axum::Router;
 use axum::{extract::Request, middleware::Next, response::Response};
 use landscape_common::args::LAND_HOME_PATH;
+use landscape_common::auth::LoginInfo;
+use landscape_common::auth::LoginResult;
 use landscape_common::config::AuthRuntimeConfig;
 use landscape_common::LANDSCAPE_SYS_TOKEN_FILE_ANME;
 use once_cell::sync::Lazy;
@@ -155,16 +157,4 @@ async fn login_handler(
         return Err(AuthError::InvalidUsernameOrPassword)?;
     }
     LandscapeApiResp::success(result)
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct LoginInfo {
-    username: String,
-    password: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct LoginResult {
-    success: bool,
-    token: String,
 }

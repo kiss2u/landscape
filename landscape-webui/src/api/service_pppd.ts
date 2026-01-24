@@ -8,7 +8,7 @@ export async function get_all_pppd_status(): Promise<
   let data = await axiosService.get(`services/pppds/status`);
   let map = new Map<string, ServiceStatus>();
   for (const [key, value] of Object.entries(data.data)) {
-    map.set(key, new ServiceStatus(value as any));
+    map.set(key, value as ServiceStatus);
   }
   return map;
 }

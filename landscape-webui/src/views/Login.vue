@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { do_login } from "@/api/auth";
-import { LoginInfo } from "@/lib/auth";
+import { LoginInfo } from "landscape-types/common/auth";
 import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
 
@@ -9,7 +9,7 @@ import CopyRight from "@/components/CopyRight.vue";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 import { useUiStore } from "@/stores/ui_store";
 
-const login_info = ref<LoginInfo>(new LoginInfo({}));
+const login_info = ref<LoginInfo>({ username: "", password: "" });
 
 const router = useRouter();
 const uiStore = useUiStore();

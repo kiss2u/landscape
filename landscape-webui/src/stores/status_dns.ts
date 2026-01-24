@@ -4,7 +4,7 @@ import { get_dns_status } from "@/api/dns_service";
 import { ServiceStatus, ServiceStatusType } from "@/lib/services";
 
 export const useDnsStore = defineStore("dns_status", () => {
-  const dns_status = ref<ServiceStatus>(new ServiceStatus());
+  const dns_status = ref<ServiceStatus>({ t: ServiceStatusType.Stop });
 
   const is_down = computed(() => {
     return dns_status.value.t == ServiceStatusType.Stop;

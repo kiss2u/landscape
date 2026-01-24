@@ -6,6 +6,9 @@ import { NetworkIfaceConfig } from "landscape-types/common/iface";
 import { NetDev, WLANTypeTag } from "./dev";
 import { ZoneType } from "./service_ipconfig";
 
+import { ServiceStatus } from "landscape-types/common/service";
+export type { ServiceStatus } from "landscape-types/common/service";
+
 export enum ServiceStatusType {
   Staring = "staring",
   Running = "running",
@@ -13,18 +16,9 @@ export enum ServiceStatusType {
   Stop = "stop",
 }
 
-export class ServiceStatus {
-  t: ServiceStatusType;
-  message: undefined | string;
-
-  constructor(obj?: { t: ServiceStatusType; message?: string }) {
-    this.t = obj?.t ?? ServiceStatusType.Stop;
-    this.message = obj?.message;
-  }
-
-  get_color(themeVars: any) {
-    return this.t === ServiceStatusType.Running ? themeVars.successColor : "";
-  }
+export function get_service_status_color(status: ServiceStatus | undefined, themeVars: any) {
+  if (!status) return "";
+  return status.t === ServiceStatusType.Running ? themeVars.successColor : "";
 }
 
 export class ServiceExhibitSwitch {
