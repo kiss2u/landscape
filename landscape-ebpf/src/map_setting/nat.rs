@@ -70,7 +70,7 @@ where
         egress_mapping_key.addr = ipv4_addr.to_bits().to_be();
         ingress_mapping_value.addr = ipv4_addr.to_bits().to_be();
         if ipv4_addr.is_unspecified() {
-            egress_mapping_key.prefixlen = 64;
+            egress_mapping_key.prefixlen = 32;
         }
 
         keys.extend_from_slice(unsafe { plain::as_bytes(&ingress_mapping_key) });
@@ -262,7 +262,7 @@ where
         let ipv4_addr = static_mapping.lan_ip;
         egress_mapping_key.addr = ipv4_addr.to_bits().to_be();
         if ipv4_addr.is_unspecified() {
-            egress_mapping_key.prefixlen = 64;
+            egress_mapping_key.prefixlen = 32;
         }
 
         keys.extend_from_slice(unsafe { plain::as_bytes(&ingress_mapping_key) });
