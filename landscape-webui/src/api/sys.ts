@@ -1,7 +1,7 @@
-import { LandscapeStatus, SysInfo } from "@/lib/sys";
+import { LandscapeStatus, LandscapeSystemInfo } from "@/lib/sys";
 import axiosService from ".";
 
-export async function get_sysinfo(): Promise<SysInfo> {
+export async function get_sysinfo(): Promise<LandscapeSystemInfo> {
   let data = await axiosService.get("sysinfo/sys");
   return data.data;
 }
