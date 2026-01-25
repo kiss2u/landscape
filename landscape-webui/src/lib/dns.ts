@@ -1,6 +1,7 @@
 import { FlowMark } from "landscape-types/flow";
 import { FlowMarkType } from "./default_value";
 import {
+  DnsBindConfig,
   DNSRuleConfig,
   FilterResult,
   RuleSource,
@@ -64,6 +65,7 @@ export class DnsRule implements DNSRuleConfig {
   filter: FilterResult;
   update_at?: number;
   upstream_id: string;
+  bind_config: DnsBindConfig;
 
   constructor(obj?: Partial<DNSRuleConfig>) {
     this.id = obj?.id;
@@ -76,6 +78,7 @@ export class DnsRule implements DNSRuleConfig {
     this.filter = obj?.filter ?? "unfilter";
     this.update_at = obj?.update_at;
     this.upstream_id = obj?.upstream_id ?? "";
+    this.bind_config = obj?.bind_config ?? {};
   }
 }
 

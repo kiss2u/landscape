@@ -12,6 +12,7 @@ pub enum DNSRuleConfigs {
     UpstreamId,
     Mark,
     Source,
+    BindConfig,
     FlowId,
     UpdateAt,
 }

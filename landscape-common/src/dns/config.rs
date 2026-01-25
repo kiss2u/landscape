@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -49,4 +49,17 @@ impl Default for DnsUpstreamConfig {
             update_at: get_f64_timestamp(),
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, TS, Default)]
+#[ts(export, export_to = "common/dns.d.ts")]
+pub struct DnsBindConfig {
+    /// 绑定地址 v4 (可选)
+    #[ts(optional)]
+    #[serde(default)]
+    pub bind_addr4: Option<Ipv4Addr>,
+    /// 绑定地址 v6 (可选)
+    #[ts(optional)]
+    #[serde(default)]
+    pub bind_addr6: Option<Ipv6Addr>,
 }

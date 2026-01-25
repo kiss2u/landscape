@@ -25,6 +25,7 @@ pub struct Model {
     pub enable: bool,
     pub filter: DBJson,
     pub upstream_id: DBId,
+    pub bind_config: DBJson,
     pub mark: u32,
     /// 虽然是 JSON 但是考虑到可能存储较多信息
     #[sea_orm(column_type = "Text")]
@@ -58,6 +59,7 @@ impl From<Model> for DNSRuleConfig {
             enable: entity.enable,
             filter: serde_json::from_value(entity.filter).unwrap(),
             upstream_id: entity.upstream_id,
+            bind_config: serde_json::from_value(entity.bind_config).unwrap(),
             mark: entity.mark.into(),
             source: serde_json::from_str(&entity.source).unwrap(),
             flow_id: entity.flow_id,
@@ -81,6 +83,7 @@ impl UpdateActiveModel<ActiveModel> for DNSRuleConfig {
         active.enable = Set(self.enable);
         active.filter = Set(serde_json::to_value(self.filter).unwrap().into());
         active.upstream_id = Set(self.upstream_id);
+        active.bind_config = Set(serde_json::to_value(self.bind_config).unwrap().into());
         active.mark = Set(self.mark.into());
         active.source = Set(serde_json::to_string(&self.source).unwrap());
         active.flow_id = Set(self.flow_id);

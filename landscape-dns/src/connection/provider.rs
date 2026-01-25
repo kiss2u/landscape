@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::os::fd::RawFd;
 use std::os::unix::io::AsRawFd;
 use std::{future::Future, io, pin::Pin};
@@ -9,6 +9,7 @@ use hickory_resolver::{
     proto::runtime::{iocompat::AsyncIoTokioAsStd, RuntimeProvider, TokioHandle, TokioTime},
 };
 
+use landscape_common::dns::config::DnsBindConfig;
 use libc::{setsockopt, SOL_SOCKET, SO_MARK, SO_RCVMARK};
 use std::time::Duration;
 use tokio::net::UdpSocket as TokioUdpSocket;
@@ -21,6 +22,8 @@ pub type MarkConnectionProvider = GenericConnector<MarkRuntimeProvider>;
 pub struct MarkRuntimeProvider {
     handler: TokioHandle,
     mark_value: u32,
+    bind_addr4: Option<Ipv4Addr>,
+    bind_addr6: Option<Ipv6Addr>,
 }
 
 impl fmt::Debug for MarkRuntimeProvider {
@@ -34,8 +37,14 @@ impl fmt::Debug for MarkRuntimeProvider {
 
 impl MarkRuntimeProvider {
     /// Create a Tokio runtime with a specific mark value
-    pub fn new(mark_value: u32) -> Self {
-        MarkRuntimeProvider { handler: TokioHandle::default(), mark_value }
+    pub fn new(mark_value: u32, bind_config: DnsBindConfig) -> Self {
+        let DnsBindConfig { bind_addr4, bind_addr6 } = bind_config;
+        MarkRuntimeProvider {
+            handler: TokioHandle::default(),
+            mark_value,
+            bind_addr4,
+            bind_addr6,
+        }
     }
 }
 
@@ -56,17 +65,32 @@ impl RuntimeProvider for MarkRuntimeProvider {
         wait_for: Option<Duration>,
     ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
         let mark_value = self.mark_value;
+
+        let (debug, bind_addr) = if server_addr.is_ipv4() {
+            let bind_addr =
+                self.bind_addr4.map(|addr| SocketAddr::new(IpAddr::V4(addr), 0)).or(bind_addr);
+
+            (self.bind_addr4.is_some(), bind_addr)
+        } else {
+            let bind_addr =
+                self.bind_addr6.map(|addr| SocketAddr::new(IpAddr::V6(addr), 0)).or(bind_addr);
+
+            (self.bind_addr6.is_some(), bind_addr)
+        };
+
         Box::pin(async move {
             let socket = match server_addr {
                 SocketAddr::V4(_) => TcpSocket::new_v4(),
                 SocketAddr::V6(_) => TcpSocket::new_v6(),
             }?;
 
-            // tracing::info!(
-            //     "Create tcp local_addr: {:?}, server_addr: {}, mark_value: {mark_value}",
-            //     bind_addr,
-            //     server_addr
-            // );
+            if debug {
+                tracing::info!(
+                    "Create tcp local_addr: {:?}, server_addr: {}, mark_value: {mark_value}",
+                    bind_addr,
+                    server_addr
+                );
+            }
             if let Some(bind_addr) = bind_addr {
                 socket.bind(bind_addr)?;
             }
@@ -92,18 +116,40 @@ impl RuntimeProvider for MarkRuntimeProvider {
     fn bind_udp(
         &self,
         local_addr: SocketAddr,
-        _server_addr: SocketAddr,
+        server_addr: SocketAddr,
     ) -> Pin<Box<dyn Send + Future<Output = std::io::Result<Self::Udp>>>> {
         let mark_value = self.mark_value;
+
+        let (debug, socket_addr) = if server_addr.is_ipv4() {
+            let socket_addr = self
+                .bind_addr4
+                .map(|addr| SocketAddr::new(IpAddr::V4(addr), 0))
+                .unwrap_or(local_addr);
+
+            (self.bind_addr4.is_some(), socket_addr)
+        } else {
+            let socket_addr = self
+                .bind_addr6
+                .map(|addr| SocketAddr::new(IpAddr::V6(addr), 0))
+                .unwrap_or(local_addr);
+
+            (self.bind_addr6.is_some(), socket_addr)
+        };
+
         Box::pin(async move {
-            let socket = TokioUdpSocket::bind(local_addr).await?;
+            if debug {
+                tracing::info!(
+                    "Create udp local_addr: {}, server_addr: {}, mark_value: {mark_value}",
+                    socket_addr,
+                    server_addr
+                );
+            }
+
+            let socket = TokioUdpSocket::bind(socket_addr).await?;
             let fd = socket.as_raw_fd();
             set_socket_mark(fd, mark_value)?;
-            // tracing::info!(
-            //     "Create udp local_addr: {}, server_addr: {}, mark_value: {mark_value}",
-            //     local_addr,
-            //     server_addr
-            // );
+            socket.connect(server_addr).await?;
+
             Ok(socket)
         })
     }

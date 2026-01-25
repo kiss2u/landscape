@@ -3,7 +3,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
-use crate::dns::config::DnsUpstreamConfig;
+use crate::dns::config::{DnsBindConfig, DnsUpstreamConfig};
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 use crate::{flow::mark::FlowMark, store::storev2::LandscapeStore};
@@ -17,7 +17,7 @@ pub struct DNSRuleConfig {
     #[serde(default = "gen_database_uuid")]
     #[ts(as = "Option<_>", optional)]
     pub id: Uuid,
-
+    /// 名称
     pub name: String,
     /// 优先级
     pub index: u32,
@@ -26,18 +26,21 @@ pub struct DNSRuleConfig {
     /// 过滤模式
     #[serde(default)]
     pub filter: FilterResult,
-
+    /// 上游配置 ID
     pub upstream_id: Uuid,
+    /// 源 IP 绑定配置
+    #[serde(default)]
+    pub bind_config: DnsBindConfig,
     /// 流量标记
     #[serde(default)]
     pub mark: FlowMark,
     /// 匹配规则列表
     #[serde(default)]
     pub source: Vec<RuleSource>,
-
+    /// 关联 Flow ID
     #[serde(default = "default_flow_id")]
     pub flow_id: u32,
-
+    /// 最近一次更新时间
     #[serde(default = "get_f64_timestamp")]
     #[ts(as = "Option<_>", optional)]
     pub update_at: f64,
@@ -59,6 +62,8 @@ pub struct DNSRuntimeRule {
     pub filter: FilterResult,
     /// 解析模式
     pub resolve_mode: DnsUpstreamConfig,
+    /// 源 IP 绑定配置
+    pub bind_config: DnsBindConfig,
     /// 流量标记
     pub mark: FlowMark,
     /// 匹配规则列表

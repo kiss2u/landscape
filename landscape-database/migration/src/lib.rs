@@ -28,6 +28,7 @@ mod m20251013_144933_add_ip_validation_to_dns_upstream;
 mod m20251025_064017_add_ac_in_pppd;
 mod m20251216_141215_lan_static_route;
 mod m20260122_125946_multiple_nat_ports;
+mod m20260124_140950_dns_bind_addr;
 mod tables;
 
 pub struct Migrator;
@@ -64,6 +65,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20251025_064017_add_ac_in_pppd::Migration),
             Box::new(m20251216_141215_lan_static_route::Migration),
             Box::new(m20260122_125946_multiple_nat_ports::Migration),
+            Box::new(m20260124_140950_dns_bind_addr::Migration),
         ]
     }
 }

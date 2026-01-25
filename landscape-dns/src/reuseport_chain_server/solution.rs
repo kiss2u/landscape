@@ -80,8 +80,12 @@ impl ResolutionRule {
 
         let enable_ip_validation =
             config.resolve_mode.enable_ip_validation.unwrap_or(DEFAULT_ENABLE_IP_VALIDATION);
-        let resolver =
-            crate::connection::create_resolver(flow_id, config.mark, config.resolve_mode.clone());
+        let resolver = crate::connection::create_resolver(
+            flow_id,
+            config.mark,
+            config.bind_config.clone(),
+            config.resolve_mode.clone(),
+        );
 
         let mark = DnsRuntimeMarkInfo {
             mark: config.mark.clone(),

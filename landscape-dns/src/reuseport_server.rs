@@ -141,7 +141,7 @@ impl FlowDnsServer {
             resolver_map: info
                 .resolver_configs
                 .into_iter()
-                .map(|e| (e.id, create_resolver(e.flow_id, e.mark, e.resolve_mode)))
+                .map(|e| (e.id, create_resolver(e.flow_id, e.mark, e.bind_config, e.resolve_mode)))
                 .collect(),
             default_resolver: info.default_resolver,
         }

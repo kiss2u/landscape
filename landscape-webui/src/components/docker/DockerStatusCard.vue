@@ -28,14 +28,21 @@ async function stop() {
 <template>
   <n-card content-style="display: flex;">
     <template #header>
-      <n-icon :color="get_service_status_color(dockerStatus.docker_status, themeVars)" size="16">
+      <n-icon
+        :color="get_service_status_color(dockerStatus.docker_status, themeVars)"
+        size="16"
+      >
         <DotMark />
       </n-icon>
       Docker
     </template>
     <template #header-extra>
       <n-flex>
-        <n-button :focusable="false" size="small" @click="show_image_drawer = true">
+        <n-button
+          :focusable="false"
+          size="small"
+          @click="show_image_drawer = true"
+        >
           镜像
         </n-button>
         <n-button :focusable="false" size="small" @click="start" v-if="is_down">

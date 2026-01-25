@@ -27,7 +27,6 @@ async function search_upstreams() {
 
 <template>
   <n-select
-    style="width: 50%"
     v-model:value="upstream_id"
     filterable
     placeholder="重定向的流 ID"

@@ -83,6 +83,21 @@ async function saveRule() {
     message.warning("**优先级** 值不能为 -1, 且不能重复, 否则将会覆盖规则");
     return;
   }
+
+  if (
+    typeof rule.value.bind_config.bind_addr4 === "string" &&
+    rule.value.bind_config.bind_addr4.trim() === ""
+  ) {
+    rule.value.bind_config.bind_addr4 = undefined;
+  }
+
+  if (
+    typeof rule.value.bind_config.bind_addr6 === "string" &&
+    rule.value.bind_config.bind_addr6.trim() === ""
+  ) {
+    rule.value.bind_config.bind_addr6 = undefined;
+  }
+
   try {
     commit_spin.value = true;
     await push_dns_rule(rule.value);
@@ -159,7 +174,7 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
   >
     <!-- {{ isModified }} -->
     <n-form style="flex: 1" ref="formRef" :model="rule" :cols="5">
-      <n-grid :cols="5">
+      <n-grid x-gap="10" :cols="5">
         <n-form-item-gi label="优先级" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi>
@@ -186,22 +201,25 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
         </n-form-item-gi>
 
         <n-form-item-gi :span="5" label="流量动作">
-          <!-- <n-popover trigger="hover">
-            <template #trigger>
-              <n-switch v-model:value="rule.mark">
-                <template #checked> 标记 </template>
-                <template #unchecked> 不标记 </template>
-              </n-switch>
-            </template>
-            <span>向上游 DNS 请求时的流量是否标记</span>
-          </n-popover> -->
           <FlowMarkEdit v-model:mark="rule.mark"></FlowMarkEdit>
         </n-form-item-gi>
 
-        <n-form-item-gi :span="5" label="DNS 上游选择">
+        <n-form-item-gi :span="2" label="DNS 上游选择">
           <SelectUpstream v-model:upstream_id="rule.upstream_id">
           </SelectUpstream>
         </n-form-item-gi>
+        <!-- <n-form-item-gi :span="2" label="绑定本地 IPv4 (可选)">
+          <n-input
+            v-model:value="rule.bind_config.bind_addr4"
+            clearable
+          ></n-input>
+        </n-form-item-gi>
+        <n-form-item-gi :span="2" label="绑定本地 IPv6 (可选)">
+          <n-input
+            v-model:value="rule.bind_config.bind_addr6"
+            clearable
+          ></n-input>
+        </n-form-item-gi> -->
       </n-grid>
       <n-form-item :show-feedback="false">
         <template #label>

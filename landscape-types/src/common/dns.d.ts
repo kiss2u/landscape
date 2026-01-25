@@ -7,6 +7,9 @@ import type { GeoConfigKey } from "./geo.d";
  */
 export type DNSRuleConfig = {
   id?: string;
+  /**
+   * 名称
+   */
   name: string;
   /**
    * 优先级
@@ -20,7 +23,14 @@ export type DNSRuleConfig = {
    * 过滤模式
    */
   filter: FilterResult;
+  /**
+   * 上游配置 ID
+   */
   upstream_id: string;
+  /**
+   * 源 IP 绑定配置
+   */
+  bind_config: DnsBindConfig;
   /**
    * 流量标记
    */
@@ -29,8 +39,25 @@ export type DNSRuleConfig = {
    * 匹配规则列表
    */
   source: Array<RuleSource>;
+  /**
+   * 关联 Flow ID
+   */
   flow_id: number;
+  /**
+   * 最近一次更新时间
+   */
   update_at?: number;
+};
+
+export type DnsBindConfig = {
+  /**
+   * 绑定地址 v4 (可选)
+   */
+  bind_addr4?: string;
+  /**
+   * 绑定地址 v6 (可选)
+   */
+  bind_addr6?: string;
 };
 
 export type DnsUpstreamConfig = {

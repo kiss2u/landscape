@@ -7,7 +7,10 @@ use hickory_resolver::{
 };
 
 use landscape_common::{
-    dns::{config::DnsUpstreamConfig, upstream::DnsUpstreamMode},
+    dns::{
+        config::{DnsBindConfig, DnsUpstreamConfig},
+        upstream::DnsUpstreamMode,
+    },
     flow::mark::FlowMark,
 };
 
@@ -20,6 +23,7 @@ pub(crate) type LandscapeMarkDNSResolver = Resolver<MarkConnectionProvider>;
 pub(crate) fn create_resolver(
     flow_id: u32,
     mark: FlowMark,
+    bind_config: DnsBindConfig,
     DnsUpstreamConfig { mode, ips, port, .. }: DnsUpstreamConfig,
 ) -> LandscapeMarkDNSResolver {
     let name_server = match mode {
@@ -64,7 +68,7 @@ pub(crate) fn create_resolver(
     // options.use_hosts_file = ResolveHosts::Never;
     let resolver = Resolver::builder_with_config(
         resolve,
-        MarkConnectionProvider::new(MarkRuntimeProvider::new(mark_value)),
+        MarkConnectionProvider::new(MarkRuntimeProvider::new(mark_value, bind_config)),
     )
     .with_options(options)
     .build();

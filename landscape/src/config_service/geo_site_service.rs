@@ -262,6 +262,7 @@ impl GeoSiteService {
                         enable: config.enable,
                         filter: config.filter,
                         resolve_mode: upstream_config.clone(),
+                        bind_config: config.bind_config,
                         mark: config.mark,
                         flow_id: config.flow_id,
                     });

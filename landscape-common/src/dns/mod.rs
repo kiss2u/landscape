@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::config::dns::{
     default_flow_id, DNSRuleConfig, DNSRuntimeRule, DomainConfig, FilterResult,
 };
-use crate::dns::config::DnsUpstreamConfig;
+use crate::dns::config::{DnsBindConfig, DnsUpstreamConfig};
 use crate::dns::redirect::DNSRedirectRuntimeRule;
 use crate::flow::mark::FlowMark;
 use crate::flow::DnsRuntimeMarkInfo;
@@ -36,6 +36,7 @@ pub struct DnsServerInitInfo {
 pub struct DnsResolverConfig {
     pub id: Uuid,
     pub resolve_mode: DnsUpstreamConfig,
+    pub bind_config: DnsBindConfig,
     pub mark: FlowMark,
     pub flow_id: u32,
 }
@@ -77,6 +78,7 @@ pub fn gen_default_dns_rule_and_upstream() -> (DNSRuleConfig, DnsUpstreamConfig)
         flow_id: default_flow_id(),
         update_at: get_f64_timestamp(),
         upstream_id: upstream.id,
+        bind_config: DnsBindConfig::default(),
     };
     (rule, upstream)
 }
