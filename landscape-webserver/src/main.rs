@@ -82,7 +82,9 @@ use crate::{
         dns_redirect::get_dns_redirect_config_paths, dns_upstream::get_dns_upstream_config_paths,
         static_nat_mapping::get_static_nat_mapping_config_paths,
     },
-    service::{route_lan::get_route_lan_paths, route_wan::get_route_wan_paths},
+    service::{
+        route::get_route_paths, route_lan::get_route_lan_paths, route_wan::get_route_wan_paths,
+    },
     sys_service::config_service::get_config_paths,
 };
 
@@ -364,6 +366,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         .nest(
             "/services",
             Router::new()
+                .merge(get_route_paths().await)
                 .merge(get_route_wan_paths().await)
                 .merge(get_route_lan_paths().await)
                 .merge(get_mss_clamp_service_paths().await)

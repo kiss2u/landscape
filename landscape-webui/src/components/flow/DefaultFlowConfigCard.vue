@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { ModelBuilder } from "@vicons/carbon";
 import DnsRuleDrawer from "@/components/dns/DnsRuleDrawer.vue";
+import { reset_cache } from "@/api/route/cache";
 
 const emit = defineEmits(["create-flow"]);
 
@@ -10,6 +11,10 @@ const show_ip_rule = ref(false);
 
 async function create_flow() {
   emit("create-flow");
+}
+
+async function clear_route_cache() {
+  reset_cache();
 }
 </script>
 
@@ -43,7 +48,14 @@ async function create_flow() {
         </n-icon>
       </template>
       <template #extra>
-        <n-button @click="create_flow" size="small"> 创建一个新 Flow </n-button>
+        <n-flex>
+          <n-button @click="create_flow" size="small">
+            创建一个新 Flow
+          </n-button>
+          <n-button @click="clear_route_cache" size="small">
+            清理路由缓存
+          </n-button>
+        </n-flex>
       </template>
     </n-empty>
 
