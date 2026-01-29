@@ -52,7 +52,7 @@ int rt4_wan_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = lan_redirect_check_v4(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v4(skb, current_l3_offset, &context, false);
     if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
@@ -94,7 +94,7 @@ int rt4_wan_egress(struct __sk_buff *skb) {
         return TC_ACT_UNSPEC;
     }
 
-    ret = lan_redirect_check_v4(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v4(skb, current_l3_offset, &context, false);
     if (ret != TC_ACT_OK) {
         return ret;
     }
@@ -105,7 +105,7 @@ int rt4_wan_egress(struct __sk_buff *skb) {
     }
 
     barrier_var(flow_mark);
-    skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
+    skb->mark = replace_flow_source(flow_mark, FLOW_FROM_WAN);
 
     ret = pick_wan_and_send_by_flow_id_v4(skb, current_l3_offset, &context, flow_mark);
 

@@ -263,7 +263,7 @@ static __always_inline bool inet4_addr_equal(const struct inet4_addr *a,
 }
 
 static __always_inline bool inet6_addr_equal(const union inet6_addr *a, const union inet6_addr *b) {
-    return a->all[0] == b->all[0] && a->all[1] == b->all[2] && a->all[2] == b->all[2] &&
+    return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];
 }
 

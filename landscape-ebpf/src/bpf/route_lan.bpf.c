@@ -55,7 +55,7 @@ int rt4_lan_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = lan_redirect_check_v4(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v4(skb, current_l3_offset, &context, true);
     if (ret != TC_ACT_OK) {
         return ret;
     }

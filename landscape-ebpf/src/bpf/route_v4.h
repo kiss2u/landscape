@@ -14,7 +14,7 @@
 #include "neigh_ip.h"
 
 static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 current_l3_offset,
-                                                 struct route_context_v4 *context) {
+                                                 struct route_context_v4 *context, bool is_lan) {
 #define BPF_LOG_TOPIC "lan_redirect_check_v4"
 
     int ret;
@@ -30,7 +30,7 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
     if (likely(lan_info != NULL)) {
         // is LAN Packet, redirect to lan
         if (unlikely(lan_info->ifindex == skb->ifindex)) {
-            if (lan_info->has_mac && lan_info->addr != 0 && lan_info->addr != context->daddr) {
+            if (is_lan && lan_info->has_mac && lan_info->addr != 0 && lan_info->addr != context->daddr) {
                 mac_key_search.addr = context->daddr;
                 mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
                 if (mac_value) {
