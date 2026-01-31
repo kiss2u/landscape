@@ -1,6 +1,6 @@
 #ifndef __LD_ROUTE_MAP_V6_H__
 #define __LD_ROUTE_MAP_V6_H__
-#include "vmlinux.h"
+#include <vmlinux.h>
 #include <bpf/bpf_helpers.h>
 #include "../landscape.h"
 
@@ -42,10 +42,8 @@ struct flow_dns_match_key_v6 {
 
 struct each_flow_dns_v6 {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    // __uint(key_size, 16);
-    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
-    __type(key, struct flow_dns_match_key_v6);
-    __type(value, struct flow_dns_match_value_v6);
+    __uint(key_size, sizeof(struct flow_dns_match_key_v6));
+    __uint(value_size, sizeof(struct flow_dns_match_value_v6));
     __uint(max_entries, 4096);
 };
 
@@ -53,7 +51,7 @@ struct each_flow_dns_v6 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
     __type(key, u32);
-    __uint(max_entries, 512);
+    __uint(max_entries, 256);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
     __array(values, struct each_flow_dns_v6);
 } flow6_dns_map SEC(".maps");
@@ -74,8 +72,8 @@ struct flow_ip_trie_value_v6 {
 struct each_flow_ip_trie_v6 {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
     __uint(map_flags, BPF_F_NO_PREALLOC);
-    __type(key, struct flow_ip_trie_key_v6);
-    __type(value, struct flow_ip_trie_value_v6);
+    __uint(key_size, sizeof(struct flow_ip_trie_key_v6));
+    __uint(value_size, sizeof(struct flow_ip_trie_value_v6));
     __uint(max_entries, 65536);
 };
 
@@ -83,7 +81,7 @@ struct each_flow_ip_trie_v6 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
     __type(key, u32);
-    __uint(max_entries, 512);
+    __uint(max_entries, 256);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
     __array(values, struct each_flow_ip_trie_v6);
 } flow6_ip_map SEC(".maps");
@@ -125,8 +123,8 @@ struct rt_cache_value_v6 {
 // 缓存
 struct each_v6_cache {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __type(key, struct rt_cache_key_v6);
-    __type(value, struct rt_cache_value_v6);
+    __uint(key_size, sizeof(struct rt_cache_key_v6));
+    __uint(value_size, sizeof(struct rt_cache_value_v6));
     __uint(max_entries, 65536);
 };
 

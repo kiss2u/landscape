@@ -1,7 +1,7 @@
 #ifndef __LD_PKG_DEF_H__
 #define __LD_PKG_DEF_H__
 
-#include "vmlinux.h"
+#include <vmlinux.h>
 #include <bpf/bpf_endian.h>
 #include "landscape_log.h"
 #include "landscape.h"

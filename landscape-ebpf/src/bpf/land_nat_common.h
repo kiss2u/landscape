@@ -1,6 +1,6 @@
 #ifndef LD_NAT_COMMON_H
 #define LD_NAT_COMMON_H
-#include "vmlinux.h"
+#include <vmlinux.h>
 #include "landscape_log.h"
 #include "landscape.h"
 #include "pkg_def.h"

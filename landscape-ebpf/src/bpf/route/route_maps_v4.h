@@ -1,6 +1,6 @@
 #ifndef __LD_ROUTE_MAP_v4_H__
 #define __LD_ROUTE_MAP_v4_H__
-#include "vmlinux.h"
+#include <vmlinux.h>
 #include <bpf/bpf_helpers.h>
 
 struct lan_route_key_v4 {
@@ -28,7 +28,6 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rt4_lan_map SEC(".maps");
 
-
 // reusable
 struct flow_dns_match_value_v4 {
     u32 mark;
@@ -40,13 +39,10 @@ struct flow_dns_match_key_v4 {
     __be32 addr;
 } __flow_dns_match_key_v4;
 
-
 struct each_flow_dns_v4 {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    // __uint(key_size, 16);
-    // __uint(map_flags, BPF_F_NO_COMMON_LRU);
-    __type(key, struct flow_dns_match_key_v4);
-    __type(value, struct flow_dns_match_value_v4);
+    __uint(key_size, sizeof(struct flow_dns_match_key_v4));
+    __uint(value_size, sizeof(struct flow_dns_match_value_v4));
     __uint(max_entries, 4096);
 };
 
@@ -54,12 +50,10 @@ struct each_flow_dns_v4 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
     __type(key, u32);
-    __uint(max_entries, 512);
+    __uint(max_entries, 256);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
     __array(values, struct each_flow_dns_v4);
 } flow4_dns_map SEC(".maps");
-
-
 
 //
 struct flow_ip_trie_key_v4 {
@@ -77,8 +71,8 @@ struct flow_ip_trie_value_v4 {
 struct each_flow_ip_trie_v4 {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
     __uint(map_flags, BPF_F_NO_PREALLOC);
-    __type(key, struct flow_ip_trie_key_v4);
-    __type(value, struct flow_ip_trie_value_v4);
+    __uint(key_size, sizeof(struct flow_ip_trie_key_v4));
+    __uint(value_size, sizeof(struct flow_ip_trie_value_v4));
     __uint(max_entries, 65536);
 };
 
@@ -86,12 +80,10 @@ struct each_flow_ip_trie_v4 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);
     __type(key, u32);
-    __uint(max_entries, 512);
+    __uint(max_entries, 256);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
     __array(values, struct each_flow_ip_trie_v4);
 } flow4_ip_map SEC(".maps");
-
-
 
 struct route_target_key_v4 {
     __u32 flow_id;
@@ -114,9 +106,6 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } rt4_target_map SEC(".maps");
 
-
-
-
 struct rt_cache_key_v4 {
     __be32 local_addr;
     __be32 remote_addr;
@@ -134,8 +123,8 @@ struct rt_cache_value_v4 {
 // 缓存
 struct each_v4_cache {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __type(key, struct rt_cache_key_v4);
-    __type(value, struct rt_cache_value_v4);
+    __uint(key_size, sizeof(struct rt_cache_key_v4));
+    __uint(value_size, sizeof(struct rt_cache_value_v4));
     __uint(max_entries, 65536);
 };
 
@@ -145,6 +134,6 @@ struct {
     __uint(max_entries, 4);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
     __array(values, struct each_v4_cache);
-} rt4_cache_map  SEC(".maps");
+} rt4_cache_map SEC(".maps");
 
 #endif /* __LD_ROUTE_MAP_v4_H__ */
