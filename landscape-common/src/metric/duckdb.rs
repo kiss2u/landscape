@@ -192,7 +192,12 @@ pub fn collect_and_cleanup_old_metrics(conn: &Connection, cutoff: u64) -> Box<Ve
 
 pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMetric> {
     let stmt = "
-        SELECT report_time, ingress_bytes, ingress_packets, egress_bytes, egress_packets
+        SELECT 
+            report_time,
+            ingress_bytes - lag(ingress_bytes, 1, ingress_bytes) OVER (ORDER BY report_time) as d_ingress_bytes,
+            ingress_packets - lag(ingress_packets, 1, ingress_packets) OVER (ORDER BY report_time) as d_ingress_packets,
+            egress_bytes - lag(egress_bytes, 1, egress_bytes) OVER (ORDER BY report_time) as d_egress_bytes,
+            egress_packets - lag(egress_packets, 1, egress_packets) OVER (ORDER BY report_time) as d_egress_packets
         FROM metrics
         WHERE src_ip = ?1 AND dst_ip = ?2 AND src_port = ?3 AND dst_port = ?4
             AND l4_proto = ?5 AND l3_proto = ?6 AND flow_id = ?7 AND trace_id = ?8
