@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useMetricStore } from "@/stores/status_metric";
-import { formatRate, formatPackets } from "@/lib/util";
+import { formatRate, formatPackets, formatSize } from "@/lib/util";
+import { get_connect_global_stats } from "@/api/metric";
+import type { ConnectGlobalStats } from "landscape-types/common/metric/connect";
 import LiveMetric from "./metric/LiveMetric.vue";
 import HistoryMetric from "./metric/HistoryMetric.vue";
 
@@ -9,12 +11,18 @@ const metricStore = useMetricStore();
 
 // 视图模式: live (实时) | history (历史)
 const viewMode = ref<"live" | "history" | any>("live");
+const globalStats = ref<ConnectGlobalStats | null>(null);
 
 let timer: any = null;
 
 onMounted(async () => {
   metricStore.SET_ENABLE(true);
   await metricStore.UPDATE_INFO();
+  
+  // 获取一次历史全量统计
+  get_connect_global_stats().then(res => {
+    globalStats.value = res;
+  });
   
   timer = setInterval(async () => {
     if (viewMode.value === "live") {
@@ -51,7 +59,7 @@ const systemStats = computed(() => {
       <n-flex align="center" size="large">
         <n-radio-group v-model:value="viewMode" size="medium" type="button">
           <n-radio-button value="live">实时活跃连接</n-radio-button>
-          <n-radio-button value="history">历史回溯审计</n-radio-button>
+          <n-radio-button value="history">历史连接查询</n-radio-button>
         </n-radio-group>
 
         <n-tag v-if="viewMode === 'live'" :bordered="false" type="info" size="small" round>
@@ -63,7 +71,8 @@ const systemStats = computed(() => {
 
         <n-divider vertical />
 
-        <n-flex align="center" size="large">
+        <!-- 动态面板：根据模式切换统计内容 -->
+        <n-flex align="center" size="large" v-if="viewMode === 'live'">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">活跃连接:</span>
             <span style="font-weight: bold; color: #18a058">{{ systemStats.count }}</span>
@@ -81,6 +90,25 @@ const systemStats = computed(() => {
               <span style="font-weight: bold; color: #18a058">{{ formatRate(systemStats.ingressBps) }}</span>
               <span style="font-size: 11px; color: #aaa">({{ formatPackets(systemStats.ingressPps) }})</span>
             </n-flex>
+          </n-flex>
+        </n-flex>
+
+        <n-flex align="center" size="large" v-else-if="globalStats">
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">历史连接总数:</span>
+            <span style="font-weight: bold; color: #4fb233">{{ globalStats.total_connect_count }}</span>
+          </n-flex>
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">累计总上传:</span>
+            <span style="font-weight: bold; color: #2080f0">{{ formatSize(globalStats.total_egress_bytes) }}</span>
+          </n-flex>
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">累计总下载:</span>
+            <span style="font-weight: bold; color: #18a058">{{ formatSize(globalStats.total_ingress_bytes) }}</span>
+          </n-flex>
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">更新于:</span>
+            <n-time :time="globalStats.last_calculate_time" format="yyyy-MM-dd HH:mm" style="color: #aaa" />
           </n-flex>
         </n-flex>
       </n-flex>

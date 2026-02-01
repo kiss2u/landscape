@@ -51,9 +51,9 @@ const emit = defineEmits(["show:key"]);
         <n-flex align="center">
           <n-flex align="center" style="width: 160px">
             <n-flex vertical size="small">
-              <n-time :time="history.key.create_time" />
+              <n-time :time="history.key.create_time" format="yyyy-MM-dd HH:mm:ss" />
               <div style="font-size: 10px; color: #888">
-                始于 {{ new Date(history.key.create_time).toLocaleTimeString() }}
+                记录于 {{ new Date(history.key.create_time).getFullYear() }}
               </div>
             </n-flex>
           </n-flex>
@@ -67,7 +67,7 @@ const emit = defineEmits(["show:key"]);
             </n-tag>
           </n-flex>
 
-          <n-flex align="center" style="min-width: 350px">
+          <n-flex align="center" style="width: 800px; font-variant-numeric: tabular-nums">
             {{
               `${
                 frontEndStore.presentation_mode
@@ -81,47 +81,43 @@ const emit = defineEmits(["show:key"]);
             }}
           </n-flex>
 
-          <!-- 历史累计总量展示 -->
-          <n-flex align="center" :wrap="false" style="margin-left: 20px; flex: 1" justify="end">
-            <n-flex align="center" :wrap="false" style="gap: 24px">
-              <!-- 累计上行 -->
-              <n-flex align="center" :wrap="false" size="small" style="width: 120px">
-                <n-icon :color="themeVars.infoColor" size="20">
-                  <ArrowUp />
-                </n-icon>
-                <n-flex vertical :size="[-4, 0]" style="flex: 1">
-                  <span style="font-size: 13px; font-weight: 600; white-space: nowrap">
-                    {{ formatSize(history.total_egress_bytes) }}
-                  </span>
-                  <span style="font-size: 10px; color: #999; white-space: nowrap">
-                    {{ formatCount(history.total_egress_pkts) }} pkt
-                  </span>
-                </n-flex>
+          <!-- 累计总量展示 -->
+          <n-flex align="center" :wrap="false" style="gap: 24px">
+            <!-- 累计上行 -->
+            <n-flex align="center" :wrap="false" size="small" style="width: 100px">
+              <n-icon :color="themeVars.infoColor" size="20">
+                <ArrowUp />
+              </n-icon>
+              <n-flex vertical :size="[-4, 0]" style="flex: 1">
+                <span style="font-size: 13px; font-weight: 600; white-space: nowrap">
+                  {{ formatSize(history.total_egress_bytes) }}
+                </span>
+                <span style="font-size: 10px; color: #999; white-space: nowrap">
+                  {{ formatCount(history.total_egress_pkts) }} pkt
+                </span>
               </n-flex>
+            </n-flex>
 
-              <!-- 累计下行 -->
-              <n-flex align="center" :wrap="false" size="small" style="width: 120px">
-                <n-icon :color="themeVars.successColor" size="20">
-                  <ArrowDown />
-                </n-icon>
-                <n-flex vertical :size="[-4, 0]" style="flex: 1">
-                  <span style="font-size: 13px; font-weight: 600; white-space: nowrap">
-                    {{ formatSize(history.total_ingress_bytes) }}
-                  </span>
-                  <span style="font-size: 10px; color: #999; white-space: nowrap">
-                    {{ formatCount(history.total_ingress_pkts) }} pkt
-                  </span>
-                </n-flex>
+            <!-- 累计下行 -->
+            <n-flex align="center" :wrap="false" size="small" style="width: 100px">
+              <n-icon :color="themeVars.successColor" size="20">
+                <ArrowDown />
+              </n-icon>
+              <n-flex vertical :size="[-4, 0]" style="flex: 1">
+                <span style="font-size: 13px; font-weight: 600; white-space: nowrap">
+                  {{ formatSize(history.total_ingress_bytes) }}
+                </span>
+                <span style="font-size: 10px; color: #999; white-space: nowrap">
+                  {{ formatCount(history.total_ingress_pkts) }} pkt
+                </span>
               </n-flex>
-
-              <div style="width: 70px; font-size: 10px; color: #bbb; text-align: right">
-                累计流量
-              </div>
             </n-flex>
           </n-flex>
         </n-flex>
-
-        <n-flex>
+        
+        <!-- 右侧区域：操作按钮 -->
+        <n-flex align="center" :wrap="false">
+          <!-- 图表按钮 -->
           <n-button
             :focusable="false"
             text
@@ -145,6 +141,6 @@ const emit = defineEmits(["show:key"]);
 }
 
 .box:hover {
-  border-color: rgba(79, 163, 255, 0.4);
+  border-color: #4fa3ff; /* 你想要的亮色 */
 }
 </style>

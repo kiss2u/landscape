@@ -150,6 +150,23 @@ pub struct ConnectRealtimeStatus {
     pub last_metric: Option<ConnectMetric>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct ConnectGlobalStats {
+    #[ts(type = "number")]
+    pub total_ingress_bytes: u64,
+    #[ts(type = "number")]
+    pub total_egress_bytes: u64,
+    #[ts(type = "number")]
+    pub total_ingress_pkts: u64,
+    #[ts(type = "number")]
+    pub total_egress_pkts: u64,
+    #[ts(type = "number")]
+    pub total_connect_count: u64,
+    #[ts(type = "number")]
+    pub last_calculate_time: u64,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 #[serde(rename_all = "lowercase")]
@@ -216,6 +233,7 @@ pub struct ConnectMetricManager {
     msg_channel: mpsc::Sender<ConnectMessage>,
     #[cfg(feature = "duckdb")]
     metric_store: DuckMetricStore,
+    pub global_stats: Arc<RwLock<ConnectGlobalStats>>,
 }
 
 #[allow(unused_variables)]
@@ -337,13 +355,37 @@ impl ConnectMetricManager {
             tracing::info!("connect metric exit");
         });
 
-        ConnectMetricManager {
+        let manager = ConnectMetricManager {
             active_connects,
             realtime_metrics,
             msg_channel,
             #[cfg(feature = "duckdb")]
-            metric_store,
+            metric_store: metric_store.clone(),
+            global_stats: Arc::new(RwLock::new(ConnectGlobalStats::default())),
+        };
+
+        // 定时汇总全量统计 (每 24 小时)
+        #[cfg(feature = "duckdb")]
+        {
+            let metric_store_clone = metric_store;
+            let global_stats_clone = manager.global_stats.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(86400));
+                loop {
+                    interval.tick().await;
+                    let stats = metric_store_clone.get_global_stats().await;
+                    let mut lock = global_stats_clone.write().await;
+                    *lock = stats;
+                    tracing::info!("Global stats updated: {} connects", lock.total_connect_count);
+                }
+            });
         }
+
+        manager
+    }
+
+    pub async fn get_global_stats(&self) -> ConnectGlobalStats {
+        self.global_stats.read().await.clone()
     }
 
     pub fn send_connect_msg(&self, msg: ConnectMessage) {

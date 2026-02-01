@@ -4,8 +4,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::metric::connect::{
-    ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectRealtimeStatus,
+    ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric, ConnectRealtimeStatus, ConnectGlobalStats,
 };
 use serde_json::Value;
 
@@ -19,6 +18,7 @@ pub async fn get_metric_service_paths() -> Router<LandscapeApp> {
         .route("/connects", get(get_connects_info))
         .route("/connects/chart", post(get_connect_metric_info))
         .route("/connects/history", get(get_connect_history))
+        .route("/connects/global_stats", get(get_connect_global_stats))
 }
 
 pub async fn get_metric_status(State(state): State<LandscapeApp>) -> LandscapeApiResult<Value> {
@@ -45,5 +45,11 @@ pub async fn get_connect_history(
     Query(params): Query<ConnectHistoryQueryParams>,
 ) -> LandscapeApiResult<Vec<ConnectHistoryStatus>> {
     let data = state.metric_service.data.connect_metric.history_summaries_complex(params).await;
+    LandscapeApiResp::success(data)
+}
+pub async fn get_connect_global_stats(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<ConnectGlobalStats> {
+    let data = state.metric_service.data.connect_metric.get_global_stats().await;
     LandscapeApiResp::success(data)
 }

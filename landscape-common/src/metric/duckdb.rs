@@ -1,6 +1,6 @@
 use crate::metric::connect::{
-    ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey, ConnectMetric,
-    ConnectSortKey, SortOrder,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
+    ConnectMetric, ConnectSortKey, SortOrder,
 };
 use duckdb::{params, Connection};
 use std::path::PathBuf;
@@ -27,6 +27,7 @@ pub enum DBMessage {
         params: ConnectHistoryQueryParams,
         resp: oneshot::Sender<Vec<ConnectHistoryStatus>>
     },
+    QueryGlobalStats { resp: oneshot::Sender<ConnectGlobalStats> },
 }
 
 #[derive(Clone)]
@@ -407,6 +408,39 @@ pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
     }
 }
 
+pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
+    let stmt = "
+        SELECT 
+            SUM(total_ingress_bytes), 
+            SUM(total_egress_bytes), 
+            SUM(total_ingress_pkts), 
+            SUM(total_egress_pkts), 
+            COUNT(*) 
+        FROM connect_summaries
+    ";
+
+    let mut stmt = match conn.prepare(stmt) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to prepare SQL for global stats: {}", e);
+            return ConnectGlobalStats::default();
+        }
+    };
+
+    let res = stmt.query_row([], |row| {
+        Ok(ConnectGlobalStats {
+            total_ingress_bytes: row.get::<_, Option<i64>>(0)?.unwrap_or(0) as u64,
+            total_egress_bytes: row.get::<_, Option<i64>>(1)?.unwrap_or(0) as u64,
+            total_ingress_pkts: row.get::<_, Option<i64>>(2)?.unwrap_or(0) as u64,
+            total_egress_pkts: row.get::<_, Option<i64>>(3)?.unwrap_or(0) as u64,
+            total_connect_count: row.get::<_, i64>(4)? as u64,
+            last_calculate_time: chrono::Utc::now().timestamp_millis() as u64,
+        })
+    });
+
+    res.unwrap_or_default()
+}
+
 pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
     // std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
 
@@ -545,6 +579,10 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                             let result = query_historical_summaries_complex(&conn, params);
                             let _ = resp.send(result);
                         }
+                        DBMessage::QueryGlobalStats { resp } => {
+                            let result = query_global_stats(&conn);
+                            let _ = resp.send(result);
+                        }
                     }
 
                     if batch_count >= crate::DEFAULT_METRIC_BATCH_SIZE {
@@ -616,6 +654,15 @@ impl DuckMetricStore {
         if let Err(e) = self.tx.send(DBMessage::QueryConnectHistoryComplex { params, resp }).await {
             tracing::error!("Failed to send query message: {}", e);
             return Vec::new();
+        }
+        rx.await.unwrap_or_default()
+    }
+
+    pub async fn get_global_stats(&self) -> ConnectGlobalStats {
+        let (resp, rx) = oneshot::channel::<ConnectGlobalStats>();
+        if let Err(e) = self.tx.send(DBMessage::QueryGlobalStats { resp }).await {
+            tracing::error!("Failed to send query global stats message: {}", e);
+            return ConnectGlobalStats::default();
         }
         rx.await.unwrap_or_default()
     }

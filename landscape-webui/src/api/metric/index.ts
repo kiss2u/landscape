@@ -5,7 +5,13 @@ import {
   ConnectMetric,
   ConnectRealtimeStatus,
   ConnectHistoryStatus,
+  ConnectGlobalStats,
 } from "landscape-types/common/metric/connect";
+
+export async function get_connect_global_stats(): Promise<ConnectGlobalStats> {
+  let data = await axiosService.get("metric/connects/global_stats");
+  return data.data;
+}
 
 export async function get_metric_status(): Promise<ServiceStatus> {
   let data = await axiosService.get("metric/status");

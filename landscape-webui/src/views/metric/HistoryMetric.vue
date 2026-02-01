@@ -49,7 +49,7 @@ const fetchHistory = async () => {
   if (timeRange.value !== null) {
     startTime = Math.floor((Date.now() - timeRange.value * 1000) / 1000);
   }
-  
+
   historicalData.value = await get_connect_history({
     start_time: startTime,
     limit: queryLimit.value || undefined,
@@ -85,7 +85,13 @@ const filteredHistory = computed(() => {
 });
 
 const historyTotalStats = computed(() => {
-  const stats = { totalIngressBytes: 0, totalEgressBytes: 0, totalIngressPkts: 0, totalEgressPkts: 0, count: 0 };
+  const stats = {
+    totalIngressBytes: 0,
+    totalEgressBytes: 0,
+    totalIngressPkts: 0,
+    totalEgressPkts: 0,
+    count: 0,
+  };
   if (filteredHistory.value) {
     filteredHistory.value.forEach((item) => {
       stats.totalIngressBytes += item.total_ingress_bytes || 0;
@@ -103,9 +109,13 @@ watch([timeRange, queryLimit, sortKey, sortOrder], () => {
   fetchHistory();
 });
 
-watch(historyFilter, () => {
-  fetchHistory();
-}, { deep: true });
+watch(
+  historyFilter,
+  () => {
+    fetchHistory();
+  },
+  { deep: true },
+);
 
 onMounted(() => {
   fetchHistory();
@@ -116,52 +126,116 @@ onMounted(() => {
   <n-flex vertical style="flex: 1; overflow: hidden">
     <!-- 历史模式专用工具栏 -->
     <n-flex align="center" :wrap="true" style="margin-bottom: 12px">
-      <n-input v-model:value="historyFilter.src_ip" placeholder="源IP" clearable style="width: 170px" />
-      <n-input v-model:value="historyFilter.dst_ip" placeholder="目标IP" clearable style="width: 170px" />
+      <n-input
+        v-model:value="historyFilter.src_ip"
+        placeholder="源IP"
+        clearable
+        style="width: 170px"
+      />
+      <n-input
+        v-model:value="historyFilter.dst_ip"
+        placeholder="目标IP"
+        clearable
+        style="width: 170px"
+      />
       <n-input-group style="width: 220px">
-        <n-input-number v-model:value="historyFilter.port_start" placeholder="源端口" :show-button="false" clearable />
+        <n-input-number
+          v-model:value="historyFilter.port_start"
+          placeholder="源端口"
+          :show-button="false"
+          clearable
+        />
         <n-input-group-label>=></n-input-group-label>
-        <n-input-number v-model:value="historyFilter.port_end" placeholder="目的" :show-button="false" clearable />
+        <n-input-number
+          v-model:value="historyFilter.port_end"
+          placeholder="目的"
+          :show-button="false"
+          clearable
+        />
       </n-input-group>
-      <n-select v-model:value="historyFilter.l4_proto" placeholder="传输协议" :options="protocolOptions" clearable style="width: 130px" />
-      <n-input-number v-model:value="historyFilter.flow_id" placeholder="Flow" :min="1" :max="255" clearable style="width: 100px" />
-      
+      <n-select
+        v-model:value="historyFilter.l4_proto"
+        placeholder="传输协议"
+        :options="protocolOptions"
+        clearable
+        style="width: 130px"
+      />
+      <n-input-number
+        v-model:value="historyFilter.flow_id"
+        placeholder="Flow"
+        :min="1"
+        :max="255"
+        clearable
+        style="width: 100px"
+      />
+
       <n-divider vertical />
 
-      <n-select v-model:value="timeRange" :options="timeRangeOptions" style="width: 140px" />
-      <n-select v-model:value="queryLimit" :options="limitOptions" style="width: 140px" />
+      <n-select
+        v-model:value="timeRange"
+        :options="timeRangeOptions"
+        style="width: 140px"
+      />
+      <n-select
+        v-model:value="queryLimit"
+        :options="limitOptions"
+        style="width: 140px"
+      />
 
       <n-button-group>
-        <n-button @click="fetchHistory" type="primary">重载历史</n-button>
+        <n-button @click="fetchHistory" type="primary">查询</n-button>
         <n-button @click="resetHistoryFilter">重置</n-button>
       </n-button-group>
 
       <n-divider vertical />
 
       <n-button-group>
-        <n-button :type="sortKey === 'time' ? 'primary' : 'default'" @click="toggleSort('time')">
-          产生时间 {{ sortKey === 'time' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
+        <n-button
+          :type="sortKey === 'time' ? 'primary' : 'default'"
+          @click="toggleSort('time')"
+        >
+          发起时间
+          {{ sortKey === "time" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
-        <n-button :type="sortKey === 'port' ? 'primary' : 'default'" @click="toggleSort('port')">
-          端口 {{ sortKey === 'port' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
+        <n-button
+          :type="sortKey === 'port' ? 'primary' : 'default'"
+          @click="toggleSort('port')"
+        >
+          端口 {{ sortKey === "port" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
-        <n-button :type="sortKey === 'ingress' ? 'primary' : 'default'" @click="toggleSort('ingress')">
-          下载量排序 {{ sortKey === 'ingress' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
+        <n-button
+          :type="sortKey === 'egress' ? 'primary' : 'default'"
+          @click="toggleSort('egress')"
+        >
+          上传量排序
+          {{ sortKey === "egress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
-        <n-button :type="sortKey === 'egress' ? 'primary' : 'default'" @click="toggleSort('egress')">
-          上传量排序 {{ sortKey === 'egress' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
+        <n-button
+          :type="sortKey === 'ingress' ? 'primary' : 'default'"
+          @click="toggleSort('ingress')"
+        >
+          下载量排序
+          {{ sortKey === "ingress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
       </n-button-group>
     </n-flex>
 
     <n-grid x-gap="12" :cols="5" style="margin-bottom: 12px">
       <n-gi>
-        <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
+        <n-card
+          size="small"
+          :bordered="false"
+          style="background-color: #f9f9f910"
+        >
           <n-statistic label="过滤结果总数" :value="historyTotalStats.count" />
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
+        <n-card
+          size="small"
+          :bordered="false"
+          style="background-color: #f9f9f910"
+        >
           <n-statistic label="过滤结果总上行">
             <span :style="{ color: themeVars.infoColor, fontWeight: 'bold' }">
               {{ formatSize(historyTotalStats.totalEgressBytes) }}
@@ -170,16 +244,26 @@ onMounted(() => {
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
+        <n-card
+          size="small"
+          :bordered="false"
+          style="background-color: #f9f9f910"
+        >
           <n-statistic label="过滤结果总下行">
-            <span :style="{ color: themeVars.successColor, fontWeight: 'bold' }">
+            <span
+              :style="{ color: themeVars.successColor, fontWeight: 'bold' }"
+            >
               {{ formatSize(historyTotalStats.totalIngressBytes) }}
             </span>
           </n-statistic>
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
+        <n-card
+          size="small"
+          :bordered="false"
+          style="background-color: #f9f9f910"
+        >
           <n-statistic label="过滤结果总入站">
             <span style="color: #888">
               {{ formatCount(historyTotalStats.totalIngressPkts) }} pkt
@@ -188,7 +272,11 @@ onMounted(() => {
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
+        <n-card
+          size="small"
+          :bordered="false"
+          style="background-color: #f9f9f910"
+        >
           <n-statistic label="过滤结果总出站">
             <span style="color: #888">
               {{ formatCount(historyTotalStats.totalEgressPkts) }} pkt
@@ -198,11 +286,20 @@ onMounted(() => {
       </n-gi>
     </n-grid>
 
-    <div style="flex: 1; overflow-y: auto; padding-right: 4px" class="history-list-container">
-      <HistoryItemInfo 
-        v-for="item in filteredHistory" 
-        :key="item.key.src_ip + item.key.create_time + item.key.src_port + item.key.flow_id" 
-        :history="item" 
+    <div
+      style="flex: 1; overflow-y: auto; padding-right: 4px"
+      class="history-list-container"
+    >
+      <HistoryItemInfo
+        v-for="(item, index) in filteredHistory"
+        :key="
+          item.key.src_ip +
+          item.key.create_time +
+          item.key.src_port +
+          item.key.flow_id
+        "
+        :history="item"
+        :index="index"
       />
     </div>
   </n-flex>

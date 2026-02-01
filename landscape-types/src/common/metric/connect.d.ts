@@ -9,6 +9,41 @@ export type ConnectAgg = {
 
 export type ConnectEventType = "unknow" | "create_connect" | "dis_connct";
 
+export type ConnectGlobalStats = {
+  total_ingress_bytes: number;
+  total_egress_bytes: number;
+  total_ingress_pkts: number;
+  total_egress_pkts: number;
+  total_connect_count: number;
+  last_calculate_time: number;
+};
+
+export type ConnectHistoryQueryParams = {
+  start_time: bigint | null;
+  end_time: bigint | null;
+  limit: number | null;
+  src_ip: string | null;
+  dst_ip: string | null;
+  port_start: number | null;
+  port_end: number | null;
+  l3_proto: number | null;
+  l4_proto: number | null;
+  flow_id: number | null;
+  sort_key: ConnectSortKey | null;
+  sort_order: SortOrder | null;
+  status: number | null;
+};
+
+export type ConnectHistoryStatus = {
+  key: ConnectKey;
+  total_ingress_bytes: number;
+  total_egress_bytes: number;
+  total_ingress_pkts: number;
+  total_egress_pkts: number;
+  last_report_time: number;
+  status: number;
+};
+
 export type ConnectInfo = {
   key: ConnectKey;
   event_type: ConnectEventType;
@@ -35,6 +70,7 @@ export type ConnectMetric = {
   ingress_packets: number;
   egress_bytes: number;
   egress_packets: number;
+  status: ConnectStatusType;
 };
 
 export type ConnectRealtimeStatus = {
@@ -46,11 +82,8 @@ export type ConnectRealtimeStatus = {
   last_metric: ConnectMetric | null;
 };
 
-export type ConnectHistoryStatus = {
-  key: ConnectKey;
-  total_ingress_bytes: number;
-  total_egress_bytes: number;
-  total_ingress_pkts: number;
-  total_egress_pkts: number;
-  last_report_time: number;
-};
+export type ConnectSortKey = "time" | "port" | "ingress" | "egress";
+
+export type ConnectStatusType = "unknow" | "active" | "disabled";
+
+export type SortOrder = "asc" | "desc";
