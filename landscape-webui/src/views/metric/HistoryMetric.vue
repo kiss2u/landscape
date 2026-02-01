@@ -122,14 +122,22 @@ const historyTotalStats = computed(() => {
 });
 
 // 5. 监听器与生命周期 (Watchers & Lifecycle)
+// 只在时间范围、查询限制、排序变化时自动查询
 watch([timeRange, queryLimit, sortKey, sortOrder], () => {
   fetchHistory();
 });
 
+// 防抖查询：用户停止输入 800ms 后自动查询
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 watch(
   historyFilter,
   () => {
-    fetchHistory();
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      fetchHistory();
+    }, 800); // 800ms 延迟
   },
   { deep: true },
 );
