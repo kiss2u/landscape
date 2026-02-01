@@ -60,7 +60,8 @@ const fetchHistory = async () => {
   try {
     let startTime: number | undefined;
     if (timeRange.value !== null) {
-      startTime = Math.floor((Date.now() - timeRange.value * 1000) / 1000);
+      // 计算开始时间（毫秒时间戳）
+      startTime = Date.now() - timeRange.value * 1000;
     }
 
     historicalData.value = await get_connect_history({
