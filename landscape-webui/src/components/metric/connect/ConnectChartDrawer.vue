@@ -65,25 +65,26 @@ const categories = computed(() =>
 );
 
 // Divide values by 5 to get per-second rates
+// Use raw cumulative values from the database
 const bytesSeries = computed(() => [
   {
-    name: "Ingress Bytes/s",
-    data: chart.value.map((m) => m.ingress_bytes / 5),
+    name: "入站总量 (Ingress)",
+    data: chart.value.map((m) => m.ingress_bytes),
   },
   {
-    name: "Egress Bytes/s",
-    data: chart.value.map((m) => m.egress_bytes / 5),
+    name: "出站总量 (Egress)",
+    data: chart.value.map((m) => m.egress_bytes),
   },
 ]);
 
 const packetsSeries = computed(() => [
   {
-    name: "Ingress Packets/s",
-    data: chart.value.map((m) => m.ingress_packets / 5),
+    name: "入站封包 (Ingress)",
+    data: chart.value.map((m) => m.ingress_packets),
   },
   {
-    name: "Egress Packets/s",
-    data: chart.value.map((m) => m.egress_packets / 5),
+    name: "出站封包 (Egress)",
+    data: chart.value.map((m) => m.egress_packets),
   },
 ]);
 
@@ -104,9 +105,9 @@ const baseOptions = computed<ApexOptions>(() => ({
     intersect: false,
   },
   xaxis: {
-    categories: categories.value, // ✅ 响应式绑定
+    categories: categories.value,
     tickAmount: 10,
-    title: { text: "Time" },
+    title: { text: "时间" },
     labels: {
       showDuplicates: false,
       hideOverlappingLabels: true,
@@ -117,9 +118,9 @@ const baseOptions = computed<ApexOptions>(() => ({
   },
 }));
 
-function formatRate(value: number): string {
-  if (value === 0) return "0 B/s";
-  const units = ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"];
+function formatVolume(value: number): string {
+  if (value === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
   const k = 1024;
   const i = Math.floor(Math.log(value) / Math.log(k));
   const scaled = value / Math.pow(k, i);
@@ -129,9 +130,9 @@ function formatRate(value: number): string {
 const bytesOptions = computed<ApexOptions>(() => ({
   ...baseOptions.value,
   yaxis: {
-    title: { text: "Bytes/s" },
+    title: { text: "数据总量" },
     labels: {
-      formatter: formatRate,
+      formatter: formatVolume,
     },
   },
 }));
@@ -139,9 +140,9 @@ const bytesOptions = computed<ApexOptions>(() => ({
 const packetsOptions = computed<ApexOptions>(() => ({
   ...baseOptions.value,
   yaxis: {
-    title: { text: "Packets/s" },
+    title: { text: "封包总量" },
     labels: {
-      formatter: (value: number) => `${value.toFixed(1)} pkt/s`,
+      formatter: (value: number) => `${Math.round(value)} pkt`,
     },
   },
 }));

@@ -1,9 +1,9 @@
+use crate::metric::connect::ConnectHistoryStatus;
 use crate::metric::connect::{ConnectInfo, ConnectKey, ConnectMetric};
 use duckdb::{params, Connection};
 use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
-
 
 /// Database operation messages
 pub enum DBMessage {
@@ -15,6 +15,12 @@ pub enum DBMessage {
 
     CollectAndCleanupOldMetrics { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectMetric>>> },
     CollectAndCleanupOldInfos { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectInfo>>> },
+    QueryHistory { 
+        limit: Option<usize>, 
+        start_time: Option<u64>, 
+        end_time: Option<u64>, 
+        resp: oneshot::Sender<Vec<ConnectHistoryStatus>> 
+    },
 }
 
 #[derive(Clone)]
@@ -234,6 +240,71 @@ pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMe
     rows.filter_map(Result::ok).collect()
 }
 
+pub fn query_historical_summaries(
+    conn: &Connection, 
+    limit: Option<usize>,
+    start_time: Option<u64>,
+    end_time: Option<u64>,
+) -> Vec<ConnectHistoryStatus> {
+    let mut where_clauses = Vec::new();
+    if let Some(start) = start_time {
+        where_clauses.push(format!("report_time >= {}", start));
+    }
+    if let Some(end) = end_time {
+        where_clauses.push(format!("report_time <= {}", end));
+    }
+
+    let where_stmt = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    let limit_clause = if let Some(l) = limit {
+        format!("LIMIT {}", l)
+    } else {
+        String::new()
+    };
+
+    let stmt = format!("
+        SELECT 
+            src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id, create_time,
+            MAX(ingress_bytes), MAX(egress_bytes), MAX(ingress_packets), MAX(egress_packets), MAX(report_time)
+        FROM metrics
+        {}
+        GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+        ORDER BY create_time DESC
+        {}
+    ", where_stmt, limit_clause);
+
+    let mut stmt = conn.prepare(&stmt).unwrap();
+    let rows = stmt
+        .query_map([], |row| {
+            let key = ConnectKey {
+                src_ip: row.get::<_, String>(0)?.parse().unwrap(),
+                dst_ip: row.get::<_, String>(1)?.parse().unwrap(),
+                src_port: row.get::<_, i64>(2)? as u16,
+                dst_port: row.get::<_, i64>(3)? as u16,
+                l4_proto: row.get::<_, i64>(4)? as u8,
+                l3_proto: row.get::<_, i64>(5)? as u8,
+                flow_id: row.get::<_, i64>(6)? as u8,
+                trace_id: row.get::<_, i64>(7)? as u8,
+                create_time: row.get::<_, i64>(8)? as u64,
+            };
+            Ok(ConnectHistoryStatus {
+                key,
+                total_ingress_bytes: row.get::<_, i64>(9)? as u64,
+                total_egress_bytes: row.get::<_, i64>(10)? as u64,
+                total_ingress_pkts: row.get::<_, i64>(11)? as u64,
+                total_egress_pkts: row.get::<_, i64>(12)? as u64,
+                last_report_time: row.get::<_, i64>(13)? as u64,
+            })
+        })
+        .unwrap();
+
+    rows.filter_map(Result::ok).collect()
+}
+
 pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
     let stmt = "
         SELECT * FROM (
@@ -281,16 +352,13 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
     let flush_interval = std::time::Duration::from_secs(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let mut last_flush = std::time::Instant::now();
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
     rt.block_on(async {
         loop {
             let now = std::time::Instant::now();
             let remaining = flush_interval.saturating_sub(now.duration_since(last_flush));
-            
+
             let timeout_res = tokio::time::timeout(remaining, rx.recv()).await;
 
             match timeout_res {
@@ -356,6 +424,12 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                             batch_count = 0;
                             last_flush = std::time::Instant::now();
                             let result = collect_and_cleanup_old_infos(&conn, cutoff);
+                            let _ = resp.send(result);
+                        }
+                        DBMessage::QueryHistory { limit, start_time, end_time, resp } => {
+                            let _ = connect_appender.flush();
+                            let _ = metrics_appender.flush();
+                            let result = query_historical_summaries(&conn, limit, start_time, end_time);
                             let _ = resp.send(result);
                         }
                     }
@@ -424,6 +498,12 @@ impl DuckMetricStore {
         let (resp, rx) = oneshot::channel();
         let _ = self.tx.send(DBMessage::CollectAndCleanupOldInfos { cutoff, resp }).await;
 
+        rx.await.unwrap()
+    }
+
+    pub async fn history_summaries(&self, limit: Option<usize>, start_time: Option<u64>, end_time: Option<u64>) -> Vec<ConnectHistoryStatus> {
+        let (resp, rx) = oneshot::channel();
+        let _ = self.tx.send(DBMessage::QueryHistory { limit, start_time, end_time, resp }).await;
         rx.await.unwrap()
     }
 }

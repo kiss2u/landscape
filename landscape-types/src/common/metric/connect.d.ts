@@ -45,3 +45,12 @@ export type ConnectRealtimeStatus = {
   egress_pps: number;
   last_metric: ConnectMetric | null;
 };
+
+export type ConnectHistoryStatus = {
+  key: ConnectKey;
+  total_ingress_bytes: number;
+  total_egress_bytes: number;
+  total_ingress_pkts: number;
+  total_egress_pkts: number;
+  last_report_time: number;
+};

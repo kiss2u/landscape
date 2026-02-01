@@ -109,3 +109,16 @@ export function formatPackets(pps: number): string {
   if (pps < 1000) return `${pps} pps`;
   return `${(pps / 1000).toFixed(2)} Kpps`;
 }
+
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+export function formatCount(count: number): string {
+  if (count < 1000) return `${count}`;
+  if (count < 1000000) return `${(count / 1000).toFixed(1)} K`;
+  return `${(count / 1000000).toFixed(1)} M`;
+}

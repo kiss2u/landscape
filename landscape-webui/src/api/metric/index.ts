@@ -4,6 +4,7 @@ import {
   ConnectKey,
   ConnectMetric,
   ConnectRealtimeStatus,
+  ConnectHistoryStatus,
 } from "landscape-types/common/metric/connect";
 
 export async function get_metric_status(): Promise<ServiceStatus> {
@@ -14,6 +15,17 @@ export async function get_metric_status(): Promise<ServiceStatus> {
 
 export async function get_connects_info(): Promise<ConnectRealtimeStatus[]> {
   let data = await axiosService.get("metric/connects");
+  return data.data;
+}
+
+export async function get_connect_history(
+  start_time?: number,
+  end_time?: number,
+  limit?: number
+): Promise<ConnectHistoryStatus[]> {
+  let data = await axiosService.get("metric/connects/history", {
+    params: { start_time, end_time, limit },
+  });
   return data.data;
 }
 

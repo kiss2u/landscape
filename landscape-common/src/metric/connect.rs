@@ -118,6 +118,22 @@ pub struct ConnectRealtimeStatus {
     pub last_metric: Option<ConnectMetric>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct ConnectHistoryStatus {
+    pub key: ConnectKey,
+    #[ts(type = "number")]
+    pub total_ingress_bytes: u64,
+    #[ts(type = "number")]
+    pub total_egress_bytes: u64,
+    #[ts(type = "number")]
+    pub total_ingress_pkts: u64,
+    #[ts(type = "number")]
+    pub total_egress_pkts: u64,
+    #[ts(type = "number")]
+    pub last_report_time: u64,
+}
+
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct ConnectMetricManager {
@@ -300,6 +316,26 @@ impl ConnectMetricManager {
         #[cfg(not(any(feature = "duckdb", feature = "polars")))]
         {
             let _ = key;
+            Vec::new()
+        }
+    }
+
+    pub async fn history_summaries(
+        &self,
+        limit: Option<usize>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+    ) -> Vec<ConnectHistoryStatus> {
+        #[cfg(feature = "duckdb")]
+        {
+            self.metric_store.history_summaries(limit, start_time, end_time).await
+        }
+
+        #[cfg(not(feature = "duckdb"))]
+        {
+            let _ = limit;
+            let _ = start_time;
+            let _ = end_time;
             Vec::new()
         }
     }
