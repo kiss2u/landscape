@@ -6,8 +6,10 @@ import { get_connect_global_stats } from "@/api/metric";
 import type { ConnectGlobalStats } from "landscape-types/common/metric/connect";
 import LiveMetric from "./metric/LiveMetric.vue";
 import HistoryMetric from "./metric/HistoryMetric.vue";
+import { useThemeVars } from "naive-ui";
 
 const metricStore = useMetricStore();
+const themeVars = useThemeVars();
 
 // 视图模式: live (实时) | history (历史)
 const viewMode = ref<"live" | "history" | any>("live");
@@ -87,14 +89,14 @@ const systemStats = computed(() => {
         <n-flex align="center" size="large" v-if="viewMode === 'live'">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">活跃连接:</span>
-            <span style="font-weight: bold; color: #18a058">{{
+            <span style="font-weight: bold">{{
               systemStats.count
             }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">系统上行:</span>
             <n-flex align="center" size="small" :wrap="false">
-              <span style="font-weight: bold; color: #2080f0">{{
+              <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
                 formatRate(systemStats.egressBps)
               }}</span>
               <span style="font-size: 11px; color: #aaa"
@@ -105,7 +107,7 @@ const systemStats = computed(() => {
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">系统下行:</span>
             <n-flex align="center" size="small" :wrap="false">
-              <span style="font-weight: bold; color: #18a058">{{
+              <span :style="{ fontWeight: 'bold', color: themeVars.successColor }">{{
                 formatRate(systemStats.ingressBps)
               }}</span>
               <span style="font-size: 11px; color: #aaa"
@@ -118,19 +120,19 @@ const systemStats = computed(() => {
         <n-flex align="center" size="large" v-else-if="globalStats">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">历史连接总数:</span>
-            <span style="font-weight: bold; color: #4fb233">{{
+            <span style="font-weight: bold">{{
               globalStats.total_connect_count
             }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">累计总上传:</span>
-            <span style="font-weight: bold; color: #2080f0">{{
+            <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
               formatSize(globalStats.total_egress_bytes)
             }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">累计总下载:</span>
-            <span style="font-weight: bold; color: #18a058">{{
+            <span :style="{ fontWeight: 'bold', color: themeVars.successColor }">{{
               formatSize(globalStats.total_ingress_bytes)
             }}</span>
           </n-flex>

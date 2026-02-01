@@ -9,9 +9,11 @@ import {
 import { ApexOptions } from "apexcharts";
 import { computed, ref } from "vue";
 import VueApexCharts from "vue3-apexcharts";
+import { useThemeVars } from "naive-ui";
 
 const metricStore = useMetricStore();
 const frontEndStore = useFrontEndStore();
+const themeVars = useThemeVars();
 
 interface Props {
   conn: ConnectKey | null;
@@ -119,8 +121,10 @@ const baseOptions = computed<ApexOptions>(() => ({
   theme: {
     mode: "dark",
   },
+  colors: [themeVars.value.successColor, themeVars.value.infoColor], // 入站(绿色), 出站(蓝色)
   stroke: {
     curve: "smooth",
+    width: 2,
   },
   tooltip: {
     shared: true,
