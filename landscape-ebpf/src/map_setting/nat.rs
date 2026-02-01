@@ -43,7 +43,7 @@ where
 
     for static_mapping in mapping_iter {
         let ingress_mapping_key = static_nat_mapping_key_v4 {
-            prefixlen: 64, // current only match port
+            prefixlen: 32, // current only match port
             port: static_mapping.wan_port.to_be(),
             gress: NAT_MAPPING_INGRESS,
             l4_protocol: static_mapping.l4_protocol,
@@ -51,7 +51,7 @@ where
         };
 
         let mut egress_mapping_key = static_nat_mapping_key_v4 {
-            prefixlen: 96,
+            prefixlen: 64,
             port: static_mapping.lan_port.to_be(),
             gress: NAT_MAPPING_EGRESS,
             l4_protocol: static_mapping.l4_protocol,
@@ -244,7 +244,7 @@ where
 
     for static_mapping in mapping_iter {
         let ingress_mapping_key = static_nat_mapping_key_v4 {
-            prefixlen: 64, // current only match port
+            prefixlen: 32, // current only match port
             port: static_mapping.wan_port.to_be(),
             gress: NAT_MAPPING_INGRESS,
             l4_protocol: static_mapping.l4_protocol,
@@ -252,7 +252,7 @@ where
         };
 
         let mut egress_mapping_key = static_nat_mapping_key_v4 {
-            prefixlen: 96,
+            prefixlen: 64,
             port: static_mapping.lan_port.to_be(),
             gress: NAT_MAPPING_EGRESS,
             l4_protocol: static_mapping.l4_protocol,

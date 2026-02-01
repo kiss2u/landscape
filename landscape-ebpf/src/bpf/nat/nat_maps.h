@@ -48,7 +48,6 @@ struct static_nat_mapping_key_v4 {
     // INGRESS:  only use u32 for ifindex match
     // EGRESS: match lan client ip
     __be32 addr;
-    u8 _pad[4];
 };
 
 struct nat_mapping_value_v4 {

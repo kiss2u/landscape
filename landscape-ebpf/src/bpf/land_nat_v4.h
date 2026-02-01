@@ -926,7 +926,7 @@ lookup_static_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, u8 gress,
     struct nat_mapping_value_v4 *nat_gress_value_rev = NULL;
     if (gress == NAT_MAPPING_EGRESS) {
         egress_key.gress = NAT_MAPPING_EGRESS;
-        egress_key.prefixlen = 96;
+        egress_key.prefixlen = 64;
         egress_key.port = pkt_ip_pair->src_port;
         egress_key.addr = pkt_ip_pair->src_addr.addr;
 
