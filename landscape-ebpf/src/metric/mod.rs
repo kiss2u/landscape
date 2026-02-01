@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{ConnectInfo, ConnectMetric};
-use landscape_common::metric::MetricData;
+use tokio::sync::mpsc;
 use tokio::sync::oneshot::{self, error::TryRecvError};
 
 use crate::map_setting::share_map::types::{
@@ -10,7 +10,7 @@ use crate::map_setting::share_map::types::{
 };
 use crate::MAP_PATHS;
 
-pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: MetricData) {
+pub fn new_metric(mut service_status: oneshot::Receiver<()>, connect_msg_tx: mpsc::Sender<ConnectMessage>) {
     let nat_conn_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_conn_events).unwrap();
     let firewall_conn_map =
         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.firewall_conn_events).unwrap();
@@ -24,8 +24,8 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
 
     let revise_time = |time: u64| -> u64 { (time + offset_time) / 1_000_000 };
 
-    let net_conn = metric_service.connect_metric.clone();
-    let nat_conn_callback = |data: &[u8]| -> i32 {
+    let nat_conn_tx = connect_msg_tx.clone();
+    let nat_conn_callback = move |data: &[u8]| -> i32 {
         let nat_conn_event_value = plain::from_bytes::<nat_conn_event>(data);
         if let Ok(data) = nat_conn_event_value {
             let mut event = ConnectInfo::from(data);
@@ -34,15 +34,15 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
             event.report_time = revise_time(event.report_time);
 
             // println!("event, {:#?}", event);
-            net_conn.send_connect_msg(ConnectMessage::Event(event));
+            let _ = nat_conn_tx.try_send(ConnectMessage::Event(event));
             // println!("event, {:#?}, time: {time}, diff: {}", event, time - data.time);
         }
         // let _ = nat_conn_events_tx.send(Box::new(data.to_vec()));
         0
     };
 
-    let firewall = metric_service.connect_metric.clone();
-    let firewall_callback = |data: &[u8]| -> i32 {
+    let firewall_tx = connect_msg_tx.clone();
+    let firewall_callback = move |data: &[u8]| -> i32 {
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let firewall_conn_event_value = plain::from_bytes::<firewall_conn_event>(data);
         if let Ok(data) = firewall_conn_event_value {
@@ -50,13 +50,13 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
             event.key.create_time = revise_time(event.key.create_time);
             event.report_time = revise_time(event.report_time);
             // println!("event, {:#?}, time: {time}", event);
-            firewall.send_connect_msg(ConnectMessage::Event(event));
+            let _ = firewall_tx.try_send(ConnectMessage::Event(event));
         }
         0
     };
 
-    let firewall = metric_service.connect_metric.clone();
-    let firewall_metric_callback = |data: &[u8]| -> i32 {
+    let firewall_metric_tx = connect_msg_tx.clone();
+    let firewall_metric_callback = move |data: &[u8]| -> i32 {
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let firewall_conn_event_value = plain::from_bytes::<firewall_conn_metric_event>(data);
         if let Ok(data) = firewall_conn_event_value {
@@ -64,13 +64,13 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
             event.key.create_time = revise_time(event.key.create_time);
             event.report_time = revise_time(event.report_time);
             // println!("FirewallMetric, {:#?}, time: {time}", event);
-            firewall.send_connect_msg(ConnectMessage::Metric(event));
+            let _ = firewall_metric_tx.try_send(ConnectMessage::Metric(event));
         }
         0
     };
 
-    let nat_metric = metric_service.connect_metric.clone();
-    let nat_metric_callback = |data: &[u8]| -> i32 {
+    let nat_metric_tx = connect_msg_tx.clone();
+    let nat_metric_callback = move |data: &[u8]| -> i32 {
         // let time = landscape_common::utils::time::get_boot_time_ns().unwrap_or_default();
         let conn_event_value = plain::from_bytes::<nat_conn_metric_event>(data);
         if let Ok(data) = conn_event_value {
@@ -78,7 +78,7 @@ pub fn new_metric(mut service_status: oneshot::Receiver<()>, metric_service: Met
             event.key.create_time = revise_time(event.key.create_time);
             event.report_time = revise_time(event.report_time);
             // println!("NAT Metric, {:#?}", event);
-            nat_metric.send_connect_msg(ConnectMessage::Metric(event));
+            let _ = nat_metric_tx.try_send(ConnectMessage::Metric(event));
         }
         0
     };

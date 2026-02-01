@@ -1,4 +1,5 @@
-use landscape_common::{metric::MetricData, LANDSCAPE_METRIC_DIR_NAME};
+use landscape::metric::MetricData;
+use landscape_common::LANDSCAPE_METRIC_DIR_NAME;
 use landscape_ebpf::metric::new_metric;
 use std::{
     path::PathBuf,
@@ -28,7 +29,7 @@ async fn main() {
     let metric_service = MetricData::new(metric_path).await;
     let metric_service_clone = metric_service.clone();
     std::thread::spawn(move || {
-        new_metric(rx, metric_service_clone);
+        new_metric(rx, metric_service_clone.connect_metric.get_msg_channel());
         let _ = other_tx.send(());
     });
 

@@ -46,8 +46,6 @@ rustflags = ["-C", "target-feature=-crt-static"]
 
 [alias]
 release = "build --release --features duckdb-bundled"
-dev = "run --features duckdb"
 
 [env]
-DUCKDB_DOWNLOAD_LIB = "1"
 TS_RS_EXPORT_DIR = { value = "./landscape-types/src", relative = true }

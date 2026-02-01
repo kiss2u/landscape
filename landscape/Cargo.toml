@@ -42,6 +42,8 @@ socket2 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+chrono = { workspace = true }
+
 tokio = { workspace = true, features = ["full", "net", "io-util"] }
 tokio-util = { workspace = true }
 rand = { workspace = true }
@@ -63,5 +65,14 @@ sysctl = { workspace = true }
 portable-pty = { workspace = true }
 # pseudoterminal = { version = "0.2.1", features = ["non-blocking"] }
 
+polars = { workspace = true, features = ["lazy", "parquet"], optional = true }
+duckdb = { workspace = true, optional = true }
+
 [dependencies.pnet]
 workspace = true
+
+[features]
+default = ["duckdb"]
+polars = ["dep:polars"]
+duckdb = ["dep:duckdb"]
+duckdb-bundled = ["duckdb/bundled"]

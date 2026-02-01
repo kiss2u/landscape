@@ -13,8 +13,12 @@ dockerfiles/landscape/.landscape-router
 dockerfiles/landscape/apps
 push_arm.sh
 push_x86.sh
+net.sh
 *.sqlite
 
 # pcaps
 *.pcap
 *.cap
+
+# DuckDB local library
+libduckdb/

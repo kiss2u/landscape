@@ -1,11 +1,31 @@
 use std::path::PathBuf;
 
 use landscape_common::{
-    metric::MetricData,
     service::{DefaultWatchServiceStatus, ServiceStatus},
     LANDSCAPE_METRIC_DIR_NAME,
 };
 use tokio::sync::oneshot;
+
+pub mod connect_manager;
+#[cfg(feature = "duckdb")]
+pub mod duckdb;
+#[cfg(feature = "polars")]
+pub mod polars;
+
+use crate::metric::connect_manager::ConnectMetricManager;
+
+#[derive(Clone)]
+pub struct MetricData {
+    pub connect_metric: ConnectMetricManager,
+}
+
+impl MetricData {
+    pub async fn new(home_path: PathBuf) -> Self {
+        MetricData {
+            connect_metric: ConnectMetricManager::new(home_path).await,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct MetricService {
@@ -16,6 +36,11 @@ pub struct MetricService {
 impl MetricService {
     pub async fn new(home_path: PathBuf) -> Self {
         let metric_path = home_path.join(LANDSCAPE_METRIC_DIR_NAME);
+        if !metric_path.exists() {
+            if let Err(e) = std::fs::create_dir_all(&metric_path) {
+                tracing::error!("Failed to create metric directory: {}", e);
+            }
+        }
         let status = DefaultWatchServiceStatus::new();
         MetricService { data: MetricData::new(metric_path).await, status }
     }
@@ -54,8 +79,11 @@ pub async fn create_metric_service(
         let _ = tx.send(());
         tracing::info!("向内部发送停止信号");
     });
+
+    let connect_msg_tx = metric_service.connect_metric.get_msg_channel();
+
     std::thread::spawn(move || {
-        landscape_ebpf::metric::new_metric(rx, metric_service);
+        landscape_ebpf::metric::new_metric(rx, connect_msg_tx);
         let _ = other_tx.send(());
     });
     let _ = other_rx.await;

@@ -147,7 +147,7 @@ jobs:
             if [ "${{ matrix.settings.bindgen }}" = "true" ]; then
               cargo install --force --locked bindgen-cli
             fi
-            cargo build --release --target ${{ matrix.settings.target }}
+            cargo build --release --target ${{ matrix.settings.target }} --features duckdb-bundled
             cargo build --release --package landscape-ebpf --bin redirect_pkg_handler --target ${{ matrix.settings.target }}
             mkdir -p output
             cp target/${{ matrix.settings.target }}/release/landscape-webserver output/landscape-webserver-${{ matrix.settings.architecture }}
@@ -198,7 +198,7 @@ jobs:
       - name: Build Rust binaries
         run: |
           mkdir -p output
-          cargo build --release
+          cargo build --release --features duckdb-bundled
           cp target/release/landscape-webserver output/landscape-webserver-${{ matrix.settings.architecture }}-musl
           # redirect_pkg_handler
           cargo build --package landscape-ebpf --bin redirect_pkg_handler --release

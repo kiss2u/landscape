@@ -57,5 +57,4 @@ ts-rs = { workspace = true, features = ["serde-compat"] }
 [features]
 default = []
 static = ["landscape-ebpf/static"]
-duckdb = ["landscape-common/duckdb"]
-duckdb-bundled = ["landscape-common/duckdb-bundled"]
+duckdb-bundled = ["landscape/duckdb-bundled"]

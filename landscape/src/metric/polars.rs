@@ -9,9 +9,9 @@ use polars::{df, error::PolarsResult, frame::DataFrame, prelude::DataType, serie
 use tokio::sync::RwLock;
 use tokio::time::interval;
 
-use crate::metric::connect::ConnectInfo;
-use crate::metric::connect::ConnectKey;
-use crate::metric::connect::ConnectMetric;
+use landscape_common::metric::connect::ConnectInfo;
+use landscape_common::metric::connect::ConnectKey;
+use landscape_common::metric::connect::ConnectMetric;
 
 #[derive(Clone)]
 pub struct PolarsMetricStore {
@@ -157,6 +157,7 @@ impl PolarsMetricStore {
                     .unwrap()
                     .get(row)
                     .unwrap(),
+                status: landscape_common::metric::connect::ConnectStatusType::Active, // Fallback status
             });
         }
 
@@ -177,7 +178,7 @@ pub async fn start_metrics_flush_task(
     loop {
         ticker.tick().await;
 
-        let now = crate::utils::time::get_current_time_ms().unwrap();
+        let now = chrono::Utc::now().timestamp_millis() as u64;
         let cutoff = now.saturating_sub(20 * 60 * 1_000); //one hour
 
         let mut metrics_lock = df.write().await;

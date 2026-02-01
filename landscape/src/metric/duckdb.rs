@@ -1,4 +1,4 @@
-use crate::metric::connect::{
+use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
     ConnectMetric, ConnectSortKey, SortOrder,
 };
@@ -447,7 +447,9 @@ pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
 }
 
 pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
-    // std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
+    if !base_path.exists() {
+        std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
+    }
 
     let db_path = base_path.join("metrics.duckdb");
     let conn = Connection::open(db_path).unwrap();
@@ -470,7 +472,7 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
     ").unwrap();
 
     let mut batch_count = 0;
-    let flush_interval = std::time::Duration::from_secs(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
+    let flush_interval = std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let mut last_flush = std::time::Instant::now();
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
@@ -594,7 +596,7 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                         }
                     }
 
-                    if batch_count >= crate::DEFAULT_METRIC_BATCH_SIZE {
+                    if batch_count >= landscape_common::DEFAULT_METRIC_BATCH_SIZE {
                         let _ = metrics_appender.flush();
                         batch_count = 0;
                         last_flush = std::time::Instant::now();
