@@ -12,7 +12,7 @@ const themeVars = useThemeVars();
 
 // 1. 声明所有基础响应式状态 (State)
 const historicalData = ref<any[]>([]);
-const timeRange = ref<number | null>(300); // 默认 5 分钟 (300秒)
+const timeRange = ref<number | string | null>(300); // 默认 5 分钟 (300秒)
 const queryLimit = ref<number | null>(100); // 默认限制 100 条
 const historyFilter = reactive(new ConnectFilter());
 const sortKey = ref<"time" | "port" | "ingress" | "egress" | "duration">(
