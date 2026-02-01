@@ -22,6 +22,10 @@ const showChart = ref(false);
 const showChartKey = ref<ConnectKey | null>(null);
 const loading = ref(false);
 
+// 自定义时间段
+const useCustomTimeRange = ref(false);
+const customTimeRange = ref<[number, number] | null>(null);
+
 const showChartDrawer = (key: ConnectKey) => {
   showChartKey.value = key;
   showChart.value = true;
@@ -43,6 +47,7 @@ const timeRangeOptions = [
   { label: "近 6 小时", value: 21600 },
   { label: "近 24 小时", value: 86400 },
   { label: "近 3 天", value: 259200 },
+  { label: "自定义时间段", value: "custom" },
   { label: "不限时间", value: null },
 ];
 
@@ -59,13 +64,20 @@ const fetchHistory = async () => {
   loading.value = true;
   try {
     let startTime: number | undefined;
-    if (timeRange.value !== null) {
-      // 计算开始时间（毫秒时间戳）
-      startTime = Date.now() - timeRange.value * 1000;
+    let endTime: number | undefined;
+    
+    if (useCustomTimeRange.value && customTimeRange.value) {
+      // 使用自定义时间段
+      startTime = customTimeRange.value[0];
+      endTime = customTimeRange.value[1];
+    } else if (timeRange.value !== null && timeRange.value !== "custom") {
+      // 使用相对时间范围
+      startTime = Date.now() - (timeRange.value as number) * 1000;
     }
 
     historicalData.value = await get_connect_history({
       start_time: startTime,
+      end_time: endTime,
       limit: queryLimit.value || undefined,
       src_ip: historyFilter.src_ip || undefined,
       dst_ip: historyFilter.dst_ip || undefined,
@@ -122,8 +134,26 @@ const historyTotalStats = computed(() => {
 });
 
 // 5. 监听器与生命周期 (Watchers & Lifecycle)
-// 只在时间范围、查询限制、排序变化时自动查询
-watch([timeRange, queryLimit, sortKey, sortOrder], () => {
+// 监听时间范围选择，切换自定义模式
+watch(timeRange, (newVal) => {
+  if (newVal === "custom") {
+    useCustomTimeRange.value = true;
+  } else {
+    useCustomTimeRange.value = false;
+    customTimeRange.value = null;
+    fetchHistory();
+  }
+});
+
+// 监听自定义时间段变化
+watch(customTimeRange, () => {
+  if (useCustomTimeRange.value && customTimeRange.value) {
+    fetchHistory();
+  }
+});
+
+// 只在查询限制、排序变化时自动查询
+watch([queryLimit, sortKey, sortOrder], () => {
   fetchHistory();
 });
 
@@ -206,8 +236,21 @@ onMounted(() => {
         v-model:value="timeRange"
         :options="timeRangeOptions"
         :disabled="loading"
-        style="width: 140px"
+        style="width: 150px"
       />
+      
+      <!-- 自定义时间段选择器 -->
+      <n-date-picker
+        v-if="useCustomTimeRange"
+        v-model:value="customTimeRange"
+        type="datetimerange"
+        :disabled="loading"
+        clearable
+        style="width: 360px"
+        format="yyyy-MM-dd HH:mm"
+        :is-date-disabled="(ts: number) => ts > Date.now()"
+      />
+      
       <n-select
         v-model:value="queryLimit"
         :options="limitOptions"
