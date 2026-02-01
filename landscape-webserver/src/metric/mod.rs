@@ -4,17 +4,10 @@ use axum::{
     Json, Router,
 };
 use landscape_common::metric::connect::{
-    ConnectHistoryStatus, ConnectKey, ConnectMetric, ConnectRealtimeStatus,
+    ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    ConnectRealtimeStatus,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct QueryHistoryParams {
-    pub start_time: Option<u64>,
-    pub end_time: Option<u64>,
-    pub limit: Option<usize>,
-}
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 
@@ -49,13 +42,8 @@ pub async fn get_connect_metric_info(
 
 pub async fn get_connect_history(
     State(state): State<LandscapeApp>,
-    Query(params): Query<QueryHistoryParams>,
+    Query(params): Query<ConnectHistoryQueryParams>,
 ) -> LandscapeApiResult<Vec<ConnectHistoryStatus>> {
-    let data = state
-        .metric_service
-        .data
-        .connect_metric
-        .history_summaries(params.limit, params.start_time, params.end_time)
-        .await;
+    let data = state.metric_service.data.connect_metric.history_summaries_complex(params).await;
     LandscapeApiResp::success(data)
 }

@@ -19,12 +19,23 @@ export async function get_connects_info(): Promise<ConnectRealtimeStatus[]> {
 }
 
 export async function get_connect_history(
-  start_time?: number,
-  end_time?: number,
-  limit?: number
+  params?: {
+    start_time?: number;
+    end_time?: number;
+    limit?: number;
+    src_ip?: string;
+    dst_ip?: string;
+    port_start?: number;
+    port_end?: number;
+    l3_proto?: number;
+    l4_proto?: number;
+    flow_id?: number;
+    sort_key?: string;
+    sort_order?: string;
+  }
 ): Promise<ConnectHistoryStatus[]> {
   let data = await axiosService.get("metric/connects/history", {
-    params: { start_time, end_time, limit },
+    params,
   });
   return data.data;
 }

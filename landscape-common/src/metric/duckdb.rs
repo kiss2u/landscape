@@ -4,6 +4,41 @@ use duckdb::{params, Connection};
 use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectSortKey {
+    #[default]
+    Time,
+    Port,
+    Ingress,
+    Egress,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SortOrder {
+    Asc,
+    #[default]
+    Desc,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct ConnectHistoryQueryParams {
+    pub start_time: Option<u64>,
+    pub end_time: Option<u64>,
+    pub limit: Option<usize>,
+    pub src_ip: Option<String>,
+    pub dst_ip: Option<String>,
+    pub port_start: Option<u16>,
+    pub port_end: Option<u16>,
+    pub l3_proto: Option<u8>,
+    pub l4_proto: Option<u8>,
+    pub flow_id: Option<u8>,
+    pub sort_key: Option<ConnectSortKey>,
+    pub sort_order: Option<SortOrder>,
+}
 
 /// Database operation messages
 pub enum DBMessage {
@@ -15,11 +50,15 @@ pub enum DBMessage {
 
     CollectAndCleanupOldMetrics { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectMetric>>> },
     CollectAndCleanupOldInfos { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectInfo>>> },
-    QueryHistory { 
+    QueryConnectHistory { 
         limit: Option<usize>, 
         start_time: Option<u64>, 
         end_time: Option<u64>, 
         resp: oneshot::Sender<Vec<ConnectHistoryStatus>> 
+    },
+    QueryConnectHistoryComplex {
+        params: ConnectHistoryQueryParams,
+        resp: oneshot::Sender<Vec<ConnectHistoryStatus>>
     },
 }
 
@@ -240,18 +279,41 @@ pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMe
     rows.filter_map(Result::ok).collect()
 }
 
-pub fn query_historical_summaries(
+pub fn query_historical_summaries_complex(
     conn: &Connection, 
-    limit: Option<usize>,
-    start_time: Option<u64>,
-    end_time: Option<u64>,
+    params: ConnectHistoryQueryParams
 ) -> Vec<ConnectHistoryStatus> {
     let mut where_clauses = Vec::new();
-    if let Some(start) = start_time {
+    if let Some(start) = params.start_time {
         where_clauses.push(format!("report_time >= {}", start));
     }
-    if let Some(end) = end_time {
+    if let Some(end) = params.end_time {
         where_clauses.push(format!("report_time <= {}", end));
+    }
+    if let Some(ip) = params.src_ip {
+        if !ip.is_empty() {
+            where_clauses.push(format!("src_ip LIKE '%{}%'", ip));
+        }
+    }
+    if let Some(ip) = params.dst_ip {
+        if !ip.is_empty() {
+            where_clauses.push(format!("dst_ip LIKE '%{}%'", ip));
+        }
+    }
+    if let Some(p) = params.port_start {
+        where_clauses.push(format!("src_port = {}", p));
+    }
+    if let Some(p) = params.port_end {
+        where_clauses.push(format!("dst_port = {}", p));
+    }
+    if let Some(p) = params.l3_proto {
+        where_clauses.push(format!("l3_proto = {}", p));
+    }
+    if let Some(p) = params.l4_proto {
+        where_clauses.push(format!("l4_proto = {}", p));
+    }
+    if let Some(p) = params.flow_id {
+        where_clauses.push(format!("flow_id = {}", p));
     }
 
     let where_stmt = if where_clauses.is_empty() {
@@ -260,7 +322,18 @@ pub fn query_historical_summaries(
         format!("WHERE {}", where_clauses.join(" AND "))
     };
 
-    let limit_clause = if let Some(l) = limit {
+    let sort_col = match params.sort_key.unwrap_or_default() {
+        ConnectSortKey::Port => "src_port",
+        ConnectSortKey::Ingress => "MAX(ingress_bytes)",
+        ConnectSortKey::Egress => "MAX(egress_bytes)",
+        ConnectSortKey::Time => "create_time",
+    };
+    let sort_order_str = match params.sort_order.unwrap_or_default() {
+        SortOrder::Asc => "ASC",
+        SortOrder::Desc => "DESC",
+    };
+
+    let limit_clause = if let Some(l) = params.limit {
         format!("LIMIT {}", l)
     } else {
         String::new()
@@ -273,9 +346,9 @@ pub fn query_historical_summaries(
         FROM metrics
         {}
         GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
-        ORDER BY create_time DESC
+        ORDER BY {} {}
         {}
-    ", where_stmt, limit_clause);
+    ", where_stmt, sort_col, sort_order_str, limit_clause);
 
     let mut stmt = conn.prepare(&stmt).unwrap();
     let rows = stmt
@@ -426,10 +499,21 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                             let result = collect_and_cleanup_old_infos(&conn, cutoff);
                             let _ = resp.send(result);
                         }
-                        DBMessage::QueryHistory { limit, start_time, end_time, resp } => {
+                        DBMessage::QueryConnectHistory { limit, start_time, end_time, resp } => {
                             let _ = connect_appender.flush();
                             let _ = metrics_appender.flush();
-                            let result = query_historical_summaries(&conn, limit, start_time, end_time);
+                            let result = query_historical_summaries_complex(&conn, ConnectHistoryQueryParams {
+                                limit,
+                                start_time,
+                                end_time,
+                                ..Default::default()
+                            });
+                            let _ = resp.send(result);
+                        }
+                        DBMessage::QueryConnectHistoryComplex { params, resp } => {
+                            let _ = connect_appender.flush();
+                            let _ = metrics_appender.flush();
+                            let result = query_historical_summaries_complex(&conn, params);
                             let _ = resp.send(result);
                         }
                     }
@@ -503,7 +587,13 @@ impl DuckMetricStore {
 
     pub async fn history_summaries(&self, limit: Option<usize>, start_time: Option<u64>, end_time: Option<u64>) -> Vec<ConnectHistoryStatus> {
         let (resp, rx) = oneshot::channel();
-        let _ = self.tx.send(DBMessage::QueryHistory { limit, start_time, end_time, resp }).await;
+        let _ = self.tx.send(DBMessage::QueryConnectHistory { limit, start_time, end_time, resp }).await;
+        rx.await.unwrap()
+    }
+
+    pub async fn history_summaries_complex(&self, params: ConnectHistoryQueryParams) -> Vec<ConnectHistoryStatus> {
+        let (resp, rx) = oneshot::channel();
+        let _ = self.tx.send(DBMessage::QueryConnectHistoryComplex { params, resp }).await;
         rx.await.unwrap()
     }
 }

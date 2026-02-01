@@ -9,6 +9,8 @@ use ts_rs::TS;
 use crate::event::ConnectMessage;
 #[cfg(feature = "duckdb")]
 use crate::metric::duckdb::DuckMetricStore;
+#[cfg(feature = "duckdb")]
+pub use crate::metric::duckdb::ConnectHistoryQueryParams;
 
 ///
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
@@ -320,22 +322,18 @@ impl ConnectMetricManager {
         }
     }
 
-    pub async fn history_summaries(
+    pub async fn history_summaries_complex(
         &self,
-        limit: Option<usize>,
-        start_time: Option<u64>,
-        end_time: Option<u64>,
+        params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
         #[cfg(feature = "duckdb")]
         {
-            self.metric_store.history_summaries(limit, start_time, end_time).await
+            self.metric_store.history_summaries_complex(params).await
         }
 
         #[cfg(not(feature = "duckdb"))]
         {
-            let _ = limit;
-            let _ = start_time;
-            let _ = end_time;
+            let _ = params;
             Vec::new()
         }
     }

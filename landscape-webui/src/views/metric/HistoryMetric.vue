@@ -8,32 +8,15 @@ import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
 
 const themeVars = useThemeVars();
 
-// 历史数据
+// 1. 声明所有基础响应式状态 (State)
 const historicalData = ref<any[]>([]);
 const timeRange = ref<number | null>(300); // 默认 5 分钟 (300秒)
 const queryLimit = ref<number | null>(100); // 默认限制 100 条
-
-const fetchHistory = async () => {
-  let startTime: number | undefined;
-  if (timeRange.value !== null) {
-    startTime = Math.floor((Date.now() - timeRange.value * 1000) / 1000);
-  }
-  historicalData.value = await get_connect_history(startTime, undefined, queryLimit.value || undefined);
-};
-
-// 监听时间范围和限制变化
-watch([timeRange, queryLimit], () => {
-  fetchHistory();
-});
-
-onMounted(() => {
-  fetchHistory();
-});
-
-// 历史过滤器状态
 const historyFilter = reactive(new ConnectFilter());
+const sortKey = ref<"time" | "port" | "ingress" | "egress">("time");
+const sortOrder = ref<"asc" | "desc">("desc");
 
-// 协议类型选项
+// 2. 声明常量选项 (Options)
 const protocolOptions = [
   { label: "全部", value: null },
   { label: "TCP", value: 6 },
@@ -42,7 +25,6 @@ const protocolOptions = [
   { label: "ICMPv6", value: 58 },
 ];
 
-// 时间范围选项 (秒)
 const timeRangeOptions = [
   { label: "近 5 分钟", value: 300 },
   { label: "近 15 分钟", value: 900 },
@@ -53,7 +35,6 @@ const timeRangeOptions = [
   { label: "不限时间", value: null },
 ];
 
-// 查询限制选项
 const limitOptions = [
   { label: "限制 100 条", value: 100 },
   { label: "限制 500 条", value: 500 },
@@ -62,12 +43,31 @@ const limitOptions = [
   { label: "不限制数量", value: null },
 ];
 
-// 排序状态
-const sortKey = ref<"time" | "port" | "ingress" | "egress">("time");
-const sortOrder = ref<"asc" | "desc">("desc");
+// 3. 声明数据获取逻辑 (Actions)
+const fetchHistory = async () => {
+  let startTime: number | undefined;
+  if (timeRange.value !== null) {
+    startTime = Math.floor((Date.now() - timeRange.value * 1000) / 1000);
+  }
+  
+  historicalData.value = await get_connect_history({
+    start_time: startTime,
+    limit: queryLimit.value || undefined,
+    src_ip: historyFilter.src_ip || undefined,
+    dst_ip: historyFilter.dst_ip || undefined,
+    port_start: historyFilter.port_start || undefined,
+    port_end: historyFilter.port_end || undefined,
+    l3_proto: historyFilter.l3_proto || undefined,
+    l4_proto: historyFilter.l4_proto || undefined,
+    flow_id: historyFilter.flow_id || undefined,
+    sort_key: sortKey.value,
+    sort_order: sortOrder.value,
+  });
+};
 
 const resetHistoryFilter = () => {
   Object.assign(historyFilter, new ConnectFilter());
+  fetchHistory();
 };
 
 const toggleSort = (key: "time" | "port" | "ingress" | "egress") => {
@@ -79,34 +79,9 @@ const toggleSort = (key: "time" | "port" | "ingress" | "egress") => {
   }
 };
 
+// 4. 计算属性 (Computed)
 const filteredHistory = computed(() => {
-  if (!historicalData.value) return [];
-  
-  const filtered = historicalData.value.filter((item) => {
-    const key = item.key;
-    if (historyFilter.src_ip && !key.src_ip.includes(historyFilter.src_ip)) return false;
-    if (historyFilter.dst_ip && !key.dst_ip.includes(historyFilter.dst_ip)) return false;
-    if (historyFilter.port_start !== null && key.src_port !== historyFilter.port_start) return false;
-    if (historyFilter.port_end !== null && key.dst_port !== historyFilter.port_end) return false;
-    if (historyFilter.l3_proto !== null && key.l3_proto !== historyFilter.l3_proto) return false;
-    if (historyFilter.l4_proto !== null && key.l4_proto !== historyFilter.l4_proto) return false;
-    if (historyFilter.flow_id !== null && key.flow_id !== historyFilter.flow_id) return false;
-    return true;
-  });
-
-  return filtered.slice().sort((a, b) => {
-    let result = 0;
-    if (sortKey.value === "time") {
-      result = (a.key.create_time || 0) - (b.key.create_time || 0);
-    } else if (sortKey.value === "port") {
-      result = (a.key.src_port || 0) - (b.key.src_port || 0);
-    } else if (sortKey.value === "ingress") {
-      result = (a.total_ingress_bytes || 0) - (b.total_ingress_bytes || 0);
-    } else if (sortKey.value === "egress") {
-      result = (a.total_egress_bytes || 0) - (b.total_egress_bytes || 0);
-    }
-    return sortOrder.value === "asc" ? result : -result;
-  });
+  return historicalData.value || [];
 });
 
 const historyTotalStats = computed(() => {
@@ -121,6 +96,19 @@ const historyTotalStats = computed(() => {
     });
   }
   return stats;
+});
+
+// 5. 监听器与生命周期 (Watchers & Lifecycle)
+watch([timeRange, queryLimit, sortKey, sortOrder], () => {
+  fetchHistory();
+});
+
+watch(historyFilter, () => {
+  fetchHistory();
+}, { deep: true });
+
+onMounted(() => {
+  fetchHistory();
 });
 </script>
 
@@ -169,12 +157,12 @@ const historyTotalStats = computed(() => {
     <n-grid x-gap="12" :cols="5" style="margin-bottom: 12px">
       <n-gi>
         <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
-          <n-statistic label="检索记录数" :value="historyTotalStats.count" />
+          <n-statistic label="过滤结果总数" :value="historyTotalStats.count" />
         </n-card>
       </n-gi>
       <n-gi>
         <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
-          <n-statistic label="累计总上行">
+          <n-statistic label="过滤结果总上行">
             <span :style="{ color: themeVars.infoColor, fontWeight: 'bold' }">
               {{ formatSize(historyTotalStats.totalEgressBytes) }}
             </span>
@@ -183,7 +171,7 @@ const historyTotalStats = computed(() => {
       </n-gi>
       <n-gi>
         <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
-          <n-statistic label="累计总下行">
+          <n-statistic label="过滤结果总下行">
             <span :style="{ color: themeVars.successColor, fontWeight: 'bold' }">
               {{ formatSize(historyTotalStats.totalIngressBytes) }}
             </span>
@@ -192,7 +180,7 @@ const historyTotalStats = computed(() => {
       </n-gi>
       <n-gi>
         <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
-          <n-statistic label="累计入站封包">
+          <n-statistic label="过滤结果总入站">
             <span style="color: #888">
               {{ formatCount(historyTotalStats.totalIngressPkts) }} pkt
             </span>
@@ -201,7 +189,7 @@ const historyTotalStats = computed(() => {
       </n-gi>
       <n-gi>
         <n-card size="small" :bordered="false" style="background-color: #f9f9f910">
-          <n-statistic label="累计出站封包">
+          <n-statistic label="过滤结果总出站">
             <span style="color: #888">
               {{ formatCount(historyTotalStats.totalEgressPkts) }} pkt
             </span>
