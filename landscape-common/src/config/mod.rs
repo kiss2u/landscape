@@ -160,6 +160,14 @@ pub struct LandscapeStoreConfig {
     pub database_path: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct LandscapeMetricConfig {
+    pub retention_days: Option<u64>,
+    pub batch_size: Option<usize>,
+    pub flush_interval_secs: Option<u64>,
+}
+
 /// Read & Write <CONFIG_PATH>/config.toml
 #[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
 #[ts(export, export_to = "common/config.d.ts")]
@@ -172,6 +180,8 @@ pub struct LandscapeConfig {
     pub log: LandscapeLogConfig,
     #[serde(default)]
     pub store: LandscapeStoreConfig,
+    #[serde(default)]
+    pub metric: LandscapeMetricConfig,
 }
 
 ///
@@ -185,6 +195,7 @@ pub struct RuntimeConfig {
     pub log: LogRuntimeConfig,
     pub web: WebRuntimeConfig,
     pub store: StoreRuntimeConfig,
+    pub metric: MetricRuntimeConfig,
 }
 
 fn default_home_path() -> PathBuf {
@@ -266,12 +277,19 @@ impl RuntimeConfig {
                 StoreRuntimeConfig::create_default_db_store(&home_path),
             ),
         };
+        let metric = MetricRuntimeConfig {
+            retention_days: config.metric.retention_days.unwrap_or(crate::DEFAULT_METRIC_RETENTION_DAYS),
+            batch_size: config.metric.batch_size.unwrap_or(crate::DEFAULT_METRIC_BATCH_SIZE),
+            flush_interval_secs: config.metric.flush_interval_secs.unwrap_or(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS),
+        };
+
         let runtime_config = RuntimeConfig {
             home_path,
             auth,
             log,
             web,
             store,
+            metric,
             file_config: config,
         };
 
@@ -307,7 +325,12 @@ impl RuntimeConfig {
          Listen HTTPS on: https://{}\n\
          \n\
          [Store]\n\
-         Database Connect: {}\n",
+         Database Connect: {}\n\
+         \n\
+         [Metric]\n\
+         Retention Days: {} days\n\
+         Batch Size: {}\n\
+         Flush Interval: {}s\n",
             self.home_path.display(),
             self.auth.admin_user,
             self.auth.admin_pass,
@@ -319,6 +342,9 @@ impl RuntimeConfig {
             address_http_str,
             address_https_str,
             self.store.database_path,
+            self.metric.retention_days,
+            self.metric.batch_size,
+            self.metric.flush_interval_secs,
         )
     }
 }
@@ -358,6 +384,13 @@ pub struct WebRuntimeConfig {
 #[derive(Clone, Debug)]
 pub struct StoreRuntimeConfig {
     pub database_path: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MetricRuntimeConfig {
+    pub retention_days: u64,
+    pub batch_size: usize,
+    pub flush_interval_secs: u64,
 }
 
 impl StoreRuntimeConfig {

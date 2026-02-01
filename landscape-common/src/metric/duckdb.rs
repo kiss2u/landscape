@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
 
-pub const METRIC_BATCH_SIZE: usize = 2000;
-pub const METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
 
 /// Database operation messages
 pub enum DBMessage {
@@ -280,7 +278,7 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
     let mut metrics_appender = conn.appender("metrics").unwrap();
 
     let mut batch_count = 0;
-    let flush_interval = std::time::Duration::from_secs(METRIC_FLUSH_INTERVAL_SECS);
+    let flush_interval = std::time::Duration::from_secs(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let mut last_flush = std::time::Instant::now();
 
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -362,7 +360,7 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                         }
                     }
 
-                    if batch_count >= METRIC_BATCH_SIZE {
+                    if batch_count >= crate::DEFAULT_METRIC_BATCH_SIZE {
                         let _ = connect_appender.flush();
                         let _ = metrics_appender.flush();
                         batch_count = 0;

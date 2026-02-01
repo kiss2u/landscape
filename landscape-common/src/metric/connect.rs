@@ -139,7 +139,7 @@ impl ConnectMetricManager {
             loop {
                 interval.tick().await;
                 let now = chrono::Utc::now().timestamp_millis() as u64;
-                let cutoff = now - CLEAR_INTERVAL * 1000;
+                let cutoff = now - (crate::DEFAULT_METRIC_RETENTION_DAYS * 24 * 60 * 60 * 1000);
                 let cold_metrics = metric_store_clone.collect_and_cleanup_old_metrics(cutoff).await;
                 let cold_infos = metric_store_clone.collect_and_cleanup_old_infos(cutoff).await;
                 if !cold_metrics.is_empty() {

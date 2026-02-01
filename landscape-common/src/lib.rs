@@ -66,6 +66,10 @@ pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
 /// metric
 pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
 
+pub const DEFAULT_METRIC_RETENTION_DAYS: u64 = 7;
+pub const DEFAULT_METRIC_BATCH_SIZE: usize = 2000;
+pub const DEFAULT_METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
+
 /// default sqlite path
 pub const LANDSCAPE_DB_SQLITE_NAME: &str = "landscape_db.sqlite";
 /// LOG Path
