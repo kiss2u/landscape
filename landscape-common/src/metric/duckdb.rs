@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
 
+pub const METRIC_BATCH_SIZE: usize = 2000;
+pub const METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
+
 /// Database operation messages
 pub enum DBMessage {
     InsertConnectInfo(ConnectInfo),
@@ -260,9 +263,7 @@ pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
 }
 
 pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
-    // Create a single-threaded DuckDB connection
-    // let conn = Connection::open_in_memory().unwrap();
-    std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
+    // std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
 
     let db_path = base_path.join("metrics.duckdb");
     let conn = Connection::open(db_path).unwrap();
@@ -270,32 +271,112 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
     create_connect_table(&conn).unwrap();
     create_metrics_table(&conn).unwrap();
 
-    while let Some(msg) = rx.blocking_recv() {
-        match msg {
-            DBMessage::InsertConnectInfo(info) => {
-                insert_connect_info(&conn, &info);
-            }
-            DBMessage::InsertMetric(metric) => {
-                insert_metric(&conn, &metric);
-            }
-            DBMessage::QueryMetricByKey { key, resp } => {
-                let result = query_metric_by_key(&conn, &key);
-                let _ = resp.send(result);
-            }
-            DBMessage::QueryCurrentActiveConnectKeys { resp } => {
-                let result = current_active_connect_keys(&conn);
-                let _ = resp.send(result);
-            }
-            DBMessage::CollectAndCleanupOldMetrics { cutoff, resp } => {
-                let result = collect_and_cleanup_old_metrics(&conn, cutoff);
-                let _ = resp.send(result);
-            }
-            DBMessage::CollectAndCleanupOldInfos { cutoff, resp } => {
-                let result = collect_and_cleanup_old_infos(&conn, cutoff);
-                let _ = resp.send(result);
+    let mut connect_appender = conn.appender("connect").unwrap();
+    let mut metrics_appender = conn.appender("metrics").unwrap();
+
+    let mut batch_count = 0;
+    let flush_interval = std::time::Duration::from_secs(METRIC_FLUSH_INTERVAL_SECS);
+    let mut last_flush = std::time::Instant::now();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        loop {
+            let now = std::time::Instant::now();
+            let remaining = flush_interval.saturating_sub(now.duration_since(last_flush));
+            
+            let timeout_res = tokio::time::timeout(remaining, rx.recv()).await;
+
+            match timeout_res {
+                Ok(Some(msg)) => {
+                    match msg {
+                        DBMessage::InsertConnectInfo(info) => {
+                            let key = &info.key;
+                            let event_type_val: u8 = info.event_type.into();
+                            let _ = connect_appender.append_row(params![
+                                key.src_ip.to_string(),
+                                key.dst_ip.to_string(),
+                                key.src_port as i64,
+                                key.dst_port as i64,
+                                key.l4_proto as i64,
+                                key.l3_proto as i64,
+                                key.flow_id as i64,
+                                key.trace_id as i64,
+                                key.create_time as i64,
+                                event_type_val as i64,
+                                info.report_time as i64
+                            ]);
+                            batch_count += 1;
+                        }
+                        DBMessage::InsertMetric(metric) => {
+                            let key = &metric.key;
+                            let _ = metrics_appender.append_row(params![
+                                key.src_ip.to_string(),
+                                key.dst_ip.to_string(),
+                                key.src_port as i64,
+                                key.dst_port as i64,
+                                key.l4_proto as i64,
+                                key.l3_proto as i64,
+                                key.flow_id as i64,
+                                key.trace_id as i64,
+                                key.create_time as i64,
+                                metric.report_time as i64,
+                                metric.ingress_bytes as i64,
+                                metric.ingress_packets as i64,
+                                metric.egress_bytes as i64,
+                                metric.egress_packets as i64,
+                            ]);
+                            batch_count += 1;
+                        }
+                        DBMessage::QueryMetricByKey { key, resp } => {
+                            let result = query_metric_by_key(&conn, &key);
+                            let _ = resp.send(result);
+                        }
+                        DBMessage::QueryCurrentActiveConnectKeys { resp } => {
+                            let result = current_active_connect_keys(&conn);
+                            let _ = resp.send(result);
+                        }
+                        DBMessage::CollectAndCleanupOldMetrics { cutoff, resp } => {
+                            let _ = connect_appender.flush();
+                            let _ = metrics_appender.flush();
+                            batch_count = 0;
+                            last_flush = std::time::Instant::now();
+                            let result = collect_and_cleanup_old_metrics(&conn, cutoff);
+                            let _ = resp.send(result);
+                        }
+                        DBMessage::CollectAndCleanupOldInfos { cutoff, resp } => {
+                            let _ = connect_appender.flush();
+                            let _ = metrics_appender.flush();
+                            batch_count = 0;
+                            last_flush = std::time::Instant::now();
+                            let result = collect_and_cleanup_old_infos(&conn, cutoff);
+                            let _ = resp.send(result);
+                        }
+                    }
+
+                    if batch_count >= METRIC_BATCH_SIZE {
+                        let _ = connect_appender.flush();
+                        let _ = metrics_appender.flush();
+                        batch_count = 0;
+                        last_flush = std::time::Instant::now();
+                    }
+                }
+                Ok(None) => break, // Channel closed
+                Err(_) => {
+                    // Timeout reached
+                    if batch_count > 0 {
+                        let _ = connect_appender.flush();
+                        let _ = metrics_appender.flush();
+                        batch_count = 0;
+                    }
+                    last_flush = std::time::Instant::now();
+                }
             }
         }
-    }
+    });
 }
 
 impl DuckMetricStore {
