@@ -60,26 +60,29 @@ async function stop_fetch_data() {
 }
 
 // 数据降采样：当数据点过多时，抽样显示以提高性能和可读性
-function downsampleData(data: number[], maxPoints: number = 100): { data: number[]; indices: number[] } {
+function downsampleData(
+  data: number[],
+  maxPoints: number = 100,
+): { data: number[]; indices: number[] } {
   if (data.length <= maxPoints) {
     return { data, indices: data.map((_, i) => i) };
   }
-  
+
   const step = Math.ceil(data.length / maxPoints);
   const sampledData: number[] = [];
   const sampledIndices: number[] = [];
-  
+
   for (let i = 0; i < data.length; i += step) {
     sampledData.push(data[i]);
     sampledIndices.push(i);
   }
-  
+
   // 确保包含最后一个点
   if (sampledIndices[sampledIndices.length - 1] !== data.length - 1) {
     sampledData.push(data[data.length - 1]);
     sampledIndices.push(data.length - 1);
   }
-  
+
   return { data: sampledData, indices: sampledIndices };
 }
 
@@ -110,27 +113,34 @@ function calculateDeltas(values: number[]): number[] {
   return deltas;
 }
 
-
 // 根据模式返回累计值或增量值
 const bytesSeries = computed(() => {
   const ingressData = chart.value.map((m) => m.ingress_bytes);
   const egressData = chart.value.map((m) => m.egress_bytes);
 
   // 先处理模式（累计或增量）
-  const processedIngress = props.mode === "cumulative" ? ingressData : calculateDeltas(ingressData);
-  const processedEgress = props.mode === "cumulative" ? egressData : calculateDeltas(egressData);
+  const processedIngress =
+    props.mode === "cumulative" ? ingressData : calculateDeltas(ingressData);
+  const processedEgress =
+    props.mode === "cumulative" ? egressData : calculateDeltas(egressData);
 
   // 然后降采样
-  const sampledIngress = sampledIndices.value.map((idx) => processedIngress[idx]);
+  const sampledIngress = sampledIndices.value.map(
+    (idx) => processedIngress[idx],
+  );
   const sampledEgress = sampledIndices.value.map((idx) => processedEgress[idx]);
 
   return [
     {
-      name: props.mode === "cumulative" ? "入站总量 (Ingress)" : "入站增量 (Ingress)",
+      name:
+        props.mode === "cumulative"
+          ? "入站总量 (Ingress)"
+          : "入站增量 (Ingress)",
       data: sampledIngress,
     },
     {
-      name: props.mode === "cumulative" ? "出站总量 (Egress)" : "出站增量 (Egress)",
+      name:
+        props.mode === "cumulative" ? "出站总量 (Egress)" : "出站增量 (Egress)",
       data: sampledEgress,
     },
   ];
@@ -141,20 +151,30 @@ const packetsSeries = computed(() => {
   const egressData = chart.value.map((m) => m.egress_packets);
 
   // 先处理模式（累计或增量）
-  const processedIngress = props.mode === "cumulative" ? ingressData : calculateDeltas(ingressData);
-  const processedEgress = props.mode === "cumulative" ? egressData : calculateDeltas(egressData);
+  const processedIngress =
+    props.mode === "cumulative" ? ingressData : calculateDeltas(ingressData);
+  const processedEgress =
+    props.mode === "cumulative" ? egressData : calculateDeltas(egressData);
 
   // 然后降采样
-  const sampledIngress = sampledIndices.value.map((idx) => processedIngress[idx]);
+  const sampledIngress = sampledIndices.value.map(
+    (idx) => processedIngress[idx],
+  );
   const sampledEgress = sampledIndices.value.map((idx) => processedEgress[idx]);
 
   return [
     {
-      name: props.mode === "cumulative" ? "入站封包 (Ingress)" : "入站封包增量 (Ingress)",
+      name:
+        props.mode === "cumulative"
+          ? "入站封包 (Ingress)"
+          : "入站封包增量 (Ingress)",
       data: sampledIngress,
     },
     {
-      name: props.mode === "cumulative" ? "出站封包 (Egress)" : "出站封包增量 (Egress)",
+      name:
+        props.mode === "cumulative"
+          ? "出站封包 (Egress)"
+          : "出站封包增量 (Egress)",
       data: sampledEgress,
     },
   ];

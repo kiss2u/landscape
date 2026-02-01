@@ -154,10 +154,7 @@ const totalStats = computed(() => {
         clearable
         style="width: 110px"
       />
-      <FlowSelect
-        v-model="liveFilter.flow_id"
-        width="120px"
-      />
+      <FlowSelect v-model="liveFilter.flow_id" width="120px" />
 
       <n-button-group>
         <n-button @click="metricStore.UPDATE_INFO()" type="primary"

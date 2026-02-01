@@ -15,7 +15,9 @@ const historicalData = ref<any[]>([]);
 const timeRange = ref<number | null>(300); // 默认 5 分钟 (300秒)
 const queryLimit = ref<number | null>(100); // 默认限制 100 条
 const historyFilter = reactive(new ConnectFilter());
-const sortKey = ref<"time" | "port" | "ingress" | "egress" | "duration">("time");
+const sortKey = ref<"time" | "port" | "ingress" | "egress" | "duration">(
+  "time",
+);
 const sortOrder = ref<"asc" | "desc">("desc");
 
 // 图表展示状态
@@ -66,7 +68,7 @@ const fetchHistory = async () => {
   try {
     let startTime: number | undefined;
     let endTime: number | undefined;
-    
+
     if (useCustomTimeRange.value && customTimeRange.value) {
       // 使用自定义时间段
       startTime = customTimeRange.value[0];
@@ -100,7 +102,9 @@ const resetHistoryFilter = () => {
   fetchHistory();
 };
 
-const toggleSort = (key: "time" | "port" | "ingress" | "egress" | "duration") => {
+const toggleSort = (
+  key: "time" | "port" | "ingress" | "egress" | "duration",
+) => {
   if (sortKey.value === key) {
     sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
   } else {
@@ -235,7 +239,7 @@ onMounted(() => {
         :disabled="loading"
         style="width: 150px"
       />
-      
+
       <!-- 自定义时间段选择器 -->
       <n-date-picker
         v-if="useCustomTimeRange"
@@ -247,7 +251,7 @@ onMounted(() => {
         format="yyyy-MM-dd HH:mm"
         :is-date-disabled="(ts: number) => ts > Date.now()"
       />
-      
+
       <n-select
         v-model:value="queryLimit"
         :options="limitOptions"
@@ -256,8 +260,12 @@ onMounted(() => {
       />
 
       <n-button-group>
-        <n-button @click="fetchHistory" type="primary" :loading="loading">查询</n-button>
-        <n-button @click="resetHistoryFilter" :disabled="loading">重置</n-button>
+        <n-button @click="fetchHistory" type="primary" :loading="loading"
+          >查询</n-button
+        >
+        <n-button @click="resetHistoryFilter" :disabled="loading"
+          >重置</n-button
+        >
       </n-button-group>
 
       <n-divider vertical />
@@ -371,11 +379,7 @@ onMounted(() => {
       </n-gi>
     </n-grid>
 
-    <n-virtual-list
-      style="flex: 1"
-      :item-size="40"
-      :items="filteredHistory"
-    >
+    <n-virtual-list style="flex: 1" :item-size="40" :items="filteredHistory">
       <template #default="{ item, index }">
         <HistoryItemInfo
           :history="item"
@@ -384,6 +388,10 @@ onMounted(() => {
         />
       </template>
     </n-virtual-list>
-    <ConnectChartDrawer v-model:show="showChart" :conn="showChartKey" mode="cumulative" />
+    <ConnectChartDrawer
+      v-model:show="showChart"
+      :conn="showChartKey"
+      mode="cumulative"
+    />
   </n-flex>
 </template>
