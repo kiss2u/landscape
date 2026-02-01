@@ -16,7 +16,7 @@ use hickory_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
 use lru::LruCache;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 
 use crate::{
     reuseport_chain_server::solution::{RedirectSolution, ResolutionRule},
@@ -25,7 +25,9 @@ use crate::{
 use landscape_common::{
     config::dns::FilterResult,
     dns::ChainDnsServerInitInfo,
+    event::DnsMetricMessage,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
+    metric::dns::DnsMetric,
 };
 
 #[derive(Clone, Debug)]
@@ -34,10 +36,15 @@ pub struct ChainDnsRequestHandle {
     resolves: Arc<ArcSwap<BTreeMap<u32, ResolutionRule>>>,
     pub cache: Arc<Mutex<DNSCache>>,
     pub flow_id: u32,
+    pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
 }
 
 impl ChainDnsRequestHandle {
-    pub fn new(info: ChainDnsServerInitInfo, flow_id: u32) -> ChainDnsRequestHandle {
+    pub fn new(
+        info: ChainDnsServerInitInfo,
+        flow_id: u32,
+        msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+    ) -> ChainDnsRequestHandle {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
             resolves.insert(rule.index, ResolutionRule::new(rule, flow_id));
@@ -52,6 +59,7 @@ impl ChainDnsRequestHandle {
             cache,
             flow_id,
             redirect_solution: Arc::new(ArcSwap::from_pointee(redirect_solution)),
+            msg_tx,
         }
     }
 
@@ -298,6 +306,7 @@ impl RequestHandler for ChainDnsRequestHandle {
         request: &Request,
         mut response_handle: R,
     ) -> ResponseInfo {
+        let start_time = Instant::now();
         let queries = request.queries();
         if queries.is_empty() {
             let mut header = Header::response_from_request(request.header());
@@ -408,6 +417,22 @@ impl RequestHandler for ChainDnsRequestHandle {
         );
 
         let result = response_handle.send_response(response).await;
+
+        if let Some(msg_tx) = &self.msg_tx {
+            let duration_ms = start_time.elapsed().as_millis() as u32;
+            let dns_metric = DnsMetric {
+                flow_id: self.flow_id,
+                domain: domain.clone(),
+                query_type: query_type.to_string(),
+                response_code: header.response_code().to_string(),
+                report_time: landscape_common::utils::time::get_current_time_ms().unwrap_or_default(),
+                duration_ms,
+                src_ip: request.src().ip(),
+                answers: records.iter().map(|r| r.to_string()).collect(),
+            };
+            let _ = msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
+        }
+
         match result {
             Err(e) => {
                 tracing::error!("Request failed: {}", e);

@@ -10,7 +10,10 @@ use crate::map_setting::share_map::types::{
 };
 use crate::MAP_PATHS;
 
-pub fn new_metric(mut service_status: oneshot::Receiver<()>, connect_msg_tx: mpsc::Sender<ConnectMessage>) {
+pub fn new_metric(
+    mut service_status: oneshot::Receiver<()>,
+    connect_msg_tx: mpsc::Sender<ConnectMessage>,
+) {
     let nat_conn_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat_conn_events).unwrap();
     let firewall_conn_map =
         libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.firewall_conn_events).unwrap();

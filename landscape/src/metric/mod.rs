@@ -7,21 +7,26 @@ use landscape_common::{
 use tokio::sync::oneshot;
 
 pub mod connect_manager;
+pub mod dns_manager;
 pub mod duckdb;
 #[cfg(feature = "polars")]
 pub mod polars;
-
 use crate::metric::connect_manager::ConnectMetricManager;
+use crate::metric::dns_manager::DnsMetricManager;
+use landscape_common::config::MetricRuntimeConfig;
 
 #[derive(Clone)]
 pub struct MetricData {
     pub connect_metric: ConnectMetricManager,
+    pub dns_metric: DnsMetricManager,
 }
 
 impl MetricData {
-    pub async fn new(home_path: PathBuf) -> Self {
+    pub async fn new(home_path: PathBuf, config: MetricRuntimeConfig) -> Self {
+        let store = crate::metric::duckdb::DuckMetricStore::new(home_path, config).await;
         MetricData {
-            connect_metric: ConnectMetricManager::new(home_path).await,
+            connect_metric: ConnectMetricManager::with_store(store.clone()),
+            dns_metric: DnsMetricManager::with_store(store),
         }
     }
 }
@@ -33,7 +38,7 @@ pub struct MetricService {
 }
 
 impl MetricService {
-    pub async fn new(home_path: PathBuf) -> Self {
+    pub async fn new(home_path: PathBuf, config: MetricRuntimeConfig) -> Self {
         let metric_path = home_path.join(LANDSCAPE_METRIC_DIR_NAME);
         if !metric_path.exists() {
             if let Err(e) = std::fs::create_dir_all(&metric_path) {
@@ -41,7 +46,7 @@ impl MetricService {
             }
         }
         let status = DefaultWatchServiceStatus::new();
-        MetricService { data: MetricData::new(metric_path).await, status }
+        MetricService { data: MetricData::new(metric_path, config).await, status }
     }
 
     pub async fn start_service(&self) {
@@ -80,7 +85,6 @@ pub async fn create_metric_service(
     });
 
     let connect_msg_tx = metric_service.connect_metric.get_msg_channel();
-
     std::thread::spawn(move || {
         landscape_ebpf::metric::new_metric(rx, connect_msg_tx);
         let _ = other_tx.send(());

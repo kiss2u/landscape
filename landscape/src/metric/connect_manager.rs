@@ -2,12 +2,13 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use landscape_common::config::MetricRuntimeConfig;
 use tokio::sync::{mpsc, RwLock};
 
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
-    ConnectMetric, ConnectRealtimeStatus, ConnectEventType,
+    ConnectEventType, ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus,
+    ConnectInfo, ConnectKey, ConnectMetric, ConnectRealtimeStatus,
 };
 
 use crate::metric::duckdb::DuckMetricStore;
@@ -20,39 +21,19 @@ pub struct ConnectMetricManager {
     /// 实时速率缓存: Key -> (上一次的指标, 当前算出的状态)
     realtime_metrics: Arc<RwLock<HashMap<ConnectKey, ConnectRealtimeStatus>>>,
     msg_channel: mpsc::Sender<ConnectMessage>,
-    metric_store: DuckMetricStore,
+    pub metric_store: DuckMetricStore,
     pub global_stats: Arc<RwLock<ConnectGlobalStats>>,
 }
 
 #[allow(unused_variables)]
 impl ConnectMetricManager {
-    pub async fn new(base_path: PathBuf) -> Self {
+    pub fn with_store(metric_store: DuckMetricStore) -> Self {
         let active_connects = Arc::new(RwLock::new(HashSet::new()));
-        let active_connects_clone = active_connects.clone();
-
         let realtime_metrics = Arc::new(RwLock::new(HashMap::new()));
+        let (msg_channel, mut message_rx) = mpsc::channel(1024);
+
+        let active_connects_clone = active_connects.clone();
         let realtime_metrics_clone = realtime_metrics.clone();
-
-        let metric_store = DuckMetricStore::new(base_path).await;
-
-        let metric_store_clone = metric_store.clone();
-
-        tokio::spawn(async move {
-            // 定时清理
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
-                landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS,
-            ));
-
-            loop {
-                interval.tick().await;
-                let now = chrono::Utc::now().timestamp_millis() as u64;
-                let cutoff = now - (landscape_common::DEFAULT_METRIC_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-                let cold_metrics = metric_store_clone.collect_and_cleanup_old_metrics(cutoff).await;
-                if !cold_metrics.is_empty() {
-                    tracing::info!("Collected {} cold metrics", cold_metrics.len());
-                }
-            }
-        });
 
         let (conn_tx, mut conn_rx) = mpsc::channel::<ConnectInfo>(1024);
 
@@ -76,7 +57,6 @@ impl ConnectMetricManager {
         });
 
         let metric_store_clone = metric_store.clone();
-        let (msg_channel, mut message_rx) = mpsc::channel(1024);
         let realtime_metrics_clone_for_msg = realtime_metrics.clone();
 
         tokio::spawn(async move {
@@ -133,22 +113,14 @@ impl ConnectMetricManager {
                     }
                 }
             }
-
-            tracing::info!("connect metric exit");
         });
 
-        let manager = ConnectMetricManager {
-            active_connects,
-            realtime_metrics,
-            msg_channel,
-            metric_store: metric_store.clone(),
-            global_stats: Arc::new(RwLock::new(ConnectGlobalStats::default())),
-        };
+        let global_stats = Arc::new(RwLock::new(ConnectGlobalStats::default()));
 
         // 定时汇总全量统计 (每 24 小时)
         {
-            let metric_store_clone = metric_store;
-            let global_stats_clone = manager.global_stats.clone();
+            let metric_store_clone = metric_store.clone();
+            let global_stats_clone = global_stats.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(86400));
                 loop {
@@ -157,11 +129,30 @@ impl ConnectMetricManager {
                     let mut lock = global_stats_clone.write().await;
                     *lock = stats;
                     tracing::info!("Global stats updated: {} connects", lock.total_connect_count);
+
+                    let retention_days = metric_store_clone.config.retention_days.max(1);
+                    let cutoff = landscape_common::utils::time::get_current_time_ms()
+                        .unwrap_or_default()
+                        .saturating_sub(retention_days as u64 * 24 * 3600 * 1000);
+                    let _ = metric_store_clone.collect_and_cleanup_old_metrics(cutoff).await;
+                    tracing::info!("Cleanup old metrics, cutoff: {}", cutoff);
                 }
             });
         }
 
-        manager
+        ConnectMetricManager {
+            active_connects,
+            realtime_metrics,
+            msg_channel,
+            metric_store,
+            global_stats,
+        }
+
+    }
+
+    pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Self {
+        let metric_store = DuckMetricStore::new(base_path, config).await;
+        Self::with_store(metric_store)
     }
 
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {

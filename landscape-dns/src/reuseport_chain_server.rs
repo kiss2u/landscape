@@ -5,8 +5,10 @@ use std::{
 };
 
 use hickory_server::ServerFuture;
-use landscape_common::{dns::ChainDnsServerInitInfo, service::DefaultWatchServiceStatus};
-use tokio::sync::Mutex;
+use landscape_common::{
+    dns::ChainDnsServerInitInfo, event::DnsMetricMessage, service::DefaultWatchServiceStatus,
+};
+use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -23,16 +25,18 @@ pub struct LandscapeReusePortChainDnsServer {
     pub status: DefaultWatchServiceStatus,
     flow_dns_server: Arc<Mutex<HashMap<u32, (ChainDnsRequestHandle, CancellationToken)>>>,
     pub addr: SocketAddr,
+    pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
 }
 
 impl LandscapeReusePortChainDnsServer {
-    pub fn new(listen_port: u16) -> Self {
+    pub fn new(listen_port: u16, msg_tx: Option<mpsc::Sender<DnsMetricMessage>>) -> Self {
         crate::check_resolver_conf();
         let status = DefaultWatchServiceStatus::new();
         Self {
             status,
             flow_dns_server: Arc::new(Mutex::new(HashMap::new())),
             addr: SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, listen_port, 0, 0)),
+            msg_tx,
         }
     }
 
@@ -49,7 +53,7 @@ impl LandscapeReusePortChainDnsServer {
             }
         }
 
-        let handler = ChainDnsRequestHandle::new(info, flow_id);
+        let handler = ChainDnsRequestHandle::new(info, flow_id, self.msg_tx.clone());
         let token = start_dns_server(flow_id, self.addr, handler.clone()).await;
 
         {

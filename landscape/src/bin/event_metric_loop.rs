@@ -26,7 +26,17 @@ async fn main() {
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
 
-    let metric_service = MetricData::new(metric_path).await;
+    let metric_service = MetricData::new(
+        metric_path,
+        landscape_common::config::MetricRuntimeConfig {
+            retention_days: landscape_common::DEFAULT_METRIC_RETENTION_DAYS,
+            batch_size: landscape_common::DEFAULT_METRIC_BATCH_SIZE,
+            flush_interval_secs: landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS,
+            max_memory: 128,
+            max_threads: 1,
+        },
+    )
+    .await;
     let metric_service_clone = metric_service.clone();
     std::thread::spawn(move || {
         new_metric(rx, metric_service_clone.connect_metric.get_msg_channel());

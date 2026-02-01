@@ -6,6 +6,7 @@ use landscape_common::{
         controller_service_v2::{ConfigController, FlowConfigController},
         DefaultWatchServiceStatus,
     },
+    event::DnsMetricMessage,
 };
 use landscape_dns::{
     reuseport_chain_server::LandscapeReusePortChainDnsServer, CheckChainDnsResult, CheckDnsReq,
@@ -35,8 +36,9 @@ impl LandscapeDnsService {
         dns_redirect_rule_service: DNSRedirectService,
         geo_site_service: GeoSiteService,
         dns_upstream_service: DnsUpstreamService,
+        msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     ) -> Self {
-        let dns_service = LandscapeReusePortChainDnsServer::new(53);
+        let dns_service = LandscapeReusePortChainDnsServer::new(53, msg_tx);
 
         // dns_service.restart(53).await;
         // dns_service.update_flow_map(&flow_rule_service.list().await).await;

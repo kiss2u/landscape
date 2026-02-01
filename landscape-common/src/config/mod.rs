@@ -166,6 +166,8 @@ pub struct LandscapeMetricConfig {
     pub retention_days: Option<u64>,
     pub batch_size: Option<usize>,
     pub flush_interval_secs: Option<u64>,
+    pub max_memory: Option<usize>,
+    pub max_threads: Option<usize>,
 }
 
 /// Read & Write <CONFIG_PATH>/config.toml
@@ -277,6 +279,7 @@ impl RuntimeConfig {
                 StoreRuntimeConfig::create_default_db_store(&home_path),
             ),
         };
+
         let metric = MetricRuntimeConfig {
             retention_days: config
                 .metric
@@ -287,6 +290,14 @@ impl RuntimeConfig {
                 .metric
                 .flush_interval_secs
                 .unwrap_or(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS),
+            max_memory: config
+                .metric
+                .max_memory
+                .unwrap_or(crate::DEFAULT_METRIC_MAX_MEMORY),
+            max_threads: config
+                .metric
+                .max_threads
+                .unwrap_or(crate::DEFAULT_METRIC_MAX_THREADS),
         };
 
         let runtime_config = RuntimeConfig {
@@ -336,7 +347,9 @@ impl RuntimeConfig {
          [Metric]\n\
          Retention Days: {} days\n\
          Batch Size: {}\n\
-         Flush Interval: {}s\n",
+         Flush Interval: {}s\n\
+         Max Memory: {}MB\n\
+         Max Threads: {}\n",
             self.home_path.display(),
             self.auth.admin_user,
             self.auth.admin_pass,
@@ -351,6 +364,8 @@ impl RuntimeConfig {
             self.metric.retention_days,
             self.metric.batch_size,
             self.metric.flush_interval_secs,
+            self.metric.max_memory,
+            self.metric.max_threads,
         )
     }
 }
@@ -397,6 +412,8 @@ pub struct MetricRuntimeConfig {
     pub retention_days: u64,
     pub batch_size: usize,
     pub flush_interval_secs: u64,
+    pub max_memory: usize,
+    pub max_threads: usize,
 }
 
 impl StoreRuntimeConfig {

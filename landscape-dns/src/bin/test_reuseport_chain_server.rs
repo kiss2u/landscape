@@ -7,7 +7,7 @@ async fn main() -> std::io::Result<()> {
     landscape_common::init_tracing!();
 
     let listen_port = 54;
-    let server = LandscapeReusePortChainDnsServer::new(listen_port);
+    let server = LandscapeReusePortChainDnsServer::new(listen_port, None);
 
     // handler
     let default_rule = vec![DNSRuntimeRule::default()];
