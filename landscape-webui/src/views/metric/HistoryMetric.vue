@@ -20,6 +20,7 @@ const sortOrder = ref<"asc" | "desc">("desc");
 // 图表展示状态
 const showChart = ref(false);
 const showChartKey = ref<ConnectKey | null>(null);
+const loading = ref(false);
 
 const showChartDrawer = (key: ConnectKey) => {
   showChartKey.value = key;
@@ -55,24 +56,29 @@ const limitOptions = [
 
 // 3. 声明数据获取逻辑 (Actions)
 const fetchHistory = async () => {
-  let startTime: number | undefined;
-  if (timeRange.value !== null) {
-    startTime = Math.floor((Date.now() - timeRange.value * 1000) / 1000);
-  }
+  loading.value = true;
+  try {
+    let startTime: number | undefined;
+    if (timeRange.value !== null) {
+      startTime = Math.floor((Date.now() - timeRange.value * 1000) / 1000);
+    }
 
-  historicalData.value = await get_connect_history({
-    start_time: startTime,
-    limit: queryLimit.value || undefined,
-    src_ip: historyFilter.src_ip || undefined,
-    dst_ip: historyFilter.dst_ip || undefined,
-    port_start: historyFilter.port_start || undefined,
-    port_end: historyFilter.port_end || undefined,
-    l3_proto: historyFilter.l3_proto || undefined,
-    l4_proto: historyFilter.l4_proto || undefined,
-    flow_id: historyFilter.flow_id || undefined,
-    sort_key: sortKey.value,
-    sort_order: sortOrder.value,
-  });
+    historicalData.value = await get_connect_history({
+      start_time: startTime,
+      limit: queryLimit.value || undefined,
+      src_ip: historyFilter.src_ip || undefined,
+      dst_ip: historyFilter.dst_ip || undefined,
+      port_start: historyFilter.port_start || undefined,
+      port_end: historyFilter.port_end || undefined,
+      l3_proto: historyFilter.l3_proto || undefined,
+      l4_proto: historyFilter.l4_proto || undefined,
+      flow_id: historyFilter.flow_id || undefined,
+      sort_key: sortKey.value,
+      sort_order: sortOrder.value,
+    });
+  } finally {
+    loading.value = false;
+  }
 };
 
 const resetHistoryFilter = () => {
@@ -140,12 +146,14 @@ onMounted(() => {
         v-model:value="historyFilter.src_ip"
         placeholder="源IP"
         clearable
+        :disabled="loading"
         style="width: 170px"
       />
       <n-input
         v-model:value="historyFilter.dst_ip"
         placeholder="目标IP"
         clearable
+        :disabled="loading"
         style="width: 170px"
       />
       <n-input-group style="width: 220px">
@@ -153,6 +161,7 @@ onMounted(() => {
           v-model:value="historyFilter.port_start"
           placeholder="源端口"
           :show-button="false"
+          :disabled="loading"
           clearable
         />
         <n-input-group-label>=></n-input-group-label>
@@ -160,6 +169,7 @@ onMounted(() => {
           v-model:value="historyFilter.port_end"
           placeholder="目的"
           :show-button="false"
+          :disabled="loading"
           clearable
         />
       </n-input-group>
@@ -167,6 +177,7 @@ onMounted(() => {
         v-model:value="historyFilter.l4_proto"
         placeholder="传输协议"
         :options="protocolOptions"
+        :disabled="loading"
         clearable
         style="width: 130px"
       />
@@ -175,6 +186,7 @@ onMounted(() => {
         placeholder="Flow"
         :min="1"
         :max="255"
+        :disabled="loading"
         clearable
         style="width: 100px"
       />
@@ -184,17 +196,19 @@ onMounted(() => {
       <n-select
         v-model:value="timeRange"
         :options="timeRangeOptions"
+        :disabled="loading"
         style="width: 140px"
       />
       <n-select
         v-model:value="queryLimit"
         :options="limitOptions"
+        :disabled="loading"
         style="width: 140px"
       />
 
       <n-button-group>
-        <n-button @click="fetchHistory" type="primary">查询</n-button>
-        <n-button @click="resetHistoryFilter">重置</n-button>
+        <n-button @click="fetchHistory" type="primary" :loading="loading">查询</n-button>
+        <n-button @click="resetHistoryFilter" :disabled="loading">重置</n-button>
       </n-button-group>
 
       <n-divider vertical />
@@ -202,6 +216,7 @@ onMounted(() => {
       <n-button-group>
         <n-button
           :type="sortKey === 'time' ? 'primary' : 'default'"
+          :disabled="loading"
           @click="toggleSort('time')"
         >
           发起时间
@@ -209,12 +224,14 @@ onMounted(() => {
         </n-button>
         <n-button
           :type="sortKey === 'port' ? 'primary' : 'default'"
+          :disabled="loading"
           @click="toggleSort('port')"
         >
           端口 {{ sortKey === "port" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
           :type="sortKey === 'egress' ? 'primary' : 'default'"
+          :disabled="loading"
           @click="toggleSort('egress')"
         >
           上传量排序
@@ -222,6 +239,7 @@ onMounted(() => {
         </n-button>
         <n-button
           :type="sortKey === 'ingress' ? 'primary' : 'default'"
+          :disabled="loading"
           @click="toggleSort('ingress')"
         >
           下载量排序
@@ -296,23 +314,19 @@ onMounted(() => {
       </n-gi>
     </n-grid>
 
-    <div
-      style="flex: 1; overflow-y: auto; padding-right: 4px"
-      class="history-list-container"
+    <n-virtual-list
+      style="flex: 1"
+      :item-size="40"
+      :items="filteredHistory"
     >
-      <HistoryItemInfo
-        v-for="(item, index) in filteredHistory"
-        :key="
-          item.key.src_ip +
-          item.key.create_time +
-          item.key.src_port +
-          item.key.flow_id
-        "
-        :history="item"
-        :index="index"
-        @show:key="showChartDrawer"
-      />
-    </div>
+      <template #default="{ item, index }">
+        <HistoryItemInfo
+          :history="item"
+          :index="index"
+          @show:key="showChartDrawer"
+        />
+      </template>
+    </n-virtual-list>
     <ConnectChartDrawer v-model:show="showChart" :conn="showChartKey" mode="cumulative" />
   </n-flex>
 </template>

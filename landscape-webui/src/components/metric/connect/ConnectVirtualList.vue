@@ -31,3 +31,9 @@ async function show_chart_drawer(key: ConnectKey) {
 
   <ConnectChartDrawer v-model:show="show_chart" :conn="show_chart_key" />
 </template>
+
+<style scoped>
+.list {
+  height: 100%;
+}
+</style>

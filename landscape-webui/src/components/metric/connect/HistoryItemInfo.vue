@@ -158,6 +158,7 @@ const emit = defineEmits(["show:key"]);
 .box {
   border: 2px solid transparent;
   transition: border-color 0.25s ease;
+  margin-right: 12px;
 }
 
 .box:hover {
