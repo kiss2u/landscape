@@ -15,9 +15,12 @@ const frontEndStore = useFrontEndStore();
 
 interface Props {
   conn: ConnectKey | null;
+  mode?: "cumulative" | "delta"; // cumulative: 显示累计总量, delta: 显示增量
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  mode: "delta", // 默认显示增量（兼容实时连接）
+});
 
 const chart = ref<ConnectMetric[]>([]);
 
@@ -64,29 +67,48 @@ const categories = computed(() =>
   }),
 );
 
-// Divide values by 5 to get per-second rates
-// Use raw cumulative values from the database
-const bytesSeries = computed(() => [
-  {
-    name: "入站总量 (Ingress)",
-    data: chart.value.map((m) => m.ingress_bytes),
-  },
-  {
-    name: "出站总量 (Egress)",
-    data: chart.value.map((m) => m.egress_bytes),
-  },
-]);
+// 计算增量数据（用于实时连接）
+function calculateDeltas(values: number[]): number[] {
+  if (values.length === 0) return [];
+  const deltas = [0]; // 第一个点的增量为0
+  for (let i = 1; i < values.length; i++) {
+    deltas.push(Math.max(0, values[i] - values[i - 1]));
+  }
+  return deltas;
+}
 
-const packetsSeries = computed(() => [
-  {
-    name: "入站封包 (Ingress)",
-    data: chart.value.map((m) => m.ingress_packets),
-  },
-  {
-    name: "出站封包 (Egress)",
-    data: chart.value.map((m) => m.egress_packets),
-  },
-]);
+// 根据模式返回累计值或增量值
+const bytesSeries = computed(() => {
+  const ingressData = chart.value.map((m) => m.ingress_bytes);
+  const egressData = chart.value.map((m) => m.egress_bytes);
+
+  return [
+    {
+      name: props.mode === "cumulative" ? "入站总量 (Ingress)" : "入站增量 (Ingress)",
+      data: props.mode === "cumulative" ? ingressData : calculateDeltas(ingressData),
+    },
+    {
+      name: props.mode === "cumulative" ? "出站总量 (Egress)" : "出站增量 (Egress)",
+      data: props.mode === "cumulative" ? egressData : calculateDeltas(egressData),
+    },
+  ];
+});
+
+const packetsSeries = computed(() => {
+  const ingressData = chart.value.map((m) => m.ingress_packets);
+  const egressData = chart.value.map((m) => m.egress_packets);
+
+  return [
+    {
+      name: props.mode === "cumulative" ? "入站封包 (Ingress)" : "入站封包增量 (Ingress)",
+      data: props.mode === "cumulative" ? ingressData : calculateDeltas(ingressData),
+    },
+    {
+      name: props.mode === "cumulative" ? "出站封包 (Egress)" : "出站封包增量 (Egress)",
+      data: props.mode === "cumulative" ? egressData : calculateDeltas(egressData),
+    },
+  ];
+});
 
 const baseOptions = computed<ApexOptions>(() => ({
   chart: {

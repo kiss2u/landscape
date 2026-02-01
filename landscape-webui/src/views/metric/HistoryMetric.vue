@@ -5,6 +5,7 @@ import { get_connect_history } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
+import { ConnectKey } from "landscape-types/common/metric/connect";
 
 const themeVars = useThemeVars();
 
@@ -15,6 +16,15 @@ const queryLimit = ref<number | null>(100); // 默认限制 100 条
 const historyFilter = reactive(new ConnectFilter());
 const sortKey = ref<"time" | "port" | "ingress" | "egress">("time");
 const sortOrder = ref<"asc" | "desc">("desc");
+
+// 图表展示状态
+const showChart = ref(false);
+const showChartKey = ref<ConnectKey | null>(null);
+
+const showChartDrawer = (key: ConnectKey) => {
+  showChartKey.value = key;
+  showChart.value = true;
+};
 
 // 2. 声明常量选项 (Options)
 const protocolOptions = [
@@ -300,7 +310,9 @@ onMounted(() => {
         "
         :history="item"
         :index="index"
+        @show:key="showChartDrawer"
       />
     </div>
+    <ConnectChartDrawer v-model:show="showChart" :conn="showChartKey" mode="cumulative" />
   </n-flex>
 </template>

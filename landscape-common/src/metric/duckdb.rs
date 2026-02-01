@@ -215,10 +215,10 @@ pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMe
     let stmt = "
         SELECT 
             report_time,
-            ingress_bytes - lag(ingress_bytes, 1, ingress_bytes) OVER (ORDER BY report_time) as d_ingress_bytes,
-            ingress_packets - lag(ingress_packets, 1, ingress_packets) OVER (ORDER BY report_time) as d_ingress_packets,
-            egress_bytes - lag(egress_bytes, 1, egress_bytes) OVER (ORDER BY report_time) as d_egress_bytes,
-            egress_packets - lag(egress_packets, 1, egress_packets) OVER (ORDER BY report_time) as d_egress_packets,
+            ingress_bytes,
+            ingress_packets,
+            egress_bytes,
+            egress_packets,
             status
         FROM metrics
         WHERE src_ip = ?1 AND dst_ip = ?2 AND src_port = ?3 AND dst_port = ?4
