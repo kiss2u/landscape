@@ -311,6 +311,7 @@ pub fn query_historical_summaries_complex(
         ConnectSortKey::Ingress => "total_ingress_bytes",
         ConnectSortKey::Egress => "total_egress_bytes",
         ConnectSortKey::Time => "create_time",
+        ConnectSortKey::Duration => "(last_report_time - create_time)",
     };
     let sort_order_str = match params.sort_order.unwrap_or_default() {
         SortOrder::Asc => "ASC",

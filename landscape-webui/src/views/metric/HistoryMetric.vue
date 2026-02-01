@@ -14,7 +14,7 @@ const historicalData = ref<any[]>([]);
 const timeRange = ref<number | null>(300); // 默认 5 分钟 (300秒)
 const queryLimit = ref<number | null>(100); // 默认限制 100 条
 const historyFilter = reactive(new ConnectFilter());
-const sortKey = ref<"time" | "port" | "ingress" | "egress">("time");
+const sortKey = ref<"time" | "port" | "ingress" | "egress" | "duration">("time");
 const sortOrder = ref<"asc" | "desc">("desc");
 
 // 图表展示状态
@@ -87,7 +87,7 @@ const resetHistoryFilter = () => {
   fetchHistory();
 };
 
-const toggleSort = (key: "time" | "port" | "ingress" | "egress") => {
+const toggleSort = (key: "time" | "port" | "ingress" | "egress" | "duration") => {
   if (sortKey.value === key) {
     sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
   } else {
@@ -253,6 +253,14 @@ onMounted(() => {
         >
           下载量排序
           {{ sortKey === "ingress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
+        </n-button>
+        <n-button
+          :type="sortKey === 'duration' ? 'primary' : 'default'"
+          :disabled="loading"
+          @click="toggleSort('duration')"
+        >
+          存活时间
+          {{ sortKey === "duration" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
       </n-button-group>
     </n-flex>

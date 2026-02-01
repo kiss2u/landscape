@@ -176,6 +176,7 @@ pub enum ConnectSortKey {
     Port,
     Ingress,
     Egress,
+    Duration,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
