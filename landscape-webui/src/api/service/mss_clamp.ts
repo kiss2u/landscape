@@ -14,7 +14,7 @@ export async function get_all_mss_clamp_status(): Promise<
 }
 
 export async function get_iface_mss_clamp_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<MSSClampServiceConfig> {
   let data = await axiosService.get(`services/mss_clamp/${iface_name}`);
   console.log(data.data);
@@ -22,7 +22,7 @@ export async function get_iface_mss_clamp_config(
 }
 
 export async function update_mss_clamp_config(
-  mss_clamp_config: MSSClampServiceConfig
+  mss_clamp_config: MSSClampServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/mss_clamp`, {
     ...mss_clamp_config,
@@ -32,7 +32,7 @@ export async function update_mss_clamp_config(
 }
 
 export async function stop_and_del_iface_mss_clamp(
-  name: string
+  name: string,
 ): Promise<void> {
   return axiosService.delete(`services/mss_clamp/${name}`);
 }

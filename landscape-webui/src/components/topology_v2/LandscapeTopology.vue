@@ -41,7 +41,7 @@ onConnect(async (params: any) => {
     naive_message.warning("只能从 Bridge 的右边开始连");
   } else if (!is_source_bridge && !is_target_bridge) {
     naive_message.warning(
-      "连接的双方, 必须要有一个是 Bridge, 且只能从 Bridge 的右边开始连"
+      "连接的双方, 必须要有一个是 Bridge, 且只能从 Bridge 的右边开始连",
     );
   }
 
@@ -49,7 +49,7 @@ onConnect(async (params: any) => {
   if (dev?.wifi_info !== undefined) {
     if (dev.wifi_info.wifi_type.t !== WLANTypeTag.Ap) {
       naive_message.warning(
-        "当前无线网卡为客户端模式, 需要转为 AP 模式才能加入桥接网络"
+        "当前无线网卡为客户端模式, 需要转为 AP 模式才能加入桥接网络",
       );
     }
   }

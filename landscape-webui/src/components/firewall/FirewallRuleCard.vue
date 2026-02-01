@@ -19,7 +19,7 @@ async function del() {
 const title_name = computed(() =>
   rule.value.remark == null || rule.value.remark === ""
     ? `无备注`
-    : rule.value.remark
+    : rule.value.remark,
 );
 </script>
 <template>

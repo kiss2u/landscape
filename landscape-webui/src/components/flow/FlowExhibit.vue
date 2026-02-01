@@ -20,7 +20,7 @@ watch(
   () => props.flow_id,
   async () => {
     await refresh();
-  }
+  },
 );
 
 const config = ref<FlowConfig>();

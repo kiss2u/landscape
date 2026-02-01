@@ -9,7 +9,7 @@ export async function get_dns_status(): Promise<ServiceStatus> {
 }
 
 export async function start_dns_service(
-  udp_port: number
+  udp_port: number,
 ): Promise<ServiceStatus> {
   let data = await axiosService.post("sys_service/dns", {
     udp_port,
@@ -25,7 +25,7 @@ export async function stop_dns_service(): Promise<ServiceStatus> {
 }
 
 export async function check_domain(
-  req: CheckDnsReq
+  req: CheckDnsReq,
 ): Promise<CheckChainDnsResult> {
   let data = await axiosService.get("sys_service/dns/check", {
     params: { ...req },

@@ -14,7 +14,7 @@ export async function get_all_nat_status(): Promise<
 }
 
 export async function get_iface_nat_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<NatServiceConfig> {
   let data = await axiosService.get(`services/nats/${iface_name}`);
   console.log(data.data);
@@ -22,7 +22,7 @@ export async function get_iface_nat_config(
 }
 
 export async function update_iface_nat_config(
-  nat_config: NatServiceConfig
+  nat_config: NatServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/nats`, {
     ...nat_config,

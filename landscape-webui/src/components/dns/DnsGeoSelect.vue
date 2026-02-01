@@ -140,7 +140,7 @@ async function typing_attribute(n: string, k: string) {
       key: k,
     });
     attributes.value = new Set(
-      config.values.flatMap((value) => value.attributes)
+      config.values.flatMap((value) => value.attributes),
     );
   } finally {
     loading_attrs.value = false;

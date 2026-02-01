@@ -14,7 +14,7 @@ export async function get_all_firewall_status(): Promise<
 }
 
 export async function get_iface_firewall_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<FirewallServiceConfig> {
   let data = await axiosService.get(`services/firewall/${iface_name}`);
   console.log(data.data);
@@ -22,7 +22,7 @@ export async function get_iface_firewall_config(
 }
 
 export async function update_firewall_config(
-  firewall_config: FirewallServiceConfig
+  firewall_config: FirewallServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/firewall`, {
     ...firewall_config,

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import DockerAllContainer from "@/components/docker/DockerAllContainer.vue";
 import DockerStatusCard from "@/components/docker/DockerStatusCard.vue";
-
 </script>
 <template>
   <n-layout :native-scrollbar="false" content-style="padding: 10px;">

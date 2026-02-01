@@ -19,7 +19,7 @@ const emit = defineEmits(["refresh"]);
 const value = ref<PPPDServiceConfig>(
   new PPPDServiceConfig({
     attach_iface_name: props.attach_iface_name,
-  })
+  }),
 );
 
 const isModified = computed(() => {
@@ -32,7 +32,7 @@ async function init_conf_value() {
       ? props.origin_value
       : {
           attach_iface_name: props.attach_iface_name,
-        }
+        },
   );
 }
 

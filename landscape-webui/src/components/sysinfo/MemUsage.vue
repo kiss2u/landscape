@@ -46,21 +46,23 @@ const getUsageColor = (percentage: number) => {
     <template #header>
       <n-flex align="center" justify="space-between">
         <span>{{ t("mem") }}</span>
-        <n-tag size="small" :bordered="false">
-          {{ memData.total }} GB
-        </n-tag>
+        <n-tag size="small" :bordered="false"> {{ memData.total }} GB </n-tag>
       </n-flex>
     </template>
 
     <!-- Memory Section -->
     <div class="mem-section">
-      <n-flex justify="space-between" align="center" style="margin-bottom: 8px;">
-        <n-text depth="3" style="font-size: 13px;">{{ t("memory_usage") }}</n-text>
-        <n-text :style="{ color: getUsageColor(memData.percentage), fontWeight: 600 }">
+      <n-flex justify="space-between" align="center" style="margin-bottom: 8px">
+        <n-text depth="3" style="font-size: 13px">{{
+          t("memory_usage")
+        }}</n-text>
+        <n-text
+          :style="{ color: getUsageColor(memData.percentage), fontWeight: 600 }"
+        >
           {{ memData.percentage.toFixed(1) }}%
         </n-text>
       </n-flex>
-      
+
       <!-- Memory Bar -->
       <div class="usage-bar-container">
         <div
@@ -71,12 +73,12 @@ const getUsageColor = (percentage: number) => {
           }"
         ></div>
       </div>
-      
-      <n-flex justify="space-between" style="margin-top: 6px;">
-        <n-text depth="3" style="font-size: 12px;">
+
+      <n-flex justify="space-between" style="margin-top: 6px">
+        <n-text depth="3" style="font-size: 12px">
           {{ t("used") }}: {{ memData.used }} GB
         </n-text>
-        <n-text depth="3" style="font-size: 12px;">
+        <n-text depth="3" style="font-size: 12px">
           {{ t("total") }}: {{ memData.total }} GB
         </n-text>
       </n-flex>
@@ -86,22 +88,32 @@ const getUsageColor = (percentage: number) => {
 
     <!-- Swap Section -->
     <div class="mem-section">
-      <n-flex justify="space-between" align="center" style="margin-bottom: 8px;">
+      <n-flex justify="space-between" align="center" style="margin-bottom: 8px">
         <n-flex align="center" :size="8">
-          <n-text depth="3" style="font-size: 13px;">{{ t("swap_usage") }}</n-text>
-          <n-tag v-if="!swapData.enabled" size="tiny" :bordered="false" type="default">
+          <n-text depth="3" style="font-size: 13px">{{
+            t("swap_usage")
+          }}</n-text>
+          <n-tag
+            v-if="!swapData.enabled"
+            size="tiny"
+            :bordered="false"
+            type="default"
+          >
             Disabled
           </n-tag>
         </n-flex>
-        <n-text 
+        <n-text
           v-if="swapData.enabled"
-          :style="{ color: getUsageColor(swapData.percentage), fontWeight: 600 }"
+          :style="{
+            color: getUsageColor(swapData.percentage),
+            fontWeight: 600,
+          }"
         >
           {{ swapData.percentage.toFixed(1) }}%
         </n-text>
         <n-text v-else depth="3">--</n-text>
       </n-flex>
-      
+
       <!-- Swap Bar -->
       <div class="usage-bar-container" :class="{ disabled: !swapData.enabled }">
         <div
@@ -113,13 +125,14 @@ const getUsageColor = (percentage: number) => {
           }"
         ></div>
       </div>
-      
-      <n-flex justify="space-between" style="margin-top: 6px;">
-        <n-text depth="3" style="font-size: 12px;">
-          {{ t("used") }}: {{ swapData.enabled ? swapData.used + ' GB' : '--' }}
+
+      <n-flex justify="space-between" style="margin-top: 6px">
+        <n-text depth="3" style="font-size: 12px">
+          {{ t("used") }}: {{ swapData.enabled ? swapData.used + " GB" : "--" }}
         </n-text>
-        <n-text depth="3" style="font-size: 12px;">
-          {{ t("total") }}: {{ swapData.enabled ? swapData.total + ' GB' : '--' }}
+        <n-text depth="3" style="font-size: 12px">
+          {{ t("total") }}:
+          {{ swapData.enabled ? swapData.total + " GB" : "--" }}
         </n-text>
       </n-flex>
     </div>
@@ -146,7 +159,9 @@ const getUsageColor = (percentage: number) => {
 .usage-bar-fill {
   height: 100%;
   border-radius: 6px;
-  transition: width 0.3s ease, background-color 0.3s ease;
+  transition:
+    width 0.3s ease,
+    background-color 0.3s ease;
   min-width: 4px;
 }
 

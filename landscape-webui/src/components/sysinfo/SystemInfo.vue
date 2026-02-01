@@ -3,7 +3,7 @@ import { get_sysinfo } from "@/api/sys";
 import { LandscapeSystemInfo } from "@/lib/sys";
 import { onMounted, ref, computed } from "vue";
 import { useThemeVars } from "naive-ui";
-import { InformationFilled, WarningAltFilled } from "@vicons/carbon"
+import { InformationFilled, WarningAltFilled } from "@vicons/carbon";
 
 const themeVars = useThemeVars();
 
@@ -39,7 +39,9 @@ const isVersionMismatch = computed(() => {
 // Calculate uptime in a readable format
 const uptime = computed(() => {
   if (!sysinfo.value.start_at) return "";
-  const seconds = Math.floor((now.value - sysinfo.value.start_at * 1000) / 1000);
+  const seconds = Math.floor(
+    (now.value - sysinfo.value.start_at * 1000) / 1000,
+  );
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -72,7 +74,7 @@ const uptime = computed(() => {
       <div class="info-item featured">
         <n-text depth="3" class="info-label">主机名称</n-text>
         <n-text class="info-value large">
-          {{ sysinfo.host_name || '--' }}
+          {{ sysinfo.host_name || "--" }}
         </n-text>
       </div>
 
@@ -80,7 +82,7 @@ const uptime = computed(() => {
       <div class="info-item">
         <n-text depth="3" class="info-label">系统</n-text>
         <n-text class="info-value">
-          {{ sysinfo.system_name || '--' }}
+          {{ sysinfo.system_name || "--" }}
         </n-text>
       </div>
 
@@ -88,7 +90,7 @@ const uptime = computed(() => {
       <div class="info-item">
         <n-text depth="3" class="info-label">内核</n-text>
         <n-ellipsis class="info-value" :tooltip="{ width: 300 }">
-          {{ sysinfo.kernel_version || '--' }}
+          {{ sysinfo.kernel_version || "--" }}
         </n-ellipsis>
       </div>
 
@@ -96,17 +98,20 @@ const uptime = computed(() => {
       <div class="info-item">
         <n-text depth="3" class="info-label">运行时间</n-text>
         <n-flex align="center" :size="6">
-          <n-text class="info-value uptime">{{ uptime || '--' }}</n-text>
+          <n-text class="info-value uptime">{{ uptime || "--" }}</n-text>
           <n-tooltip trigger="hover" placement="top">
             <template #trigger>
-
-              <n-icon size="14" style="opacity: 0.5; cursor: help;">
+              <n-icon size="14" style="opacity: 0.5; cursor: help">
                 <InformationFilled></InformationFilled>
               </n-icon>
             </template>
             <n-flex vertical :size="2">
               <span>启动于:</span>
-              <n-time :time="sysinfo.start_at" format="yyyy-MM-dd HH:mm:ss" unix />
+              <n-time
+                :time="sysinfo.start_at"
+                format="yyyy-MM-dd HH:mm:ss"
+                unix
+              />
             </n-flex>
           </n-tooltip>
         </n-flex>
@@ -118,27 +123,27 @@ const uptime = computed(() => {
     <!-- Version Info -->
     <div class="version-section">
       <n-flex justify="space-between" align="center">
-        <n-text depth="3" style="font-size: 12px;">Landscape Router</n-text>
+        <n-text depth="3" style="font-size: 12px">Landscape Router</n-text>
         <n-tooltip v-if="isVersionMismatch" trigger="hover" placement="top">
           <template #trigger>
             <n-tag size="small" type="error" :bordered="false">
               {{ sysinfo.landscape_version }}
-              <n-icon size="12" style="margin-left: 4px;">
+              <n-icon size="12" style="margin-left: 4px">
                 <WarningAltFilled></WarningAltFilled>
               </n-icon>
             </n-tag>
           </template>
           <div>
-            <div style="font-weight: 600; margin-bottom: 4px;">版本不匹配!</div>
+            <div style="font-weight: 600; margin-bottom: 4px">版本不匹配!</div>
             <div>后端: {{ sysinfo.landscape_version }}</div>
             <div>前端: {{ ui_version }}</div>
-            <div style="margin-top: 8px; opacity: 0.8; font-size: 12px;">
+            <div style="margin-top: 8px; opacity: 0.8; font-size: 12px">
               请检查前端静态文件或清理浏览器缓存
             </div>
           </div>
         </n-tooltip>
         <n-tag v-else size="small" type="success" :bordered="false">
-          {{ sysinfo.landscape_version || '--' }}
+          {{ sysinfo.landscape_version || "--" }}
         </n-tag>
       </n-flex>
     </div>

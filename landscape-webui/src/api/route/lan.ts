@@ -19,14 +19,14 @@ export async function get_route_lans(): Promise<RouteLanServiceConfig[]> {
 }
 
 export async function get_route_lan_config(
-  id: string
+  id: string,
 ): Promise<RouteLanServiceConfig> {
   let result = await axiosService.get(`services/route_lans/${id}`);
   return result.data;
 }
 
 export async function update_route_lans_config(
-  config: RouteLanServiceConfig
+  config: RouteLanServiceConfig,
 ): Promise<void> {
   await axiosService.post(`services/route_lans`, config);
 }

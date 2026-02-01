@@ -8,7 +8,7 @@ export const useFrontEndStore = defineStore(
     const presentation_mode = ref(false);
 
     function MASK_INFO(
-      value: string | undefined | null
+      value: string | undefined | null,
     ): string | undefined | null {
       if (value) {
         return presentation_mode.value ? mask_string(value) : value;
@@ -18,7 +18,7 @@ export const useFrontEndStore = defineStore(
     }
 
     function MASK_PORT(
-      value: string | number | undefined | null
+      value: string | number | undefined | null,
     ): string | number | undefined | null {
       if (value) {
         return presentation_mode.value ? "****" : value;
@@ -38,5 +38,5 @@ export const useFrontEndStore = defineStore(
       key: "front_end",
       storage: localStorage,
     },
-  }
+  },
 );

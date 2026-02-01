@@ -15,7 +15,7 @@ export async function get_all_ipv6pd_status(): Promise<
 }
 
 export async function get_iface_ipv6pd_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<IPV6PDServiceConfig> {
   let data = await axiosService.get(`services/ipv6pd/${iface_name}`);
   return data.data;
@@ -34,7 +34,7 @@ export async function get_current_ip_prefix_info(): Promise<
 
 // 新建新的 PD Client 配置
 export async function update_ipv6pd_config(
-  ipv6pd_config: IPV6PDServiceConfig
+  ipv6pd_config: IPV6PDServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/ipv6pd`, {
     ...ipv6pd_config,

@@ -16,7 +16,10 @@ export enum ServiceStatusType {
   Stop = "stop",
 }
 
-export function get_service_status_color(status: ServiceStatus | undefined, themeVars: any) {
+export function get_service_status_color(
+  status: ServiceStatus | undefined,
+  themeVars: any,
+) {
   if (!status) return "";
   return status.t === ServiceStatusType.Running ? themeVars.successColor : "";
 }
@@ -126,7 +129,7 @@ export class TopologyServiceExhibitSwitch {
   constructor(
     config: NetworkIfaceConfig,
     status: LandscapeInterface,
-    wifi_info: LandscapeWifiInterface | null
+    wifi_info: LandscapeWifiInterface | null,
   ) {
     this.carrier = true;
     this.enable_in_boot = true;

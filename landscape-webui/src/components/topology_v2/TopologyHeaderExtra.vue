@@ -19,7 +19,7 @@ let ifaceNodeStore = useTopologyStore();
 async function redrawTopology() {
   ifaceNodeStore.clear_position_cache();
   await ifaceNodeStore.UPDATE_INFO();
-  window.$message.success('拓扑已重新绘制');
+  window.$message.success("拓扑已重新绘制");
   setTimeout(() => {
     fitView({ padding: 0.3 });
   }, 100);

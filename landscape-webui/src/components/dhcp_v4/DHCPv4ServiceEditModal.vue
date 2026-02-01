@@ -31,7 +31,7 @@ const iface_info = defineProps<{
 const service_config = ref<DHCPv4ServiceConfig>(
   new DHCPv4ServiceConfig({
     iface_name: iface_info.iface_name,
-  })
+  }),
 );
 
 async function on_modal_enter() {
@@ -68,7 +68,7 @@ const server_ip_addr = computed({
   set(new_value) {
     service_config.value.config.server_ip_addr = new_value;
     const [start, end] = get_dhcp_range(
-      `${service_config.value.config.server_ip_addr}/${service_config.value.config.network_mask}`
+      `${service_config.value.config.server_ip_addr}/${service_config.value.config.network_mask}`,
     );
     service_config.value.config.ip_range_start = start;
     service_config.value.config.ip_range_end = end;
@@ -82,7 +82,7 @@ const network_mask = computed({
   set(new_value) {
     service_config.value.config.network_mask = new_value;
     const [start, end] = get_dhcp_range(
-      `${service_config.value.config.server_ip_addr}/${service_config.value.config.network_mask}`
+      `${service_config.value.config.server_ip_addr}/${service_config.value.config.network_mask}`,
     );
     service_config.value.config.ip_range_start = start;
     service_config.value.config.ip_range_end = end;

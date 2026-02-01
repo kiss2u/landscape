@@ -221,13 +221,21 @@ export class PosotionCalculator {
   client: number;
 
   // 位置缓存获取函数
-  private get_cached_position: (nodeId: string) => { x: number; y: number } | null;
+  private get_cached_position: (
+    nodeId: string,
+  ) => { x: number; y: number } | null;
   // 位置保存函数
-  private save_position: (nodeId: string, position: { x: number; y: number }) => void;
+  private save_position: (
+    nodeId: string,
+    position: { x: number; y: number },
+  ) => void;
 
   constructor(
     get_cached_position?: (nodeId: string) => { x: number; y: number } | null,
-    save_position?: (nodeId: string, position: { x: number; y: number }) => void
+    save_position?: (
+      nodeId: string,
+      position: { x: number; y: number },
+    ) => void,
   ) {
     this.wan = 0;
     this.lan = 0;

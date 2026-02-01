@@ -230,7 +230,7 @@ function validate(source: IPV6RaConfigSource[]): boolean {
                 <ICMPRaSourceExhibit
                   v-for="(each, index) in service_config.config.source"
                   :source="each"
-                  @commit="(e:any) => replace_source(e, index)"
+                  @commit="(e: any) => replace_source(e, index)"
                   @delete="delete_source(index)"
                 >
                 </ICMPRaSourceExhibit>

@@ -13,7 +13,7 @@ export async function get_flow_rule(id: string): Promise<FlowConfig> {
 }
 
 export async function get_flow_rule_by_flow_id(
-  id: number
+  id: number,
 ): Promise<FlowConfig> {
   let result = await axiosService.get(`config/flow_rules/flow_id/${id}`);
   return result.data;

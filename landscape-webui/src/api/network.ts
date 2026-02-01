@@ -42,7 +42,7 @@ export async function change_zone(data: {
 
 export async function change_iface_status(
   iface_name: string,
-  status: boolean
+  status: boolean,
 ): Promise<any> {
   let result = await axiosService.post(`iface/${iface_name}/status/${status}`);
   return result.data;
@@ -50,7 +50,7 @@ export async function change_iface_status(
 
 export async function change_wifi_mode(
   iface_name: string,
-  mode: WifiMode
+  mode: WifiMode,
 ): Promise<any> {
   let result = await axiosService.post(`iface/${iface_name}/wifi_mode/${mode}`);
   return result.data;

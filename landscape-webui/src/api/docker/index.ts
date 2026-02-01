@@ -40,7 +40,7 @@ export async function stop_container(name: string): Promise<any> {
     undefined,
     {
       timeout: 60000,
-    }
+    },
   );
   console.log(data.data);
   return;

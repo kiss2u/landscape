@@ -43,7 +43,7 @@ export class DHCPv4ServerConfig {
     this.server_ip_addr = obj?.server_ip_addr ?? "192.168.5.1";
     this.network_mask = obj?.network_mask ?? 24;
     const [start, end] = get_dhcp_range(
-      `${this.server_ip_addr}/${this.network_mask}`
+      `${this.server_ip_addr}/${this.network_mask}`,
     );
     // console.log(end);
     this.ip_range_start = obj?.ip_range_start ?? start;
@@ -75,7 +75,7 @@ export type DHCPv4OfferInfoShow = {
 };
 
 export function conver_to_show(
-  data: DHCPv4OfferInfo | null
+  data: DHCPv4OfferInfo | null,
 ): DHCPv4OfferInfoShow[] {
   if (data) {
     const result: DHCPv4OfferInfoShow[] = [];

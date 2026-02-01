@@ -61,12 +61,20 @@ const emit = defineEmits(["show:key"]);
               {{ l4_proto(conn.key.l4_proto) }}
             </n-tag>
 
-            <n-tag v-if="conn.key.flow_id != 0" type="info" :bordered="false" size="small">
+            <n-tag
+              v-if="conn.key.flow_id != 0"
+              type="info"
+              :bordered="false"
+              size="small"
+            >
               FLOW: {{ conn.key.flow_id }}
             </n-tag>
           </n-flex>
 
-          <n-flex align="center" style="width: 800px; font-variant-numeric: tabular-nums">
+          <n-flex
+            align="center"
+            style="width: 800px; font-variant-numeric: tabular-nums"
+          >
             {{
               `${
                 frontEndStore.presentation_mode
@@ -83,7 +91,12 @@ const emit = defineEmits(["show:key"]);
           <!-- 速率展示 -->
           <n-flex align="center" :wrap="false" style="gap: 24px">
             <!-- 出站 (Egress) -->
-            <n-flex align="center" :wrap="false" size="small" style="width: 100px">
+            <n-flex
+              align="center"
+              :wrap="false"
+              size="small"
+              style="width: 100px"
+            >
               <n-icon
                 :color="themeVars.infoColor"
                 size="20"
@@ -94,17 +107,37 @@ const emit = defineEmits(["show:key"]);
                 <ArrowUp />
               </n-icon>
               <n-flex vertical :size="[-4, 0]" style="flex: 1">
-                <span style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap">
+                <span
+                  style="
+                    font-size: 13px;
+                    font-weight: 600;
+                    font-variant-numeric: tabular-nums;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                  "
+                >
                   {{ formatRate(conn.egress_bps) }}
                 </span>
-                <span style="font-size: 10px; color: #999; font-variant-numeric: tabular-nums; white-space: nowrap">
+                <span
+                  style="
+                    font-size: 10px;
+                    color: #999;
+                    font-variant-numeric: tabular-nums;
+                    white-space: nowrap;
+                  "
+                >
                   {{ formatPackets(conn.egress_pps) }}
                 </span>
               </n-flex>
             </n-flex>
 
             <!-- 进站 (Ingress) -->
-            <n-flex align="center" :wrap="false" size="small" style="width: 100px">
+            <n-flex
+              align="center"
+              :wrap="false"
+              size="small"
+              style="width: 100px"
+            >
               <n-icon
                 :color="themeVars.successColor"
                 size="20"
@@ -115,10 +148,25 @@ const emit = defineEmits(["show:key"]);
                 <ArrowDown />
               </n-icon>
               <n-flex vertical :size="[-4, 0]" style="flex: 1">
-                <span style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap">
+                <span
+                  style="
+                    font-size: 13px;
+                    font-weight: 600;
+                    font-variant-numeric: tabular-nums;
+                    line-height: 1.2;
+                    white-space: nowrap;
+                  "
+                >
                   {{ formatRate(conn.ingress_bps) }}
                 </span>
-                <span style="font-size: 10px; color: #999; font-variant-numeric: tabular-nums; white-space: nowrap">
+                <span
+                  style="
+                    font-size: 10px;
+                    color: #999;
+                    font-variant-numeric: tabular-nums;
+                    white-space: nowrap;
+                  "
+                >
                   {{ formatPackets(conn.ingress_pps) }}
                 </span>
               </n-flex>

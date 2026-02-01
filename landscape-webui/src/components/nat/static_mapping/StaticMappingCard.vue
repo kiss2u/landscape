@@ -19,7 +19,7 @@ function openEditModal(focusIndex?: number) {
   if (selection && selection.toString().length > 0) {
     return;
   }
-  
+
   edit_focus_index.value = focusIndex;
   show_edit_modal.value = true;
 }
@@ -37,10 +37,10 @@ function formatIPv6(ip: string | null): string {
   if (!ip) return "";
   const masked = frontEndStore.MASK_INFO(ip);
   if (!masked) return "";
-  
+
   // If it's a short address (e.g. ::1), just return it
   if (masked.length < 15) return `[${masked}]`;
-  
+
   const parts = masked.split(":");
   if (parts.length > 4) {
     // Keep last 3 parts
@@ -90,14 +90,16 @@ function formatIPv6(ip: string | null): string {
       </template>
 
       <!-- Top Section: Targets (Simulating Statistics) -->
-      <n-grid :cols="2" :x-gap="12" style="margin-bottom: 4px;">
+      <n-grid :cols="2" :x-gap="12" style="margin-bottom: 4px">
         <!-- IPv4 Stat -->
         <n-gi>
           <div class="stat-box" :class="{ 'is-inactive': !rule.lan_ipv4 }">
             <div class="stat-label">IPv4 目标</div>
             <div class="stat-value-row">
               <template v-if="rule.lan_ipv4">
-                <div class="stat-value">{{ frontEndStore.MASK_INFO(rule.lan_ipv4) }}</div>
+                <div class="stat-value">
+                  {{ frontEndStore.MASK_INFO(rule.lan_ipv4) }}
+                </div>
                 <div class="stat-tags">
                   <n-tag
                     v-for="proto in rule.ipv4_l4_protocol"
@@ -151,9 +153,11 @@ function formatIPv6(ip: string | null): string {
 
       <!-- Bottom Section: Port Mappings (Fixed Height Wrapper) -->
       <div class="ports-container">
-        <div class="section-label">端口映射 ({{ rule.mapping_pair_ports.length }})</div>
+        <div class="section-label">
+          端口映射 ({{ rule.mapping_pair_ports.length }})
+        </div>
         <!-- Using a fixed height scrollbar to ensure consistent card height -->
-        <n-scrollbar style="height: 100px; padding-right: 4px;">
+        <n-scrollbar style="height: 100px; padding-right: 4px">
           <div class="ports-grid">
             <div
               v-for="(pair, index) in rule.mapping_pair_ports"
@@ -161,9 +165,13 @@ function formatIPv6(ip: string | null): string {
               class="port-box"
               @click.stop="openEditModal(index)"
             >
-              <span class="wan-port">{{ frontEndStore.MASK_PORT(pair.wan_port.toString()) }}</span>
+              <span class="wan-port">{{
+                frontEndStore.MASK_PORT(pair.wan_port.toString())
+              }}</span>
               <n-icon :component="ArrowRight" class="arrow-icon" />
-              <span class="lan-port">{{ frontEndStore.MASK_PORT(pair.lan_port.toString()) }}</span>
+              <span class="lan-port">{{
+                frontEndStore.MASK_PORT(pair.lan_port.toString())
+              }}</span>
             </div>
           </div>
         </n-scrollbar>
@@ -198,7 +206,7 @@ function formatIPv6(ip: string | null): string {
   flex: 1;
   border-radius: 4px;
   transition: all 0.2s ease-in-out;
-  border: 1px solid transparent; 
+  border: 1px solid transparent;
   cursor: pointer; /* Clickable */
 }
 
@@ -286,7 +294,10 @@ function formatIPv6(ip: string | null): string {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
   user-select: none; /* Container not selectable */
   cursor: pointer;
   white-space: nowrap;

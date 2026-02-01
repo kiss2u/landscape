@@ -10,7 +10,7 @@ import { h } from "vue";
  */
 export function sortGeoKeys(
   results: GeoConfigKey[],
-  query: string
+  query: string,
 ): GeoConfigKey[] {
   const q = (query || "").toUpperCase();
   if (!results) return [];
@@ -86,9 +86,9 @@ export const renderGeoSelectLabel = (option: SelectOption) => {
                 },
                 title: data.name, // Tooltip on hover
               },
-              { default: () => data.name }
+              { default: () => data.name },
             ),
-        }
+        },
       ),
       // Key (Right)
       h(
@@ -102,8 +102,8 @@ export const renderGeoSelectLabel = (option: SelectOption) => {
           },
           title: option.label as string, // Tooltip
         },
-        { default: () => option.label }
+        { default: () => option.label },
       ),
-    ]
+    ],
   );
 };

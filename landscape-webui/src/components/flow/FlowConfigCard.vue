@@ -39,7 +39,7 @@ async function del() {
 const title_name = computed(() =>
   props.config.remark == null || props.config.remark === ""
     ? `无备注`
-    : frontEndStore.MASK_INFO(props.config.remark)
+    : frontEndStore.MASK_INFO(props.config.remark),
 );
 </script>
 

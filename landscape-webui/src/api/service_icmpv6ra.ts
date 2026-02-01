@@ -16,7 +16,7 @@ export async function get_all_icmpv6ra_status(): Promise<
 }
 
 export async function get_iface_icmpv6ra_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<IPV6RAServiceConfig> {
   let data = await axiosService.get(`services/icmpv6ra/${iface_name}`);
   console.log(data.data);
@@ -24,7 +24,7 @@ export async function get_iface_icmpv6ra_config(
 }
 
 export async function update_icmpv6ra_config(
-  icmpv6ra_config: IPV6RAServiceConfig
+  icmpv6ra_config: IPV6RAServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/icmpv6ra`, {
     ...icmpv6ra_config,

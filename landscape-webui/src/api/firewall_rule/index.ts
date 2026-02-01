@@ -8,14 +8,14 @@ export async function get_firewall_rules(): Promise<FirewallRuleConfig[]> {
 }
 
 export async function get_firewall_rule(
-  id: string
+  id: string,
 ): Promise<FirewallRuleConfig> {
   let data = await axiosService.get(`config/firewall_rules/${id}`);
   return new FirewallRule(data.data);
 }
 
 export async function push_firewall_rule(
-  rule: FirewallRuleConfig
+  rule: FirewallRuleConfig,
 ): Promise<void> {
   let data = await axiosService.post(`config/firewall_rules`, rule);
 }

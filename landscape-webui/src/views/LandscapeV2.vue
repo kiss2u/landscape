@@ -49,7 +49,6 @@ const { t } = useI18n({ useScope: "global" });
       content-style="padding: 10px;"
     >
       <n-flex vertical>
-       
         <n-divider style="margin: 0px 0" title-placement="left">
           {{ t("topology_divider") }}
         </n-divider>

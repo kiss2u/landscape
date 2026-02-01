@@ -28,7 +28,7 @@ const title = computed(() => {
     return "";
   } else {
     return frontEndStore.MASK_INFO(
-      `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`
+      `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`,
     );
   }
 });
@@ -61,7 +61,7 @@ const categories = computed(() =>
       .getSeconds()
       .toString()
       .padStart(2, "0")}`;
-  })
+  }),
 );
 
 // Divide values by 5 to get per-second rates

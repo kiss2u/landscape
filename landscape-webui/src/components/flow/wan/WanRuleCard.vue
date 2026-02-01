@@ -20,7 +20,7 @@ async function del() {
 const title_name = computed(() =>
   rule.value.remark == null || rule.value.remark === ""
     ? `无备注`
-    : rule.value.remark
+    : rule.value.remark,
 );
 </script>
 <template>
@@ -35,7 +35,10 @@ const title_name = computed(() =>
       <!-- {{ rule }} -->
       <n-descriptions bordered label-placement="top" :column="1">
         <n-descriptions-item label="选择流量出口">
-          <FlowMarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></FlowMarkExhibit>
+          <FlowMarkExhibit
+            :mark="rule.mark"
+            :flow_id="rule.flow_id"
+          ></FlowMarkExhibit>
         </n-descriptions-item>
         <n-descriptions-item label="匹配规则">
           <n-scrollbar v-if="rule.source.length > 0" style="max-height: 120px">

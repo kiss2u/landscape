@@ -23,7 +23,7 @@ class ReconnectingWebSocket {
   constructor(
     url: string,
     protocols?: string | string[],
-    options: ReconnectingWebSocketOptions = {}
+    options: ReconnectingWebSocketOptions = {},
   ) {
     this.url = url;
     this.protocols = protocols;
@@ -44,7 +44,7 @@ class ReconnectingWebSocket {
     this.ws.onclose = (event) => {
       if (this.retries < this.maxRetries) {
         console.log(
-          `Connection lost. Reconnecting in ${this.reconnectInterval} ms...`
+          `Connection lost. Reconnecting in ${this.reconnectInterval} ms...`,
         );
         setTimeout(() => {
           this.retries++;
@@ -82,7 +82,7 @@ class ReconnectingWebSocket {
 
 export function generateValidMAC() {
   let mac = [...Array(6)].map(() =>
-    ("0" + Math.floor(Math.random() * 256).toString(16)).slice(-2)
+    ("0" + Math.floor(Math.random() * 256).toString(16)).slice(-2),
   );
   mac[0] = (
     "0" + ((parseInt(mac[0], 16) & 0b11111110) | 0b00000010).toString(16)
@@ -113,7 +113,8 @@ export function formatPackets(pps: number): string {
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 

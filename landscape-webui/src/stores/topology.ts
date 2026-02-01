@@ -36,14 +36,14 @@ export const useTopologyStore = defineStore("topology", () => {
   // 从localStorage加载位置缓存
   function load_position_cache() {
     try {
-      const cached = localStorage.getItem('topology-position-cache');
+      const cached = localStorage.getItem("topology-position-cache");
       if (cached) {
         position_cache.value = JSON.parse(cached);
       } else {
         position_cache.value = {};
       }
     } catch (error) {
-      console.error('Failed to load position cache:', error);
+      console.error("Failed to load position cache:", error);
       position_cache.value = {};
     }
   }
@@ -51,26 +51,35 @@ export const useTopologyStore = defineStore("topology", () => {
   // 保存位置缓存到localStorage
   function save_position_cache() {
     try {
-      localStorage.setItem('topology-position-cache', JSON.stringify(position_cache.value));
+      localStorage.setItem(
+        "topology-position-cache",
+        JSON.stringify(position_cache.value),
+      );
     } catch (error) {
-      console.error('Failed to save position cache:', error);
+      console.error("Failed to save position cache:", error);
     }
   }
 
   // 清除位置缓存
   function clear_position_cache() {
     position_cache.value = {};
-    localStorage.removeItem('topology-position-cache');
+    localStorage.removeItem("topology-position-cache");
   }
 
   // 保存单个节点位置
-  function save_node_position(nodeId: string, position: { x: number; y: number }, isUserDragged: boolean = false) {
+  function save_node_position(
+    nodeId: string,
+    position: { x: number; y: number },
+    isUserDragged: boolean = false,
+  ) {
     position_cache.value[nodeId] = position;
     save_position_cache();
   }
 
   // 获取节点缓存位置
-  function get_cached_position(nodeId: string): { x: number; y: number } | null {
+  function get_cached_position(
+    nodeId: string,
+  ): { x: number; y: number } | null {
     return position_cache.value[nodeId] || null;
   }
 
@@ -84,7 +93,7 @@ export const useTopologyStore = defineStore("topology", () => {
 
   async function update_topo(
     new_value: LandscapeFlowNode[],
-    old_value: LandscapeFlowNode[]
+    old_value: LandscapeFlowNode[],
   ) {
     topo_nodes.value = [];
     topo_edges.value = [];
@@ -103,7 +112,8 @@ export const useTopologyStore = defineStore("topology", () => {
     }
     let position = new PosotionCalculator(
       (nodeId: string) => get_cached_position(nodeId),
-      (nodeId: string, position: { x: number; y: number }) => save_node_position(nodeId, position, false)
+      (nodeId: string, position: { x: number; y: number }) =>
+        save_node_position(nodeId, position, false),
     );
     if (new_value.length != 0) {
       for (const node of topo_nodes.value) {
@@ -165,7 +175,7 @@ export const useTopologyStore = defineStore("topology", () => {
 
     let { managed, unmanaged } = await new_ifaces();
     let new_docker_nets = await get_all_docker_networks();
-    
+
     if (hide_down_dev.value) {
       managed = managed.filter((e) => {
         if (e.status) {
@@ -176,11 +186,17 @@ export const useTopologyStore = defineStore("topology", () => {
     }
     let dev_id_iface_name_map = new Map<number, string>();
     for (const net_dev of unmanaged) {
-      dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.iface_name);
+      dev_id_iface_name_map.set(
+        net_dev.status.index,
+        net_dev.status.iface_name,
+      );
     }
     for (const net_dev of managed) {
       if (net_dev.status) {
-        dev_id_iface_name_map.set(net_dev.status.index, net_dev.status.iface_name);
+        dev_id_iface_name_map.set(
+          net_dev.status.index,
+          net_dev.status.iface_name,
+        );
       }
     }
     // console.log(new_docker_nets);
@@ -213,7 +229,7 @@ export const useTopologyStore = defineStore("topology", () => {
               dev: net_dev,
               docker_data,
             },
-          })
+          }),
         );
         if (net_dev.status) {
           docker_ifindexs.set(net_dev.status.index, net_dev.status.iface_name);
@@ -236,7 +252,7 @@ export const useTopologyStore = defineStore("topology", () => {
               dev: net_dev,
               docker_data,
             },
-          })
+          }),
         );
         docker_ifindexs.set(net_dev.status.index, net_dev.status.iface_name);
       } else {
@@ -263,7 +279,7 @@ export const useTopologyStore = defineStore("topology", () => {
           parent: dev.config.controller_name,
           position: { x: 0, y: 0 },
           data: { t: FlowNodeType.Managed, dev },
-        })
+        }),
       );
     }
 
@@ -280,7 +296,7 @@ export const useTopologyStore = defineStore("topology", () => {
               parent: docker_parent,
               position: { x: 0, y: 0 },
               data: { t: FlowNodeType.DockerLeaf, dev },
-            })
+            }),
           );
           continue;
         }
@@ -301,7 +317,7 @@ export const useTopologyStore = defineStore("topology", () => {
           parent,
           position: { x: 0, y: 0 },
           data: { t: FlowNodeType.UnManaged, dev },
-        })
+        }),
       );
     }
 
@@ -361,7 +377,7 @@ export const useTopologyStore = defineStore("topology", () => {
 
 function compare_devs(
   new_value: LandscapeFlowNode[],
-  old_value: LandscapeFlowNode[]
+  old_value: LandscapeFlowNode[],
 ): {
   addedNodes: LandscapeFlowNode[];
   removedNodes: LandscapeFlowNode[];

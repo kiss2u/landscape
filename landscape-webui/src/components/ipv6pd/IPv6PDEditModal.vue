@@ -29,7 +29,7 @@ const service_config = ref<IPV6PDServiceConfig>(
     config: new IPV6PDConfig({
       mac: iface_info.mac ?? generateValidMAC(),
     }),
-  })
+  }),
 );
 
 async function on_modal_enter() {

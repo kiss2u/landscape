@@ -48,7 +48,7 @@ const docker_options = computed(() =>
       label: name,
       value: name,
     };
-  })
+  }),
 );
 
 enum FlowTargetEnum {

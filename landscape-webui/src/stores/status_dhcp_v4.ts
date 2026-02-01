@@ -5,7 +5,7 @@ import { computed, ComputedRef, ref } from "vue";
 
 export const useDHCPv4ConfigStore = defineStore("status_dhcp_v4", () => {
   const status = ref<Map<string, ServiceStatus>>(
-    new Map<string, ServiceStatus>()
+    new Map<string, ServiceStatus>(),
   );
 
   async function UPDATE_INFO() {
@@ -13,7 +13,7 @@ export const useDHCPv4ConfigStore = defineStore("status_dhcp_v4", () => {
   }
 
   function GET_STATUS_BY_IFACE_NAME(
-    name: string
+    name: string,
   ): ComputedRef<ServiceStatus | undefined> {
     return computed(() => status.value.get(name));
   }

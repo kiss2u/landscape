@@ -20,7 +20,7 @@ export async function delete_dns_redirect(id: string): Promise<void> {
 }
 
 export async function push_many_dns_redirect(
-  rule: DNSRedirectRule[]
+  rule: DNSRedirectRule[],
 ): Promise<void> {
   let data = await axiosService.post(`config/dns_redirects/set_many`, rule);
 }

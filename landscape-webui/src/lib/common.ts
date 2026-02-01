@@ -24,7 +24,7 @@ export const LANDSCAPE_TOKEN_KEY = "LANDSCAPE_TOKEN";
 
 export async function copy_context_to_clipboard(
   message: MessageApi,
-  content: string
+  content: string,
 ) {
   try {
     await navigator.clipboard.writeText(content);

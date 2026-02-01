@@ -14,14 +14,14 @@ export async function get_all_route_wan_status(): Promise<
 }
 
 export async function get_route_wan_config(
-  id: string
+  id: string,
 ): Promise<RouteWanServiceConfig> {
   let result = await axiosService.get(`services/route_wans/${id}`);
   return result.data;
 }
 
 export async function update_route_wans_config(
-  config: RouteWanServiceConfig
+  config: RouteWanServiceConfig,
 ): Promise<void> {
   await axiosService.post(`services/route_wans`, config);
 }

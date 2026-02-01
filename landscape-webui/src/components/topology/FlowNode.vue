@@ -260,14 +260,14 @@ const show_switch = computed(() => {
           {{
             frontEndStore.presentation_mode
               ? mask_string(node.mac)
-              : node.mac ?? "N/A"
+              : (node.mac ?? "N/A")
           }}
         </n-descriptions-item>
         <n-descriptions-item label="物理mca">
           {{
             frontEndStore.presentation_mode
               ? mask_string(node.perm_mac)
-              : node.perm_mac ?? "N/A"
+              : (node.perm_mac ?? "N/A")
           }}
         </n-descriptions-item>
         <n-descriptions-item label="设备类型">

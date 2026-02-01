@@ -47,8 +47,8 @@ async function export_config() {
         // }
         return value;
       },
-      2
-    )
+      2,
+    ),
   );
 }
 

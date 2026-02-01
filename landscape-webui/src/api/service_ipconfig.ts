@@ -14,7 +14,7 @@ export async function get_all_ipconfig_status(): Promise<
 }
 
 export async function get_iface_server_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<IfaceIpServiceConfig> {
   let data = await axiosService.get(`services/ipconfigs/${iface_name}`);
   // console.log(data.data);
@@ -22,7 +22,7 @@ export async function get_iface_server_config(
 }
 
 export async function get_iface_server_status(
-  iface_name: string
+  iface_name: string,
 ): Promise<IfaceIpServiceConfig> {
   let data = await axiosService.get(`services/ipconfigs/${iface_name}/status`);
   // console.log(data.data);
@@ -30,7 +30,7 @@ export async function get_iface_server_status(
 }
 
 export async function update_iface_server_config(
-  iface_config: IfaceIpServiceConfig
+  iface_config: IfaceIpServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/ipconfigs`, {
     ...iface_config,

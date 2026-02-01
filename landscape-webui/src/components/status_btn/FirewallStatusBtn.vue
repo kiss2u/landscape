@@ -13,7 +13,7 @@ const iface_info = defineProps<{
 }>();
 
 const status = firewallConfigStore.GET_STATUS_BY_IFACE_NAME(
-  iface_info.iface_name
+  iface_info.iface_name,
 );
 
 const emit = defineEmits(["click"]);

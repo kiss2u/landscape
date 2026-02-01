@@ -33,15 +33,15 @@ onNodeDragStart((e) => console.log("drag start", e));
 onNodeDragStop((e) => console.log("drag stop", e));
 
 onPaneClick(
-  (event) => captureZoomClick.value && console.log("pane click", event)
+  (event) => captureZoomClick.value && console.log("pane click", event),
 );
 
 onPaneScroll(
-  (event) => captureZoomScroll.value && console.log("pane scroll", event)
+  (event) => captureZoomScroll.value && console.log("pane scroll", event),
 );
 
 onPaneContextMenu(
-  (event) => captureZoomClick.value && console.log("pane ctx menu", event)
+  (event) => captureZoomClick.value && console.log("pane ctx menu", event),
 );
 
 onMoveEnd((flowTransform) => console.log("move end", flowTransform));

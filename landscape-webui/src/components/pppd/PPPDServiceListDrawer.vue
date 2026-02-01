@@ -13,7 +13,7 @@ const props = defineProps<{
 const pppd_configs = ref<PPPDServiceConfig[]>([]);
 async function inti_drawer() {
   pppd_configs.value = await get_attach_iface_pppd_config(
-    props.attach_iface_name
+    props.attach_iface_name,
   );
 }
 

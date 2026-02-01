@@ -32,8 +32,6 @@ const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
-
-
 const rules = {
   lan_ipv4: [
     {
@@ -79,7 +77,10 @@ async function enter() {
       if (targetInput) {
         targetInput.focus();
         // Optional: scroll into view if the list is long
-        targetInput.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetInput.$el?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       }
     }, 100);
   }
@@ -104,8 +105,6 @@ function removePortPair(index: number) {
   }
 }
 
-
-
 const formRef = ref();
 
 async function saveRule() {
@@ -114,7 +113,10 @@ async function saveRule() {
       // 验证表单
       await formRef.value?.validate();
 
-      if (rule.value.ipv4_l4_protocol.length === 0 && rule.value.ipv6_l4_protocol.length === 0) {
+      if (
+        rule.value.ipv4_l4_protocol.length === 0 &&
+        rule.value.ipv6_l4_protocol.length === 0
+      ) {
         message.error("请至少选择一个协议");
         return;
       }
@@ -186,7 +188,7 @@ const wanPortRule = {
     if (!value && value !== 0) return new Error("不能为空");
     if (value <= 0 || value > 65535) return new Error("范围 1-65535");
     return true;
-  }
+  },
 };
 
 const lanPortRule = {
@@ -195,7 +197,7 @@ const lanPortRule = {
     if (!value && value !== 0) return new Error("不能为空");
     if (value <= 0 || value > 65535) return new Error("范围 1-65535");
     return true;
-  }
+  },
 };
 
 // 列表整体验证规则（用于显示汇总错误）
@@ -213,9 +215,14 @@ const mappingPortsRule = {
     const errors: string[] = [];
 
     // 检查是否有无效值
-    const hasInvalid = ports.some((p: any) =>
-      !p.wan_port || p.wan_port <= 0 || p.wan_port > 65535 ||
-      !p.lan_port || p.lan_port <= 0 || p.lan_port > 65535
+    const hasInvalid = ports.some(
+      (p: any) =>
+        !p.wan_port ||
+        p.wan_port <= 0 ||
+        p.wan_port > 65535 ||
+        !p.lan_port ||
+        p.lan_port <= 0 ||
+        p.lan_port > 65535,
     );
     if (hasInvalid) errors.push("存在无效的端口值");
 
@@ -235,17 +242,31 @@ const mappingPortsRule = {
     }
 
     return true;
-  }
+  },
 };
 </script>
 
 <template>
-  <n-modal v-model:show="show" style="width: 600px" class="custom-card" preset="card" title="规则编辑" @after-enter="enter"
-    :bordered="false">
+  <n-modal
+    v-model:show="show"
+    style="width: 600px"
+    class="custom-card"
+    preset="card"
+    title="规则编辑"
+    @after-enter="enter"
+    :bordered="false"
+  >
     <n-flex vertical>
       <n-alert type="info"> 当前需要额外在防火墙开放静态映射端口 </n-alert>
       <!-- {{ isModified }} -->
-      <n-form v-if="rule" :rules="rules" style="flex: 1" ref="formRef" :model="rule" :cols="5">
+      <n-form
+        v-if="rule"
+        :rules="rules"
+        style="flex: 1"
+        ref="formRef"
+        :model="rule"
+        :cols="5"
+      >
         <n-grid :cols="2">
           <!-- <n-form-item-gi label="优先级" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
@@ -260,7 +281,10 @@ const mappingPortsRule = {
           <n-form-item-gi label="允许协议" :span="2">
             <n-flex justify="space-between" style="flex: 1">
               <n-flex>
-                <n-checkbox v-model:checked="allSelected" :indeterminate="isIndeterminate">
+                <n-checkbox
+                  v-model:checked="allSelected"
+                  :indeterminate="isIndeterminate"
+                >
                   全选
                 </n-checkbox>
               </n-flex>
@@ -294,28 +318,63 @@ const mappingPortsRule = {
           </n-radio-group>
         </n-form-item-gi> -->
 
-
           <!-- 端口映射对列表 -->
-          <n-form-item-gi :span="2" label="端口映射 (不能与 NAT 映射端口重叠)" path="mapping_pair_ports" :rule="mappingPortsRule">
+          <n-form-item-gi
+            :span="2"
+            label="端口映射 (不能与 NAT 映射端口重叠)"
+            path="mapping_pair_ports"
+            :rule="mappingPortsRule"
+          >
             <n-flex vertical style="width: 100%; gap: 8px">
-              <n-flex v-for="(pair, index) in rule.mapping_pair_ports" :key="index" align="center" style="gap: 8px">
-                <n-form-item style="flex: 1; margin-bottom: 0" :show-label="false" :show-feedback="false"
-                  :path="`mapping_pair_ports[${index}].wan_port`" :rule="wanPortRule">
-                  <n-input-number 
-                    :ref="(el: any) => { if(el) portInputRefs[index] = el }"
-                    v-model:value="pair.wan_port" 
-                    :min="1" :max="65535" 
+              <n-flex
+                v-for="(pair, index) in rule.mapping_pair_ports"
+                :key="index"
+                align="center"
+                style="gap: 8px"
+              >
+                <n-form-item
+                  style="flex: 1; margin-bottom: 0"
+                  :show-label="false"
+                  :show-feedback="false"
+                  :path="`mapping_pair_ports[${index}].wan_port`"
+                  :rule="wanPortRule"
+                >
+                  <n-input-number
+                    :ref="
+                      (el: any) => {
+                        if (el) portInputRefs[index] = el;
+                      }
+                    "
+                    v-model:value="pair.wan_port"
+                    :min="1"
+                    :max="65535"
                     placeholder="开放端口"
-                    style="width: 100%" />
+                    style="width: 100%"
+                  />
                 </n-form-item>
                 <span style="color: #999">→</span>
-                <n-form-item style="flex: 1; margin-bottom: 0" :show-label="false" :show-feedback="false"
-                  :path="`mapping_pair_ports[${index}].lan_port`" :rule="lanPortRule">
-                  <n-input-number v-model:value="pair.lan_port" :min="1" :max="65535" placeholder="内网端口"
-                    style="width: 100%" />
+                <n-form-item
+                  style="flex: 1; margin-bottom: 0"
+                  :show-label="false"
+                  :show-feedback="false"
+                  :path="`mapping_pair_ports[${index}].lan_port`"
+                  :rule="lanPortRule"
+                >
+                  <n-input-number
+                    v-model:value="pair.lan_port"
+                    :min="1"
+                    :max="65535"
+                    placeholder="内网端口"
+                    style="width: 100%"
+                  />
                 </n-form-item>
-                <n-button v-if="rule.mapping_pair_ports.length > 1" size="small" @click="removePortPair(index)"
-                  secondary type="error">
+                <n-button
+                  v-if="rule.mapping_pair_ports.length > 1"
+                  size="small"
+                  @click="removePortPair(index)"
+                  secondary
+                  type="error"
+                >
                   删除
                 </n-button>
               </n-flex>
@@ -325,13 +384,18 @@ const mappingPortsRule = {
             </n-flex>
           </n-form-item-gi>
 
-
           <n-form-item-gi :span="2" path="lan_ipv4" label="内网目标 IPv4">
-            <n-input placeholder="如果开放的是路由的端口，那么就设置为 0.0.0.0 不映射留空即可" v-model:value="rule.lan_ipv4" />
+            <n-input
+              placeholder="如果开放的是路由的端口，那么就设置为 0.0.0.0 不映射留空即可"
+              v-model:value="rule.lan_ipv4"
+            />
           </n-form-item-gi>
 
           <n-form-item-gi :span="2" path="lan_ipv6" label="内网目标 IPv6">
-            <n-input placeholder="如果开放的是路由的端口，那么就设置为 :: 不映射留空即可" v-model:value="rule.lan_ipv6" />
+            <n-input
+              placeholder="如果开放的是路由的端口，那么就设置为 :: 不映射留空即可"
+              v-model:value="rule.lan_ipv6"
+            />
           </n-form-item-gi>
 
           <n-form-item-gi :span="2" label="备注">
@@ -344,7 +408,11 @@ const mappingPortsRule = {
     <template #footer>
       <n-flex justify="space-between">
         <n-button @click="show = false">取消</n-button>
-        <n-button :loading="commit_spin" @click="saveRule" :disabled="!isModified">
+        <n-button
+          :loading="commit_spin"
+          @click="saveRule"
+          :disabled="!isModified"
+        >
           保存
         </n-button>
       </n-flex>

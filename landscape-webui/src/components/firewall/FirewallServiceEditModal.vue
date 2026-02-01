@@ -21,7 +21,7 @@ const iface_info = defineProps<{
 const service_config = ref<FirewallServiceConfig>(
   new FirewallServiceConfig({
     iface_name: iface_info.iface_name,
-  })
+  }),
 );
 
 async function on_modal_enter() {

@@ -26,7 +26,7 @@ watch(
       parts[3] ?? 0,
     ];
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const ip_parts_watch = computed(() => {

@@ -20,7 +20,7 @@ axiosService.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 axiosService.interceptors.response.use(
@@ -46,7 +46,7 @@ axiosService.interceptors.response.use(
       return Promise.reject(error.response.data);
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default axiosService;

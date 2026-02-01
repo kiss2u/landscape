@@ -14,7 +14,7 @@ export async function get_all_wifi_status(): Promise<
 }
 
 export async function get_iface_wifi_config(
-  iface_name: string
+  iface_name: string,
 ): Promise<WifiServiceConfig> {
   let data = await axiosService.get(`services/wifi/${iface_name}`);
   console.log(data.data);
@@ -22,7 +22,7 @@ export async function get_iface_wifi_config(
 }
 
 export async function update_wifi_config(
-  wifi_config: WifiServiceConfig
+  wifi_config: WifiServiceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`services/wifi`, {
     ...wifi_config,

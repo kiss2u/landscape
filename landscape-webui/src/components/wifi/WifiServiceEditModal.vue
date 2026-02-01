@@ -18,7 +18,7 @@ const iface_info = defineProps<{
 const service_config = ref<WifiServiceConfig>(
   new WifiServiceConfig({
     iface_name: iface_info.iface_name,
-  })
+  }),
 );
 
 async function on_modal_enter() {

@@ -19,7 +19,9 @@ async function del() {
 }
 
 const title_name = computed(() =>
-  rule.value.name == null || rule.value.name === "" ? `无备注` : rule.value.name
+  rule.value.name == null || rule.value.name === ""
+    ? `无备注`
+    : rule.value.name,
 );
 </script>
 <template>
@@ -38,7 +40,10 @@ const title_name = computed(() =>
           {{ rule.index }}
         </n-descriptions-item> -->
         <n-descriptions-item label="流量动作">
-          <FlowMarkExhibit :mark="rule.mark" :flow_id="rule.flow_id"></FlowMarkExhibit>
+          <FlowMarkExhibit
+            :mark="rule.mark"
+            :flow_id="rule.flow_id"
+          ></FlowMarkExhibit>
           <!-- {{ rule.mark }} -->
         </n-descriptions-item>
         <n-descriptions-item label="DNS 上游配置">

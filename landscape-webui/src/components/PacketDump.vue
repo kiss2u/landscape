@@ -7,7 +7,7 @@ const show_switch = defineModel<boolean>();
 const socket = ref<WebSocket | undefined>(undefined);
 function enter() {
   socket.value = new WebSocket(
-    `ws://${window.location.hostname}:${window.location.port}/ws/sock/dump/br0-test`
+    `ws://${window.location.hostname}:${window.location.port}/ws/sock/dump/br0-test`,
   );
   //     socket.value.addEventListener('open', function (event) {
   // });

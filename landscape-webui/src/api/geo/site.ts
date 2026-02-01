@@ -10,7 +10,7 @@ import {
 } from "landscape-types/common/geo_site";
 
 export async function get_geo_site_configs(
-  name?: string
+  name?: string,
 ): Promise<GeoSiteSourceConfig[]> {
   let data = await axiosService.get(`config/geo_sites`, {
     params: {
@@ -21,20 +21,20 @@ export async function get_geo_site_configs(
 }
 
 export async function get_geo_site_config(
-  id: string
+  id: string,
 ): Promise<GeoSiteSourceConfig> {
   let data = await axiosService.get(`config/geo_sites/${id}`);
   return data.data;
 }
 
 export async function push_geo_site_config(
-  config: GeoSiteSourceConfig
+  config: GeoSiteSourceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`config/geo_sites`, config);
 }
 
 export async function push_many_geo_site_rule(
-  rules: GeoSiteSourceConfig[]
+  rules: GeoSiteSourceConfig[],
 ): Promise<void> {
   let data = await axiosService.post(`config/geo_sites/set_many`, rules);
 }
@@ -44,7 +44,7 @@ export async function delete_geo_site_config(id: string): Promise<void> {
 }
 
 export async function get_geo_cache_key(
-  filter: QueryGeoKey
+  filter: QueryGeoKey,
 ): Promise<GeoConfigKey[]> {
   let data = await axiosService.get(`config/geo_sites/cache`, {
     params: { ...filter },
@@ -57,7 +57,7 @@ export async function refresh_geo_cache_key(): Promise<void> {
 }
 
 export async function search_geo_site_cache(
-  query: QueryGeoKey
+  query: QueryGeoKey,
 ): Promise<GeoConfigKey[]> {
   let data = await axiosService.get(`config/geo_sites/cache/search`, {
     params: {
@@ -68,7 +68,7 @@ export async function search_geo_site_cache(
 }
 
 export async function get_geo_site_cache_detail(
-  key: GeoFileCacheKey
+  key: GeoFileCacheKey,
 ): Promise<GeoDomainConfig> {
   let data = await axiosService.get(`config/geo_sites/cache/detail`, {
     params: {
@@ -80,11 +80,11 @@ export async function get_geo_site_cache_detail(
 
 export async function update_geo_site_by_upload(
   name: string,
-  form_data: FormData
+  form_data: FormData,
 ): Promise<GeoDomainConfig> {
   let data = await axiosService.post(
     `config/geo_sites/${name}/update_by_upload`,
-    form_data
+    form_data,
   );
   return data.data;
 }

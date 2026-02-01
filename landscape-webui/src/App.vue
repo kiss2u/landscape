@@ -22,7 +22,6 @@ import Env from "@/components/Env.vue";
       </n-notification-provider>
     </n-message-provider>
   </n-config-provider>
-
 </template>
 
 <style>

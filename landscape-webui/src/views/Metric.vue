@@ -18,12 +18,12 @@ let timer: any = null;
 onMounted(async () => {
   metricStore.SET_ENABLE(true);
   await metricStore.UPDATE_INFO();
-  
+
   // 获取一次历史全量统计
-  get_connect_global_stats().then(res => {
+  get_connect_global_stats().then((res) => {
     globalStats.value = res;
   });
-  
+
   timer = setInterval(async () => {
     if (viewMode.value === "live") {
       await metricStore.UPDATE_INFO();
@@ -38,7 +38,13 @@ onUnmounted(() => {
 
 // 系统全局汇总 (未过滤实时指标，用于顶部 Header)
 const systemStats = computed(() => {
-  const stats = { ingressBps: 0, egressBps: 0, ingressPps: 0, egressPps: 0, count: 0 };
+  const stats = {
+    ingressBps: 0,
+    egressBps: 0,
+    ingressPps: 0,
+    egressPps: 0,
+    count: 0,
+  };
   if (metricStore.firewall_info) {
     metricStore.firewall_info.forEach((item) => {
       stats.ingressBps += item.ingress_bps || 0;
@@ -62,7 +68,13 @@ const systemStats = computed(() => {
           <n-radio-button value="history">历史连接查询</n-radio-button>
         </n-radio-group>
 
-        <n-tag v-if="viewMode === 'live'" :bordered="false" type="info" size="small" round>
+        <n-tag
+          v-if="viewMode === 'live'"
+          :bordered="false"
+          type="info"
+          size="small"
+          round
+        >
           <template #icon>
             <div class="pulse-dot"></div>
           </template>
@@ -75,20 +87,30 @@ const systemStats = computed(() => {
         <n-flex align="center" size="large" v-if="viewMode === 'live'">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">活跃连接:</span>
-            <span style="font-weight: bold; color: #18a058">{{ systemStats.count }}</span>
+            <span style="font-weight: bold; color: #18a058">{{
+              systemStats.count
+            }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">系统上行:</span>
             <n-flex align="center" size="small" :wrap="false">
-              <span style="font-weight: bold; color: #2080f0">{{ formatRate(systemStats.egressBps) }}</span>
-              <span style="font-size: 11px; color: #aaa">({{ formatPackets(systemStats.egressPps) }})</span>
+              <span style="font-weight: bold; color: #2080f0">{{
+                formatRate(systemStats.egressBps)
+              }}</span>
+              <span style="font-size: 11px; color: #aaa"
+                >({{ formatPackets(systemStats.egressPps) }})</span
+              >
             </n-flex>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">系统下行:</span>
             <n-flex align="center" size="small" :wrap="false">
-              <span style="font-weight: bold; color: #18a058">{{ formatRate(systemStats.ingressBps) }}</span>
-              <span style="font-size: 11px; color: #aaa">({{ formatPackets(systemStats.ingressPps) }})</span>
+              <span style="font-weight: bold; color: #18a058">{{
+                formatRate(systemStats.ingressBps)
+              }}</span>
+              <span style="font-size: 11px; color: #aaa"
+                >({{ formatPackets(systemStats.ingressPps) }})</span
+              >
             </n-flex>
           </n-flex>
         </n-flex>
@@ -96,19 +118,29 @@ const systemStats = computed(() => {
         <n-flex align="center" size="large" v-else-if="globalStats">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">历史连接总数:</span>
-            <span style="font-weight: bold; color: #4fb233">{{ globalStats.total_connect_count }}</span>
+            <span style="font-weight: bold; color: #4fb233">{{
+              globalStats.total_connect_count
+            }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">累计总上传:</span>
-            <span style="font-weight: bold; color: #2080f0">{{ formatSize(globalStats.total_egress_bytes) }}</span>
+            <span style="font-weight: bold; color: #2080f0">{{
+              formatSize(globalStats.total_egress_bytes)
+            }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">累计总下载:</span>
-            <span style="font-weight: bold; color: #18a058">{{ formatSize(globalStats.total_ingress_bytes) }}</span>
+            <span style="font-weight: bold; color: #18a058">{{
+              formatSize(globalStats.total_ingress_bytes)
+            }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">更新于:</span>
-            <n-time :time="globalStats.last_calculate_time" format="yyyy-MM-dd HH:mm" style="color: #aaa" />
+            <n-time
+              :time="globalStats.last_calculate_time"
+              format="yyyy-MM-dd HH:mm"
+              style="color: #aaa"
+            />
           </n-flex>
         </n-flex>
       </n-flex>
@@ -132,8 +164,17 @@ const systemStats = computed(() => {
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 210, 255, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0, 210, 255, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 210, 255, 0); }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(0, 210, 255, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(0, 210, 255, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(0, 210, 255, 0);
+  }
 }
 </style>

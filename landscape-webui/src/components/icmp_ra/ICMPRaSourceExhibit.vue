@@ -5,7 +5,7 @@ import { Edit, Delete } from "@vicons/carbon";
 
 const source = defineModel<IPV6RaConfigSource>("source", { required: true });
 const tag_type = computed(() =>
-  source.value.t == "static" ? "default" : "info"
+  source.value.t == "static" ? "default" : "info",
 );
 
 const emit = defineEmits(["delete", "commit"]);

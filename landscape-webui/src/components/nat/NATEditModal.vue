@@ -22,7 +22,7 @@ const iface_info = defineProps<{
 const nat_service_config = ref<NatServiceConfig>(
   new NatServiceConfig({
     iface_name: iface_info.iface_name,
-  })
+  }),
 );
 
 async function on_modal_enter() {

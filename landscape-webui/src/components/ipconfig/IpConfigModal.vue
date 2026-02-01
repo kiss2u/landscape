@@ -21,7 +21,7 @@ const iface_info = defineProps<{
 }>();
 
 const iface_data = ref<IfaceIpServiceConfig>(
-  new IfaceIpServiceConfig({ iface_name: iface_info.iface_name })
+  new IfaceIpServiceConfig({ iface_name: iface_info.iface_name }),
 );
 
 const ip_config_options = computed(() => {

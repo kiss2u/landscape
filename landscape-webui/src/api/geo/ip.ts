@@ -3,7 +3,7 @@ import { GeoConfigKey, QueryGeoKey } from "landscape-types/common/geo";
 import { GeoIpConfig, GeoIpSourceConfig } from "landscape-types/common/geo_ip";
 
 export async function get_geo_ip_configs(
-  name?: string
+  name?: string,
 ): Promise<GeoIpSourceConfig[]> {
   let data = await axiosService.get(`config/geo_ips`, {
     params: {
@@ -14,20 +14,20 @@ export async function get_geo_ip_configs(
 }
 
 export async function get_geo_ip_config(
-  id: string
+  id: string,
 ): Promise<GeoIpSourceConfig> {
   let data = await axiosService.get(`config/geo_ips/${id}`);
   return data.data;
 }
 
 export async function push_geo_ip_config(
-  config: GeoIpSourceConfig
+  config: GeoIpSourceConfig,
 ): Promise<void> {
   let data = await axiosService.post(`config/geo_ips`, config);
 }
 
 export async function push_many_geo_ip_rule(
-  rules: GeoIpSourceConfig[]
+  rules: GeoIpSourceConfig[],
 ): Promise<void> {
   let data = await axiosService.post(`config/geo_ips/set_many`, rules);
 }
@@ -37,7 +37,7 @@ export async function delete_geo_ip_config(id: string): Promise<void> {
 }
 
 export async function get_geo_cache_key(
-  filter: QueryGeoKey
+  filter: QueryGeoKey,
 ): Promise<GeoConfigKey[]> {
   let data = await axiosService.get(`config/geo_ips/cache`, {
     params: { ...filter },
@@ -50,7 +50,7 @@ export async function refresh_geo_cache_key(): Promise<void> {
 }
 
 export async function search_geo_ip_cache(
-  query: QueryGeoKey
+  query: QueryGeoKey,
 ): Promise<GeoConfigKey[]> {
   let data = await axiosService.get(`config/geo_ips/cache/search`, {
     params: {
@@ -61,7 +61,7 @@ export async function search_geo_ip_cache(
 }
 
 export async function get_geo_ip_cache_detail(
-  key: GeoConfigKey
+  key: GeoConfigKey,
 ): Promise<GeoIpConfig> {
   let data = await axiosService.get(`config/geo_ips/cache/detail`, {
     params: {
@@ -73,11 +73,11 @@ export async function get_geo_ip_cache_detail(
 
 export async function update_geo_ip_by_upload(
   name: string,
-  form_data: FormData
+  form_data: FormData,
 ): Promise<GeoIpConfig> {
   let data = await axiosService.post(
     `config/geo_ips/${name}/update_by_upload`,
-    form_data
+    form_data,
   );
   return data.data;
 }

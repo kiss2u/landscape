@@ -113,7 +113,7 @@ const has_edge_label = computed({
     } else {
       if (formModel.value?.labels) {
         formModel.value.labels = formModel.value.labels.filter(
-          (e) => e.key !== LAND_REDIRECT_ID_KEY
+          (e) => e.key !== LAND_REDIRECT_ID_KEY,
         );
       }
     }

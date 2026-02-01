@@ -29,8 +29,8 @@ function coresToBitmask(selected_cores: Set<number>): string {
   if (selected_cores.size === 0) return "0";
 
   let bitmask = 0;
-  selected_cores.forEach(core => {
-    bitmask |= (1 << core);
+  selected_cores.forEach((core) => {
+    bitmask |= 1 << core;
   });
   return bitmask.toString();
 }
@@ -51,8 +51,9 @@ function bitmaskToCores(bitmask_str: string): Set<number> {
 }
 
 // 切换核心选择状态
-function toggleCore(core: number, type: 'xps' | 'rps') {
-  const selected_cores = type === 'xps' ? xps_selected_cores : rps_selected_cores;
+function toggleCore(core: number, type: "xps" | "rps") {
+  const selected_cores =
+    type === "xps" ? xps_selected_cores : rps_selected_cores;
   if (selected_cores.value.has(core)) {
     selected_cores.value.delete(core);
   } else {
@@ -75,7 +76,7 @@ async function get_current_config() {
       rps_selected_cores.value = bitmaskToCores(data.rps);
     }
   } catch (error) {
-    console.error('获取配置失败:', error);
+    console.error("获取配置失败:", error);
   }
 }
 
@@ -90,11 +91,11 @@ async function save_config() {
 
     const new_config = {
       xps: new_xps,
-      rps: new_rps
+      rps: new_rps,
     };
     await set_iface_cpu_balance(props.iface_name, new_config);
   } catch (error) {
-    console.error('保存配置失败:', error);
+    console.error("保存配置失败:", error);
   } finally {
     loading.value = false;
   }
@@ -133,8 +134,9 @@ function setRpsToZero() {
     >
       <n-flex vertical>
         <n-alert type="info">
-          选择要处理网络队列的 CPU 核心。选中多个核心可以将负载分布到不同核心，提升性能。
-          <br>
+          选择要处理网络队列的 CPU
+          核心。选中多个核心可以将负载分布到不同核心，提升性能。
+          <br />
           <strong>提示：</strong>可以点击下方的"设置为0"恢复默认
         </n-alert>
 
@@ -164,7 +166,12 @@ function setRpsToZero() {
             </n-space>
             <div class="selection-summary">
               <n-text depth="3">
-                已选择: {{ Array.from(xps_selected_cores).sort((a, b) => a - b).join(', ') || '无' }}
+                已选择:
+                {{
+                  Array.from(xps_selected_cores)
+                    .sort((a, b) => a - b)
+                    .join(", ") || "无"
+                }}
                 (位掩码: {{ coresToBitmask(xps_selected_cores) }})
               </n-text>
             </div>
@@ -196,27 +203,26 @@ function setRpsToZero() {
             </n-space>
             <div class="selection-summary">
               <n-text depth="3">
-                已选择: {{ Array.from(rps_selected_cores).sort((a, b) => a - b).join(', ') || '无' }}
+                已选择:
+                {{
+                  Array.from(rps_selected_cores)
+                    .sort((a, b) => a - b)
+                    .join(", ") || "无"
+                }}
                 (位掩码: {{ coresToBitmask(rps_selected_cores) }})
               </n-text>
             </div>
           </div>
         </div>
 
-        <div v-else>
-          <n-spin size="small" /> 正在获取 CPU 信息...
-        </div>
+        <div v-else><n-spin size="small" /> 正在获取 CPU 信息...</div>
       </n-flex>
 
       <template #footer>
         <n-flex justify="space-between" style="width: 100%">
-          <n-button @click="reset_config">
-            重置选择
-          </n-button>
+          <n-button @click="reset_config"> 重置选择 </n-button>
           <n-space>
-            <n-button @click="show_model = false">
-              取消
-            </n-button>
+            <n-button @click="show_model = false"> 取消 </n-button>
             <n-button
               :loading="loading"
               round

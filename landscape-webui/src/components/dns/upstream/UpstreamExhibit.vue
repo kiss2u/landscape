@@ -17,7 +17,7 @@ watch(
   () => props.rule_id,
   async () => {
     await refresh();
-  }
+  },
 );
 
 const rule = ref<DnsUpstreamConfig>();
