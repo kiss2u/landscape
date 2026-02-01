@@ -10,14 +10,6 @@ use crate::event::ConnectMessage;
 #[cfg(feature = "duckdb")]
 use crate::metric::duckdb::DuckMetricStore;
 
-#[allow(dead_code)]
-#[cfg(debug_assertions)]
-const CLEAR_INTERVAL: u64 = 60;
-
-#[allow(dead_code)]
-#[cfg(not(debug_assertions))]
-const CLEAR_INTERVAL: u64 = 60 * 10;
-
 ///
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
@@ -134,8 +126,10 @@ impl ConnectMetricManager {
         #[cfg(feature = "duckdb")]
         tokio::spawn(async move {
             // 定时清理
-            let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_secs(CLEAR_INTERVAL));
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
+                crate::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS,
+            ));
+
             loop {
                 interval.tick().await;
                 let now = chrono::Utc::now().timestamp_millis() as u64;

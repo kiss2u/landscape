@@ -70,6 +70,11 @@ pub const DEFAULT_METRIC_RETENTION_DAYS: u64 = 7;
 pub const DEFAULT_METRIC_BATCH_SIZE: usize = 2000;
 pub const DEFAULT_METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
 
+#[cfg(debug_assertions)]
+pub const DEFAULT_METRIC_CLEANUP_INTERVAL_SECS: u64 = 30 * 60;
+#[cfg(not(debug_assertions))]
+pub const DEFAULT_METRIC_CLEANUP_INTERVAL_SECS: u64 = 12 * 60 * 60;
+
 /// default sqlite path
 pub const LANDSCAPE_DB_SQLITE_NAME: &str = "landscape_db.sqlite";
 /// LOG Path
