@@ -36,3 +36,12 @@ export type ConnectMetric = {
   egress_bytes: number;
   egress_packets: number;
 };
+
+export type ConnectRealtimeStatus = {
+  key: ConnectKey;
+  ingress_bps: number;
+  egress_bps: number;
+  ingress_pps: number;
+  egress_pps: number;
+  last_metric: ConnectMetric | null;
+};

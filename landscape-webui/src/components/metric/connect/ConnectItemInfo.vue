@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import { ConnectKey } from "landscape-types/common/metric/connect";
+import {
+  ConnectKey,
+  ConnectRealtimeStatus,
+} from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import { ChartLine } from "@vicons/carbon";
+import { ChartLine, ArrowUp, ArrowDown } from "@vicons/carbon";
 import { mask_string } from "@/lib/common";
+import { formatRate, formatPackets } from "@/lib/util";
+import { useThemeVars } from "naive-ui";
 
 const frontEndStore = useFrontEndStore();
+const themeVars = useThemeVars();
 
 interface Props {
-  conn: ConnectKey;
+  conn: ConnectRealtimeStatus;
+  index?: number;
 }
 
 const props = defineProps<Props>();
@@ -27,37 +34,101 @@ const emit = defineEmits(["show:key"]);
 </script>
 
 <template>
-  <n-flex class="box" style="margin: 5px 0px">
-    <n-card size="small">
+  <div
+    class="box"
+    :style="{
+      backgroundColor:
+        (index ?? 0) % 2 === 1 ? themeVars.tableColor : 'transparent',
+    }"
+  >
+    <n-card
+      size="small"
+      :bordered="false"
+      style="background: transparent"
+      content-style="padding: 4px 12px"
+    >
       <n-flex align="center" justify="space-between">
-        <n-flex>
-          <n-flex align="center"><n-time :time="conn.create_time" /></n-flex>
+        <n-flex align="center">
+          <n-flex align="center" style="width: 160px">
+            <n-time :time="conn.key.create_time" />
+          </n-flex>
 
-          <n-flex>
-            <n-tag type="success" :bordered="false">
-              {{ conn.l3_proto == 0 ? "IPV4" : "IPV6" }}
+          <n-flex style="width: 200px">
+            <n-tag type="success" :bordered="false" size="small">
+              {{ conn.key.l3_proto == 0 ? "IPV4" : "IPV6" }}
             </n-tag>
-            <n-tag type="info" :bordered="false">
-              {{ l4_proto(conn.l4_proto) }}
+            <n-tag type="info" :bordered="false" size="small">
+              {{ l4_proto(conn.key.l4_proto) }}
             </n-tag>
 
-            <n-tag v-if="conn.flow_id != 0" type="info" :bordered="false">
-              FLOW: {{ conn.flow_id }}
+            <n-tag v-if="conn.key.flow_id != 0" type="info" :bordered="false" size="small">
+              FLOW: {{ conn.key.flow_id }}
             </n-tag>
           </n-flex>
 
-          <n-flex align="center">
+          <n-flex align="center" style="min-width: 350px">
             {{
               `${
                 frontEndStore.presentation_mode
-                  ? mask_string(conn.src_ip)
-                  : conn.src_ip
-              }:${conn.src_port} => ${
+                  ? mask_string(conn.key.src_ip)
+                  : conn.key.src_ip
+              }:${conn.key.src_port} => ${
                 frontEndStore.presentation_mode
-                  ? mask_string(conn.dst_ip)
-                  : conn.dst_ip
-              }:${conn.dst_port}`
+                  ? mask_string(conn.key.dst_ip)
+                  : conn.key.dst_ip
+              }:${conn.key.dst_port}`
             }}
+          </n-flex>
+
+          <!-- 实时速率展示: 横向紧凑对齐版 -->
+          <n-flex align="center" :wrap="false" style="margin-left: 20px; flex: 1" justify="end">
+            <n-flex align="center" :wrap="false" style="gap: 24px">
+              <!-- 出站 (Egress) -->
+              <n-flex align="center" :wrap="false" size="small" style="width: 110px">
+                <n-icon
+                  :color="themeVars.infoColor"
+                  size="20"
+                  :style="{
+                    filter: `drop-shadow(0 0 4px ${themeVars.infoColor}88)`,
+                  }"
+                >
+                  <ArrowUp />
+                </n-icon>
+                <n-flex vertical :size="[-4, 0]" style="flex: 1">
+                  <span style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap">
+                    {{ formatRate(conn.egress_bps) }}
+                  </span>
+                  <span style="font-size: 10px; color: #999; font-variant-numeric: tabular-nums; white-space: nowrap">
+                    {{ formatPackets(conn.egress_pps) }}
+                  </span>
+                </n-flex>
+              </n-flex>
+
+              <!-- 进站 (Ingress) -->
+              <n-flex align="center" :wrap="false" size="small" style="width: 110px">
+                <n-icon
+                  :color="themeVars.successColor"
+                  size="20"
+                  :style="{
+                    filter: `drop-shadow(0 0 4px ${themeVars.successColor}88)`,
+                  }"
+                >
+                  <ArrowDown />
+                </n-icon>
+                <n-flex vertical :size="[-4, 0]" style="flex: 1">
+                  <span style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap">
+                    {{ formatRate(conn.ingress_bps) }}
+                  </span>
+                  <span style="font-size: 10px; color: #999; font-variant-numeric: tabular-nums; white-space: nowrap">
+                    {{ formatPackets(conn.ingress_pps) }}
+                  </span>
+                </n-flex>
+              </n-flex>
+
+              <div style="width: 50px; font-size: 11px; color: #bbb; font-weight: 500; align-self: flex-end; margin-bottom: 2px">
+                5s avg
+              </div>
+            </n-flex>
           </n-flex>
         </n-flex>
 
@@ -66,7 +137,7 @@ const emit = defineEmits(["show:key"]);
             :focusable="false"
             text
             style="font-size: 16px"
-            @click="emit('show:key', conn)"
+            @click="emit('show:key', conn.key)"
           >
             <n-icon>
               <ChartLine />
@@ -75,7 +146,7 @@ const emit = defineEmits(["show:key"]);
         </n-flex>
       </n-flex>
     </n-card>
-  </n-flex>
+  </div>
 </template>
 
 <style scoped>

@@ -22,6 +22,7 @@ export type LandscapeConfig = {
   web: LandscapeWebConfig;
   log: LandscapeLogConfig;
   store: LandscapeStoreConfig;
+  metric: LandscapeMetricConfig;
 };
 
 export type LandscapeLogConfig = {
@@ -29,6 +30,12 @@ export type LandscapeLogConfig = {
   debug: boolean | null;
   log_output_in_terminal: boolean | null;
   max_log_files: number | null;
+};
+
+export type LandscapeMetricConfig = {
+  retention_days: bigint | null;
+  batch_size: number | null;
+  flush_interval_secs: bigint | null;
 };
 
 export type LandscapeStoreConfig = { database_path: string | null };

@@ -6,12 +6,15 @@ import {
   get_connect_metric_info,
 } from "@/api/metric";
 import { ServiceStatus, ServiceStatusType } from "@/lib/services";
-import { ConnectKey } from "landscape-types/common/metric/connect";
+import {
+  ConnectKey,
+  ConnectRealtimeStatus,
+} from "landscape-types/common/metric/connect";
 
 export const useMetricStore = defineStore("dns_metric", () => {
   const enable = ref(false);
   const metric_status = ref<ServiceStatus>({ t: ServiceStatusType.Stop });
-  const firewall_info = ref<ConnectKey[]>();
+  const firewall_info = ref<ConnectRealtimeStatus[]>();
 
   const is_down = computed(() => {
     return metric_status.value.t == ServiceStatusType.Stop;

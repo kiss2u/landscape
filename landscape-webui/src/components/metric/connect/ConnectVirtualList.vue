@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ConnectKey } from "landscape-types/common/metric/connect";
+import {
+  ConnectKey,
+  ConnectRealtimeStatus,
+} from "landscape-types/common/metric/connect";
 
 interface Props {
-  connect_metrics: ConnectKey[];
+  connect_metrics: ConnectRealtimeStatus[];
 }
 const props = defineProps<Props>();
 
@@ -16,9 +19,13 @@ async function show_chart_drawer(key: ConnectKey) {
 </script>
 
 <template>
-  <n-virtual-list class="list" :item-size="52" :items="props.connect_metrics">
-    <template #default="{ item }">
-      <ConnectItemInfo @show:key="show_chart_drawer" :conn="item" />
+  <n-virtual-list class="list" :item-size="40" :items="props.connect_metrics">
+    <template #default="{ item, index }">
+      <ConnectItemInfo
+        @show:key="show_chart_drawer"
+        :conn="item"
+        :index="index"
+      />
     </template>
   </n-virtual-list>
 

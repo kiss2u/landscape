@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::{net::IpAddr, sync::Arc};
 
@@ -101,11 +101,30 @@ pub struct ConnectAgg {
     pub egress_packets: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct ConnectRealtimeStatus {
+    pub key: ConnectKey,
+
+    #[ts(type = "number")]
+    pub ingress_bps: u64,
+    #[ts(type = "number")]
+    pub egress_bps: u64,
+    #[ts(type = "number")]
+    pub ingress_pps: u64,
+    #[ts(type = "number")]
+    pub egress_pps: u64,
+
+    pub last_metric: Option<ConnectMetric>,
+}
+
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct ConnectMetricManager {
     /// 存储所有连接事件：创建、销毁
     active_connects: Arc<RwLock<HashSet<ConnectKey>>>,
+    /// 实时速率缓存: Key -> (上一次的指标, 当前算出的状态)
+    realtime_metrics: Arc<RwLock<HashMap<ConnectKey, ConnectRealtimeStatus>>>,
     msg_channel: mpsc::Sender<ConnectMessage>,
     #[cfg(feature = "duckdb")]
     metric_store: DuckMetricStore,
@@ -116,6 +135,9 @@ impl ConnectMetricManager {
     pub async fn new(base_path: PathBuf) -> Self {
         let active_connects = Arc::new(RwLock::new(HashSet::new()));
         let active_connects_clone = active_connects.clone();
+
+        let realtime_metrics = Arc::new(RwLock::new(HashMap::new()));
+        let realtime_metrics_clone = realtime_metrics.clone();
 
         #[cfg(feature = "duckdb")]
         let metric_store = DuckMetricStore::new(base_path).await;
@@ -159,6 +181,9 @@ impl ConnectMetricManager {
                     ConnectEventType::DisConnct => {
                         let mut connect_set = active_connects_clone.write().await;
                         connect_set.remove(&info.key);
+
+                        let mut realtime_set = realtime_metrics_clone.write().await;
+                        realtime_set.remove(&info.key);
                     }
                 }
             }
@@ -167,6 +192,8 @@ impl ConnectMetricManager {
         #[cfg(feature = "duckdb")]
         let metric_store_clone = metric_store.clone();
         let (msg_channel, mut message_rx) = mpsc::channel(1024);
+        let realtime_metrics_clone_for_msg = realtime_metrics.clone();
+
         tokio::spawn(async move {
             while let Some(msg) = message_rx.recv().await {
                 match msg {
@@ -176,6 +203,48 @@ impl ConnectMetricManager {
                         metric_store_clone.insert_connect_info(info).await;
                     }
                     ConnectMessage::Metric(metric) => {
+                        // 计算实时速率
+                        {
+                            let mut realtime_set = realtime_metrics_clone_for_msg.write().await;
+                            let key = metric.key.clone();
+
+                            let status =
+                                realtime_set.entry(key.clone()).or_insert(ConnectRealtimeStatus {
+                                    key: key.clone(),
+                                    ingress_bps: 0,
+                                    egress_bps: 0,
+                                    ingress_pps: 0,
+                                    egress_pps: 0,
+                                    last_metric: None,
+                                });
+
+                            if let Some(old_metric) = &status.last_metric {
+                                let delta_time_ms =
+                                    metric.report_time.saturating_sub(old_metric.report_time);
+                                if delta_time_ms > 0 {
+                                    let delta_ingress_bytes = metric
+                                        .ingress_bytes
+                                        .saturating_sub(old_metric.ingress_bytes);
+                                    let delta_egress_bytes =
+                                        metric.egress_bytes.saturating_sub(old_metric.egress_bytes);
+                                    let delta_ingress_pkts = metric
+                                        .ingress_packets
+                                        .saturating_sub(old_metric.ingress_packets);
+                                    let delta_egress_pkts = metric
+                                        .egress_packets
+                                        .saturating_sub(old_metric.egress_packets);
+
+                                    status.ingress_bps =
+                                        (delta_ingress_bytes * 8000) / delta_time_ms;
+                                    status.egress_bps = (delta_egress_bytes * 8000) / delta_time_ms;
+                                    status.ingress_pps =
+                                        (delta_ingress_pkts * 1000) / delta_time_ms;
+                                    status.egress_pps = (delta_egress_pkts * 1000) / delta_time_ms;
+                                }
+                            }
+                            status.last_metric = Some(metric.clone());
+                        }
+
                         #[cfg(feature = "duckdb")]
                         metric_store_clone.insert_metric(metric).await;
                     }
@@ -187,6 +256,7 @@ impl ConnectMetricManager {
 
         ConnectMetricManager {
             active_connects,
+            realtime_metrics,
             msg_channel,
             #[cfg(feature = "duckdb")]
             metric_store,
@@ -199,10 +269,25 @@ impl ConnectMetricManager {
         }
     }
 
-    pub async fn connect_infos(&self) -> Vec<ConnectKey> {
+    pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         let connects = self.active_connects.read().await;
-        let mut result: Vec<ConnectKey> = connects.iter().map(Clone::clone).collect();
-        result.sort_by(|a, b| a.create_time.cmp(&b.create_time));
+        let realtime_metrics = self.realtime_metrics.read().await;
+
+        let mut result: Vec<ConnectRealtimeStatus> = connects
+            .iter()
+            .map(|key| {
+                realtime_metrics.get(key).cloned().unwrap_or_else(|| ConnectRealtimeStatus {
+                    key: key.clone(),
+                    ingress_bps: 0,
+                    egress_bps: 0,
+                    ingress_pps: 0,
+                    egress_pps: 0,
+                    last_metric: None,
+                })
+            })
+            .collect();
+
+        result.sort_by(|a, b| a.key.create_time.cmp(&b.key.create_time));
         result
     }
 

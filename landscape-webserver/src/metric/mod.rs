@@ -3,7 +3,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use landscape_common::metric::connect::{ConnectKey, ConnectMetric};
+use landscape_common::metric::connect::{ConnectKey, ConnectMetric, ConnectRealtimeStatus};
 use serde_json::Value;
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
@@ -23,7 +23,7 @@ pub async fn get_metric_status(State(state): State<LandscapeApp>) -> LandscapeAp
 
 pub async fn get_connects_info(
     State(state): State<LandscapeApp>,
-) -> LandscapeApiResult<Vec<ConnectKey>> {
+) -> LandscapeApiResult<Vec<ConnectRealtimeStatus>> {
     let data = state.metric_service.data.connect_metric.connect_infos().await;
     LandscapeApiResp::success(data)
 }

@@ -97,3 +97,15 @@ export function formatMacAddress(mac: string): string {
 export function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+export function formatRate(bps: number): string {
+  if (bps < 1000) return `${bps} bps`;
+  if (bps < 1000000) return `${(bps / 1000).toFixed(2)} Kbps`;
+  if (bps < 1000000000) return `${(bps / 1000000).toFixed(2)} Mbps`;
+  return `${(bps / 1000000000).toFixed(2)} Gbps`;
+}
+
+export function formatPackets(pps: number): string {
+  if (pps < 1000) return `${pps} pps`;
+  return `${(pps / 1000).toFixed(2)} Kpps`;
+}
