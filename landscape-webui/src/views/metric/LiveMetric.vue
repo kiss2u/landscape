@@ -5,6 +5,7 @@ import { ConnectFilter } from "@/lib/metric.rs";
 import { formatRate, formatPackets } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 import ConnectVirtualList from "@/components/metric/connect/ConnectVirtualList.vue";
+import FlowSelect from "@/components/flow/FlowSelect.vue";
 
 const metricStore = useMetricStore();
 const themeVars = useThemeVars();
@@ -153,13 +154,9 @@ const totalStats = computed(() => {
         clearable
         style="width: 110px"
       />
-      <n-input-number
-        v-model:value="liveFilter.flow_id"
-        placeholder="Flow"
-        :min="1"
-        :max="255"
-        clearable
-        style="width: 100px"
+      <FlowSelect
+        v-model="liveFilter.flow_id"
+        width="120px"
       />
 
       <n-button-group>

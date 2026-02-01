@@ -5,6 +5,7 @@ import { get_connect_history } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
+import FlowSelect from "@/components/flow/FlowSelect.vue";
 import { ConnectKey } from "landscape-types/common/metric/connect";
 
 const themeVars = useThemeVars();
@@ -220,14 +221,10 @@ onMounted(() => {
         clearable
         style="width: 130px"
       />
-      <n-input-number
-        v-model:value="historyFilter.flow_id"
-        placeholder="Flow"
-        :min="1"
-        :max="255"
+      <FlowSelect
+        v-model="historyFilter.flow_id"
         :disabled="loading"
-        clearable
-        style="width: 100px"
+        width="120px"
       />
 
       <n-divider vertical />

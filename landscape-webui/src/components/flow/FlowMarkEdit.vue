@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { get_flow_rules } from "@/api/flow";
 import { FlowMarkType } from "@/lib/default_value";
 import { FlowMark } from "landscape-types/flow";
-import { computed, onMounted, ref } from "vue";
+import { computed } from "vue";
+import FlowSelect from "./FlowSelect.vue";
 
 const mark = defineModel<FlowMark>("mark", { required: true });
 
@@ -25,22 +25,6 @@ const mark_type_option = [
   },
 ];
 
-onMounted(async () => {
-  await search_flows();
-});
-
-const flow_rules = ref<any[]>([]);
-const flow_options = computed(() => {
-  return flow_rules.value.map((e) => ({
-    value: e.flow_id,
-    label: e.remark ? `${e.flow_id} - ${e.remark}` : e.flow_id,
-  }));
-});
-const flow_search_loading = ref(false);
-async function search_flows() {
-  flow_rules.value = await get_flow_rules();
-}
-
 const show_other_function = computed(() => {
   return (
     mark.value.action.t == FlowMarkType.KeepGoing ||
@@ -49,7 +33,6 @@ const show_other_function = computed(() => {
 });
 
 function mark_action_update(value: FlowMarkType) {
-  // console.log(value);
   switch (value) {
     case FlowMarkType.KeepGoing:
     case FlowMarkType.Direct: {
@@ -92,16 +75,11 @@ function mark_action_update(value: FlowMarkType) {
       :options="mark_type_option"
       placeholder="选择匹配方式"
     />
-    <n-select
-      style="width: 50%"
-      v-model:value="mark.flow_id"
-      filterable
+    <FlowSelect
+      v-model="mark.flow_id"
+      :include-all="false"
       placeholder="指定流的 ID"
-      :options="flow_options"
-      :loading="flow_search_loading"
-      clearable
-      remote
-      @search="search_flows"
+      width="50%"
     />
   </n-input-group>
   <n-select
