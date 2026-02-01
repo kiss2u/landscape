@@ -4,7 +4,8 @@ use axum::{
     Json, Router,
 };
 use landscape_common::metric::connect::{
-    ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric, ConnectRealtimeStatus, ConnectGlobalStats,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    ConnectRealtimeStatus,
 };
 use serde_json::Value;
 

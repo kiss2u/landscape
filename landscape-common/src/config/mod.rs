@@ -278,9 +278,15 @@ impl RuntimeConfig {
             ),
         };
         let metric = MetricRuntimeConfig {
-            retention_days: config.metric.retention_days.unwrap_or(crate::DEFAULT_METRIC_RETENTION_DAYS),
+            retention_days: config
+                .metric
+                .retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_RETENTION_DAYS),
             batch_size: config.metric.batch_size.unwrap_or(crate::DEFAULT_METRIC_BATCH_SIZE),
-            flush_interval_secs: config.metric.flush_interval_secs.unwrap_or(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS),
+            flush_interval_secs: config
+                .metric
+                .flush_interval_secs
+                .unwrap_or(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS),
         };
 
         let runtime_config = RuntimeConfig {

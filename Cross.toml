@@ -1,9 +1,0 @@
-[target.x86_64-unknown-linux-musl]
-pre-build = [
-    "rustup toolchain install nightly --component rust-src",                  # 安装 nightly 工具链
-    "rustup default nightly",                                                 # 设置 nightly 为默认工具链
-    "rustup target add x86_64-unknown-linux-musl",                            # 添加 musl 目标平台
-    "apk update",                                                             # 更新包索引
-    "apk add --no-cache gcc musl-dev musl-tools clang elfutils-dev zlib-dev", # 安装 gcc 和 musl 工具链
-]
-image = "rust:alpine3.21"

@@ -7,27 +7,36 @@ use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
 
-
 /// Database operation messages
 pub enum DBMessage {
     InsertConnectInfo(ConnectInfo),
     InsertMetric(ConnectMetric),
 
-    QueryMetricByKey { key: ConnectKey, resp: oneshot::Sender<Vec<ConnectMetric>> },
-    QueryCurrentActiveConnectKeys { resp: oneshot::Sender<Vec<ConnectKey>> },
+    QueryMetricByKey {
+        key: ConnectKey,
+        resp: oneshot::Sender<Vec<ConnectMetric>>,
+    },
+    QueryCurrentActiveConnectKeys {
+        resp: oneshot::Sender<Vec<ConnectKey>>,
+    },
 
-    CollectAndCleanupOldMetrics { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectMetric>>> },
-    QueryConnectHistory { 
-        limit: Option<usize>, 
-        start_time: Option<u64>, 
-        end_time: Option<u64>, 
-        resp: oneshot::Sender<Vec<ConnectHistoryStatus>> 
+    CollectAndCleanupOldMetrics {
+        cutoff: u64,
+        resp: oneshot::Sender<Box<Vec<ConnectMetric>>>,
+    },
+    QueryConnectHistory {
+        limit: Option<usize>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+        resp: oneshot::Sender<Vec<ConnectHistoryStatus>>,
     },
     QueryConnectHistoryComplex {
         params: ConnectHistoryQueryParams,
-        resp: oneshot::Sender<Vec<ConnectHistoryStatus>>
+        resp: oneshot::Sender<Vec<ConnectHistoryStatus>>,
     },
-    QueryGlobalStats { resp: oneshot::Sender<ConnectGlobalStats> },
+    QueryGlobalStats {
+        resp: oneshot::Sender<ConnectGlobalStats>,
+    },
 }
 
 #[derive(Clone)]
@@ -251,8 +260,8 @@ pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMe
 }
 
 pub fn query_historical_summaries_complex(
-    conn: &Connection, 
-    params: ConnectHistoryQueryParams
+    conn: &Connection,
+    params: ConnectHistoryQueryParams,
 ) -> Vec<ConnectHistoryStatus> {
     let mut where_clauses = Vec::new();
     if let Some(start) = params.start_time {
@@ -308,11 +317,8 @@ pub fn query_historical_summaries_complex(
         SortOrder::Desc => "DESC",
     };
 
-    let limit_clause = if let Some(l) = params.limit {
-        format!("LIMIT {}", l)
-    } else {
-        String::new()
-    };
+    let limit_clause =
+        if let Some(l) = params.limit { format!("LIMIT {}", l) } else { String::new() };
 
     let stmt = format!("
         SELECT 
@@ -331,32 +337,31 @@ pub fn query_historical_summaries_complex(
             return Vec::new();
         }
     };
-    
-    let rows = stmt
-        .query_map([], |row| {
-            let src_ip_str = row.get::<_, String>(0)?;
-            let dst_ip_str = row.get::<_, String>(1)?;
-            let key = ConnectKey {
-                src_ip: src_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-                dst_ip: dst_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-                src_port: row.get::<_, i64>(2)? as u16,
-                dst_port: row.get::<_, i64>(3)? as u16,
-                l4_proto: row.get::<_, i64>(4)? as u8,
-                l3_proto: row.get::<_, i64>(5)? as u8,
-                flow_id: row.get::<_, i64>(6)? as u8,
-                trace_id: row.get::<_, i64>(7)? as u8,
-                create_time: row.get::<_, i64>(8)? as u64,
-            };
-            Ok(ConnectHistoryStatus {
-                key,
-                total_ingress_bytes: row.get::<_, i64>(9)? as u64,
-                total_egress_bytes: row.get::<_, i64>(10)? as u64,
-                total_ingress_pkts: row.get::<_, i64>(11)? as u64,
-                total_egress_pkts: row.get::<_, i64>(12)? as u64,
-                last_report_time: row.get::<_, i64>(13)? as u64,
-                status: row.get::<_, i64>(14)? as u8,
-            })
-        });
+
+    let rows = stmt.query_map([], |row| {
+        let src_ip_str = row.get::<_, String>(0)?;
+        let dst_ip_str = row.get::<_, String>(1)?;
+        let key = ConnectKey {
+            src_ip: src_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+            dst_ip: dst_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+            src_port: row.get::<_, i64>(2)? as u16,
+            dst_port: row.get::<_, i64>(3)? as u16,
+            l4_proto: row.get::<_, i64>(4)? as u8,
+            l3_proto: row.get::<_, i64>(5)? as u8,
+            flow_id: row.get::<_, i64>(6)? as u8,
+            trace_id: row.get::<_, i64>(7)? as u8,
+            create_time: row.get::<_, i64>(8)? as u64,
+        };
+        Ok(ConnectHistoryStatus {
+            key,
+            total_ingress_bytes: row.get::<_, i64>(9)? as u64,
+            total_egress_bytes: row.get::<_, i64>(10)? as u64,
+            total_ingress_pkts: row.get::<_, i64>(11)? as u64,
+            total_egress_pkts: row.get::<_, i64>(12)? as u64,
+            last_report_time: row.get::<_, i64>(13)? as u64,
+            status: row.get::<_, i64>(14)? as u8,
+        })
+    });
 
     match rows {
         Ok(r) => r.filter_map(Result::ok).collect(),
@@ -381,23 +386,22 @@ pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
             return Vec::new();
         }
     };
-    
-    let rows = stmt
-        .query_map([], |row| {
-            let src_ip_str = row.get::<_, String>(0)?;
-            let dst_ip_str = row.get::<_, String>(1)?;
-            Ok(ConnectKey {
-                src_ip: src_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-                dst_ip: dst_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-                src_port: row.get::<_, i64>(2)? as u16,
-                dst_port: row.get::<_, i64>(3)? as u16,
-                l4_proto: row.get::<_, i64>(4)? as u8,
-                l3_proto: row.get::<_, i64>(5)? as u8,
-                flow_id: row.get::<_, i64>(6)? as u8,
-                trace_id: row.get::<_, i64>(7)? as u8,
-                create_time: row.get::<_, i64>(8)? as u64,
-            })
-        });
+
+    let rows = stmt.query_map([], |row| {
+        let src_ip_str = row.get::<_, String>(0)?;
+        let dst_ip_str = row.get::<_, String>(1)?;
+        Ok(ConnectKey {
+            src_ip: src_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+            dst_ip: dst_ip_str.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+            src_port: row.get::<_, i64>(2)? as u16,
+            dst_port: row.get::<_, i64>(3)? as u16,
+            l4_proto: row.get::<_, i64>(4)? as u8,
+            l3_proto: row.get::<_, i64>(5)? as u8,
+            flow_id: row.get::<_, i64>(6)? as u8,
+            trace_id: row.get::<_, i64>(7)? as u8,
+            create_time: row.get::<_, i64>(8)? as u64,
+        })
+    });
 
     match rows {
         Ok(r) => r.filter_map(Result::ok).collect(),
@@ -449,9 +453,10 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
 
     create_summaries_table(&conn);
     create_metrics_table(&conn).unwrap();
-    
+
     // Schema migration: ensure columns exist
-    let _ = conn.execute("ALTER TABLE connect_summaries ADD COLUMN IF NOT EXISTS status INTEGER", []);
+    let _ =
+        conn.execute("ALTER TABLE connect_summaries ADD COLUMN IF NOT EXISTS status INTEGER", []);
     let _ = conn.execute("ALTER TABLE metrics ADD COLUMN IF NOT EXISTS status INTEGER", []);
 
     let mut metrics_appender = conn.appender("metrics").unwrap();
@@ -482,7 +487,7 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                         DBMessage::InsertConnectInfo(info) => {
                             let key = &info.key;
                             let event_type_val: u8 = info.event_type.into();
-                            
+
                             // 直接更新汇总表现状
                             let _ = summary_stmt.execute(params![
                                 key.src_ip.to_string(),
@@ -525,7 +530,7 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                                     v as i64
                                 },
                             ]);
-                            
+
                             let _ = summary_stmt.execute(params![
                                 key.src_ip.to_string(),
                                 key.dst_ip.to_string(),
@@ -566,12 +571,15 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
                         }
                         DBMessage::QueryConnectHistory { limit, start_time, end_time, resp } => {
                             let _ = metrics_appender.flush();
-                            let result = query_historical_summaries_complex(&conn, ConnectHistoryQueryParams {
-                                limit,
-                                start_time,
-                                end_time,
-                                ..Default::default()
-                            });
+                            let result = query_historical_summaries_complex(
+                                &conn,
+                                ConnectHistoryQueryParams {
+                                    limit,
+                                    start_time,
+                                    end_time,
+                                    ..Default::default()
+                                },
+                            );
                             let _ = resp.send(result);
                         }
                         DBMessage::QueryConnectHistoryComplex { params, resp } => {
@@ -643,13 +651,24 @@ impl DuckMetricStore {
         rx.await.unwrap()
     }
 
-    pub async fn history_summaries(&self, limit: Option<usize>, start_time: Option<u64>, end_time: Option<u64>) -> Vec<ConnectHistoryStatus> {
+    pub async fn history_summaries(
+        &self,
+        limit: Option<usize>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+    ) -> Vec<ConnectHistoryStatus> {
         let (resp, rx) = oneshot::channel();
-        let _ = self.tx.send(DBMessage::QueryConnectHistory { limit, start_time, end_time, resp }).await;
+        let _ = self
+            .tx
+            .send(DBMessage::QueryConnectHistory { limit, start_time, end_time, resp })
+            .await;
         rx.await.unwrap()
     }
 
-    pub async fn history_summaries_complex(&self, params: ConnectHistoryQueryParams) -> Vec<ConnectHistoryStatus> {
+    pub async fn history_summaries_complex(
+        &self,
+        params: ConnectHistoryQueryParams,
+    ) -> Vec<ConnectHistoryStatus> {
         let (resp, rx) = oneshot::channel();
         if let Err(e) = self.tx.send(DBMessage::QueryConnectHistoryComplex { params, resp }).await {
             tracing::error!("Failed to send query message: {}", e);
@@ -667,7 +686,6 @@ impl DuckMetricStore {
         rx.await.unwrap_or_default()
     }
 }
-
 
 /// Create `connect_summaries` table to store the latest state of each connection
 pub fn create_summaries_table(conn: &Connection) {
