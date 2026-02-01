@@ -7,7 +7,6 @@ use landscape_common::{
 use tokio::sync::oneshot;
 
 pub mod connect_manager;
-#[cfg(feature = "duckdb")]
 pub mod duckdb;
 #[cfg(feature = "polars")]
 pub mod polars;

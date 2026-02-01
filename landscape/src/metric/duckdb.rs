@@ -451,7 +451,10 @@ pub fn start_db_thread(mut rx: mpsc::Receiver<DBMessage>, base_path: PathBuf) {
         std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
     }
 
-    let db_path = base_path.join("metrics.duckdb");
+    let db_path = base_path.join(format!(
+        "metrics_v{}.duckdb",
+        landscape_common::LANDSCAPE_METRIC_DB_VERSION
+    ));
     let conn = Connection::open(db_path).unwrap();
 
     create_summaries_table(&conn);

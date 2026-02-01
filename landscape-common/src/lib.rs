@@ -65,6 +65,7 @@ pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
 /// metric
 pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
+pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 1;
 
 pub const DEFAULT_METRIC_RETENTION_DAYS: u64 = 7;
 pub const DEFAULT_METRIC_BATCH_SIZE: usize = 2000;

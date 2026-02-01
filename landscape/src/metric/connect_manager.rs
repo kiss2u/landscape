@@ -10,7 +10,6 @@ use landscape_common::metric::connect::{
     ConnectMetric, ConnectRealtimeStatus, ConnectEventType,
 };
 
-#[cfg(feature = "duckdb")]
 use crate::metric::duckdb::DuckMetricStore;
 
 #[derive(Clone)]
@@ -21,7 +20,6 @@ pub struct ConnectMetricManager {
     /// 实时速率缓存: Key -> (上一次的指标, 当前算出的状态)
     realtime_metrics: Arc<RwLock<HashMap<ConnectKey, ConnectRealtimeStatus>>>,
     msg_channel: mpsc::Sender<ConnectMessage>,
-    #[cfg(feature = "duckdb")]
     metric_store: DuckMetricStore,
     pub global_stats: Arc<RwLock<ConnectGlobalStats>>,
 }
@@ -35,13 +33,10 @@ impl ConnectMetricManager {
         let realtime_metrics = Arc::new(RwLock::new(HashMap::new()));
         let realtime_metrics_clone = realtime_metrics.clone();
 
-        #[cfg(feature = "duckdb")]
         let metric_store = DuckMetricStore::new(base_path).await;
 
-        #[cfg(feature = "duckdb")]
         let metric_store_clone = metric_store.clone();
 
-        #[cfg(feature = "duckdb")]
         tokio::spawn(async move {
             // 定时清理
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
@@ -80,7 +75,6 @@ impl ConnectMetricManager {
             }
         });
 
-        #[cfg(feature = "duckdb")]
         let metric_store_clone = metric_store.clone();
         let (msg_channel, mut message_rx) = mpsc::channel(1024);
         let realtime_metrics_clone_for_msg = realtime_metrics.clone();
@@ -90,7 +84,6 @@ impl ConnectMetricManager {
                 match msg {
                     ConnectMessage::Event(info) => {
                         let _ = conn_tx.send(info.clone()).await;
-                        #[cfg(feature = "duckdb")]
                         metric_store_clone.insert_connect_info(info).await;
                     }
                     ConnectMessage::Metric(metric) => {
@@ -136,7 +129,6 @@ impl ConnectMetricManager {
                             status.last_metric = Some(metric.clone());
                         }
 
-                        #[cfg(feature = "duckdb")]
                         metric_store_clone.insert_metric(metric).await;
                     }
                 }
@@ -149,13 +141,11 @@ impl ConnectMetricManager {
             active_connects,
             realtime_metrics,
             msg_channel,
-            #[cfg(feature = "duckdb")]
             metric_store: metric_store.clone(),
             global_stats: Arc::new(RwLock::new(ConnectGlobalStats::default())),
         };
 
         // 定时汇总全量统计 (每 24 小时)
-        #[cfg(feature = "duckdb")]
         {
             let metric_store_clone = metric_store;
             let global_stats_clone = manager.global_stats.clone();
@@ -211,31 +201,13 @@ impl ConnectMetricManager {
     }
 
     pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
-        #[cfg(any(feature = "duckdb", feature = "polars"))]
-        {
-            self.metric_store.query_metric_by_key(key).await
-        }
-
-        #[cfg(not(any(feature = "duckdb", feature = "polars")))]
-        {
-            let _ = key;
-            Vec::new()
-        }
+        self.metric_store.query_metric_by_key(key).await
     }
 
     pub async fn history_summaries_complex(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
-        #[cfg(feature = "duckdb")]
-        {
-            self.metric_store.history_summaries_complex(params).await
-        }
-
-        #[cfg(not(feature = "duckdb"))]
-        {
-            let _ = params;
-            Vec::new()
-        }
+        self.metric_store.history_summaries_complex(params).await
     }
 }
