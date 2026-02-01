@@ -50,6 +50,7 @@ default = []
 
 polars = ["dep:polars"]
 duckdb = ["dep:duckdb"]
+duckdb-bundled = ["dep:duckdb", "duckdb/bundled"]
 
 
 [dev-dependencies]

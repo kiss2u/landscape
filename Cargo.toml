@@ -121,7 +121,7 @@ hickory-proto = "0.25.2"
 # polars 
 polars = { version = "0.52.0", features = ["dtype-u16", "dtype-u8"] }
 # duckdb
-duckdb = { version = "1.4.3", features = ["bundled"] }
+duckdb = { version = "1.4.4" }
 
 portable-pty = { version = "0.9.0" }
 
