@@ -185,20 +185,20 @@ onMounted(() => {
 <template>
   <n-flex vertical style="flex: 1; overflow: hidden">
     <!-- 历史模式专用工具栏 -->
-    <n-flex align="center" :wrap="true" style="margin-bottom: 12px">
+    <n-flex align="center" :wrap="true" style="margin-bottom: 12px" size="small">
       <n-input
         v-model:value="historyFilter.src_ip"
         placeholder="源IP"
         clearable
         :disabled="loading"
-        style="width: 170px"
+        style="width: 150px"
       />
       <n-input
         v-model:value="historyFilter.dst_ip"
         placeholder="目标IP"
         clearable
         :disabled="loading"
-        style="width: 170px"
+        style="width: 150px"
       />
       <n-input-group style="width: 220px">
         <n-input-number
@@ -223,7 +223,7 @@ onMounted(() => {
         :options="protocolOptions"
         :disabled="loading"
         clearable
-        style="width: 130px"
+        style="width: 110px"
       />
       <FlowSelect
         v-model="historyFilter.flow_id"
@@ -256,7 +256,7 @@ onMounted(() => {
         v-model:value="queryLimit"
         :options="limitOptions"
         :disabled="loading"
-        style="width: 140px"
+        style="width: 130px"
       />
 
       <n-button-group>
@@ -276,7 +276,7 @@ onMounted(() => {
           :disabled="loading"
           @click="toggleSort('time')"
         >
-          发起时间
+          创建时间
           {{ sortKey === "time" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button

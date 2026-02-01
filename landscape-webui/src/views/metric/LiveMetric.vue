@@ -75,7 +75,9 @@ const filteredConnectMetrics = computed(() => {
   return filtered.sort((a, b) => {
     let result = 0;
     if (sortKey.value === "time") {
-      result = (a.key.create_time || 0) - (b.key.create_time || 0);
+      const timeA = a.last_metric?.report_time || a.key.create_time || 0;
+      const timeB = b.last_metric?.report_time || b.key.create_time || 0;
+      result = timeA - timeB;
     } else if (sortKey.value === "port") {
       result = (a.key.src_port || 0) - (b.key.src_port || 0);
     } else if (sortKey.value === "ingress") {
@@ -170,7 +172,7 @@ const totalStats = computed(() => {
           :type="sortKey === 'time' ? 'primary' : 'default'"
           @click="toggleSort('time')"
         >
-          发起时间
+          活跃时间
           {{ sortKey === "time" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button

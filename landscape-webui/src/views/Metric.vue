@@ -7,6 +7,7 @@ import type { ConnectGlobalStats } from "landscape-types/common/metric/connect";
 import LiveMetric from "./metric/LiveMetric.vue";
 import HistoryMetric from "./metric/HistoryMetric.vue";
 import { useThemeVars } from "naive-ui";
+import { Renew } from "@vicons/carbon";
 
 const metricStore = useMetricStore();
 const themeVars = useThemeVars();
@@ -22,9 +23,7 @@ onMounted(async () => {
   await metricStore.UPDATE_INFO();
 
   // 获取一次历史全量统计
-  get_connect_global_stats().then((res) => {
-    globalStats.value = res;
-  });
+  refreshGlobalStats();
 
   timer = setInterval(async () => {
     if (viewMode.value === "live") {
@@ -58,6 +57,24 @@ const systemStats = computed(() => {
   }
   return stats;
 });
+
+const refreshingStats = ref(false);
+async function refreshGlobalStats() {
+  if (refreshingStats.value) return;
+  refreshingStats.value = true;
+  
+  try {
+    const [stats] = await Promise.all([
+      get_connect_global_stats(),
+      new Promise((resolve) => setTimeout(resolve, 500)), // 至少显示 500ms loading
+    ]);
+    globalStats.value = stats;
+  } catch (e) {
+    console.error(e);
+  } finally {
+    refreshingStats.value = false;
+  }
+}
 </script>
 
 <template>
@@ -136,14 +153,27 @@ const systemStats = computed(() => {
               formatSize(globalStats.total_ingress_bytes)
             }}</span>
           </n-flex>
-          <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">更新于:</span>
-            <n-time
-              :time="globalStats.last_calculate_time"
-              format="yyyy-MM-dd HH:mm"
-              style="color: #aaa"
-            />
-          </n-flex>
+            <n-flex align="center" size="small" :wrap="false">
+              <span style="color: #888; font-size: 13px">更新于:</span>
+              <n-time
+                :time="globalStats.last_calculate_time"
+                format="yyyy-MM-dd HH:mm"
+                style="color: #aaa"
+              />
+              <span style="font-size: 12px; color: #aaa; margin-left: 2px">(每 24h 更新)</span>
+              <n-button
+                quaternary
+                circle
+                size="tiny"
+                @click="refreshGlobalStats"
+                :loading="refreshingStats"
+                style="margin-left: 4px"
+              >
+                <template #icon>
+                  <n-icon><Renew /></n-icon>
+                </template>
+              </n-button>
+            </n-flex>
         </n-flex>
       </n-flex>
     </n-flex>
