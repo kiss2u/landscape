@@ -129,13 +129,6 @@ impl ConnectMetricManager {
                     let mut lock = global_stats_clone.write().await;
                     *lock = stats;
                     tracing::info!("Global stats updated: {} connects", lock.total_connect_count);
-
-                    let retention_days = metric_store_clone.config.retention_days.max(1);
-                    let cutoff = landscape_common::utils::time::get_current_time_ms()
-                        .unwrap_or_default()
-                        .saturating_sub(retention_days as u64 * 24 * 3600 * 1000);
-                    let _ = metric_store_clone.collect_and_cleanup_old_metrics(cutoff).await;
-                    tracing::info!("Cleanup old metrics, cutoff: {}", cutoff);
                 }
             });
         }

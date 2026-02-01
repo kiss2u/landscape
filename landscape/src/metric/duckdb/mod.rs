@@ -80,6 +80,9 @@ pub fn start_db_thread(
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
+    let mut last_cleanup = std::time::Instant::now();
+    let cleanup_interval = std::time::Duration::from_secs(24 * 3600);
+
     rt.block_on(async {
         loop {
             let now = std::time::Instant::now();
@@ -199,6 +202,23 @@ pub fn start_db_thread(
                     }
                     last_flush = std::time::Instant::now();
                 }
+            }
+            
+            if last_cleanup.elapsed() > cleanup_interval {
+                let retention_days = metric_config.retention_days.max(1);
+                let cutoff = landscape_common::utils::time::get_current_time_ms()
+                    .unwrap_or_default()
+                    .saturating_sub(retention_days as u64 * 24 * 3600 * 1000);
+                
+                let _ = metrics_appender.flush();
+                let _ = dns_appender.flush();
+                batch_count = 0;
+                last_flush = std::time::Instant::now();
+                last_cleanup = std::time::Instant::now();
+
+                let _ = connect::collect_and_cleanup_old_metrics(&conn, cutoff);
+                dns::cleanup_old_dns_metrics(&conn, cutoff);
+                tracing::info!("Auto cleanup old metrics, cutoff: {}", cutoff);
             }
         }
     });
