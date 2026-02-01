@@ -1,6 +1,8 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use landscape_common::metric::connect::{ConnectEventType, ConnectInfo, ConnectKey, ConnectMetric};
+use landscape_common::metric::connect::{
+    ConnectEventType, ConnectInfo, ConnectKey, ConnectMetric, ConnectStatusType,
+};
 
 use crate::{
     map_setting::share_map::types::{
@@ -60,6 +62,7 @@ impl From<&firewall_conn_metric_event> for ConnectMetric {
             ingress_packets: ev.ingress_packets,
             egress_bytes: ev.egress_bytes,
             egress_packets: ev.egress_packets,
+            status: ConnectStatusType::Disabled,
         }
     }
 }
@@ -85,6 +88,7 @@ impl From<&nat_conn_metric_event> for ConnectMetric {
             ingress_packets: ev.ingress_packets,
             egress_bytes: ev.egress_bytes,
             egress_packets: ev.egress_packets,
+            status: ConnectStatusType::from(ev.status),
         }
     }
 }

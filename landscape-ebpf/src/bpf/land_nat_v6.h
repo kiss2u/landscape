@@ -88,7 +88,7 @@ static __always_inline void nat6_metric_accumulate(struct __sk_buff *skb, bool i
 }
 
 static __always_inline int nat_metric_try_report_v6(struct nat_timer_key_v6 *timer_key,
-                                                    struct nat_timer_value_v6 *timer_value) {
+                                                    struct nat_timer_value_v6 *timer_value, u8 status) {
 #define BPF_LOG_TOPIC "nat_metric_try_report_v6"
 
     struct nat_conn_metric_event *event;
@@ -114,6 +114,7 @@ static __always_inline int nat_metric_try_report_v6(struct nat_timer_key_v6 *tim
     event->ingress_packets = timer_value->ingress_packets;
     event->egress_bytes = timer_value->egress_bytes;
     event->egress_packets = timer_value->egress_packets;
+    event->status = status;
     bpf_ringbuf_submit(event, 0);
 
     return 0;
@@ -158,10 +159,17 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
             event->event_type = NAT_DELETE_CONN;
             bpf_ringbuf_submit(event, 0);
         }
+
+        ret = nat_metric_try_report_v6(key, value, NAT_CONN_DELETE);
+        if (ret) {
+            bpf_log_info("call back report fail");
+            bpf_timer_start(&value->timer, next_timeout, 0);
+            return 0;
+        }
         goto release;
     }
 
-    ret = nat_metric_try_report_v6(key, value);
+    ret = nat_metric_try_report_v6(key, value, NAT_CONN_ACTIVE);
     if (ret) {
         bpf_log_info("call back report fail");
         bpf_timer_start(&value->timer, next_timeout, 0);

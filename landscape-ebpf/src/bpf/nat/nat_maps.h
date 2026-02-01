@@ -112,6 +112,9 @@ struct {
 #define NAT_CREATE_CONN 1
 #define NAT_DELETE_CONN 2
 
+#define NAT_CONN_ACTIVE 1
+#define NAT_CONN_DELETE 2
+
 struct nat_conn_event {
     union u_inet_addr src_addr;
     union u_inet_addr dst_addr;
@@ -145,6 +148,7 @@ struct nat_conn_metric_event {
     u8 l3_proto;
     u8 flow_id;
     u8 trace_id;
+    u8 status;
 } __nat_conn_metric_event;
 
 struct {

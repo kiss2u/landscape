@@ -9,8 +9,6 @@ use ts_rs::TS;
 use crate::event::ConnectMessage;
 #[cfg(feature = "duckdb")]
 use crate::metric::duckdb::DuckMetricStore;
-#[cfg(feature = "duckdb")]
-pub use crate::metric::duckdb::ConnectHistoryQueryParams;
 
 ///
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
@@ -72,6 +70,36 @@ impl Into<u8> for ConnectEventType {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Default, Clone, Eq, Hash, PartialEq, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectStatusType {
+    #[default]
+    Unknow,
+    Active,
+    Disabled,
+}
+
+impl From<u8> for ConnectStatusType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => ConnectStatusType::Active,
+            2 => ConnectStatusType::Disabled,
+            _ => ConnectStatusType::Unknow,
+        }
+    }
+}
+
+impl Into<u8> for ConnectStatusType {
+    fn into(self) -> u8 {
+        match self {
+            ConnectStatusType::Unknow => 0,
+            ConnectStatusType::Active => 1,
+            ConnectStatusType::Disabled => 2,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct ConnectMetric {
@@ -88,6 +116,8 @@ pub struct ConnectMetric {
     pub egress_bytes: u64,
     #[ts(type = "number")]
     pub egress_packets: u64,
+
+    pub status: ConnectStatusType,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
@@ -120,6 +150,44 @@ pub struct ConnectRealtimeStatus {
     pub last_metric: Option<ConnectMetric>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectSortKey {
+    #[default]
+    Time,
+    Port,
+    Ingress,
+    Egress,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+#[serde(rename_all = "lowercase")]
+pub enum SortOrder {
+    Asc,
+    #[default]
+    Desc,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct ConnectHistoryQueryParams {
+    pub start_time: Option<u64>,
+    pub end_time: Option<u64>,
+    pub limit: Option<usize>,
+    pub src_ip: Option<String>,
+    pub dst_ip: Option<String>,
+    pub port_start: Option<u16>,
+    pub port_end: Option<u16>,
+    pub l3_proto: Option<u8>,
+    pub l4_proto: Option<u8>,
+    pub flow_id: Option<u8>,
+    pub sort_key: Option<ConnectSortKey>,
+    pub sort_order: Option<SortOrder>,
+    pub status: Option<u8>, // 0: Active, 1: Closed
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct ConnectHistoryStatus {
@@ -134,6 +202,8 @@ pub struct ConnectHistoryStatus {
     pub total_egress_pkts: u64,
     #[ts(type = "number")]
     pub last_report_time: u64,
+
+    pub status: u8,
 }
 
 #[derive(Clone)]
@@ -175,13 +245,8 @@ impl ConnectMetricManager {
                 let now = chrono::Utc::now().timestamp_millis() as u64;
                 let cutoff = now - (crate::DEFAULT_METRIC_RETENTION_DAYS * 24 * 60 * 60 * 1000);
                 let cold_metrics = metric_store_clone.collect_and_cleanup_old_metrics(cutoff).await;
-                let cold_infos = metric_store_clone.collect_and_cleanup_old_infos(cutoff).await;
                 if !cold_metrics.is_empty() {
                     tracing::info!("Collected {} cold metrics", cold_metrics.len());
-                }
-
-                if !cold_infos.is_empty() {
-                    tracing::info!("Collected {} cold infos", cold_infos.len());
                 }
             }
         });
