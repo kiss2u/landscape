@@ -1,6 +1,6 @@
 pub use crate::metric::duckdb::DuckMetricStore;
 use landscape_common::event::DnsMetricMessage;
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsMetric};
+use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric};
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
@@ -35,7 +35,7 @@ impl DnsMetricManager {
         self.metric_store.insert_dns_metric(metric).await;
     }
 
-    pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> Vec<DnsMetric> {
+    pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {
         self.metric_store.query_dns_history(params).await
     }
 }

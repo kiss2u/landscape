@@ -3,10 +3,24 @@ use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
     ConnectMetric,
 };
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsMetric};
+use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric};
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
+
+fn clean_ip_string(ip: &IpAddr) -> String {
+    match ip {
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                v4.to_string()
+            } else {
+                v6.to_string()
+            }
+        }
+        IpAddr::V4(v4) => v4.to_string(),
+    }
+}
 
 pub mod connect;
 pub mod dns;
@@ -15,12 +29,26 @@ use landscape_common::config::MetricRuntimeConfig;
 
 /// Database operation messages
 pub enum DBMessage {
+    // Write Operations
     InsertConnectInfo(ConnectInfo),
     InsertMetric(ConnectMetric),
-
-    CollectAndCleanupOldMetrics { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectMetric>>> },
-    // DNS Metrics
     InsertDnsMetric(DnsMetric),
+    
+    // Command Operations (Maintenance/Cleanup)
+    CollectAndCleanupOldMetrics {
+        cutoff: u64,
+        resp: oneshot::Sender<Box<Vec<ConnectMetric>>>,
+    },
+
+    // Sub-Query Enums
+    DnsQuery {
+        query: dns::DnsQuery,
+        resp: oneshot::Sender<DnsHistoryResponse>,
+    },
+    ConnectQuery {
+        query: connect::ConnectQuery,
+        resp: oneshot::Sender<connect::ConnectQueryResult>,
+    },
 }
 
 #[derive(Clone)]
@@ -43,24 +71,23 @@ pub fn start_db_thread(
 
     let conn = Connection::open_with_flags(&db_path, config).unwrap();
 
+    // 初始化表
     connect::create_summaries_table(&conn);
     connect::create_metrics_table(&conn).unwrap();
     dns::create_dns_table(&conn).unwrap();
 
+    // 状态管理
     let mut metrics_appender = conn.appender("metrics").unwrap();
     let mut dns_appender = conn.appender("dns_metrics").unwrap();
-
     let mut summary_stmt = conn.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
-
+    
     let mut batch_count = 0;
-    let flush_interval =
-        std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
+    let flush_interval = std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let mut last_flush = std::time::Instant::now();
+    let mut last_cleanup = std::time::Instant::now();
+    let cleanup_interval = std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS);
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-
-    let mut last_cleanup = std::time::Instant::now();
-    let cleanup_interval = std::time::Duration::from_secs(24 * 3600);
 
     rt.block_on(async {
         loop {
@@ -72,6 +99,7 @@ pub fn start_db_thread(
             match timeout_res {
                 Ok(Some(msg)) => {
                     match msg {
+                        // --- 写入类操作 ---
                         DBMessage::InsertConnectInfo(info) => {
                             if connect::update_summary_by_info(&mut summary_stmt, &info).is_ok() {
                                 batch_count += 1;
@@ -80,8 +108,8 @@ pub fn start_db_thread(
                         DBMessage::InsertMetric(metric) => {
                             let key = &metric.key;
                             let _ = metrics_appender.append_row(params![
-                                key.src_ip.to_string(),
-                                key.dst_ip.to_string(),
+                                clean_ip_string(&key.src_ip),
+                                clean_ip_string(&key.dst_ip),
                                 key.src_port as i64,
                                 key.dst_port as i64,
                                 key.l4_proto as i64,
@@ -100,19 +128,9 @@ pub fn start_db_thread(
                                 },
                             ]);
 
-                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok()
-                            {
+                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok() {
                                 batch_count += 1;
                             }
-                        }
-                        DBMessage::CollectAndCleanupOldMetrics { cutoff, resp } => {
-                            let _ = metrics_appender.flush();
-                            let _ = dns_appender.flush();
-                            batch_count = 0;
-                            last_flush = std::time::Instant::now();
-                            let result = connect::collect_and_cleanup_old_metrics(&conn, cutoff);
-                            dns::cleanup_old_dns_metrics(&conn, cutoff);
-                            let _ = resp.send(result);
                         }
                         DBMessage::InsertDnsMetric(metric) => {
                             let _ = dns_appender.append_row(params![
@@ -122,10 +140,31 @@ pub fn start_db_thread(
                                 metric.response_code,
                                 metric.report_time as i64,
                                 metric.duration_ms as i64,
-                                metric.src_ip.to_string(),
+                                clean_ip_string(&metric.src_ip),
                                 serde_json::to_string(&metric.answers).unwrap_or_default(),
                             ]);
                             batch_count += 1;
+                        }
+
+                        // --- 抽象后的查询操作 ---
+                        DBMessage::DnsQuery { query, resp } => {
+                            let result = dns::handle_query(&conn, query);
+                            let _ = resp.send(result);
+                        }
+                        DBMessage::ConnectQuery { query, resp } => {
+                            let result = connect::handle_query(&conn, query);
+                            let _ = resp.send(result);
+                        }
+
+                        // --- 管理类操作 ---
+                        DBMessage::CollectAndCleanupOldMetrics { cutoff, resp } => {
+                            let _ = metrics_appender.flush();
+                            let _ = dns_appender.flush();
+                            batch_count = 0;
+                            last_flush = std::time::Instant::now();
+                            let result = connect::collect_and_cleanup_old_metrics(&conn, cutoff);
+                            dns::cleanup_old_dns_metrics(&conn, cutoff);
+                            let _ = resp.send(result);
                         }
                     }
 
@@ -136,7 +175,7 @@ pub fn start_db_thread(
                         last_flush = std::time::Instant::now();
                     }
                 }
-                Ok(None) => break,
+                Ok(None) => break, 
                 Err(_) => {
                     if batch_count > 0 {
                         let _ = metrics_appender.flush();
@@ -188,18 +227,6 @@ impl DuckMetricStore {
         DuckMetricStore { tx, db_path, config }
     }
 
-    pub fn get_readonly_conn(&self) -> Connection {
-        // 以只读模式打开连接 (DuckDB 同时支持多读)
-        let config = duckdb::Config::default()
-            .access_mode(duckdb::AccessMode::ReadOnly)
-            .unwrap()
-            .threads(self.config.max_threads as i64)
-            .unwrap()
-            .max_memory(&format!("{}MB", self.config.max_memory))
-            .unwrap();
-        Connection::open_with_flags(&self.db_path, config).unwrap()
-    }
-
     pub async fn insert_connect_info(&self, info: ConnectInfo) {
         let _ = self.tx.send(DBMessage::InsertConnectInfo(info)).await;
     }
@@ -209,23 +236,27 @@ impl DuckMetricStore {
     }
 
     pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = store.get_readonly_conn();
-            connect::query_metric_by_key(&conn, &key)
-        })
-        .await
-        .unwrap_or_default()
+        let (resp, rx) = oneshot::channel();
+        let q = connect::ConnectQuery::ByKey(key);
+        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
+            return Vec::new();
+        }
+        match rx.await {
+            Ok(connect::ConnectQueryResult::Metrics(m)) => m,
+            _ => Vec::new(),
+        }
     }
 
     pub async fn current_active_connect_keys(&self) -> Vec<ConnectKey> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = store.get_readonly_conn();
-            connect::current_active_connect_keys(&conn)
-        })
-        .await
-        .unwrap_or_default()
+        let (resp, rx) = oneshot::channel();
+        let q = connect::ConnectQuery::ActiveKeys;
+        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
+            return Vec::new();
+        }
+        match rx.await {
+            Ok(connect::ConnectQueryResult::Keys(k)) => k,
+            _ => Vec::new(),
+        }
     }
 
     pub async fn collect_and_cleanup_old_metrics(&self, cutoff: u64) -> Box<Vec<ConnectMetric>> {
@@ -238,36 +269,42 @@ impl DuckMetricStore {
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = store.get_readonly_conn();
-            connect::query_historical_summaries_complex(&conn, params)
-        })
-        .await
-        .unwrap_or_default()
+        let (resp, rx) = oneshot::channel();
+        let q = connect::ConnectQuery::HistorySummaries(params);
+        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
+            return Vec::new();
+        }
+        match rx.await {
+            Ok(connect::ConnectQueryResult::HistoryStatuses(h)) => h,
+            _ => Vec::new(),
+        }
     }
 
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = store.get_readonly_conn();
-            connect::query_global_stats(&conn)
-        })
-        .await
-        .unwrap_or_default()
+        let (resp, rx) = oneshot::channel();
+        let q = connect::ConnectQuery::GlobalStats;
+        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
+            return ConnectGlobalStats::default();
+        }
+        match rx.await {
+            Ok(connect::ConnectQueryResult::Stats(s)) => s,
+            _ => ConnectGlobalStats::default(),
+        }
     }
 
-    pub async fn insert_dns_metric(&self, metric: DnsMetric) {
+    pub async fn insert_dns_metric(&self, mut metric: DnsMetric) {
+        if metric.domain.ends_with('.') && metric.domain.len() > 1 {
+            metric.domain.pop();
+        }
         let _ = self.tx.send(DBMessage::InsertDnsMetric(metric)).await;
     }
 
-    pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> Vec<DnsMetric> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = store.get_readonly_conn();
-            dns::query_dns_history(&conn, params)
-        })
-        .await
-        .unwrap_or_default()
+    pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {
+        let (resp, rx) = oneshot::channel();
+        let q = dns::DnsQuery::History(params);
+        if self.tx.send(DBMessage::DnsQuery { query: q, resp }).await.is_err() {
+            return DnsHistoryResponse { items: Vec::new(), total: 0 };
+        }
+        rx.await.unwrap_or(DnsHistoryResponse { items: Vec::new(), total: 0 })
     }
 }

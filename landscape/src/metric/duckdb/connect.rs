@@ -5,6 +5,31 @@ use landscape_common::metric::connect::{
     ConnectMetric, ConnectSortKey, SortOrder,
 };
 
+pub enum ConnectQuery {
+    ByKey(ConnectKey),
+    ActiveKeys,
+    HistorySummaries(ConnectHistoryQueryParams),
+    GlobalStats,
+}
+
+pub enum ConnectQueryResult {
+    Metrics(Vec<ConnectMetric>),
+    Keys(Vec<ConnectKey>),
+    HistoryStatuses(Vec<ConnectHistoryStatus>),
+    Stats(ConnectGlobalStats),
+}
+
+pub fn handle_query(conn: &Connection, query: ConnectQuery) -> ConnectQueryResult {
+    match query {
+        ConnectQuery::ByKey(ref key) => ConnectQueryResult::Metrics(query_metric_by_key(conn, key)),
+        ConnectQuery::ActiveKeys => ConnectQueryResult::Keys(current_active_connect_keys(conn)),
+        ConnectQuery::HistorySummaries(params) => {
+            ConnectQueryResult::HistoryStatuses(query_historical_summaries_complex(conn, params))
+        }
+        ConnectQuery::GlobalStats => ConnectQueryResult::Stats(query_global_stats(conn)),
+    }
+}
+
 pub const SUMMARY_INSERT_SQL: &str = "
     INSERT OR REPLACE INTO connect_summaries (
         src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id, create_time,

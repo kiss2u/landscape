@@ -32,8 +32,17 @@ pub struct DnsHistoryQueryParams {
     pub start_time: Option<u64>,
     pub end_time: Option<u64>,
     pub limit: Option<usize>,
+    pub offset: Option<usize>,
     pub domain: Option<String>,
     pub src_ip: Option<String>,
     pub sort_key: Option<DnsSortKey>,
     pub sort_order: Option<crate::metric::connect::SortOrder>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[ts(export, export_to = "common/metric/dns.d.ts")]
+pub struct DnsHistoryResponse {
+    pub items: Vec<DnsMetric>,
+    pub total: usize,
+}
+

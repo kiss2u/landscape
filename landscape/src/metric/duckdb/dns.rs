@@ -1,6 +1,16 @@
 use duckdb::Connection;
 use landscape_common::metric::connect::SortOrder;
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsMetric, DnsSortKey};
+use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSortKey};
+
+pub enum DnsQuery {
+    History(DnsHistoryQueryParams),
+}
+
+pub fn handle_query(conn: &Connection, query: DnsQuery) -> DnsHistoryResponse {
+    match query {
+        DnsQuery::History(params) => query_dns_history(conn, params),
+    }
+}
 
 pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
     conn.execute_batch(
@@ -15,26 +25,37 @@ pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
             src_ip TEXT,
             answers TEXT
         );
+        CREATE INDEX IF NOT EXISTS idx_dns_report_time ON dns_metrics (report_time);
         ",
     )
 }
 
-pub fn query_dns_history(conn: &Connection, params: DnsHistoryQueryParams) -> Vec<DnsMetric> {
+pub fn query_dns_history(conn: &Connection, mut params: DnsHistoryQueryParams) -> DnsHistoryResponse {
     let mut where_clauses = Vec::new();
+    let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+
     if let Some(start) = params.start_time {
-        where_clauses.push(format!("report_time >= {}", start));
+        where_clauses.push(format!("report_time >= ?"));
+        sql_params.push(Box::new(start as i64));
     }
     if let Some(end) = params.end_time {
-        where_clauses.push(format!("report_time <= {}", end));
+        where_clauses.push(format!("report_time <= ?"));
+        sql_params.push(Box::new(end as i64));
     }
-    if let Some(domain) = params.domain {
+    if let Some(domain) = params.domain.as_mut() {
         if !domain.is_empty() {
-            where_clauses.push(format!("domain LIKE '%{}%'", domain));
+            // 同样处理一下末尾的点，确保匹配
+            if domain.ends_with('.') && domain.len() > 1 {
+                domain.pop();
+            }
+            where_clauses.push(format!("domain LIKE ?"));
+            sql_params.push(Box::new(format!("%{}%", domain)));
         }
     }
     if let Some(ip) = params.src_ip {
         if !ip.is_empty() {
-            where_clauses.push(format!("src_ip LIKE '%{}%'", ip));
+            where_clauses.push(format!("src_ip LIKE ?"));
+            sql_params.push(Box::new(format!("%{}%", ip)));
         }
     }
 
@@ -44,6 +65,15 @@ pub fn query_dns_history(conn: &Connection, params: DnsHistoryQueryParams) -> Ve
         format!("WHERE {}", where_clauses.join(" AND "))
     };
 
+    // 1. 获取总数
+    let count_stmt_str = format!("SELECT COUNT(*) FROM dns_metrics {}", where_stmt);
+    let total: usize = {
+        let mut stmt = conn.prepare(&count_stmt_str).unwrap();
+        let param_refs: Vec<&dyn duckdb::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+        stmt.query_row(&param_refs[..], |row| row.get(0)).unwrap_or(0)
+    };
+
+    // 2. 排序
     let sort_col = match params.sort_key.unwrap_or_default() {
         DnsSortKey::Time => "report_time",
         DnsSortKey::Domain => "domain",
@@ -54,30 +84,32 @@ pub fn query_dns_history(conn: &Connection, params: DnsHistoryQueryParams) -> Ve
         SortOrder::Desc => "DESC",
     };
 
-    let limit_clause =
-        if let Some(l) = params.limit { format!("LIMIT {}", l) } else { String::new() };
+    // 3. 分页
+    let limit_val = params.limit.unwrap_or(20);
+    let offset_val = params.offset.unwrap_or(0);
 
-    let stmt = format!(
+    let query_stmt_str = format!(
         "
         SELECT 
             flow_id, domain, query_type, response_code, report_time, duration_ms, src_ip, answers
         FROM dns_metrics
         {}
         ORDER BY {} {}
-        {}
+        LIMIT {} OFFSET {}
     ",
-        where_stmt, sort_col, sort_order_str, limit_clause
+        where_stmt, sort_col, sort_order_str, limit_val, offset_val
     );
 
-    let mut stmt = match conn.prepare(&stmt) {
+    let mut stmt = match conn.prepare(&query_stmt_str) {
         Ok(s) => s,
         Err(e) => {
-            tracing::error!("Failed to prepare SQL: {}, error: {}", stmt, e);
-            return Vec::new();
+            tracing::error!("Failed to prepare DNS SQL: {}, error: {}", query_stmt_str, e);
+            return DnsHistoryResponse { items: Vec::new(), total };
         }
     };
 
-    let rows = stmt.query_map([], |row| {
+    let param_refs: Vec<&dyn duckdb::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt.query_map(&param_refs[..], |row| {
         let answers_str: String = row.get(7)?;
         let answers: Vec<String> = serde_json::from_str(&answers_str).unwrap_or_default();
         Ok(DnsMetric {
@@ -92,19 +124,20 @@ pub fn query_dns_history(conn: &Connection, params: DnsHistoryQueryParams) -> Ve
         })
     });
 
-    match rows {
+    let items = match rows {
         Ok(r) => r.filter_map(Result::ok).collect(),
         Err(e) => {
-            tracing::error!("Failed to execute query: {}", e);
+            tracing::error!("Failed to execute DNS query: {}", e);
             Vec::new()
         }
-    }
+    };
+
+    DnsHistoryResponse { items, total }
 }
 
 pub fn cleanup_old_dns_metrics(conn: &Connection, cutoff: u64) {
-    let deleted_count = conn
-        .execute("DELETE FROM dns_metrics WHERE report_time < ?1", duckdb::params![cutoff as i64])
-        .unwrap_or(0);
-
-    tracing::info!("DNS Cleanup complete: deleted {} dns metric records", deleted_count);
+    let _ = conn.execute(
+        "DELETE FROM dns_metrics WHERE report_time < ?1",
+        duckdb::params![cutoff as i64],
+    );
 }

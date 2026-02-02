@@ -5,11 +5,14 @@ export type DnsHistoryQueryParams = {
   start_time: bigint | null;
   end_time: bigint | null;
   limit: number | null;
+  offset: number | null;
   domain: string | null;
   src_ip: string | null;
   sort_key: DnsSortKey | null;
   sort_order: SortOrder | null;
 };
+
+export type DnsHistoryResponse = { items: Array<DnsMetric>; total: number };
 
 export type DnsMetric = {
   flow_id: number;
