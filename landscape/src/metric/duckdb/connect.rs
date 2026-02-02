@@ -1,8 +1,62 @@
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectSortKey, SortOrder,
+    ConnectSortKey, SortOrder, ConnectInfo, ConnectRealtimeStatus,
 };
+use duckdb::Statement;
+
+pub const SUMMARY_INSERT_SQL: &str = "
+    INSERT OR REPLACE INTO connect_summaries (
+        src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id, create_time,
+        last_report_time, total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, status
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+";
+
+pub fn update_summary_by_info(stmt: &mut Statement, info: &ConnectInfo) -> duckdb::Result<usize> {
+    let key = &info.key;
+    let event_type_val: u8 = info.event_type.clone().into();
+
+    stmt.execute(params![
+        key.src_ip.to_string(),
+        key.dst_ip.to_string(),
+        key.src_port as i64,
+        key.dst_port as i64,
+        key.l4_proto as i64,
+        key.l3_proto as i64,
+        key.flow_id as i64,
+        key.trace_id as i64,
+        key.create_time as i64,
+        info.report_time as i64,
+        0_i64,
+        0_i64,
+        0_i64,
+        0_i64,
+        event_type_val as i64,
+    ])
+}
+
+pub fn update_summary_by_metric(stmt: &mut Statement, metric: &ConnectMetric) -> duckdb::Result<usize> {
+    let key = &metric.key;
+    let event_type_val: u8 = metric.status.clone().into();
+
+    stmt.execute(params![
+        key.src_ip.to_string(),
+        key.dst_ip.to_string(),
+        key.src_port as i64,
+        key.dst_port as i64,
+        key.l4_proto as i64,
+        key.l3_proto as i64,
+        key.flow_id as i64,
+        key.trace_id as i64,
+        key.create_time as i64,
+        metric.report_time as i64,
+        metric.ingress_bytes as i64,
+        metric.egress_bytes as i64,
+        metric.ingress_packets as i64,
+        metric.egress_packets as i64,
+        event_type_val as i64,
+    ])
+}
 
 pub fn create_summaries_table(conn: &Connection) {
     conn.execute(

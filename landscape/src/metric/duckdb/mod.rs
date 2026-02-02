@@ -32,16 +32,9 @@ pub struct DuckMetricStore {
 
 pub fn start_db_thread(
     mut rx: mpsc::Receiver<DBMessage>,
-    base_path: PathBuf,
+    db_path: PathBuf,
     metric_config: MetricRuntimeConfig,
 ) {
-    if !base_path.exists() {
-        std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
-    }
-
-    let db_path = base_path
-        .join(format!("metrics_v{}.duckdb", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
-
     let config = duckdb::Config::default()
         .threads(metric_config.max_threads as i64)
         .unwrap()
@@ -54,20 +47,10 @@ pub fn start_db_thread(
     connect::create_metrics_table(&conn).unwrap();
     dns::create_dns_table(&conn).unwrap();
 
-    // Schema migration: ensure columns exist
-    let _ =
-        conn.execute("ALTER TABLE connect_summaries ADD COLUMN IF NOT EXISTS status INTEGER", []);
-    let _ = conn.execute("ALTER TABLE metrics ADD COLUMN IF NOT EXISTS status INTEGER", []);
-
     let mut metrics_appender = conn.appender("metrics").unwrap();
     let mut dns_appender = conn.appender("dns_metrics").unwrap();
 
-    let mut summary_stmt = conn.prepare("
-        INSERT OR REPLACE INTO connect_summaries (
-            src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id, create_time,
-            last_report_time, total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, status
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
-    ").unwrap();
+    let mut summary_stmt = conn.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
 
     let mut batch_count = 0;
     let flush_interval =
@@ -90,27 +73,9 @@ pub fn start_db_thread(
                 Ok(Some(msg)) => {
                     match msg {
                         DBMessage::InsertConnectInfo(info) => {
-                            let key = &info.key;
-                            let event_type_val: u8 = info.event_type.into();
-
-                            let _ = summary_stmt.execute(params![
-                                key.src_ip.to_string(),
-                                key.dst_ip.to_string(),
-                                key.src_port as i64,
-                                key.dst_port as i64,
-                                key.l4_proto as i64,
-                                key.l3_proto as i64,
-                                key.flow_id as i64,
-                                key.trace_id as i64,
-                                key.create_time as i64,
-                                info.report_time as i64,
-                                0_i64,
-                                0_i64,
-                                0_i64,
-                                0_i64,
-                                event_type_val as i64,
-                            ]);
-                            batch_count += 1;
+                            if connect::update_summary_by_info(&mut summary_stmt, &info).is_ok() {
+                                batch_count += 1;
+                            }
                         }
                         DBMessage::InsertMetric(metric) => {
                             let key = &metric.key;
@@ -135,28 +100,9 @@ pub fn start_db_thread(
                                 },
                             ]);
 
-                            let _ = summary_stmt.execute(params![
-                                key.src_ip.to_string(),
-                                key.dst_ip.to_string(),
-                                key.src_port as i64,
-                                key.dst_port as i64,
-                                key.l4_proto as i64,
-                                key.l3_proto as i64,
-                                key.flow_id as i64,
-                                key.trace_id as i64,
-                                key.create_time as i64,
-                                metric.report_time as i64,
-                                metric.ingress_bytes as i64,
-                                metric.egress_bytes as i64,
-                                metric.ingress_packets as i64,
-                                metric.egress_packets as i64,
-                                {
-                                    let v: u8 = metric.status.clone().into();
-                                    v as i64
-                                },
-                            ]);
-
-                            batch_count += 1;
+                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok() {
+                                batch_count += 1;
+                            }
                         }
                         DBMessage::CollectAndCleanupOldMetrics { cutoff, resp } => {
                             let _ = metrics_appender.flush();
@@ -224,11 +170,18 @@ impl DuckMetricStore {
     pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Self {
         let db_path = base_path
             .join(format!("metrics_v{}.duckdb", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
+
+        if let Some(parent) = db_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent).expect("Failed to create base directory");
+            }
+        }
+
         let (tx, rx) = mpsc::channel::<DBMessage>(1024);
-        let base_path_clone = base_path.clone();
+        let db_path_clone = db_path.clone();
         let config_clone = config.clone();
         thread::spawn(move || {
-            start_db_thread(rx, base_path_clone, config_clone);
+            start_db_thread(rx, db_path_clone, config_clone);
         });
 
         DuckMetricStore { tx, db_path, config }
