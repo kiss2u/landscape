@@ -185,7 +185,12 @@ onMounted(() => {
 <template>
   <n-flex vertical style="flex: 1; overflow: hidden">
     <!-- 历史模式专用工具栏 -->
-    <n-flex align="center" :wrap="true" style="margin-bottom: 12px" size="small">
+    <n-flex
+      align="center"
+      :wrap="true"
+      style="margin-bottom: 12px"
+      size="small"
+    >
       <n-input
         v-model:value="historyFilter.src_ip"
         placeholder="源IP"

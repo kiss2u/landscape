@@ -425,7 +425,8 @@ impl RequestHandler for ChainDnsRequestHandle {
                 domain: domain.clone(),
                 query_type: query_type.to_string(),
                 response_code: header.response_code().to_string(),
-                report_time: landscape_common::utils::time::get_current_time_ms().unwrap_or_default(),
+                report_time: landscape_common::utils::time::get_current_time_ms()
+                    .unwrap_or_default(),
                 duration_ms,
                 src_ip: request.src().ip(),
                 answers: records.iter().map(|r| r.to_string()).collect(),

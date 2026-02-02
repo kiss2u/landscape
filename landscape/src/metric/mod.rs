@@ -46,7 +46,10 @@ impl MetricService {
             }
         }
         let status = DefaultWatchServiceStatus::new();
-        MetricService { data: MetricData::new(metric_path, config).await, status }
+        MetricService {
+            data: MetricData::new(metric_path, config).await,
+            status,
+        }
     }
 
     pub async fn start_service(&self) {

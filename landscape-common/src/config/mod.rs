@@ -290,14 +290,8 @@ impl RuntimeConfig {
                 .metric
                 .flush_interval_secs
                 .unwrap_or(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS),
-            max_memory: config
-                .metric
-                .max_memory
-                .unwrap_or(crate::DEFAULT_METRIC_MAX_MEMORY),
-            max_threads: config
-                .metric
-                .max_threads
-                .unwrap_or(crate::DEFAULT_METRIC_MAX_THREADS),
+            max_memory: config.metric.max_memory.unwrap_or(crate::DEFAULT_METRIC_MAX_MEMORY),
+            max_threads: config.metric.max_threads.unwrap_or(crate::DEFAULT_METRIC_MAX_THREADS),
         };
 
         let runtime_config = RuntimeConfig {

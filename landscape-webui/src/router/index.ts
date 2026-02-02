@@ -7,7 +7,6 @@ import Flow from "@/views/Flow.vue";
 import Docker from "@/views/Docker.vue";
 import Topology from "@/views/Topology.vue";
 import Firewall from "@/views/Firewall.vue";
-import Metric from "@/views/Metric.vue";
 import GeoDomain from "@/views/GeoDomain.vue";
 import GeoIp from "@/views/GeoIp.vue";
 import Config from "@/views/Config.vue";
@@ -19,6 +18,7 @@ import DnsRedirect from "@/views/dns/DnsRedirect.vue";
 import DnsUpstream from "@/views/dns/DnsUpstream.vue";
 
 import service_status_route from "./service_status";
+import metric_route from "./metric";
 
 const inner_zone: Array<RouteRecordRaw> = [
   {
@@ -62,11 +62,7 @@ const inner_zone: Array<RouteRecordRaw> = [
     name: "firewall",
     component: Firewall,
   },
-  {
-    path: "/metric",
-    name: "metric",
-    component: Metric,
-  },
+  ...metric_route,
   {
     path: "/geo-domain",
     name: "geo-domain",

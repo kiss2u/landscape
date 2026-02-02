@@ -134,9 +134,19 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(Docker),
   },
   {
-    label: "连接信息",
-    key: "metric",
+    label: "指标监控",
+    key: "metric-group",
     icon: renderIcon(ChartCombo),
+    children: [
+      {
+        label: "连接信息",
+        key: "metric/conn",
+      },
+      {
+        label: "DNS 指标",
+        key: "metric/dns",
+      },
+    ],
   },
   {
     label: "地理关系库管理",

@@ -1,6 +1,6 @@
+use duckdb::Connection;
 use landscape_common::metric::connect::SortOrder;
 use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsMetric, DnsSortKey};
-use duckdb::Connection;
 
 pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
     conn.execute_batch(

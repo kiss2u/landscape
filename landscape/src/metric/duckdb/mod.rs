@@ -1,9 +1,9 @@
+use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
     ConnectMetric,
 };
 use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsMetric};
-use duckdb::{params, Connection};
 use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
@@ -18,10 +18,7 @@ pub enum DBMessage {
     InsertConnectInfo(ConnectInfo),
     InsertMetric(ConnectMetric),
 
-    CollectAndCleanupOldMetrics {
-        cutoff: u64,
-        resp: oneshot::Sender<Box<Vec<ConnectMetric>>>,
-    },
+    CollectAndCleanupOldMetrics { cutoff: u64, resp: oneshot::Sender<Box<Vec<ConnectMetric>>> },
     // DNS Metrics
     InsertDnsMetric(DnsMetric),
 }
@@ -42,10 +39,8 @@ pub fn start_db_thread(
         std::fs::create_dir_all(&base_path).expect("Failed to create base directory");
     }
 
-    let db_path = base_path.join(format!(
-        "metrics_v{}.duckdb",
-        landscape_common::LANDSCAPE_METRIC_DB_VERSION
-    ));
+    let db_path = base_path
+        .join(format!("metrics_v{}.duckdb", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
 
     let config = duckdb::Config::default()
         .threads(metric_config.max_threads as i64)
@@ -75,7 +70,8 @@ pub fn start_db_thread(
     ").unwrap();
 
     let mut batch_count = 0;
-    let flush_interval = std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
+    let flush_interval =
+        std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let mut last_flush = std::time::Instant::now();
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
@@ -203,13 +199,13 @@ pub fn start_db_thread(
                     last_flush = std::time::Instant::now();
                 }
             }
-            
+
             if last_cleanup.elapsed() > cleanup_interval {
                 let retention_days = metric_config.retention_days.max(1);
                 let cutoff = landscape_common::utils::time::get_current_time_ms()
                     .unwrap_or_default()
                     .saturating_sub(retention_days as u64 * 24 * 3600 * 1000);
-                
+
                 let _ = metrics_appender.flush();
                 let _ = dns_appender.flush();
                 batch_count = 0;
@@ -226,10 +222,8 @@ pub fn start_db_thread(
 
 impl DuckMetricStore {
     pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Self {
-        let db_path = base_path.join(format!(
-            "metrics_v{}.duckdb",
-            landscape_common::LANDSCAPE_METRIC_DB_VERSION
-        ));
+        let db_path = base_path
+            .join(format!("metrics_v{}.duckdb", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
         let (tx, rx) = mpsc::channel::<DBMessage>(1024);
         let base_path_clone = base_path.clone();
         let config_clone = config.clone();

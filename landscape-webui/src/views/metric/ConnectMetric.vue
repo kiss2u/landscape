@@ -4,8 +4,8 @@ import { useMetricStore } from "@/stores/status_metric";
 import { formatRate, formatPackets, formatSize } from "@/lib/util";
 import { get_connect_global_stats } from "@/api/metric";
 import type { ConnectGlobalStats } from "landscape-types/common/metric/connect";
-import LiveMetric from "./metric/LiveMetric.vue";
-import HistoryMetric from "./metric/HistoryMetric.vue";
+import LiveMetric from "./conn/LiveMetric.vue";
+import HistoryMetric from "./conn/HistoryMetric.vue";
 import { useThemeVars } from "naive-ui";
 import { Renew } from "@vicons/carbon";
 
@@ -62,7 +62,7 @@ const refreshingStats = ref(false);
 async function refreshGlobalStats() {
   if (refreshingStats.value) return;
   refreshingStats.value = true;
-  
+
   try {
     const [stats] = await Promise.all([
       get_connect_global_stats(),
@@ -106,16 +106,15 @@ async function refreshGlobalStats() {
         <n-flex align="center" size="large" v-if="viewMode === 'live'">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">活跃连接:</span>
-            <span style="font-weight: bold">{{
-              systemStats.count
-            }}</span>
+            <span style="font-weight: bold">{{ systemStats.count }}</span>
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">系统上行:</span>
             <n-flex align="center" size="small" :wrap="false">
-              <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
-                formatRate(systemStats.egressBps)
-              }}</span>
+              <span
+                :style="{ fontWeight: 'bold', color: themeVars.infoColor }"
+                >{{ formatRate(systemStats.egressBps) }}</span
+              >
               <span style="font-size: 11px; color: #aaa"
                 >({{ formatPackets(systemStats.egressPps) }})</span
               >
@@ -124,9 +123,10 @@ async function refreshGlobalStats() {
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">系统下行:</span>
             <n-flex align="center" size="small" :wrap="false">
-              <span :style="{ fontWeight: 'bold', color: themeVars.successColor }">{{
-                formatRate(systemStats.ingressBps)
-              }}</span>
+              <span
+                :style="{ fontWeight: 'bold', color: themeVars.successColor }"
+                >{{ formatRate(systemStats.ingressBps) }}</span
+              >
               <span style="font-size: 11px; color: #aaa"
                 >({{ formatPackets(systemStats.ingressPps) }})</span
               >
@@ -149,31 +149,34 @@ async function refreshGlobalStats() {
           </n-flex>
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">累计总下载:</span>
-            <span :style="{ fontWeight: 'bold', color: themeVars.successColor }">{{
-              formatSize(globalStats.total_ingress_bytes)
-            }}</span>
+            <span
+              :style="{ fontWeight: 'bold', color: themeVars.successColor }"
+              >{{ formatSize(globalStats.total_ingress_bytes) }}</span
+            >
           </n-flex>
-            <n-flex align="center" size="small" :wrap="false">
-              <span style="color: #888; font-size: 13px">更新于:</span>
-              <n-time
-                :time="globalStats.last_calculate_time"
-                format="yyyy-MM-dd HH:mm"
-                style="color: #aaa"
-              />
-              <span style="font-size: 12px; color: #aaa; margin-left: 2px">(每 24h 更新)</span>
-              <n-button
-                quaternary
-                circle
-                size="tiny"
-                @click="refreshGlobalStats"
-                :loading="refreshingStats"
-                style="margin-left: 4px"
-              >
-                <template #icon>
-                  <n-icon><Renew /></n-icon>
-                </template>
-              </n-button>
-            </n-flex>
+          <n-flex align="center" size="small" :wrap="false">
+            <span style="color: #888; font-size: 13px">更新于:</span>
+            <n-time
+              :time="globalStats.last_calculate_time"
+              format="yyyy-MM-dd HH:mm"
+              style="color: #aaa"
+            />
+            <span style="font-size: 12px; color: #aaa; margin-left: 2px"
+              >(每 24h 更新)</span
+            >
+            <n-button
+              quaternary
+              circle
+              size="tiny"
+              @click="refreshGlobalStats"
+              :loading="refreshingStats"
+              style="margin-left: 4px"
+            >
+              <template #icon>
+                <n-icon><Renew /></n-icon>
+              </template>
+            </n-button>
+          </n-flex>
         </n-flex>
       </n-flex>
     </n-flex>

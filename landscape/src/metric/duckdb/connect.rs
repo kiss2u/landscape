@@ -342,9 +342,15 @@ pub fn collect_and_cleanup_old_metrics(conn: &Connection, cutoff: u64) -> Box<Ve
     );
 
     let deleted_summaries = conn
-        .execute("DELETE FROM connect_summaries WHERE last_report_time < ?1", params![cutoff as i64])
+        .execute(
+            "DELETE FROM connect_summaries WHERE last_report_time < ?1",
+            params![cutoff as i64],
+        )
         .unwrap_or(0);
-    tracing::info!("Cleanup summaries complete: deleted {} connect_summaries records", deleted_summaries);
+    tracing::info!(
+        "Cleanup summaries complete: deleted {} connect_summaries records",
+        deleted_summaries
+    );
 
     Box::new(metrics)
 }

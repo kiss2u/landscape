@@ -140,7 +140,6 @@ impl ConnectMetricManager {
             metric_store,
             global_stats,
         }
-
     }
 
     pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Self {

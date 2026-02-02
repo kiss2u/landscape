@@ -2,11 +2,11 @@ use std::time::Instant;
 
 use landscape_common::{
     event::dns::DnsEvent,
+    event::DnsMetricMessage,
     service::{
         controller_service_v2::{ConfigController, FlowConfigController},
         DefaultWatchServiceStatus,
     },
-    event::DnsMetricMessage,
 };
 use landscape_dns::{
     reuseport_chain_server::LandscapeReusePortChainDnsServer, CheckChainDnsResult, CheckDnsReq,

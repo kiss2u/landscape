@@ -33,21 +33,21 @@ function l4_proto(value: number): string {
 function formatDuration(start: number, end: number): string {
   const diff = Math.max(0, end - start);
   const seconds = Math.floor(diff / 1000);
-  
+
   if (seconds < 60) {
     return `${seconds}秒`;
   }
-  
+
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
     return `${minutes}分 ${seconds % 60}秒`;
   }
-  
+
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     return `${hours}小时 ${minutes % 60}分`;
   }
-  
+
   const days = Math.floor(hours / 24);
   return `${days}天 ${hours % 24}小时`;
 }
@@ -81,7 +81,13 @@ const emit = defineEmits(["show:key"]);
                 <n-tooltip trigger="hover">
                   <template #trigger>
                     <span style="cursor: help; border-bottom: 1px dashed #888">
-                      持续 {{ formatDuration(history.key.create_time, history.last_report_time) }}
+                      持续
+                      {{
+                        formatDuration(
+                          history.key.create_time,
+                          history.last_report_time,
+                        )
+                      }}
                     </span>
                   </template>
                   创建于

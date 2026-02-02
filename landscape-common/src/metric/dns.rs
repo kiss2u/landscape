@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
 use std::net::IpAddr;
+use ts_rs::TS;
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/metric/dns.d.ts")]

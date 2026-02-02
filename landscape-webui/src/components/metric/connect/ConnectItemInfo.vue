@@ -33,21 +33,21 @@ function l4_proto(value: number): string {
 function formatDuration(start: number, end: number): string {
   const diff = Math.max(0, end - start);
   const seconds = Math.floor(diff / 1000);
-  
+
   if (seconds < 60) {
     return `${seconds}秒`;
   }
-  
+
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) {
     return `${minutes}分 ${seconds % 60}秒`;
   }
-  
+
   const hours = Math.floor(minutes / 60);
   if (hours < 24) {
     return `${hours}小时 ${minutes % 60}分`;
   }
-  
+
   const days = Math.floor(hours / 24);
   return `${days}天 ${hours % 24}小时`;
 }
@@ -84,7 +84,12 @@ const emit = defineEmits(["show:key"]);
                     <n-time :time="lastActiveTime(conn)" format="HH:mm:ss" />
                     <n-divider vertical />
                     <span style="color: #888; font-size: 12px">
-                      {{ formatDuration(conn.key.create_time, lastActiveTime(conn)) }}
+                      {{
+                        formatDuration(
+                          conn.key.create_time,
+                          lastActiveTime(conn),
+                        )
+                      }}
                     </span>
                   </n-flex>
                 </div>
