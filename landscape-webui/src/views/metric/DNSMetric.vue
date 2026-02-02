@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, h, computed, watch } from "vue";
 import { DnsMetric, get_dns_history } from "@/api/metric";
-import { NDataTable, NTag, NTime, NButton, NSpace, NInput, NDatePicker, NIcon, NTooltip } from "naive-ui";
+import { NDataTable, NTag, NTime, NButton, NSpace, NInput, NDatePicker, NIcon, NTooltip, NTabs, NTabPane, NSelect, NInputNumber } from "naive-ui";
 import type { DataTableColumns } from 'naive-ui'
 import { Refresh, TrashOutline, HelpCircleOutline, TimeOutline } from "@vicons/ionicons5";
 import { useDebounceFn } from "@vueuse/core";
+import DNSDashboard from "./DNSDashboard.vue";
+
+const activeTab = ref('dashboard');
+const dashboardRef = ref<any>(null);
 
 const data = ref<DnsMetric[]>([]);
 const loading = ref(false);
@@ -14,6 +18,10 @@ const DEFAULT_TIME_WINDOW = 20 * 60 * 1000; // 20 minutes
 const searchParams = reactive({
     domain: '',
     src_ip: '',
+    query_type: null as string | null,
+    status: null as string | null,
+    min_duration_ms: null as number | null,
+    max_duration_ms: null as number | null,
     timeRange: [Date.now() - DEFAULT_TIME_WINDOW, Date.now()] as [number, number] | null,
     sort_key: 'time',
     sort_order: 'desc' as 'asc' | 'desc'
@@ -42,6 +50,29 @@ const formatIp = (ip: string) => {
     }
     return ip;
 };
+
+const queryTypeOptions = [
+    { label: 'All Types', value: null },
+    { label: 'A (IPv4)', value: 'A' },
+    { label: 'AAAA (IPv6)', value: 'AAAA' },
+    { label: 'CNAME', value: 'CNAME' },
+    { label: 'MX', value: 'MX' },
+    { label: 'TXT', value: 'TXT' },
+    { label: 'NS', value: 'NS' },
+    { label: 'PTR', value: 'PTR' },
+    { label: 'SOA', value: 'SOA' },
+    { label: 'SRV', value: 'SRV' },
+];
+
+const statusOptions = [
+    { label: 'All Status', value: null },
+    { label: 'Hit (Cache)', value: 'hit' },
+    { label: 'Normal', value: 'normal' },
+    { label: 'Block', value: 'block' },
+    { label: 'Local', value: 'local' },
+    { label: 'NXDomain', value: 'nxdomain' },
+    { label: 'Error', value: 'error' },
+];
 
 const columns = computed<DataTableColumns<DnsMetric>>(() => [
   {
@@ -137,8 +168,13 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
 
 const loadData = async (resetPage = false) => {
   if (resetPage) pagination.page = 1;
-  loading.value = true;
-  try {
+    if (activeTab.value === 'dashboard') {
+        dashboardRef.value?.refresh();
+        return;
+    }
+
+    loading.value = true;
+    try {
     const params: any = { 
         limit: pagination.pageSize,
         offset: (pagination.page - 1) * pagination.pageSize,
@@ -151,6 +187,18 @@ const loadData = async (resetPage = false) => {
     }
     if (searchParams.src_ip && searchParams.src_ip.trim()) {
       params.src_ip = searchParams.src_ip.trim();
+    }
+    if (searchParams.query_type) {
+      params.query_type = searchParams.query_type;
+    }
+    if (searchParams.status) {
+      params.status = searchParams.status;
+    }
+    if (searchParams.min_duration_ms !== null && searchParams.min_duration_ms !== undefined) {
+      params.min_duration_ms = searchParams.min_duration_ms;
+    }
+    if (searchParams.max_duration_ms !== null && searchParams.max_duration_ms !== undefined) {
+      params.max_duration_ms = searchParams.max_duration_ms;
     }
     
     if (Array.isArray(searchParams.timeRange) && searchParams.timeRange.length === 2) {
@@ -173,7 +221,7 @@ const debouncedLoadData = useDebounceFn(() => {
 }, 500);
 
 watch(
-    () => [searchParams.domain, searchParams.src_ip],
+    () => [searchParams.domain, searchParams.src_ip, searchParams.query_type, searchParams.status, searchParams.min_duration_ms, searchParams.max_duration_ms],
     () => debouncedLoadData()
 );
 
@@ -216,9 +264,24 @@ const syncToNow = () => {
     loadData(true);
 }
 
+watch(
+    () => activeTab.value,
+    (tab) => {
+        if (tab === 'dashboard') {
+            dashboardRef.value?.refresh();
+        } else {
+            loadData(true);
+        }
+    }
+)
+
 const handleReset = () => {
     searchParams.domain = '';
     searchParams.src_ip = '';
+    searchParams.query_type = null;
+    searchParams.status = null;
+    searchParams.min_duration_ms = null;
+    searchParams.max_duration_ms = null;
     searchParams.timeRange = [Date.now() - DEFAULT_TIME_WINDOW, Date.now()];
     searchParams.sort_key = 'time';
     searchParams.sort_order = 'desc';
@@ -231,7 +294,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div style="padding: 10px">
+  <div style="width: 100%; padding: 12px">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
       <h3 style="margin: 0; font-weight: 500; font-size: 1.1rem">DNS History</h3>
       <n-space :size="8">
@@ -251,9 +314,47 @@ onMounted(() => {
       </n-space>
     </div>
 
-    <n-space style="margin-bottom: 10px" align="center" :size="[8, 8]">
-       <n-input v-model:value="searchParams.domain" size="small" placeholder="Domain" clearable style="width: 200px"/>
-       <n-input v-model:value="searchParams.src_ip" size="small" placeholder="IP" clearable style="width: 140px"/>
+    <n-space style="margin-bottom: 10px" align="center" :size="[8, 8]" :wrap="false">
+       <n-input v-model:value="searchParams.domain" size="small" placeholder="Domain" clearable style="width: 200px" v-if="activeTab === 'history'"/>
+       <n-input v-model:value="searchParams.src_ip" size="small" placeholder="IP" clearable style="width: 140px" v-if="activeTab === 'history'"/>
+       <n-select 
+         v-model:value="searchParams.query_type" 
+         size="small" 
+         :options="queryTypeOptions" 
+         placeholder="Type" 
+         clearable 
+         style="width: 130px" 
+         v-if="activeTab === 'history'"
+       />
+       <n-select 
+         v-model:value="searchParams.status" 
+         size="small" 
+         :options="statusOptions" 
+         placeholder="Status" 
+         clearable 
+         style="width: 130px" 
+         v-if="activeTab === 'history'"
+       />
+       <n-input-number 
+         v-model:value="searchParams.min_duration_ms" 
+         size="small" 
+         placeholder="Min ms" 
+         clearable 
+         :min="0"
+         :show-button="false"
+         style="width: 100px" 
+         v-if="activeTab === 'history'"
+       />
+       <n-input-number 
+         v-model:value="searchParams.max_duration_ms" 
+         size="small" 
+         placeholder="Max ms" 
+         clearable 
+         :min="0"
+         :show-button="false"
+         style="width: 100px" 
+         v-if="activeTab === 'history'"
+       />
        <n-date-picker v-model:value="searchParams.timeRange" size="small" type="datetimerange" clearable :shortcuts="shortcuts" placeholder="Time Range" style="width: 320px"/>
        <n-tooltip trigger="hover">
           <template #trigger>
@@ -272,18 +373,25 @@ onMounted(() => {
        </n-button>
     </n-space>
 
-    <n-data-table
-      remote
-      :columns="columns" 
-      :data="data" 
-      :loading="loading" 
-      :pagination="pagination"
-      size="small"
-      @update:sorter="handleSorterChange"
-      :row-key="(row) => row.report_time + row.domain + row.flow_id"
-      :bordered="false"
-      class="dns-history-table"
-    />
+    <n-tabs v-model:value="activeTab" type="line" animated>
+      <n-tab-pane name="dashboard" tab="Dashboard">
+        <DNSDashboard ref="dashboardRef" :time-range="searchParams.timeRange" />
+      </n-tab-pane>
+      <n-tab-pane name="history" tab="Query Log">
+        <n-data-table 
+          remote
+          :columns="columns" 
+          :data="data" 
+          :loading="loading"
+          :pagination="pagination"
+          @update:sorter="handleSorterChange"
+          size="small"
+          :row-key="(row) => row.report_time + row.domain + row.flow_id"
+          :bordered="false"
+          class="dns-history-table"
+        />
+      </n-tab-pane>
+    </n-tabs>
   </div>
 </template>
 

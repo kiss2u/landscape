@@ -3,7 +3,7 @@ use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
     ConnectMetric,
 };
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric};
+use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
@@ -43,7 +43,7 @@ pub enum DBMessage {
     // Sub-Query Enums
     DnsQuery {
         query: dns::DnsQuery,
-        resp: oneshot::Sender<DnsHistoryResponse>,
+        resp: oneshot::Sender<dns::DnsQueryResult>,
     },
     ConnectQuery {
         query: connect::ConnectQuery,
@@ -306,6 +306,65 @@ impl DuckMetricStore {
         if self.tx.send(DBMessage::DnsQuery { query: q, resp }).await.is_err() {
             return DnsHistoryResponse { items: Vec::new(), total: 0 };
         }
-        rx.await.unwrap_or(DnsHistoryResponse { items: Vec::new(), total: 0 })
+        match rx.await {
+            Ok(dns::DnsQueryResult::History(result)) => result,
+            _ => DnsHistoryResponse { items: Vec::new(), total: 0 },
+        }
+    }
+
+    pub async fn get_dns_summary(&self, params: DnsHistoryQueryParams) -> DnsSummaryResponse {
+        let (resp, rx) = oneshot::channel();
+        let q = dns::DnsQuery::Summary(params);
+        if self.tx.send(DBMessage::DnsQuery { query: q, resp }).await.is_err() {
+             return DnsSummaryResponse {
+                total_queries: 0,
+                total_effective_queries: 0,
+                cache_hit_count: 0,
+                hit_count_v4: 0,
+                hit_count_v6: 0,
+                hit_count_other: 0,
+                total_v4: 0,
+                total_v6: 0,
+                total_other: 0,
+                block_count: 0,
+                nxdomain_count: 0,
+                error_count: 0,
+                avg_duration_ms: 0.0,
+                p50_duration_ms: 0.0,
+                p95_duration_ms: 0.0,
+                p99_duration_ms: 0.0,
+                max_duration_ms: 0.0,
+                top_clients: vec![],
+                top_domains: vec![],
+                top_blocked: vec![],
+                slowest_domains: vec![],
+            };
+        }
+        match rx.await {
+            Ok(dns::DnsQueryResult::Summary(result)) => result,
+            _ => DnsSummaryResponse {
+                total_queries: 0,
+                total_effective_queries: 0,
+                cache_hit_count: 0,
+                hit_count_v4: 0,
+                hit_count_v6: 0,
+                hit_count_other: 0,
+                total_v4: 0,
+                total_v6: 0,
+                total_other: 0,
+                block_count: 0,
+                nxdomain_count: 0,
+                error_count: 0,
+                avg_duration_ms: 0.0,
+                p50_duration_ms: 0.0,
+                p95_duration_ms: 0.0,
+                p99_duration_ms: 0.0,
+                max_duration_ms: 0.0,
+                top_clients: vec![],
+                top_domains: vec![],
+                top_blocked: vec![],
+                slowest_domains: vec![],
+            },
+        }
     }
 }

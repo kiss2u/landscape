@@ -7,7 +7,7 @@ use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
     ConnectRealtimeStatus,
 };
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse};
+use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsSummaryResponse};
 use serde_json::Value;
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
@@ -22,6 +22,7 @@ pub async fn get_metric_service_paths() -> Router<LandscapeApp> {
         .route("/connects/history", get(get_connect_history))
         .route("/connects/global_stats", get(get_connect_global_stats))
         .route("/dns/history", get(get_dns_history))
+        .route("/dns/summary", get(get_dns_summary))
 }
 
 pub async fn get_metric_status(State(state): State<LandscapeApp>) -> LandscapeApiResult<Value> {
@@ -61,5 +62,13 @@ pub async fn get_dns_history(
     Query(params): Query<DnsHistoryQueryParams>,
 ) -> LandscapeApiResult<DnsHistoryResponse> {
     let data = state.metric_service.data.dns_metric.query_dns_history(params).await;
+    LandscapeApiResp::success(data)
+}
+
+pub async fn get_dns_summary(
+    State(state): State<LandscapeApp>,
+    Query(params): Query<DnsHistoryQueryParams>,
+) -> LandscapeApiResult<DnsSummaryResponse> {
+    let data = state.metric_service.data.dns_metric.get_dns_summary(params).await;
     LandscapeApiResp::success(data)
 }

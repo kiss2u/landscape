@@ -8,6 +8,10 @@ export type DnsHistoryQueryParams = {
   offset: number | null;
   domain: string | null;
   src_ip: string | null;
+  query_type: string | null;
+  status: DnsResultStatus | null;
+  min_duration_ms: number | null;
+  max_duration_ms: number | null;
   sort_key: DnsSortKey | null;
   sort_order: SortOrder | null;
 };
@@ -35,3 +39,33 @@ export type DnsResultStatus =
   | "error";
 
 export type DnsSortKey = "time" | "domain" | "duration";
+
+export type DnsStatEntry = {
+  name: string;
+  count: number;
+  value: number | null;
+};
+
+export type DnsSummaryResponse = {
+  total_queries: number;
+  total_effective_queries: number;
+  cache_hit_count: number;
+  hit_count_v4: number;
+  hit_count_v6: number;
+  hit_count_other: number;
+  total_v4: number;
+  total_v6: number;
+  total_other: number;
+  block_count: number;
+  nxdomain_count: number;
+  error_count: number;
+  avg_duration_ms: number;
+  p50_duration_ms: number;
+  p95_duration_ms: number;
+  p99_duration_ms: number;
+  max_duration_ms: number;
+  top_clients: Array<DnsStatEntry>;
+  top_domains: Array<DnsStatEntry>;
+  top_blocked: Array<DnsStatEntry>;
+  slowest_domains: Array<DnsStatEntry>;
+};

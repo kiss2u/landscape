@@ -1,21 +1,17 @@
 import axiosService from "@/api";
+import type { 
+  DnsMetric, 
+  DnsHistoryResponse, 
+  DnsStatEntry, 
+  DnsSummaryResponse 
+} from "landscape-types/common/metric/dns";
 
-export interface DnsMetric {
-  flow_id: number;
-  domain: string;
-  query_type: string;
-  response_code: string;
-  status: string;
-  report_time: number;
-  duration_ms: number;
-  src_ip: string;
-  answers: string[];
-}
-
-export interface DnsHistoryResponse {
-  items: DnsMetric[];
-  total: number;
-}
+export type { 
+  DnsMetric, 
+  DnsHistoryResponse, 
+  DnsStatEntry, 
+  DnsSummaryResponse 
+};
 
 export async function get_dns_history(params?: {
   start_time?: number;
@@ -28,6 +24,16 @@ export async function get_dns_history(params?: {
   src_ip?: string;
 }): Promise<DnsHistoryResponse> {
   let data = await axiosService.get("metric/dns/history", {
+    params,
+  });
+  return data.data;
+}
+
+export async function get_dns_summary(params?: {
+  start_time?: number;
+  end_time?: number;
+}): Promise<DnsSummaryResponse> {
+  let data = await axiosService.get("metric/dns/summary", {
     params,
   });
   return data.data;
