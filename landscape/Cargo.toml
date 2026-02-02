@@ -58,7 +58,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing-appender = { workspace = true }
 
 dhcproto = { workspace = true }
-ts-rs = { workspace = true }
 
 sysctl = { workspace = true }
 

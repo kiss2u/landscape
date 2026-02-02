@@ -1,16 +1,30 @@
 use hickory_proto::rr::{Record, RecordType};
-use landscape_common::config::dns::{DNSRuntimeRule, LandscapeDnsRecordType};
-use landscape_common::config::FlowId;
+use landscape_common::config::dns::LandscapeDnsRecordType;
 use landscape_common::{
     config::dns::FilterResult,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
 };
 
+pub use landscape_common::dns::check::{
+    CheckChainDnsResult, CheckDnsReq, CheckDnsResult, LandscapeRecord as CommonRecord,
+};
 use lru::LruCache;
-use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf, time::Instant};
-use ts_rs::TS;
-use uuid::Uuid;
+
+pub fn to_common_records(records: Vec<Record>) -> Vec<CommonRecord> {
+    records
+        .into_iter()
+        .map(|r| {
+            let data = format!("{}", r.data());
+            CommonRecord {
+                name: r.name().to_string(),
+                rr_type: r.record_type().to_string(),
+                ttl: r.ttl(),
+                data,
+            }
+        })
+        .collect()
+}
 
 pub(crate) mod connection;
 
@@ -50,43 +64,7 @@ fn check_resolver_conf() {
     std::fs::write(&resolver_file, new_content).unwrap();
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, TS)]
-#[ts(export, export_to = "dns.d.ts")]
-pub struct CheckDnsResult {
-    #[ts(type = "any | null")]
-    pub config: Option<DNSRuntimeRule>,
-    #[ts(type = "Array<any>|null")]
-    pub records: Option<Vec<Record>>,
-    #[ts(type = "Array<any>|null")]
-    pub cache_records: Option<Vec<Record>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, TS)]
-#[ts(export, export_to = "dns.d.ts")]
-pub struct CheckChainDnsResult {
-    pub redirect_id: Option<Uuid>,
-    pub rule_id: Option<Uuid>,
-    #[ts(type = "Array<any>|null")]
-    pub records: Option<Vec<Record>>,
-    #[ts(type = "Array<any>|null")]
-    pub cache_records: Option<Vec<Record>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, TS)]
-#[ts(export, export_to = "dns.d.ts")]
-pub struct CheckDnsReq {
-    flow_id: FlowId,
-    domain: String,
-    record_type: LandscapeDnsRecordType,
-}
-
-impl CheckDnsReq {
-    pub fn get_domain(&self) -> String {
-        format!("{}.", self.domain)
-    }
-}
-
-fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
+pub fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
     match record_type {
         LandscapeDnsRecordType::A => RecordType::A,
         LandscapeDnsRecordType::AAAA => RecordType::AAAA,

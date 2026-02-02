@@ -187,7 +187,7 @@ impl ChainDnsRequestHandle {
                         .await
                         {
                             Ok(Ok(rdata_vec)) => {
-                                result.records = Some(rdata_vec);
+                                result.records = Some(crate::to_common_records(rdata_vec));
                             }
                             Ok(Err(_)) => {
                                 // lookup 返回了错误
@@ -202,11 +202,11 @@ impl ChainDnsRequestHandle {
                 drop(resolves);
             }
         } else {
-            result.records = Some(records);
+            result.records = Some(crate::to_common_records(records));
         }
 
         if let Some((records, _)) = self.lookup_cache(domain, query_type).await {
-            result.cache_records = Some(records);
+            result.cache_records = Some(crate::to_common_records(records));
         }
 
         result

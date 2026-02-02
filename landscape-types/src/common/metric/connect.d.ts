@@ -82,7 +82,12 @@ export type ConnectRealtimeStatus = {
   last_metric: ConnectMetric | null;
 };
 
-export type ConnectSortKey = "time" | "port" | "ingress" | "egress";
+export type ConnectSortKey =
+  | "time"
+  | "port"
+  | "ingress"
+  | "egress"
+  | "duration";
 
 export type ConnectStatusType = "unknow" | "active" | "disabled";
 

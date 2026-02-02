@@ -52,7 +52,6 @@ rand = { workspace = true }
 
 # logs
 tracing = { workspace = true }
-ts-rs = { workspace = true, features = ["serde-compat"] }
 
 [features]
 default = []

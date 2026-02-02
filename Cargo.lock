@@ -3293,7 +3293,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "ts-rs",
  "uuid",
  "wl-nl80211",
  "zbus",
@@ -3310,7 +3309,6 @@ dependencies = [
  "clap 4.5.53",
  "dhcproto",
  "dotenvy",
- "hickory-proto",
  "homedir",
  "hostname 0.4.2",
  "landscape-macro",
@@ -3382,7 +3380,6 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "trie-rs",
- "ts-rs",
  "uuid",
 ]
 
@@ -3471,7 +3468,6 @@ dependencies = [
  "tower 0.4.13",
  "tower-http 0.5.2",
  "tracing",
- "ts-rs",
 ]
 
 [[package]]

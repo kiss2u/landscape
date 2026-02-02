@@ -4,8 +4,8 @@ import type { LandscapeDnsRecordType } from "./common/dns_record_type.d";
 export type CheckChainDnsResult = {
   redirect_id: string | null;
   rule_id: string | null;
-  records: Array<any> | null;
-  cache_records: Array<any> | null;
+  records: Array<LandscapeRecord> | null;
+  cache_records: Array<LandscapeRecord> | null;
 };
 
 export type CheckDnsReq = {
@@ -16,6 +16,13 @@ export type CheckDnsReq = {
 
 export type CheckDnsResult = {
   config: any | null;
-  records: Array<any> | null;
-  cache_records: Array<any> | null;
+  records: Array<LandscapeRecord> | null;
+  cache_records: Array<LandscapeRecord> | null;
+};
+
+export type LandscapeRecord = {
+  name: string;
+  rr_type: string;
+  ttl: number;
+  data: string;
 };

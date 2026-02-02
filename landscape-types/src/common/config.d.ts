@@ -36,6 +36,8 @@ export type LandscapeMetricConfig = {
   retention_days: bigint | null;
   batch_size: number | null;
   flush_interval_secs: bigint | null;
+  max_memory: number | null;
+  max_threads: number | null;
 };
 
 export type LandscapeStoreConfig = { database_path: string | null };

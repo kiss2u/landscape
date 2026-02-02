@@ -1,10 +1,12 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use config::from_phy_dev;
-use dev_wifi::LandscapeWifiInterface;
 use futures::stream::TryStreamExt;
 use landscape_common::database::repository::Repository;
 use landscape_common::database::LandscapeServiceDBTrait;
+use landscape_common::dev::LandscapeInterface;
+use landscape_common::iface::dev_wifi::LandscapeWifiInterface;
+pub use landscape_common::iface::{IfaceInfo, IfacesInfo, RawIfaceInfo};
 use landscape_common::service::controller_service_v2::ConfigController;
 use landscape_common::{
     config::iface::{IfaceCpuSoftBalance, IfaceZoneType, NetworkIfaceConfig, WifiMode},
@@ -15,9 +17,6 @@ use landscape_database::iface::repository::NetIfaceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use rtnetlink::new_connection;
 use serde::Serialize;
-use ts_rs::TS;
-
-use crate::dev::LandscapeInterface;
 
 pub mod config;
 pub mod dev_wifi;
@@ -42,7 +41,7 @@ pub async fn get_iface_by_name(name: &str) -> Option<LandscapeInterface> {
     let mut links = handle.link().get().match_name(name.to_string()).execute();
 
     if let Ok(Some(msg)) = links.try_next().await {
-        LandscapeInterface::new(msg)
+        crate::dev::new_landscape_interface(msg)
     } else {
         None
     }
@@ -288,33 +287,6 @@ impl ConfigController for IfaceManagerService {
     fn get_repository(&self) -> &Self::DatabseAction {
         &self.store
     }
-}
-
-/// 已管理的网卡
-#[derive(Serialize, Debug, Clone, TS)]
-#[ts(export, export_to = "iface.ts")]
-pub struct IfaceInfo {
-    /// 持久化的配置
-    pub config: NetworkIfaceConfig,
-    /// 当前网卡的配置, 可能网卡现在不存在
-    pub status: Option<LandscapeInterface>,
-    pub wifi_info: Option<LandscapeWifiInterface>,
-}
-
-/// 未纳入配置的网卡
-#[derive(Serialize, Debug, Clone, TS)]
-#[ts(export, export_to = "iface.ts")]
-pub struct RawIfaceInfo {
-    /// 当前网卡的配置
-    pub status: LandscapeInterface,
-    pub wifi_info: Option<LandscapeWifiInterface>,
-}
-
-#[derive(Clone, Serialize, TS)]
-#[ts(export, export_to = "iface.ts")]
-pub struct IfacesInfo {
-    managed: Vec<IfaceInfo>,
-    unmanaged: Vec<RawIfaceInfo>,
 }
 fn reset_iface_balance(iface_name: &str) -> LdResult<()> {
     setting_iface_balance(iface_name, IfaceCpuSoftBalance { xps: "0".into(), rps: "0".into() })

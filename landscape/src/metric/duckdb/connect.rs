@@ -1,9 +1,9 @@
+use duckdb::Statement;
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectSortKey, SortOrder, ConnectInfo, ConnectRealtimeStatus,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
+    ConnectMetric, ConnectSortKey, SortOrder,
 };
-use duckdb::Statement;
 
 pub const SUMMARY_INSERT_SQL: &str = "
     INSERT OR REPLACE INTO connect_summaries (
@@ -35,7 +35,10 @@ pub fn update_summary_by_info(stmt: &mut Statement, info: &ConnectInfo) -> duckd
     ])
 }
 
-pub fn update_summary_by_metric(stmt: &mut Statement, metric: &ConnectMetric) -> duckdb::Result<usize> {
+pub fn update_summary_by_metric(
+    stmt: &mut Statement,
+    metric: &ConnectMetric,
+) -> duckdb::Result<usize> {
     let key = &metric.key;
     let event_type_val: u8 = metric.status.clone().into();
 

@@ -14,6 +14,7 @@ use crate::flow::DnsRuntimeMarkInfo;
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 
+pub mod check;
 pub mod config;
 pub mod redirect;
 pub mod upstream;

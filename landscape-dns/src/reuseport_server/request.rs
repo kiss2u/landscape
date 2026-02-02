@@ -136,7 +136,8 @@ impl LandscapeDnsRequestHandle {
                 .await
                 {
                     Ok(Ok(rdata_vec)) => {
-                        result.records = Some(rdata_vec.records().to_vec());
+                        result.records =
+                            Some(crate::to_common_records(rdata_vec.records().to_vec()));
                     }
                     Ok(Err(_)) => {
                         // lookup 返回了错误
@@ -149,7 +150,7 @@ impl LandscapeDnsRequestHandle {
         }
 
         if let Some((records, _)) = self.lookup_cache(domain, query_type).await {
-            result.cache_records = Some(records);
+            result.cache_records = Some(crate::to_common_records(records));
         }
 
         result

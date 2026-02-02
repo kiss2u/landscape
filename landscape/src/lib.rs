@@ -3,10 +3,11 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use dev::{DevState, LandscapeInterface};
 use futures::stream::TryStreamExt;
-use iface::{dev_wifi::LandscapeWifiInterface, get_iface_by_name};
+use iface::get_iface_by_name;
 use landscape_common::config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode};
+use landscape_common::dev::{DevState, LandscapeInterface};
+use landscape_common::iface::dev_wifi::LandscapeWifiInterface;
 use netlink_packet_route::{address::AddressAttribute, AddressFamily};
 use rtnetlink::new_connection;
 
@@ -70,7 +71,7 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
 
     let mut interface_map: HashMap<String, LandscapeInterface> = HashMap::new();
     while let Some(msg) = links.try_next().await.unwrap() {
-        if let Some(data) = LandscapeInterface::new(msg) {
+        if let Some(data) = crate::dev::new_landscape_interface(msg) {
             interface_map.insert(data.name.clone(), data);
         }
     }
@@ -201,7 +202,7 @@ pub async fn get_all_wifi_devices() -> HashMap<String, LandscapeWifiInterface> {
             None => break,
         };
 
-        if let Some(data) = LandscapeWifiInterface::new(msg.payload) {
+        if let Some(data) = crate::iface::dev_wifi::new_landscape_wifi_interface(msg.payload) {
             result.insert(data.name.clone(), data);
         }
     }
@@ -215,7 +216,7 @@ pub async fn get_all_devices() -> Vec<LandscapeInterface> {
     let mut links = handle.link().get().execute();
     let mut result = vec![];
     while let Some(msg) = links.try_next().await.unwrap() {
-        if let Some(data) = LandscapeInterface::new(msg) {
+        if let Some(data) = crate::dev::new_landscape_interface(msg) {
             if data.is_lo() {
                 continue;
             }

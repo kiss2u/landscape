@@ -49,7 +49,6 @@ tracing-appender = { workspace = true }
 futures-util = "*"
 
 nix = { workspace = true, features = ["socket", "uio"] }
-ts-rs = { workspace = true }
 
 
 [dev-dependencies]

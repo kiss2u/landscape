@@ -100,7 +100,8 @@ pub fn start_db_thread(
                                 },
                             ]);
 
-                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok() {
+                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok()
+                            {
                                 batch_count += 1;
                             }
                         }
