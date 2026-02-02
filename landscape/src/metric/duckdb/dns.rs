@@ -23,7 +23,8 @@ pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
             report_time BIGINT,
             duration_ms INTEGER,
             src_ip TEXT,
-            answers TEXT
+            answers TEXT,
+            status TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_dns_report_time ON dns_metrics (report_time);
         ",
@@ -91,7 +92,7 @@ pub fn query_dns_history(conn: &Connection, mut params: DnsHistoryQueryParams) -
     let query_stmt_str = format!(
         "
         SELECT 
-            flow_id, domain, query_type, response_code, report_time, duration_ms, src_ip, answers
+            flow_id, domain, query_type, response_code, report_time, duration_ms, src_ip, answers, status
         FROM dns_metrics
         {}
         ORDER BY {} {}
@@ -121,6 +122,7 @@ pub fn query_dns_history(conn: &Connection, mut params: DnsHistoryQueryParams) -
             duration_ms: row.get::<_, i64>(5)? as u32,
             src_ip: row.get::<_, String>(6)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
             answers,
+            status: serde_json::from_str(&row.get::<_, String>(8).unwrap_or_else(|_| "\"normal\"".to_string())).unwrap_or_default(),
         })
     });
 

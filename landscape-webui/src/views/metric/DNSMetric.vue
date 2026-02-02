@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, h, computed, watch } from "vue";
 import { DnsMetric, get_dns_history } from "@/api/metric";
 import { NDataTable, NTag, NTime, NButton, NSpace, NInput, NDatePicker, NIcon, NTooltip } from "naive-ui";
 import type { DataTableColumns } from 'naive-ui'
-import { Refresh, TrashOutline, HelpCircleOutline } from "@vicons/ionicons5";
+import { Refresh, TrashOutline, HelpCircleOutline, TimeOutline } from "@vicons/ionicons5";
 import { useDebounceFn } from "@vueuse/core";
 
 const data = ref<DnsMetric[]>([]);
@@ -82,10 +82,37 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
   { 
     title: 'Resp Code', 
     key: 'response_code', 
-    width: 100,
+    width: 150,
     render(row) {
-      const isOk = row.response_code === 'NoError';
-      return h(NTag, { type: isOk ? 'success' : 'error', size: 'small' }, { default: () => row.response_code })
+      const code = String(row.response_code || '').toLowerCase();
+      const isOk = code === 'noerror' || code === 'no error';
+      return h(NTag, { 
+        type: isOk ? 'success' : 'error', 
+        size: 'small',
+        style: { minWidth: '80px', justifyContent: 'center' }
+      }, { default: () => row.response_code })
+    }
+  },
+  { 
+    title: 'Status', 
+    key: 'status', 
+    width: 110,
+    render(row) {
+      const statusMap: Record<string, { type: any, label: string }> = {
+          'local': { type: 'success', label: 'Local' },
+          'block': { type: 'warning', label: 'Block' },
+          'hit': { type: 'info', label: 'Hit' },
+          'nxdomain': { type: 'default', label: 'NXDomain' },
+          'normal': { type: 'default', label: 'Normal' },
+          'error': { type: 'error', label: 'Error' }
+      };
+      const s = statusMap[row.status] || { type: 'default', label: row.status };
+      return h(NTag, { 
+        type: s.type, 
+        size: 'small', 
+        bordered: false,
+        style: { minWidth: '70px', justifyContent: 'center' }
+      }, { default: () => s.label })
     }
   },
   { 
@@ -178,6 +205,17 @@ const shortcuts = {
     '24h': () => [Date.now() - 24 * 60 * 60 * 1000, Date.now()] as [number, number]
 };
 
+const syncToNow = () => {
+    if (searchParams.timeRange && searchParams.timeRange.length === 2) {
+        const duration = searchParams.timeRange[1] - searchParams.timeRange[0];
+        const now = Date.now();
+        searchParams.timeRange = [now - duration, now];
+    } else {
+        searchParams.timeRange = [Date.now() - DEFAULT_TIME_WINDOW, Date.now()];
+    }
+    loadData(true);
+}
+
 const handleReset = () => {
     searchParams.domain = '';
     searchParams.src_ip = '';
@@ -216,14 +254,25 @@ onMounted(() => {
     <n-space style="margin-bottom: 10px" align="center" :size="[8, 8]">
        <n-input v-model:value="searchParams.domain" size="small" placeholder="Domain" clearable style="width: 200px"/>
        <n-input v-model:value="searchParams.src_ip" size="small" placeholder="IP" clearable style="width: 140px"/>
-       <n-date-picker v-model:value="searchParams.timeRange" size="small" type="datetimerange" clearable :shortcuts="shortcuts" placeholder="Time Range" style="width: 340px"/>
+       <n-date-picker v-model:value="searchParams.timeRange" size="small" type="datetimerange" clearable :shortcuts="shortcuts" placeholder="Time Range" style="width: 320px"/>
+       <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button strong secondary size="small" @click="syncToNow" type="info">
+               <template #icon>
+                 <n-icon><TimeOutline /></n-icon>
+               </template>
+               Now
+            </n-button>
+          </template>
+          Sync time range to now (preserve duration)
+       </n-tooltip>
        <n-button @click="handleReset" size="small" secondary>
           <template #icon><n-icon><TrashOutline /></n-icon></template>
           Reset
        </n-button>
     </n-space>
 
-    <n-data-table 
+    <n-data-table
       remote
       :columns="columns" 
       :data="data" 

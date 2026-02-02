@@ -27,7 +27,7 @@ use landscape_common::{
     dns::ChainDnsServerInitInfo,
     event::DnsMetricMessage,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
-    metric::dns::DnsMetric,
+    metric::dns::{DnsMetric, DnsResultStatus},
 };
 
 #[derive(Clone, Debug)]
@@ -336,6 +336,8 @@ impl RequestHandler for ChainDnsRequestHandle {
 
         let mut records = vec![];
         let mut redirect_records = None;
+        let mut status = DnsResultStatus::Normal;
+
         {
             let redirect_list = self.redirect_solution.load();
             for each in redirect_list.iter() {
@@ -346,16 +348,24 @@ impl RequestHandler for ChainDnsRequestHandle {
             }
         };
 
-        if let Some(redirect_records) = redirect_records {
-            records = redirect_records;
+        if let Some(redirect_records_inner) = redirect_records {
+            records = redirect_records_inner;
+            if records.is_empty() {
+                status = DnsResultStatus::Block;
+            } else {
+                status = DnsResultStatus::Local;
+            }
         } else {
             if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
                 records = fiter_result(result, &filter);
+                status = DnsResultStatus::Hit;
             } else {
                 {
                     let resolves = self.resolves.load();
+                    let mut found = false;
                     for (_index, resolver) in resolves.iter() {
                         if resolver.is_match(&domain) {
+                            found = true;
                             records = match resolver.lookup(&domain, query_type).await {
                                 Ok(rdata_vec) => {
                                     if rdata_vec.len() > 0 {
@@ -368,14 +378,43 @@ impl RequestHandler for ChainDnsRequestHandle {
                                         )
                                         .await;
                                     }
+                                    status = DnsResultStatus::Normal;
                                     fiter_result(rdata_vec, &resolver.filter_mode())
                                 }
                                 Err(error_code) => {
+                                    status = if error_code == ResponseCode::NXDomain {
+                                        DnsResultStatus::NxDomain
+                                    } else if error_code == ResponseCode::NoError {
+                                        DnsResultStatus::Normal
+                                    } else {
+                                        DnsResultStatus::Error
+                                    };
                                     // 构建并返回错误响应
                                     header.set_response_code(error_code);
                                     let response =
                                         MessageResponseBuilder::from_message_request(request)
                                             .build_no_records(header);
+
+                                    // 发送指标 (由于提前退出，需要在这里发送指标以便记录错误)
+                                    if let Some(msg_tx) = &self.msg_tx {
+                                        let duration_ms = start_time.elapsed().as_millis() as u32;
+                                        let dns_metric = DnsMetric {
+                                            flow_id: self.flow_id,
+                                            domain: domain.clone(),
+                                            query_type: query_type.to_string(),
+                                            response_code: header.response_code().to_string(),
+                                            status,
+                                            report_time:
+                                                landscape_common::utils::time::get_current_time_ms()
+                                                    .unwrap_or_default(),
+                                            duration_ms,
+                                            src_ip: request.src().ip(),
+                                            answers: vec![],
+                                        };
+                                        let _ =
+                                            msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
+                                    }
+
                                     let result = response_handle.send_response(response).await;
                                     return match result {
                                         Err(e) => {
@@ -389,16 +428,38 @@ impl RequestHandler for ChainDnsRequestHandle {
                             break;
                         }
                     }
+                    if !found {
+                        // 没有任何规则匹配
+                        status = DnsResultStatus::Normal;
+                    }
                     drop(resolves);
                 }
             }
         }
 
-        // 如果没有找到记录，返回 NXDomain 响应
+        // 如果没有找到记录，返回空响应
         if records.is_empty() {
-            // header.set_response_code(ResponseCode::NXDomain);
             let response = response_builder.build_no_records(header);
             let result = response_handle.send_response(response).await;
+
+            // 发送空结果指标
+            if let Some(msg_tx) = &self.msg_tx {
+                let duration_ms = start_time.elapsed().as_millis() as u32;
+                let dns_metric = DnsMetric {
+                    flow_id: self.flow_id,
+                    domain: domain.clone(),
+                    query_type: query_type.to_string(),
+                    response_code: header.response_code().to_string(),
+                    status,
+                    report_time: landscape_common::utils::time::get_current_time_ms()
+                        .unwrap_or_default(),
+                    duration_ms,
+                    src_ip: request.src().ip(),
+                    answers: vec![],
+                };
+                let _ = msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
+            }
+
             return match result {
                 Err(e) => {
                     tracing::error!("Record Empty and response error: {}", e);
@@ -425,6 +486,7 @@ impl RequestHandler for ChainDnsRequestHandle {
                 domain: domain.clone(),
                 query_type: query_type.to_string(),
                 response_code: header.response_code().to_string(),
+                status,
                 report_time: landscape_common::utils::time::get_current_time_ms()
                     .unwrap_or_default(),
                 duration_ms,

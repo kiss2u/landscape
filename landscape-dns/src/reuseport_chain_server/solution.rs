@@ -147,11 +147,23 @@ impl ResolutionRule {
                 Ok(result)
             }
             Err(e) => {
-                let result = if e.is_no_records_found() {
-                    ResponseCode::NoError
+                let code = if let Some(proto_err) = e.proto() {
+                    match proto_err.kind() {
+                        hickory_proto::ProtoErrorKind::NoRecordsFound { response_code, .. } => *response_code,
+                        _ => {
+                            tracing::error!(
+                                "[flow_id: {:?}, config: {}] DNS resolution failed (proto) for {}: {}",
+                                self.config.flow_id,
+                                self.config.resolve_mode.id,
+                                domain,
+                                e
+                            );
+                            ResponseCode::ServFail
+                        }
+                    }
                 } else {
                     tracing::error!(
-                        "[flow_id: {:?}, config: {}] DNS resolution failed for {}: {}",
+                        "[flow_id: {:?}, config: {}] DNS resolution failed (resolver) for {}: {}",
                         self.config.flow_id,
                         self.config.resolve_mode.id,
                         domain,
@@ -159,7 +171,7 @@ impl ResolutionRule {
                     );
                     ResponseCode::ServFail
                 };
-                Err(result)
+                Err(code)
             }
         }
     }

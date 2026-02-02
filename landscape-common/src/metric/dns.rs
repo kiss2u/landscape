@@ -2,6 +2,19 @@ use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use ts_rs::TS;
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, TS, PartialEq, Eq, Default)]
+#[ts(export, export_to = "common/metric/dns.d.ts")]
+#[serde(rename_all = "lowercase")]
+pub enum DnsResultStatus {
+    Local,    // 重定向有值
+    Block,    // 重定向空值
+    Hit,      // 命中缓存
+    NxDomain, // 域名不存在
+    #[default]
+    Normal,   // 正常透传
+    Error,    // 异常
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/metric/dns.d.ts")]
 pub struct DnsMetric {
@@ -9,6 +22,7 @@ pub struct DnsMetric {
     pub domain: String,
     pub query_type: String,
     pub response_code: String,
+    pub status: DnsResultStatus,
     #[ts(type = "number")]
     pub report_time: u64,
     pub duration_ms: u32,

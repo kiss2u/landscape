@@ -19,10 +19,19 @@ export type DnsMetric = {
   domain: string;
   query_type: string;
   response_code: string;
+  status: DnsResultStatus;
   report_time: number;
   duration_ms: number;
   src_ip: string;
   answers: Array<string>;
 };
+
+export type DnsResultStatus =
+  | "local"
+  | "block"
+  | "hit"
+  | "nxdomain"
+  | "normal"
+  | "error";
 
 export type DnsSortKey = "time" | "domain" | "duration";

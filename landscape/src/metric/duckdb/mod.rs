@@ -142,6 +142,7 @@ pub fn start_db_thread(
                                 metric.duration_ms as i64,
                                 clean_ip_string(&metric.src_ip),
                                 serde_json::to_string(&metric.answers).unwrap_or_default(),
+                                serde_json::to_string(&metric.status).unwrap_or_default(),
                             ]);
                             batch_count += 1;
                         }

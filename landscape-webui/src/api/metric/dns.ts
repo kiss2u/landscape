@@ -5,6 +5,7 @@ export interface DnsMetric {
   domain: string;
   query_type: string;
   response_code: string;
+  status: string;
   report_time: number;
   duration_ms: number;
   src_ip: string;
