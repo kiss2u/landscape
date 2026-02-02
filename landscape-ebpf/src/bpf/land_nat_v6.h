@@ -114,6 +114,7 @@ static __always_inline int nat_metric_try_report_v6(struct nat_timer_key_v6 *tim
     event->ingress_packets = timer_value->ingress_packets;
     event->egress_bytes = timer_value->egress_bytes;
     event->egress_packets = timer_value->egress_packets;
+    event->cpu_id = timer_value->cpu_id;
     event->status = status;
     bpf_ringbuf_submit(event, 0);
 
@@ -345,6 +346,7 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
         __builtin_memset(&new_value, 0, sizeof(new_value));
         new_value.create_time = bpf_ktime_get_ns();
         new_value.flow_id = get_flow_id(skb->mark);
+        new_value.cpu_id = bpf_get_smp_processor_id();
         update_ipv6_cache_value(skb, ip_pair, &new_value);
         value = insert_ct6_timer(&key, &new_value);
 

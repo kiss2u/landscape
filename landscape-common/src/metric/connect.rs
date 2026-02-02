@@ -100,6 +100,7 @@ pub struct ConnectMetric {
     pub egress_packets: u64,
 
     pub status: ConnectStatusType,
+    pub cpu_id: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]

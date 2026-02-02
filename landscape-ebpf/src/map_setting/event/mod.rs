@@ -42,6 +42,7 @@ impl From<&firewall_conn_metric_event> for ConnectMetric {
             egress_bytes: ev.egress_bytes,
             egress_packets: ev.egress_packets,
             status: ConnectStatusType::Disabled,
+            cpu_id: 0,
         }
     }
 }
@@ -68,6 +69,7 @@ impl From<&nat_conn_metric_event> for ConnectMetric {
             egress_bytes: ev.egress_bytes,
             egress_packets: ev.egress_packets,
             status: ConnectStatusType::from(ev.status),
+            cpu_id: ev.cpu_id,
         }
     }
 }

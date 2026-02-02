@@ -251,6 +251,7 @@ static __always_inline int nat_metric_try_report_v4(struct nat_timer_key *timer_
     event->ingress_packets = timer_value->ingress_packets;
     event->egress_bytes = timer_value->egress_bytes;
     event->egress_packets = timer_value->egress_packets;
+    event->cpu_id = timer_value->cpu_id;
     event->status = status;
     bpf_ringbuf_submit(event, 0);
 
@@ -646,6 +647,7 @@ static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, b
     timer_value_new.trigger_saddr.addr = nat_egress_value->trigger_addr;
     timer_value_new.create_time = nat_egress_value->active_time;
     timer_value_new.flow_id = flow_id;
+    timer_value_new.cpu_id = bpf_get_smp_processor_id();
     timer_value = insert_new_nat_timer(l4proto, &timer_key, &timer_value_new);
     if (timer_value == NULL) {
         return TIMER_ERROR;

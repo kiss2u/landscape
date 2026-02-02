@@ -127,6 +127,7 @@ struct nat_conn_metric_event {
     u8 l3_proto;
     u8 flow_id;
     u8 trace_id;
+    u32 cpu_id;
     u8 status;
 } __nat_conn_metric_event;
 

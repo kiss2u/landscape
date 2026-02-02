@@ -92,6 +92,7 @@ struct nat_timer_value {
     u64 ingress_packets;
     u64 egress_bytes;
     u64 egress_packets;
+    u32 cpu_id;
 };
 
 //
@@ -118,6 +119,7 @@ struct nat_timer_value_v6 {
     u64 ingress_packets;
     u64 egress_bytes;
     u64 egress_packets;
+    u32 cpu_id;
     u8 client_prefix[8];
 };
 

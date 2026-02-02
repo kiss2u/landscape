@@ -65,6 +65,7 @@ export type ConnectMetric = {
   egress_bytes: number;
   egress_packets: number;
   status: ConnectStatusType;
+  cpu_id: number;
 };
 
 export type ConnectRealtimeStatus = {
