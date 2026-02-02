@@ -69,14 +69,15 @@ const boxDimensions = computed(() => {
   }
 });
 
-// Grid CSS styles - auto-fill columns that align properly
-const gridStyle = computed(() => {
-  const { width, gap } = boxDimensions.value;
+// Flex CSS styles - single row, auto-fit width
+const flexStyle = computed(() => {
+  const { gap } = boxDimensions.value;
   return {
-    display: "grid",
-    gridTemplateColumns: `repeat(auto-fill, ${width}px)`,
+    display: "flex" as const,
+    flexWrap: "nowrap" as const,
     gap: `${gap}px`,
-    justifyContent: "center", // Center the grid items
+    alignItems: "flex-end" as const,
+    width: "100%",
   };
 });
 
@@ -99,27 +100,25 @@ const getCpuIndex = (name: string, index: number) => {
     </template>
 
     <!-- CPU Model -->
-    <n-text
-      v-if="cpuModel"
-      depth="3"
-      style="font-size: 12px; margin-bottom: 12px; display: block"
-    >
-      <n-ellipsis :tooltip="{ width: 300 }">{{ cpuModel }}</n-ellipsis>
-    </n-text>
+    <n-flex v-if="cpuModel" style="margin-bottom: 12px">
+      <n-text depth="3" style="font-size: 12px">
+        <n-ellipsis :tooltip="{ width: 300 }">{{ cpuModel }}</n-ellipsis>
+      </n-text>
+    </n-flex>
 
     <!-- Global Stats -->
-    <div style="display: flex; margin-bottom: 12px; gap: 8px">
-      <div style="flex: 0 0 85px">
-        <n-statistic :label="t('total_cpu_usage')">
+    <n-flex :size="8" style="margin-bottom: 12px">
+      <n-flex vertical style="flex: 0 0 85px">
+        <n-statistic :label="t('sysinfo.total_cpu_usage')">
           <template #default>
             <n-text :style="{ color: getUsageColor(globalUsage) }">
               {{ globalUsage.toFixed(1) }}%
             </n-text>
           </template>
         </n-statistic>
-      </div>
-      <div style="flex: 0 0 95px">
-        <n-statistic :label="t('cpu_temp')">
+      </n-flex>
+      <n-flex vertical style="flex: 0 0 95px">
+        <n-statistic :label="t('sysinfo.cpu_temp')">
           <template #default>
             <n-text
               v-if="globalTemp"
@@ -139,13 +138,13 @@ const getCpuIndex = (name: string, index: number) => {
                   N/A
                 </span>
               </template>
-              {{ t("no_sensor") }}
+              {{ t("sysinfo.no_sensor") }}
             </n-tooltip>
           </template>
         </n-statistic>
-      </div>
-      <div style="flex: 1; min-width: 0">
-        <n-statistic :label="t('average_load')">
+      </n-flex>
+      <n-flex vertical style="flex: 1; min-width: 0">
+        <n-statistic :label="t('sysinfo.average_load')">
           <template #default>
             <n-tooltip trigger="hover">
               <template #trigger>
@@ -165,8 +164,8 @@ const getCpuIndex = (name: string, index: number) => {
             </n-tooltip>
           </template>
         </n-statistic>
-      </div>
-    </div>
+      </n-flex>
+    </n-flex>
 
     <n-divider style="margin: 0 0 12px 0" />
 
@@ -175,7 +174,7 @@ const getCpuIndex = (name: string, index: number) => {
       <n-scrollbar style="max-height: 100%">
         <!-- Extra padding wrapper to prevent hover clipping -->
         <div class="cpu-cores-inner">
-          <div :style="gridStyle">
+          <div :style="flexStyle">
             <n-tooltip
               v-for="(cpu, index) in cpus"
               :key="cpu.name"
@@ -187,8 +186,9 @@ const getCpuIndex = (name: string, index: number) => {
                   class="cpu-core-box"
                   :class="[`mode-${layoutMode}`]"
                   :style="{
-                    width: `${boxDimensions.width}px`,
                     height: `${boxDimensions.height}px`,
+                    flex: '1 1 0',
+                    minWidth: '0',
                   }"
                 >
                   <!-- Fill bar -->

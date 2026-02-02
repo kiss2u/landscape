@@ -263,7 +263,7 @@ const show_switch = computed(() => {
               : (node.mac ?? "N/A")
           }}
         </n-descriptions-item>
-        <n-descriptions-item label="物理mca">
+        <n-descriptions-item label="mac">
           {{
             frontEndStore.presentation_mode
               ? mask_string(node.perm_mac)

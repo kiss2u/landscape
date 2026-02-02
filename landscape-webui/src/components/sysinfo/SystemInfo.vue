@@ -3,8 +3,10 @@ import { get_sysinfo } from "@/api/sys";
 import { LandscapeSystemInfo } from "@/lib/sys";
 import { onMounted, ref, computed } from "vue";
 import { useThemeVars } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { InformationFilled, WarningAltFilled } from "@vicons/carbon";
 
+const { t } = useI18n({ useScope: "global" });
 const themeVars = useThemeVars();
 
 const sysinfo = ref<LandscapeSystemInfo>({
@@ -61,69 +63,50 @@ const uptime = computed(() => {
     <!-- Header -->
     <template #header>
       <n-flex align="center" justify="space-between">
-        <span>系统</span>
+        <span>{{ t("sysinfo.system") }}</span>
         <n-tag v-if="sysinfo.cpu_arch" size="small" :bordered="false">
           {{ sysinfo.cpu_arch }}
         </n-tag>
       </n-flex>
     </template>
 
-    <!-- Main Info Grid -->
-    <div class="info-grid">
+    <!-- Main Info Section -->
+    <n-flex vertical :size="12">
       <!-- Hostname - Featured -->
-      <div class="info-item featured">
-        <n-text depth="3" class="info-label">主机名称</n-text>
+      <n-flex vertical :size="4">
+        <n-text depth="3" class="info-label">{{ t("sysinfo.hostname") }}</n-text>
         <n-text class="info-value large">
           {{ sysinfo.host_name || "--" }}
         </n-text>
-      </div>
+      </n-flex>
 
-      <!-- OS Info -->
-      <div class="info-item">
-        <n-text depth="3" class="info-label">系统</n-text>
-        <n-text class="info-value">
-          {{ sysinfo.system_name || "--" }}
-        </n-text>
-      </div>
-
-      <!-- Kernel -->
-      <div class="info-item">
-        <n-text depth="3" class="info-label">内核</n-text>
-        <n-ellipsis class="info-value" :tooltip="{ width: 300 }">
-          {{ sysinfo.kernel_version || "--" }}
-        </n-ellipsis>
-      </div>
-
-      <!-- Uptime -->
-      <div class="info-item">
-        <n-text depth="3" class="info-label">运行时间</n-text>
-        <n-flex align="center" :size="6">
-          <n-text class="info-value uptime">{{ uptime || "--" }}</n-text>
-          <n-tooltip trigger="hover" placement="top">
-            <template #trigger>
-              <n-icon size="14" style="opacity: 0.5; cursor: help">
-                <InformationFilled></InformationFilled>
-              </n-icon>
-            </template>
-            <n-flex vertical :size="2">
-              <span>启动于:</span>
-              <n-time
-                :time="sysinfo.start_at"
-                format="yyyy-MM-dd HH:mm:ss"
-                unix
-              />
-            </n-flex>
-          </n-tooltip>
+      <!-- OS and Kernel Info Row -->
+      <n-flex :size="12">
+        <!-- OS Info -->
+        <n-flex vertical :size="4" style="flex: 1; min-width: 0">
+          <n-text depth="3" class="info-label">{{ t("sysinfo.system") }}</n-text>
+          <n-text class="info-value">
+            {{ sysinfo.system_name || "--" }}
+          </n-text>
         </n-flex>
-      </div>
-    </div>
+
+        <!-- Kernel -->
+        <n-flex vertical :size="4" style="flex: 1; min-width: 0">
+          <n-text depth="3" class="info-label">{{ t("sysinfo.kernel") }}</n-text>
+          <n-ellipsis class="info-value" :tooltip="{ width: 300 }">
+            {{ sysinfo.kernel_version || "--" }}
+          </n-ellipsis>
+        </n-flex>
+      </n-flex>
+    </n-flex>
 
     <n-divider style="margin: 12px 0" />
 
-    <!-- Version Info -->
-    <div class="version-section">
+    <!-- Version and Runtime Info -->
+    <n-flex vertical :size="8">
+      <!-- Landscape Router Version -->
       <n-flex justify="space-between" align="center">
-        <n-text depth="3" style="font-size: 12px">Landscape Router</n-text>
+        <n-text depth="3" style="font-size: 12px">{{ t("sysinfo.landscape_router") }}</n-text>
         <n-tooltip v-if="isVersionMismatch" trigger="hover" placement="top">
           <template #trigger>
             <n-tag size="small" type="error" :bordered="false">
@@ -134,11 +117,11 @@ const uptime = computed(() => {
             </n-tag>
           </template>
           <div>
-            <div style="font-weight: 600; margin-bottom: 4px">版本不匹配!</div>
-            <div>后端: {{ sysinfo.landscape_version }}</div>
-            <div>前端: {{ ui_version }}</div>
+            <div style="font-weight: 600; margin-bottom: 4px">{{ t("sysinfo.version_mismatch") }}</div>
+            <div>{{ t("sysinfo.backend") }}: {{ sysinfo.landscape_version }}</div>
+            <div>{{ t("sysinfo.frontend") }}: {{ ui_version }}</div>
             <div style="margin-top: 8px; opacity: 0.8; font-size: 12px">
-              请检查前端静态文件或清理浏览器缓存
+              {{ t("sysinfo.check_browser_cache") }}
             </div>
           </div>
         </n-tooltip>
@@ -146,27 +129,34 @@ const uptime = computed(() => {
           {{ sysinfo.landscape_version || "--" }}
         </n-tag>
       </n-flex>
-    </div>
+
+      <!-- Uptime -->
+      <n-flex justify="space-between" align="center">
+        <n-text depth="3" style="font-size: 12px">{{ t("sysinfo.uptime") }}</n-text>
+        <n-flex align="center" :size="6">
+          <n-text class="info-value uptime">{{ uptime || "--" }}</n-text>
+          <n-tooltip trigger="hover" placement="top">
+            <template #trigger>
+              <n-icon size="14" style="opacity: 0.5; cursor: help">
+                <InformationFilled></InformationFilled>
+              </n-icon>
+            </template>
+            <n-flex vertical :size="2">
+              <span>{{ t("sysinfo.started_at") }}:</span>
+              <n-time
+                :time="sysinfo.start_at"
+                format="yyyy-MM-dd HH:mm:ss"
+                unix
+              />
+            </n-flex>
+          </n-tooltip>
+        </n-flex>
+      </n-flex>
+    </n-flex>
   </n-card>
 </template>
 
 <style scoped>
-.info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.info-item.featured {
-  grid-column: 1 / -1;
-}
-
 .info-label {
   font-size: 12px;
   line-height: 1.2;
@@ -187,9 +177,5 @@ const uptime = computed(() => {
 .info-value.uptime {
   font-family: monospace;
   font-size: 14px;
-}
-
-.version-section {
-  padding: 4px 0;
 }
 </style>

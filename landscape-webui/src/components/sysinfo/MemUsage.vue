@@ -41,20 +41,22 @@ const getUsageColor = (percentage: number) => {
 </script>
 
 <template>
-  <n-card content-style="display: flex; flex-direction: column; height: 100%;">
+  <n-card
+    content-style="display: flex; flex-direction: column; height: 100%; padding-top: 22px;"
+  >
     <!-- Header -->
     <template #header>
       <n-flex align="center" justify="space-between">
-        <span>{{ t("mem") }}</span>
+        <span>{{ t("sysinfo.mem") }}</span>
         <n-tag size="small" :bordered="false"> {{ memData.total }} GB </n-tag>
       </n-flex>
     </template>
 
     <!-- Memory Section -->
-    <div class="mem-section">
-      <n-flex justify="space-between" align="center" style="margin-bottom: 8px">
+    <n-flex vertical :size="8">
+      <n-flex justify="space-between" align="center">
         <n-text depth="3" style="font-size: 13px">{{
-          t("memory_usage")
+          t("sysinfo.memory_usage")
         }}</n-text>
         <n-text
           :style="{ color: getUsageColor(memData.percentage), fontWeight: 600 }"
@@ -74,24 +76,24 @@ const getUsageColor = (percentage: number) => {
         ></div>
       </div>
 
-      <n-flex justify="space-between" style="margin-top: 6px">
+      <n-flex justify="space-between">
         <n-text depth="3" style="font-size: 12px">
-          {{ t("used") }}: {{ memData.used }} GB
+          {{ t("sysinfo.used") }}: {{ memData.used }} GB
         </n-text>
         <n-text depth="3" style="font-size: 12px">
-          {{ t("total") }}: {{ memData.total }} GB
+          {{ t("sysinfo.total") }}: {{ memData.total }} GB
         </n-text>
       </n-flex>
-    </div>
+    </n-flex>
 
     <n-divider style="margin: 16px 0" />
 
     <!-- Swap Section -->
-    <div class="mem-section">
-      <n-flex justify="space-between" align="center" style="margin-bottom: 8px">
+    <n-flex vertical :size="8">
+      <n-flex justify="space-between" align="center">
         <n-flex align="center" :size="8">
           <n-text depth="3" style="font-size: 13px">{{
-            t("swap_usage")
+            t("sysinfo.swap_usage")
           }}</n-text>
           <n-tag
             v-if="!swapData.enabled"
@@ -126,24 +128,20 @@ const getUsageColor = (percentage: number) => {
         ></div>
       </div>
 
-      <n-flex justify="space-between" style="margin-top: 6px">
+      <n-flex justify="space-between">
         <n-text depth="3" style="font-size: 12px">
-          {{ t("used") }}: {{ swapData.enabled ? swapData.used + " GB" : "--" }}
+          {{ t("sysinfo.used") }}: {{ swapData.enabled ? swapData.used + " GB" : "--" }}
         </n-text>
         <n-text depth="3" style="font-size: 12px">
-          {{ t("total") }}:
+          {{ t("sysinfo.total") }}:
           {{ swapData.enabled ? swapData.total + " GB" : "--" }}
         </n-text>
       </n-flex>
-    </div>
+    </n-flex>
   </n-card>
 </template>
 
 <style scoped>
-.mem-section {
-  padding: 4px 0;
-}
-
 .usage-bar-container {
   height: 12px;
   background-color: rgba(128, 128, 128, 0.1);

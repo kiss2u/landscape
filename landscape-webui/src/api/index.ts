@@ -13,7 +13,6 @@ axiosService.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(LANDSCAPE_TOKEN_KEY);
     if (token) {
-      // 如果存在 token，则将其添加到请求头
       config.headers["Authorization"] = `Bearer ${token}`;
     }
     return config;
@@ -30,13 +29,11 @@ axiosService.interceptors.response.use(
       const code = error.response.status;
       const msg = error.response.data.message;
       if (code === 401) {
-        // 清除本地存储中的认证信息
-        localStorage.removeItem("token");
+        localStorage.removeItem(LANDSCAPE_TOKEN_KEY);
 
-        // 重定向到登录页面
         router.push({
           path: "/login",
-          // query: { redirect: router.currentRoute }, // 登录成功后重定向回原页面
+          state: { redirect: router.currentRoute.value.fullPath },
         });
       }
 
