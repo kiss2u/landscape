@@ -17,19 +17,19 @@ export type ConnectGlobalStats = {
 };
 
 export type ConnectHistoryQueryParams = {
-  start_time: bigint | null;
-  end_time: bigint | null;
-  limit: number | null;
-  src_ip: string | null;
-  dst_ip: string | null;
-  port_start: number | null;
-  port_end: number | null;
-  l3_proto: number | null;
-  l4_proto: number | null;
-  flow_id: number | null;
-  sort_key: ConnectSortKey | null;
-  sort_order: SortOrder | null;
-  status: number | null;
+  start_time?: number;
+  end_time?: number;
+  limit?: number;
+  src_ip?: string;
+  dst_ip?: string;
+  port_start?: number;
+  port_end?: number;
+  l3_proto?: number;
+  l4_proto?: number;
+  flow_id?: number;
+  sort_key?: ConnectSortKey;
+  sort_order?: SortOrder;
+  status?: number;
 };
 
 export type ConnectHistoryStatus = {

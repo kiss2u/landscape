@@ -54,7 +54,7 @@ const formatIp = (ip: string) => {
 };
 
 const queryTypeOptions = computed(() => [
-    { label: t('metric.all_types'), value: null },
+    { label: t('metric.all_types'), value: undefined },
     { label: 'A (IPv4)', value: 'A' },
     { label: 'AAAA (IPv6)', value: 'AAAA' },
     { label: 'CNAME', value: 'CNAME' },
@@ -67,7 +67,7 @@ const queryTypeOptions = computed(() => [
 ]);
 
 const statusOptions = computed(() => [
-    { label: t('metric.all_status'), value: null },
+    { label: t('metric.all_status'), value: undefined },
     { label: t('metric.status_hit'), value: 'hit' },
     { label: t('metric.status_normal'), value: 'normal' },
     { label: t('metric.status_block'), value: 'block' },

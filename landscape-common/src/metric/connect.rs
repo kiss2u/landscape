@@ -155,18 +155,33 @@ pub enum SortOrder {
 #[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct ConnectHistoryQueryParams {
+    #[ts(optional)]
+    #[ts(type = "number")]
     pub start_time: Option<u64>,
+    #[ts(optional)]
+    #[ts(type = "number")]
     pub end_time: Option<u64>,
+    #[ts(optional)]
     pub limit: Option<usize>,
+    #[ts(optional)]
     pub src_ip: Option<String>,
+    #[ts(optional)]
     pub dst_ip: Option<String>,
+    #[ts(optional)]
     pub port_start: Option<u16>,
+    #[ts(optional)]
     pub port_end: Option<u16>,
+    #[ts(optional)]
     pub l3_proto: Option<u8>,
+    #[ts(optional)]
     pub l4_proto: Option<u8>,
+    #[ts(optional)]
     pub flow_id: Option<u8>,
+    #[ts(optional)]
     pub sort_key: Option<ConnectSortKey>,
+    #[ts(optional)]
     pub sort_order: Option<SortOrder>,
+    #[ts(optional)]
     pub status: Option<u8>, // 0: Active, 1: Closed
 }
 
