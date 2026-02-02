@@ -56,7 +56,7 @@ const lastActiveTime = (conn: ConnectRealtimeStatus) => {
   return conn.last_metric?.report_time || Date.now();
 };
 
-const emit = defineEmits(["show:key"]);
+const emit = defineEmits(["show:chart"]);
 </script>
 
 <template>
@@ -104,19 +104,19 @@ const emit = defineEmits(["show:key"]);
 
           <n-flex style="width: 200px">
             <n-tag type="success" :bordered="false" size="small">
-              {{ conn.key.l3_proto == 0 ? "IPV4" : "IPV6" }}
+              {{ conn.l3_proto == 0 ? "IPV4" : "IPV6" }}
             </n-tag>
             <n-tag type="info" :bordered="false" size="small">
-              {{ l4_proto(conn.key.l4_proto) }}
+              {{ l4_proto(conn.l4_proto) }}
             </n-tag>
 
             <n-tag
-              v-if="conn.key.flow_id != 0"
+              v-if="conn.flow_id != 0"
               type="info"
               :bordered="false"
               size="small"
             >
-              FLOW: {{ conn.key.flow_id }}
+              FLOW: {{ conn.flow_id }}
             </n-tag>
           </n-flex>
 
@@ -127,13 +127,13 @@ const emit = defineEmits(["show:key"]);
             {{
               `${
                 frontEndStore.presentation_mode
-                  ? mask_string(conn.key.src_ip)
-                  : conn.key.src_ip
-              }:${conn.key.src_port} => ${
+                  ? mask_string(conn.src_ip)
+                  : conn.src_ip
+              }:${conn.src_port} => ${
                 frontEndStore.presentation_mode
-                  ? mask_string(conn.key.dst_ip)
-                  : conn.key.dst_ip
-              }:${conn.key.dst_port}`
+                  ? mask_string(conn.dst_ip)
+                  : conn.dst_ip
+              }:${conn.dst_port}`
             }}
           </n-flex>
 
@@ -230,7 +230,7 @@ const emit = defineEmits(["show:key"]);
             :focusable="false"
             text
             style="font-size: 16px"
-            @click="emit('show:key', conn.key)"
+            @click="emit('show:chart', conn)"
           >
             <n-icon>
               <ChartLine />

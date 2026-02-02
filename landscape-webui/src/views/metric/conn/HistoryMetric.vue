@@ -23,14 +23,16 @@ const sortOrder = ref<"asc" | "desc">("desc");
 // 图表展示状态
 const showChart = ref(false);
 const showChartKey = ref<ConnectKey | null>(null);
+const showChartTitle = ref("");
 const loading = ref(false);
 
 // 自定义时间段
 const useCustomTimeRange = ref(false);
 const customTimeRange = ref<[number, number] | null>(null);
 
-const showChartDrawer = (key: ConnectKey) => {
-  showChartKey.value = key;
+const showChartDrawer = (history: any) => {
+  showChartKey.value = history.key;
+  showChartTitle.value = `${history.src_ip}:${history.src_port} => ${history.dst_ip}:${history.dst_port}`;
   showChart.value = true;
 };
 
@@ -389,13 +391,14 @@ onMounted(() => {
         <HistoryItemInfo
           :history="item"
           :index="index"
-          @show:key="showChartDrawer"
+          @show:chart="showChartDrawer"
         />
       </template>
     </n-virtual-list>
     <ConnectChartDrawer
       v-model:show="showChart"
       :conn="showChartKey"
+      :title="showChartTitle"
       mode="cumulative"
     />
   </n-flex>

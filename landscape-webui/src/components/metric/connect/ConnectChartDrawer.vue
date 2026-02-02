@@ -17,10 +17,12 @@ const themeVars = useThemeVars();
 
 interface Props {
   conn: ConnectKey | null;
+  title?: string;
   mode?: "cumulative" | "delta"; // cumulative: 显示累计总量, delta: 显示增量
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  title: "",
   mode: "delta", // 默认显示增量（兼容实时连接）
 });
 
@@ -29,13 +31,7 @@ const chart = ref<ConnectMetric[]>([]);
 const show = defineModel("show");
 
 const title = computed(() => {
-  if (props.conn == null) {
-    return "";
-  } else {
-    return frontEndStore.MASK_INFO(
-      `${props.conn.src_ip}:${props.conn.src_port} => ${props.conn.dst_ip}:${props.conn.dst_port}`,
-    );
-  }
+  return frontEndStore.MASK_INFO(props.title);
 });
 const interval_number = ref();
 async function start_fetch_data() {

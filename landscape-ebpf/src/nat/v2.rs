@@ -44,9 +44,6 @@ pub fn init_nat(
     landscape_open.maps.nat4_conn_map.set_pin_path(&MAP_PATHS.nat4_conn_map).unwrap();
     landscape_open.maps.nat4_conn_map.reuse_pinned_map(&MAP_PATHS.nat4_conn_map).unwrap();
 
-    landscape_open.maps.nat_conn_events.set_pin_path(&MAP_PATHS.nat_conn_events).unwrap();
-    landscape_open.maps.nat_conn_events.reuse_pinned_map(&MAP_PATHS.nat_conn_events).unwrap();
-
     landscape_open
         .maps
         .nat_conn_metric_events

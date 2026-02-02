@@ -7,8 +7,6 @@ export type ConnectAgg = {
   egress_packets: number;
 };
 
-export type ConnectEventType = "unknow" | "create_connect" | "dis_connct";
-
 export type ConnectGlobalStats = {
   total_ingress_bytes: number;
   total_egress_bytes: number;
@@ -36,6 +34,14 @@ export type ConnectHistoryQueryParams = {
 
 export type ConnectHistoryStatus = {
   key: ConnectKey;
+  src_ip: string;
+  dst_ip: string;
+  src_port: number;
+  dst_port: number;
+  l4_proto: number;
+  l3_proto: number;
+  flow_id: number;
+  trace_id: number;
   total_ingress_bytes: number;
   total_egress_bytes: number;
   total_ingress_pkts: number;
@@ -45,7 +51,10 @@ export type ConnectHistoryStatus = {
 };
 
 /** */
-export type ConnectKey = {
+export type ConnectKey = { create_time: number; cpu_id: number };
+
+export type ConnectMetric = {
+  key: ConnectKey;
   src_ip: string;
   dst_ip: string;
   src_port: number;
@@ -54,22 +63,24 @@ export type ConnectKey = {
   l3_proto: number;
   flow_id: number;
   trace_id: number;
-  create_time: number;
-};
-
-export type ConnectMetric = {
-  key: ConnectKey;
   report_time: number;
   ingress_bytes: number;
   ingress_packets: number;
   egress_bytes: number;
   egress_packets: number;
   status: ConnectStatusType;
-  cpu_id: number;
 };
 
 export type ConnectRealtimeStatus = {
   key: ConnectKey;
+  src_ip: string;
+  dst_ip: string;
+  src_port: number;
+  dst_port: number;
+  l4_proto: number;
+  l3_proto: number;
+  flow_id: number;
+  trace_id: number;
   ingress_bps: number;
   egress_bps: number;
   ingress_pps: number;

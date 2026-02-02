@@ -59,10 +59,8 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
 
     // metric
     landscape_open.maps.metric_bucket_map.set_pin_path(&paths.metric_map).unwrap();
-    landscape_open.maps.nat_conn_events.set_pin_path(&paths.nat_conn_events).unwrap();
     landscape_open.maps.nat_conn_metric_events.set_pin_path(&paths.nat_conn_metric_events).unwrap();
 
-    landscape_open.maps.firewall_conn_events.set_pin_path(&paths.firewall_conn_events).unwrap();
     landscape_open
         .maps
         .firewall_conn_metric_events

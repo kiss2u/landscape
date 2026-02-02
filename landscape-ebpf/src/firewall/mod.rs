@@ -34,7 +34,6 @@ pub fn new_firewall(
 
     open_skel.maps.firewall_block_ip4_map.set_pin_path(&MAP_PATHS.firewall_ipv4_block)?;
     open_skel.maps.firewall_block_ip6_map.set_pin_path(&MAP_PATHS.firewall_ipv6_block)?;
-    open_skel.maps.firewall_conn_events.set_pin_path(&MAP_PATHS.firewall_conn_events)?;
     open_skel
         .maps
         .firewall_conn_metric_events
@@ -43,7 +42,6 @@ pub fn new_firewall(
 
     open_skel.maps.firewall_block_ip4_map.reuse_pinned_map(&MAP_PATHS.firewall_ipv4_block)?;
     open_skel.maps.firewall_block_ip6_map.reuse_pinned_map(&MAP_PATHS.firewall_ipv6_block)?;
-    open_skel.maps.firewall_conn_events.reuse_pinned_map(&MAP_PATHS.firewall_conn_events)?;
     open_skel
         .maps
         .firewall_conn_metric_events

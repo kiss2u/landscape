@@ -51,23 +51,22 @@ const filteredConnectMetrics = computed(() => {
   if (!metricStore.firewall_info) return [];
 
   const filtered = metricStore.firewall_info.filter((item) => {
-    const key = item.key;
-    if (liveFilter.src_ip && !key.src_ip.includes(liveFilter.src_ip))
+    if (liveFilter.src_ip && !item.src_ip.includes(liveFilter.src_ip))
       return false;
-    if (liveFilter.dst_ip && !key.dst_ip.includes(liveFilter.dst_ip))
+    if (liveFilter.dst_ip && !item.dst_ip.includes(liveFilter.dst_ip))
       return false;
     if (
       liveFilter.port_start !== null &&
-      key.src_port !== liveFilter.port_start
+      item.src_port !== liveFilter.port_start
     )
       return false;
-    if (liveFilter.port_end !== null && key.dst_port !== liveFilter.port_end)
+    if (liveFilter.port_end !== null && item.dst_port !== liveFilter.port_end)
       return false;
-    if (liveFilter.l3_proto !== null && key.l3_proto !== liveFilter.l3_proto)
+    if (liveFilter.l3_proto !== null && item.l3_proto !== liveFilter.l3_proto)
       return false;
-    if (liveFilter.l4_proto !== null && key.l4_proto !== liveFilter.l4_proto)
+    if (liveFilter.l4_proto !== null && item.l4_proto !== liveFilter.l4_proto)
       return false;
-    if (liveFilter.flow_id !== null && key.flow_id !== liveFilter.flow_id)
+    if (liveFilter.flow_id !== null && item.flow_id !== liveFilter.flow_id)
       return false;
     return true;
   });
@@ -79,7 +78,7 @@ const filteredConnectMetrics = computed(() => {
       const timeB = b.last_metric?.report_time || b.key.create_time || 0;
       result = timeA - timeB;
     } else if (sortKey.value === "port") {
-      result = (a.key.src_port || 0) - (b.key.src_port || 0);
+      result = (a.src_port || 0) - (b.src_port || 0);
     } else if (sortKey.value === "ingress") {
       result = (a.ingress_bps || 0) - (b.ingress_bps || 0);
     } else if (sortKey.value === "egress") {

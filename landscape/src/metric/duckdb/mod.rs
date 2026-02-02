@@ -102,15 +102,8 @@ pub fn start_db_thread(
                         DBMessage::InsertMetric(metric) => {
                             let key = &metric.key;
                             let _ = metrics_appender.append_row(params![
-                                clean_ip_string(&key.src_ip),
-                                clean_ip_string(&key.dst_ip),
-                                key.src_port as i64,
-                                key.dst_port as i64,
-                                key.l4_proto as i64,
-                                key.l3_proto as i64,
-                                key.flow_id as i64,
-                                key.trace_id as i64,
                                 key.create_time as i64,
+                                key.cpu_id as i64,
                                 metric.report_time as i64,
                                 metric.ingress_bytes as i64,
                                 metric.ingress_packets as i64,

@@ -12,8 +12,10 @@ const props = defineProps<Props>();
 
 const show_chart = ref(false);
 const show_chart_key = ref<ConnectKey | null>(null);
-async function show_chart_drawer(key: ConnectKey) {
-  show_chart_key.value = key;
+const show_chart_title = ref("");
+async function show_chart_drawer(conn: ConnectRealtimeStatus) {
+  show_chart_key.value = conn.key;
+  show_chart_title.value = `${conn.src_ip}:${conn.src_port} => ${conn.dst_ip}:${conn.dst_port}`;
   show_chart.value = true;
 }
 </script>
@@ -22,14 +24,18 @@ async function show_chart_drawer(key: ConnectKey) {
   <n-virtual-list class="list" :item-size="40" :items="props.connect_metrics">
     <template #default="{ item, index }">
       <ConnectItemInfo
-        @show:key="show_chart_drawer"
+        @show:chart="show_chart_drawer"
         :conn="item"
         :index="index"
       />
     </template>
   </n-virtual-list>
 
-  <ConnectChartDrawer v-model:show="show_chart" :conn="show_chart_key" />
+  <ConnectChartDrawer
+    v-model:show="show_chart"
+    :conn="show_chart_key"
+    :title="show_chart_title"
+  />
 </template>
 
 <style scoped>

@@ -52,7 +52,7 @@ function formatDuration(start: number, end: number): string {
   return `${days}天 ${hours % 24}小时`;
 }
 
-const emit = defineEmits(["show:key"]);
+const emit = defineEmits(["show:chart"]);
 </script>
 
 <template>
@@ -103,10 +103,10 @@ const emit = defineEmits(["show:key"]);
 
           <n-flex style="width: 200px">
             <n-tag type="success" :bordered="false" size="small">
-              {{ history.key.l3_proto == 0 ? "IPV4" : "IPV6" }}
+              {{ history.l3_proto == 0 ? "IPV4" : "IPV6" }}
             </n-tag>
             <n-tag type="info" :bordered="false" size="small">
-              {{ l4_proto(history.key.l4_proto) }}
+              {{ l4_proto(history.l4_proto) }}
             </n-tag>
           </n-flex>
 
@@ -117,13 +117,13 @@ const emit = defineEmits(["show:key"]);
             {{
               `${
                 frontEndStore.presentation_mode
-                  ? mask_string(history.key.src_ip)
-                  : history.key.src_ip
-              }:${history.key.src_port} => ${
+                  ? mask_string(history.src_ip)
+                  : history.src_ip
+              }:${history.src_port} => ${
                 frontEndStore.presentation_mode
-                  ? mask_string(history.key.dst_ip)
-                  : history.key.dst_ip
-              }:${history.key.dst_port}`
+                  ? mask_string(history.dst_ip)
+                  : history.dst_ip
+              }:${history.dst_port}`
             }}
           </n-flex>
 
@@ -182,7 +182,7 @@ const emit = defineEmits(["show:key"]);
             :focusable="false"
             text
             style="font-size: 16px"
-            @click="emit('show:key', history.key)"
+            @click="emit('show:chart', history)"
           >
             <n-icon>
               <ChartLine />

@@ -7,49 +7,9 @@ use ts_rs::TS;
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct ConnectKey {
-    pub src_ip: IpAddr,
-    pub dst_ip: IpAddr,
-    pub src_port: u16,
-    pub dst_port: u16,
-
-    pub l4_proto: u8,
-    pub l3_proto: u8,
-
-    pub flow_id: u8,
-    pub trace_id: u8,
-
     #[ts(type = "number")]
     pub create_time: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
-#[ts(export, export_to = "common/metric/connect.d.ts")]
-#[serde(rename_all = "snake_case")]
-pub enum ConnectEventType {
-    #[default]
-    Unknow,
-    CreateConnect,
-    DisConnct,
-}
-
-impl From<u8> for ConnectEventType {
-    fn from(value: u8) -> Self {
-        match value {
-            1 => ConnectEventType::CreateConnect,
-            2 => ConnectEventType::DisConnct,
-            _ => ConnectEventType::Unknow,
-        }
-    }
-}
-
-impl Into<u8> for ConnectEventType {
-    fn into(self) -> u8 {
-        match self {
-            ConnectEventType::Unknow => 0,
-            ConnectEventType::CreateConnect => 1,
-            ConnectEventType::DisConnct => 2,
-        }
-    }
+    pub cpu_id: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, Eq, Hash, PartialEq, TS)]
@@ -87,6 +47,17 @@ impl Into<u8> for ConnectStatusType {
 pub struct ConnectMetric {
     pub key: ConnectKey,
 
+    pub src_ip: IpAddr,
+    pub dst_ip: IpAddr,
+    pub src_port: u16,
+    pub dst_port: u16,
+
+    pub l4_proto: u8,
+    pub l3_proto: u8,
+
+    pub flow_id: u8,
+    pub trace_id: u8,
+
     #[ts(type = "number")]
     pub report_time: u64,
 
@@ -100,7 +71,6 @@ pub struct ConnectMetric {
     pub egress_packets: u64,
 
     pub status: ConnectStatusType,
-    pub cpu_id: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone, TS)]
@@ -120,6 +90,17 @@ pub struct ConnectAgg {
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct ConnectRealtimeStatus {
     pub key: ConnectKey,
+
+    pub src_ip: IpAddr,
+    pub dst_ip: IpAddr,
+    pub src_port: u16,
+    pub dst_port: u16,
+
+    pub l4_proto: u8,
+    pub l3_proto: u8,
+
+    pub flow_id: u8,
+    pub trace_id: u8,
 
     #[ts(type = "number")]
     pub ingress_bps: u64,
@@ -193,6 +174,18 @@ pub struct ConnectHistoryQueryParams {
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct ConnectHistoryStatus {
     pub key: ConnectKey,
+
+    pub src_ip: IpAddr,
+    pub dst_ip: IpAddr,
+    pub src_port: u16,
+    pub dst_port: u16,
+
+    pub l4_proto: u8,
+    pub l3_proto: u8,
+
+    pub flow_id: u8,
+    pub trace_id: u8,
+
     #[ts(type = "number")]
     pub total_ingress_bytes: u64,
     #[ts(type = "number")]

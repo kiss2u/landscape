@@ -66,6 +66,14 @@ impl ConnectMetricManager {
                                 let status =
                                     realtime_set.entry(key.clone()).or_insert(ConnectRealtimeStatus {
                                         key: key.clone(),
+                                        src_ip: metric.src_ip,
+                                        dst_ip: metric.dst_ip,
+                                        src_port: metric.src_port,
+                                        dst_port: metric.dst_port,
+                                        l4_proto: metric.l4_proto,
+                                        l3_proto: metric.l3_proto,
+                                        flow_id: metric.flow_id,
+                                        trace_id: metric.trace_id,
                                         ingress_bps: 0,
                                         egress_bps: 0,
                                         ingress_pps: 0,
@@ -156,21 +164,11 @@ impl ConnectMetricManager {
     }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
-        let connects = self.active_connects.read().await;
         let realtime_metrics = self.realtime_metrics.read().await;
 
-        let mut result: Vec<ConnectRealtimeStatus> = connects
-            .iter()
-            .map(|key| {
-                realtime_metrics.get(key).cloned().unwrap_or_else(|| ConnectRealtimeStatus {
-                    key: key.clone(),
-                    ingress_bps: 0,
-                    egress_bps: 0,
-                    ingress_pps: 0,
-                    egress_pps: 0,
-                    last_metric: None,
-                })
-            })
+        let mut result: Vec<ConnectRealtimeStatus> = realtime_metrics
+            .values()
+            .cloned()
             .collect();
 
         result.sort_by(|a, b| a.key.create_time.cmp(&b.key.create_time));
