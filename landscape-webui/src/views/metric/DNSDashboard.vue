@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useThemeVars, NScrollbar } from 'naive-ui';
 import { get_dns_summary, DnsSummaryResponse } from '@/api/metric/dns';
 import { NGrid, NGridItem, NCard, NStatistic, NProgress, NList, NListItem, NSpace, NText, NSkeleton, NEmpty, NNumberAnimation, NEllipsis } from 'naive-ui';
 
@@ -9,6 +11,8 @@ const props = defineProps<{
 
 const summary = ref<DnsSummaryResponse | null>(null);
 const loading = ref(true);
+const { t } = useI18n();
+const themeVars = useThemeVars();
 
 const loadSummary = async () => {
     loading.value = true;
@@ -39,6 +43,21 @@ const calculatePercent = (count: number) => {
     return Number(((count / summary.value.total_queries) * 100).toFixed(1));
 };
 
+const latencyStats = computed(() => [
+  { label: t('metric.dash.avg'), value: summary.value?.avg_duration_ms, color: themeVars.value.successColor },
+  { label: t('metric.dash.p50'), value: summary.value?.p50_duration_ms, color: themeVars.value.infoColor },
+  { label: t('metric.dash.p95'), value: summary.value?.p95_duration_ms, color: themeVars.value.warningColor },
+  { label: t('metric.dash.p99'), value: summary.value?.p99_duration_ms, color: themeVars.value.errorColor },
+  { label: t('metric.dash.max'), value: summary.value?.max_duration_ms, color: themeVars.value.primaryColor }
+]);
+
+const dashboardLists = computed(() => [
+  { title: t('metric.dash.most_queried_domains'), data: summary.value?.top_domains, type: 'domain' },
+  { title: t('metric.dash.active_clients'), data: summary.value?.top_clients, type: 'client' },
+  { title: t('metric.dash.latency_hotspots'), subtitle: t('metric.dash.latency_subtitle'), data: summary.value?.slowest_domains, type: 'latency' },
+  { title: t('metric.dash.top_blocked'), data: summary.value?.top_blocked, type: 'blocked' }
+]);
+
 defineExpose({ refresh: loadSummary });
 </script>
 
@@ -50,16 +69,16 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item>
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
-            <n-statistic label="Total Queries">
+            <n-statistic :label="t('metric.dash.total_queries')">
               <n-number-animation :from="0" :to="summary?.total_queries || 0" />
             </n-statistic>
             <div class="hit-breakdown">
                 <div class="breakdown-item">
-                    <span class="label">NXDomain:</span>
+                    <span class="label">{{ t('metric.dash.nxdomain') }}:</span>
                     <span class="val">{{ summary?.nxdomain_count || 0 }}</span>
                 </div>
                 <div class="breakdown-item">
-                    <span class="label">Errors:</span>
+                    <span class="label">{{ t('metric.dash.errors') }}:</span>
                     <span class="val" :class="{ 'error': (summary?.error_count || 0) > 0 }">{{ summary?.error_count || 0 }}</span>
                 </div>
             </div>
@@ -71,7 +90,7 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item>
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
-            <n-statistic label="Cache Hit (Effective)">
+            <n-statistic :label="t('metric.dash.cache_hit_rate')">
               <template #suffix v-if="calculatePercentFromValues(summary?.cache_hit_count, summary?.total_effective_queries) !== null"><span class="suffix">%</span></template>
               <n-number-animation 
                 v-if="calculatePercentFromValues(summary?.cache_hit_count, summary?.total_effective_queries) !== null"
@@ -79,25 +98,25 @@ defineExpose({ refresh: loadSummary });
                 :to="calculatePercentFromValues(summary?.cache_hit_count, summary?.total_effective_queries) || 0" 
                 :precision="1" 
               />
-              <n-text v-else depth="3" style="font-size: 14px">No Data</n-text>
+              <n-text v-else depth="3" style="font-size: 14px">{{ t('metric.dash.no_data') }}</n-text>
             </n-statistic>
             <div class="hit-breakdown">
                 <div class="breakdown-item">
-                    <span class="label">V4:</span>
+                    <span class="label">{{ t('metric.dash.v4') }}:</span>
                     <span class="val" v-if="calculatePercentFromValues(summary?.hit_count_v4, summary?.total_v4) !== null">
                         {{ calculatePercentFromValues(summary?.hit_count_v4, summary?.total_v4) }}%
                     </span>
                     <span class="val none" v-else>-</span>
                 </div>
                 <div class="breakdown-item">
-                    <span class="label">V6:</span>
+                    <span class="label">{{ t('metric.dash.v6') }}:</span>
                     <span class="val" v-if="calculatePercentFromValues(summary?.hit_count_v6, summary?.total_v6) !== null">
                         {{ calculatePercentFromValues(summary?.hit_count_v6, summary?.total_v6) }}%
                     </span>
                     <span class="val none" v-else>-</span>
                 </div>
                 <div class="breakdown-item">
-                    <span class="label">Other:</span>
+                    <span class="label">{{ t('metric.dash.other') }}:</span>
                     <span class="val" v-if="calculatePercentFromValues(summary?.hit_count_other, summary?.total_other) !== null">
                         {{ calculatePercentFromValues(summary?.hit_count_other, summary?.total_other) }}%
                     </span>
@@ -112,7 +131,7 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item>
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
-            <n-statistic label="Block Rate">
+            <n-statistic :label="t('metric.dash.block_rate')">
               <template #suffix><span class="suffix">%</span></template>
               <n-number-animation :from="0" :to="calculatePercent(summary?.block_count || 0)" :precision="1" />
             </n-statistic>
@@ -133,17 +152,11 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item :span="2">
         <n-card size="small" :bordered="false" class="metric-card latency-card">
           <div class="latency-header">
-            <span class="latency-title">Query Latency</span>
-            <span class="latency-unit">milliseconds</span>
+            <span class="latency-title">{{ t('metric.dash.query_latency') }}</span>
+            <span class="latency-unit">{{ t('metric.dash.milliseconds') }}</span>
           </div>
           <div class="latency-grid">
-            <div class="latency-stat" v-for="stat in [
-              { label: 'Avg', value: summary?.avg_duration_ms, color: '#18a058' },
-              { label: 'P50', value: summary?.p50_duration_ms, color: '#2080f0' },
-              { label: 'P95', value: summary?.p95_duration_ms, color: '#f0a020' },
-              { label: 'P99', value: summary?.p99_duration_ms, color: '#d03050' },
-              { label: 'Max', value: summary?.max_duration_ms, color: '#c026d3' }
-            ]" :key="stat.label">
+            <div class="latency-stat" v-for="stat in latencyStats" :key="stat.label">
               <div class="latency-label">{{ stat.label }}</div>
               <div class="latency-value" :style="{ color: stat.color }">
                 <n-number-animation :from="0" :to="stat.value || 0" :precision="1" />
@@ -156,12 +169,7 @@ defineExpose({ refresh: loadSummary });
 
     <!-- Main Lists Grid -->
     <n-grid :cols="4" :x-gap="16" :y-gap="16">
-      <n-grid-item v-for="list in [
-        { title: 'Most Queried Domains', data: summary?.top_domains, type: 'domain' },
-        { title: 'Active Clients', data: summary?.top_clients, type: 'client' },
-        { title: 'Latency Hotspots', subtitle: 'Avg latency (min 3 samples)', data: summary?.slowest_domains, type: 'latency' },
-        { title: 'Top Blocked', data: summary?.top_blocked, type: 'blocked' }
-      ]" :key="list.title">
+      <n-grid-item v-for="list in dashboardLists" :key="list.title">
         <n-card size="small" class="list-card">
           <template #header>
             <div class="card-header">
@@ -169,38 +177,44 @@ defineExpose({ refresh: loadSummary });
               <span v-if="list.subtitle" class="card-subtitle">{{ list.subtitle }}</span>
             </div>
           </template>
-          <n-skeleton v-if="loading" text :repeat="12" />
-          <div v-else-if="!list.data?.length" class="empty-container">
-            <n-empty description="No Data" size="small" />
-          </div>
-          <n-list v-else hoverable size="small" :show-divider="false">
-            <n-list-item v-for="item in list.data" :key="item.name">
-              <div class="list-item-wrapper">
-                <div class="item-header">
-                  <n-ellipsis :class="['domain-text', list.type === 'blocked' ? 'danger' : '']" :tooltip="{ width: 'trigger' }">
-                    {{ item.name }}
-                  </n-ellipsis>
-                  <n-text v-if="list.type === 'latency'" type="warning" class="latency-text">{{ item.value?.toFixed(1) }}ms</n-text>
-                  <n-text v-else depth="3" class="count-text">{{ item.count }}</n-text>
-                </div>
-                <!-- Progress bars for domain and client -->
-                <n-progress 
-                    v-if="list.type === 'domain' || list.type === 'client'"
-                    type="line" 
-                    :percentage="calculatePercent(item.count)" 
-                    :show-indicator="false" 
-                    size="tiny" 
-                    :status="list.type === 'client' ? 'info' : 'default'"
-                    class="item-progress" 
-                />
-                <!-- Meta text for latency items -->
-                <div v-if="list.type === 'latency'" class="item-meta">
-                   <n-text depth="3">From {{ item.count }} samples</n-text>
-                </div>
-                <!-- For blocked, keep it clean -->
+          <div style="padding: 10px 0 10px 16px">
+            <n-skeleton v-if="loading" text :repeat="12" />
+            <div style="padding: 0 16px 0 0" v-else-if="!list.data?.length" class="empty-container">
+              <n-empty :description="t('metric.dash.no_data')" size="small" />
+            </div>
+            <n-scrollbar v-else style="max-height: 520px" trigger="hover">
+              <div style="padding-right: 16px">
+                <n-list hoverable size="small" :show-divider="false">
+                  <n-list-item v-for="item in list.data" :key="item.name">
+                    <div class="list-item-wrapper">
+                      <div class="item-header">
+                        <n-ellipsis :class="['domain-text', list.type === 'blocked' ? 'danger' : '']" :tooltip="{ width: 'trigger' }">
+                          {{ item.name }}
+                        </n-ellipsis>
+                        <n-text v-if="list.type === 'latency'" type="warning" class="latency-text">{{ item.value?.toFixed(1) }}ms</n-text>
+                        <n-text v-else depth="3" class="count-text">{{ item.count }}</n-text>
+                      </div>
+                      <!-- Progress bars for domain and client -->
+                      <n-progress 
+                          v-if="list.type === 'domain' || list.type === 'client'"
+                          type="line" 
+                          :percentage="calculatePercent(item.count)" 
+                          :show-indicator="false" 
+                          size="tiny" 
+                          :status="list.type === 'client' ? 'info' : 'default'"
+                          class="item-progress" 
+                      />
+                      <!-- Meta text for latency items -->
+                      <div v-if="list.type === 'latency'" class="item-meta">
+                         <n-text depth="3">{{ t('metric.dash.from_samples', { count: item.count }) }}</n-text>
+                      </div>
+                      <!-- For blocked, keep it clean -->
+                    </div>
+                  </n-list-item>
+                </n-list>
               </div>
-            </n-list-item>
-          </n-list>
+            </n-scrollbar>
+          </div>
         </n-card>
       </n-grid-item>
     </n-grid>
@@ -283,10 +297,15 @@ defineExpose({ refresh: loadSummary });
     flex-direction: column;
 }
 
-:deep(.n-card__content) {
+:deep(.list-card.n-card > .n-card__content) {
     flex: 1;
     display: flex;
     flex-direction: column;
+    padding: 0 0 12px 0 !important; /* Zero horizontal padding, managed by inner wrapper */
+}
+
+:deep(.list-card.n-card > .n-card-header) {
+    padding: 12px 16px !important;
 }
 
 .empty-container {
@@ -362,8 +381,9 @@ defineExpose({ refresh: loadSummary });
 
 .card-header {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
 }
 
 .card-title {

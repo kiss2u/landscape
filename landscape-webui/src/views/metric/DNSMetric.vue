@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, h, computed, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { DnsMetric, get_dns_history } from "@/api/metric";
 import { NDataTable, NTag, NTime, NButton, NSpace, NInput, NDatePicker, NIcon, NTooltip, NTabs, NTabPane, NSelect, NInputNumber } from "naive-ui";
 import type { DataTableColumns } from 'naive-ui'
@@ -9,6 +10,7 @@ import DNSDashboard from "./DNSDashboard.vue";
 
 const activeTab = ref('dashboard');
 const dashboardRef = ref<any>(null);
+const { t } = useI18n();
 
 const data = ref<DnsMetric[]>([]);
 const loading = ref(false);
@@ -51,8 +53,8 @@ const formatIp = (ip: string) => {
     return ip;
 };
 
-const queryTypeOptions = [
-    { label: 'All Types', value: null },
+const queryTypeOptions = computed(() => [
+    { label: t('metric.all_types'), value: null },
     { label: 'A (IPv4)', value: 'A' },
     { label: 'AAAA (IPv6)', value: 'AAAA' },
     { label: 'CNAME', value: 'CNAME' },
@@ -62,21 +64,21 @@ const queryTypeOptions = [
     { label: 'PTR', value: 'PTR' },
     { label: 'SOA', value: 'SOA' },
     { label: 'SRV', value: 'SRV' },
-];
+]);
 
-const statusOptions = [
-    { label: 'All Status', value: null },
-    { label: 'Hit (Cache)', value: 'hit' },
-    { label: 'Normal', value: 'normal' },
-    { label: 'Block', value: 'block' },
-    { label: 'Local', value: 'local' },
-    { label: 'NXDomain', value: 'nxdomain' },
-    { label: 'Error', value: 'error' },
-];
+const statusOptions = computed(() => [
+    { label: t('metric.all_status'), value: null },
+    { label: t('metric.status_hit'), value: 'hit' },
+    { label: t('metric.status_normal'), value: 'normal' },
+    { label: t('metric.status_block'), value: 'block' },
+    { label: t('metric.status_local'), value: 'local' },
+    { label: t('metric.status_nxdomain'), value: 'nxdomain' },
+    { label: t('metric.status_error'), value: 'error' },
+]);
 
 const columns = computed<DataTableColumns<DnsMetric>>(() => [
   {
-    title: 'Time',
+    title: t('metric.col_time'),
     key: 'report_time',
     width: 200,
     sorter: true,
@@ -86,7 +88,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     }
   },
   { 
-    title: 'Domain', 
+    title: t('metric.col_domain'), 
     key: 'domain',
     sorter: true,
     sortOrder: searchParams.sort_key === 'domain' ? (searchParams.sort_order === 'asc' ? 'ascend' : 'descend') : false,
@@ -95,7 +97,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     }
   },
   { 
-    title: 'Type', 
+    title: t('metric.col_type'), 
     key: 'query_type',
     width: 80,
     render(row) {
@@ -103,7 +105,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     }
   },
   { 
-    title: 'Src IP', 
+    title: t('metric.col_src_ip'), 
     key: 'src_ip', 
     width: 140,
     render(row) {
@@ -111,7 +113,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     }
   },
   { 
-    title: 'Resp Code', 
+    title: t('metric.col_resp_code'), 
     key: 'response_code', 
     width: 150,
     render(row) {
@@ -125,17 +127,17 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     }
   },
   { 
-    title: 'Status', 
+    title: t('metric.col_status'), 
     key: 'status', 
     width: 110,
     render(row) {
       const statusMap: Record<string, { type: any, label: string }> = {
-          'local': { type: 'success', label: 'Local' },
-          'block': { type: 'warning', label: 'Block' },
-          'hit': { type: 'info', label: 'Hit' },
-          'nxdomain': { type: 'default', label: 'NXDomain' },
-          'normal': { type: 'default', label: 'Normal' },
-          'error': { type: 'error', label: 'Error' }
+          'local': { type: 'success', label: t('metric.status_local') },
+          'block': { type: 'warning', label: t('metric.status_block') },
+          'hit': { type: 'info', label: t('metric.status_hit').split(' (')[0] },
+          'nxdomain': { type: 'default', label: t('metric.status_nxdomain') },
+          'normal': { type: 'default', label: t('metric.status_normal') },
+          'error': { type: 'error', label: t('metric.status_error') }
       };
       const s = statusMap[row.status] || { type: 'default', label: row.status };
       return h(NTag, { 
@@ -147,14 +149,14 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     }
   },
   { 
-    title: 'Duration (ms)', 
+    title: t('metric.col_duration'), 
     key: 'duration_ms', 
     width: 120,
     sorter: true,
     sortOrder: searchParams.sort_key === 'duration' ? (searchParams.sort_order === 'asc' ? 'ascend' : 'descend') : false
   },
   { 
-      title: 'Answers', 
+      title: t('metric.col_answers'), 
       key: 'answers',
       ellipsis: {
         tooltip: true
@@ -296,7 +298,7 @@ onMounted(() => {
 <template>
   <div style="width: 100%; padding: 12px">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
-      <h3 style="margin: 0; font-weight: 500; font-size: 1.1rem">DNS History</h3>
+      <h3 style="margin: 0; font-weight: 500; font-size: 1.1rem">{{ t('metric.title') }}</h3>
       <n-space :size="8">
         <n-tooltip trigger="hover">
           <template #trigger>
@@ -304,7 +306,7 @@ onMounted(() => {
               <HelpCircleOutline />
             </n-icon>
           </template>
-          Auto-search (500ms debounce)
+          {{ t('metric.auto_search_tip') }}
         </n-tooltip>
         <n-button circle size="tiny" @click="loadData(true)" tertiary>
           <template #icon>
@@ -315,13 +317,13 @@ onMounted(() => {
     </div>
 
     <n-space style="margin-bottom: 10px" align="center" :size="[8, 8]" :wrap="false">
-       <n-input v-model:value="searchParams.domain" size="small" placeholder="Domain" clearable style="width: 200px" v-if="activeTab === 'history'"/>
-       <n-input v-model:value="searchParams.src_ip" size="small" placeholder="IP" clearable style="width: 140px" v-if="activeTab === 'history'"/>
+       <n-input v-model:value="searchParams.domain" size="small" :placeholder="t('metric.domain')" clearable style="width: 200px" v-if="activeTab === 'history'"/>
+       <n-input v-model:value="searchParams.src_ip" size="small" :placeholder="t('metric.ip')" clearable style="width: 140px" v-if="activeTab === 'history'"/>
        <n-select 
          v-model:value="searchParams.query_type" 
          size="small" 
          :options="queryTypeOptions" 
-         placeholder="Type" 
+         :placeholder="t('metric.type')" 
          clearable 
          style="width: 130px" 
          v-if="activeTab === 'history'"
@@ -330,7 +332,7 @@ onMounted(() => {
          v-model:value="searchParams.status" 
          size="small" 
          :options="statusOptions" 
-         placeholder="Status" 
+         :placeholder="t('metric.status')" 
          clearable 
          style="width: 130px" 
          v-if="activeTab === 'history'"
@@ -338,7 +340,7 @@ onMounted(() => {
        <n-input-number 
          v-model:value="searchParams.min_duration_ms" 
          size="small" 
-         placeholder="Min ms" 
+         :placeholder="t('metric.min_ms')" 
          clearable 
          :min="0"
          :show-button="false"
@@ -348,36 +350,36 @@ onMounted(() => {
        <n-input-number 
          v-model:value="searchParams.max_duration_ms" 
          size="small" 
-         placeholder="Max ms" 
+         :placeholder="t('metric.max_ms')" 
          clearable 
          :min="0"
          :show-button="false"
          style="width: 100px" 
          v-if="activeTab === 'history'"
        />
-       <n-date-picker v-model:value="searchParams.timeRange" size="small" type="datetimerange" clearable :shortcuts="shortcuts" placeholder="Time Range" style="width: 320px"/>
+       <n-date-picker v-model:value="searchParams.timeRange" size="small" type="datetimerange" clearable :shortcuts="shortcuts" :placeholder="t('metric.time_range')" style="width: 320px"/>
        <n-tooltip trigger="hover">
           <template #trigger>
             <n-button strong secondary size="small" @click="syncToNow" type="info">
                <template #icon>
                  <n-icon><TimeOutline /></n-icon>
                </template>
-               Now
+               {{ t('metric.now') }}
             </n-button>
           </template>
-          Sync time range to now (preserve duration)
+          {{ t('metric.sync_to_now_tip') }}
        </n-tooltip>
        <n-button @click="handleReset" size="small" secondary>
           <template #icon><n-icon><TrashOutline /></n-icon></template>
-          Reset
+          {{ t('metric.reset') }}
        </n-button>
     </n-space>
 
     <n-tabs v-model:value="activeTab" type="line" animated>
-      <n-tab-pane name="dashboard" tab="Dashboard">
+      <n-tab-pane name="dashboard" :tab="t('metric.dashboard')">
         <DNSDashboard ref="dashboardRef" :time-range="searchParams.timeRange" />
       </n-tab-pane>
-      <n-tab-pane name="history" tab="Query Log">
+      <n-tab-pane name="history" :tab="t('metric.query_log')">
         <n-data-table 
           remote
           :columns="columns" 
