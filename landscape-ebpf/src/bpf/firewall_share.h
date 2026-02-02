@@ -34,24 +34,24 @@ struct {
 
 #define FIREWALL_CREATE_CONN 1
 #define FIREWALL_DELETE_CONN 2
-struct firewall_conn_event {
-    union u_inet_addr src_addr;
-    union u_inet_addr dst_addr;
-    u16 src_port;
-    u16 dst_port;
-    u64 create_time;
-    u64 report_time;
-    u8 l4_proto;
-    u8 l3_proto;
-    u8 event_type;
-    u8 flow_id;
-    u8 trace_id;
-} __firewall_conn_event;
+// struct firewall_conn_event {
+//     union u_inet_addr src_addr;
+//     union u_inet_addr dst_addr;
+//     u16 src_port;
+//     u16 dst_port;
+//     u64 create_time;
+//     u64 report_time;
+//     u8 l4_proto;
+//     u8 l3_proto;
+//     u8 event_type;
+//     u8 flow_id;
+//     u8 trace_id;
+// } __firewall_conn_event;
 
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
-} firewall_conn_events SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_RINGBUF);
+//     __uint(max_entries, 1 << 24);
+// } firewall_conn_events SEC(".maps");
 
 struct firewall_conn_metric_event {
     union u_inet_addr src_addr;

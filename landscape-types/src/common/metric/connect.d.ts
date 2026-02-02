@@ -44,12 +44,6 @@ export type ConnectHistoryStatus = {
   status: number;
 };
 
-export type ConnectInfo = {
-  key: ConnectKey;
-  event_type: ConnectEventType;
-  report_time: number;
-};
-
 /** */
 export type ConnectKey = {
   src_ip: string;

@@ -377,21 +377,21 @@ static __always_inline int lookup_or_new_ct4(u8 l4proto, bool do_new,
     // bpf_log_debug("insert new CT");
 
     // 发送 event
-    struct nat_conn_event *event;
-    event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-    if (event != NULL) {
-        event->dst_addr.ip = nat_egress_value->trigger_addr;
-        event->src_addr.ip = nat_ingress_value->addr;
-        event->src_port = nat_ingress_value->port;
-        event->dst_port = nat_egress_value->trigger_port;
-        event->l4_proto = l4proto;
-        event->l3_proto = LANDSCAPE_IPV4_TYPE;
-        event->flow_id = 0;
-        event->trace_id = 0;
-        event->create_time = ct4_value_new.create_time;
-        event->event_type = NAT_CREATE_CONN;
-        bpf_ringbuf_submit(event, 0);
-    }
+    // struct nat_conn_event *event;
+    // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    // if (event != NULL) {
+    //     event->dst_addr.ip = nat_egress_value->trigger_addr;
+    //     event->src_addr.ip = nat_ingress_value->addr;
+    //     event->src_port = nat_ingress_value->port;
+    //     event->dst_port = nat_egress_value->trigger_port;
+    //     event->l4_proto = l4proto;
+    //     event->l3_proto = LANDSCAPE_IPV4_TYPE;
+    //     event->flow_id = 0;
+    //     event->trace_id = 0;
+    //     event->create_time = ct4_value_new.create_time;
+    //     event->event_type = NAT_CREATE_CONN;
+    //     bpf_ringbuf_submit(event, 0);
+    // }
 
     *timer_value_ = ct4_value;
     return TIMER_CREATED;
@@ -469,21 +469,21 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key *
             bpf_log_info("release CONNECT");
         }
 
-        struct nat_conn_event *event;
-        event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-        if (event != NULL) {
-            event->dst_addr.ip = value->trigger_saddr.addr;
-            event->src_addr.ip = key->pair_ip.src_addr.addr;
-            event->src_port = key->pair_ip.src_port;
-            event->dst_port = value->trigger_port;
-            event->l4_proto = key->l4proto;
-            event->l3_proto = LANDSCAPE_IPV4_TYPE;
-            event->flow_id = value->flow_id;
-            event->trace_id = 0;
-            event->create_time = value->create_time;
-            event->event_type = NAT_DELETE_CONN;
-            bpf_ringbuf_submit(event, 0);
-        }
+        // struct nat_conn_event *event;
+        // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+        // if (event != NULL) {
+        //     event->dst_addr.ip = value->trigger_saddr.addr;
+        //     event->src_addr.ip = key->pair_ip.src_addr.addr;
+        //     event->src_port = key->pair_ip.src_port;
+        //     event->dst_port = value->trigger_port;
+        //     event->l4_proto = key->l4proto;
+        //     event->l3_proto = LANDSCAPE_IPV4_TYPE;
+        //     event->flow_id = value->flow_id;
+        //     event->trace_id = 0;
+        //     event->create_time = value->create_time;
+        //     event->event_type = NAT_DELETE_CONN;
+        //     bpf_ringbuf_submit(event, 0);
+        // }
 
         ret = nat_metric_try_report_v4(key, value, NAT_CONN_DELETE);
         if (ret) {
@@ -653,21 +653,21 @@ static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, b
     // bpf_log_debug("insert new CT");
 
     // 发送 event
-    struct nat_conn_event *event;
-    event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-    if (event != NULL) {
-        event->dst_addr.ip = nat_egress_value->trigger_addr;
-        event->src_addr.ip = nat_ingress_value->addr;
-        event->src_port = nat_ingress_value->port;
-        event->dst_port = nat_egress_value->trigger_port;
-        event->l4_proto = l4proto;
-        event->l3_proto = LANDSCAPE_IPV4_TYPE;
-        event->flow_id = flow_id;
-        event->trace_id = 0;
-        event->create_time = timer_value_new.create_time;
-        event->event_type = NAT_CREATE_CONN;
-        bpf_ringbuf_submit(event, 0);
-    }
+    // struct nat_conn_event *event;
+    // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+    // if (event != NULL) {
+    //     event->dst_addr.ip = nat_egress_value->trigger_addr;
+    //     event->src_addr.ip = nat_ingress_value->addr;
+    //     event->src_port = nat_ingress_value->port;
+    //     event->dst_port = nat_egress_value->trigger_port;
+    //     event->l4_proto = l4proto;
+    //     event->l3_proto = LANDSCAPE_IPV4_TYPE;
+    //     event->flow_id = flow_id;
+    //     event->trace_id = 0;
+    //     event->create_time = timer_value_new.create_time;
+    //     event->event_type = NAT_CREATE_CONN;
+    //     bpf_ringbuf_submit(event, 0);
+    // }
 
     *timer_value_ = timer_value;
     return TIMER_CREATED;

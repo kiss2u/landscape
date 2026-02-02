@@ -143,22 +143,22 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
             bpf_log_info("release CONNECT");
         }
 
-        struct nat_conn_event *event;
-        event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-        if (event != NULL) {
-            COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.bytes);
-            __builtin_memcpy(event->src_addr.bits, value->client_prefix, 8);
-            __builtin_memcpy(event->src_addr.bits + 8, key->client_suffix, 8);
-            event->src_port = key->client_port;
-            event->dst_port = value->trigger_port;
-            event->l4_proto = key->l4_protocol;
-            event->l3_proto = LANDSCAPE_IPV6_TYPE;
-            event->flow_id = value->flow_id;
-            event->trace_id = 0;
-            event->create_time = value->create_time;
-            event->event_type = NAT_DELETE_CONN;
-            bpf_ringbuf_submit(event, 0);
-        }
+        // struct nat_conn_event *event;
+        // event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+        // if (event != NULL) {
+        //     COPY_ADDR_FROM(event->dst_addr.all, value->trigger_addr.bytes);
+        //     __builtin_memcpy(event->src_addr.bits, value->client_prefix, 8);
+        //     __builtin_memcpy(event->src_addr.bits + 8, key->client_suffix, 8);
+        //     event->src_port = key->client_port;
+        //     event->dst_port = value->trigger_port;
+        //     event->l4_proto = key->l4_protocol;
+        //     event->l3_proto = LANDSCAPE_IPV6_TYPE;
+        //     event->flow_id = value->flow_id;
+        //     event->trace_id = 0;
+        //     event->create_time = value->create_time;
+        //     event->event_type = NAT_DELETE_CONN;
+        //     bpf_ringbuf_submit(event, 0);
+        // }
 
         ret = nat_metric_try_report_v6(key, value, NAT_CONN_DELETE);
         if (ret) {
@@ -348,24 +348,24 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
         update_ipv6_cache_value(skb, ip_pair, &new_value);
         value = insert_ct6_timer(&key, &new_value);
 
-        if (value) {
-            struct nat_conn_event *event;
-            event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
-            if (event != NULL) {
-                COPY_ADDR_FROM(event->dst_addr.bits, value->trigger_addr.bytes);
-                __builtin_memcpy(event->src_addr.bits, value->client_prefix, 8);
-                __builtin_memcpy(event->src_addr.bits + 8, key.client_suffix, 8);
-                event->src_port = key.client_port;
-                event->dst_port = value->trigger_port;
-                event->l4_proto = key.l4_protocol;
-                event->l3_proto = LANDSCAPE_IPV6_TYPE;
-                event->flow_id = value->flow_id;
-                event->trace_id = 0;
-                event->create_time = value->create_time;
-                event->event_type = NAT_CREATE_CONN;
-                bpf_ringbuf_submit(event, 0);
-            }
-        }
+        // if (value) {
+        //     struct nat_conn_event *event;
+        //     event = bpf_ringbuf_reserve(&nat_conn_events, sizeof(struct nat_conn_event), 0);
+        //     if (event != NULL) {
+        //         COPY_ADDR_FROM(event->dst_addr.bits, value->trigger_addr.bytes);
+        //         __builtin_memcpy(event->src_addr.bits, value->client_prefix, 8);
+        //         __builtin_memcpy(event->src_addr.bits + 8, key.client_suffix, 8);
+        //         event->src_port = key.client_port;
+        //         event->dst_port = value->trigger_port;
+        //         event->l4_proto = key.l4_protocol;
+        //         event->l3_proto = LANDSCAPE_IPV6_TYPE;
+        //         event->flow_id = value->flow_id;
+        //         event->trace_id = 0;
+        //         event->create_time = value->create_time;
+        //         event->event_type = NAT_CREATE_CONN;
+        //         bpf_ringbuf_submit(event, 0);
+        //     }
+        // }
     }
 
     if (value) {

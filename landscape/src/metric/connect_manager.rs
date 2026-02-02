@@ -7,8 +7,8 @@ use tokio::sync::{mpsc, RwLock};
 
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{
-    ConnectEventType, ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus,
-    ConnectInfo, ConnectKey, ConnectMetric, ConnectRealtimeStatus,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
+    ConnectMetric, ConnectRealtimeStatus, ConnectStatusType,
 };
 
 use crate::metric::duckdb::DuckMetricStore;
@@ -32,81 +32,75 @@ impl ConnectMetricManager {
         let realtime_metrics = Arc::new(RwLock::new(HashMap::new()));
         let (msg_channel, mut message_rx) = mpsc::channel(1024);
 
-        let active_connects_clone = active_connects.clone();
-        let realtime_metrics_clone = realtime_metrics.clone();
-
-        let (conn_tx, mut conn_rx) = mpsc::channel::<ConnectInfo>(1024);
-
-        tokio::spawn(async move {
-            while let Some(info) = conn_rx.recv().await {
-                match info.event_type {
-                    ConnectEventType::Unknow => {}
-                    ConnectEventType::CreateConnect => {
-                        let mut connect_set = active_connects_clone.write().await;
-                        connect_set.insert(info.key);
-                    }
-                    ConnectEventType::DisConnct => {
-                        let mut connect_set = active_connects_clone.write().await;
-                        connect_set.remove(&info.key);
-
-                        let mut realtime_set = realtime_metrics_clone.write().await;
-                        realtime_set.remove(&info.key);
-                    }
-                }
-            }
-        });
-
         let metric_store_clone = metric_store.clone();
         let realtime_metrics_clone_for_msg = realtime_metrics.clone();
+        let active_connects_clone_for_msg = active_connects.clone();
 
         tokio::spawn(async move {
             while let Some(msg) = message_rx.recv().await {
                 match msg {
-                    ConnectMessage::Event(info) => {
-                        let _ = conn_tx.send(info.clone()).await;
-                        metric_store_clone.insert_connect_info(info).await;
-                    }
                     ConnectMessage::Metric(metric) => {
+                        // 更新活跃连接状态
+                        {
+                            let mut active_set = active_connects_clone_for_msg.write().await;
+                            match metric.status {
+                                ConnectStatusType::Active => {
+                                    active_set.insert(metric.key.clone());
+                                }
+                                ConnectStatusType::Disabled => {
+                                    active_set.remove(&metric.key);
+                                }
+                                _ => {}
+                            }
+                        }
+
                         // 计算实时速率
                         {
                             let mut realtime_set = realtime_metrics_clone_for_msg.write().await;
-                            let key = metric.key.clone();
 
-                            let status =
-                                realtime_set.entry(key.clone()).or_insert(ConnectRealtimeStatus {
-                                    key: key.clone(),
-                                    ingress_bps: 0,
-                                    egress_bps: 0,
-                                    ingress_pps: 0,
-                                    egress_pps: 0,
-                                    last_metric: None,
-                                });
+                            if metric.status == ConnectStatusType::Disabled {
+                                realtime_set.remove(&metric.key);
+                            } else {
+                                let key = metric.key.clone();
 
-                            if let Some(old_metric) = &status.last_metric {
-                                let delta_time_ms =
-                                    metric.report_time.saturating_sub(old_metric.report_time);
-                                if delta_time_ms > 0 {
-                                    let delta_ingress_bytes = metric
-                                        .ingress_bytes
-                                        .saturating_sub(old_metric.ingress_bytes);
-                                    let delta_egress_bytes =
-                                        metric.egress_bytes.saturating_sub(old_metric.egress_bytes);
-                                    let delta_ingress_pkts = metric
-                                        .ingress_packets
-                                        .saturating_sub(old_metric.ingress_packets);
-                                    let delta_egress_pkts = metric
-                                        .egress_packets
-                                        .saturating_sub(old_metric.egress_packets);
+                                let status =
+                                    realtime_set.entry(key.clone()).or_insert(ConnectRealtimeStatus {
+                                        key: key.clone(),
+                                        ingress_bps: 0,
+                                        egress_bps: 0,
+                                        ingress_pps: 0,
+                                        egress_pps: 0,
+                                        last_metric: None,
+                                    });
 
-                                    status.ingress_bps =
-                                        (delta_ingress_bytes * 8000) / delta_time_ms;
-                                    status.egress_bps = (delta_egress_bytes * 8000) / delta_time_ms;
-                                    status.ingress_pps =
-                                        (delta_ingress_pkts * 1000) / delta_time_ms;
-                                    status.egress_pps = (delta_egress_pkts * 1000) / delta_time_ms;
+                                if let Some(old_metric) = &status.last_metric {
+                                    let delta_time_ms =
+                                        metric.report_time.saturating_sub(old_metric.report_time);
+                                    if delta_time_ms > 0 {
+                                        let delta_ingress_bytes = metric
+                                            .ingress_bytes
+                                            .saturating_sub(old_metric.ingress_bytes);
+                                        let delta_egress_bytes =
+                                            metric.egress_bytes.saturating_sub(old_metric.egress_bytes);
+                                        let delta_ingress_pkts = metric
+                                            .ingress_packets
+                                            .saturating_sub(old_metric.ingress_packets);
+                                        let delta_egress_pkts = metric
+                                            .egress_packets
+                                            .saturating_sub(old_metric.egress_packets);
+
+                                        status.ingress_bps =
+                                            (delta_ingress_bytes * 8000) / delta_time_ms;
+                                        status.egress_bps =
+                                            (delta_egress_bytes * 8000) / delta_time_ms;
+                                        status.ingress_pps =
+                                            (delta_ingress_pkts * 1000) / delta_time_ms;
+                                        status.egress_pps =
+                                            (delta_egress_pkts * 1000) / delta_time_ms;
+                                    }
                                 }
+                                status.last_metric = Some(metric.clone());
                             }
-                            status.last_metric = Some(metric.clone());
                         }
 
                         metric_store_clone.insert_metric(metric).await;

@@ -1,6 +1,6 @@
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectInfo, ConnectKey,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
     ConnectMetric,
 };
 use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse};
@@ -30,7 +30,6 @@ use landscape_common::config::MetricRuntimeConfig;
 /// Database operation messages
 pub enum DBMessage {
     // Write Operations
-    InsertConnectInfo(ConnectInfo),
     InsertMetric(ConnectMetric),
     InsertDnsMetric(DnsMetric),
     
@@ -100,11 +99,6 @@ pub fn start_db_thread(
                 Ok(Some(msg)) => {
                     match msg {
                         // --- 写入类操作 ---
-                        DBMessage::InsertConnectInfo(info) => {
-                            if connect::update_summary_by_info(&mut summary_stmt, &info).is_ok() {
-                                batch_count += 1;
-                            }
-                        }
                         DBMessage::InsertMetric(metric) => {
                             let key = &metric.key;
                             let _ = metrics_appender.append_row(params![
@@ -226,10 +220,6 @@ impl DuckMetricStore {
         });
 
         DuckMetricStore { tx, db_path, config }
-    }
-
-    pub async fn insert_connect_info(&self, info: ConnectInfo) {
-        let _ = self.tx.send(DBMessage::InsertConnectInfo(info)).await;
     }
 
     pub async fn insert_metric(&self, metric: ConnectMetric) {

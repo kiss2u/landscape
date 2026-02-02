@@ -22,17 +22,6 @@ pub struct ConnectKey {
     pub create_time: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, TS, Clone)]
-#[ts(export, export_to = "common/metric/connect.d.ts")]
-pub struct ConnectInfo {
-    pub key: ConnectKey,
-
-    pub event_type: ConnectEventType,
-
-    #[ts(type = "number")]
-    pub report_time: u64,
-}
-
 #[derive(Debug, Serialize, Deserialize, Default, Clone, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
 #[serde(rename_all = "snake_case")]
