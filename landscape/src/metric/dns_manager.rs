@@ -1,6 +1,8 @@
 pub use crate::metric::duckdb::DuckMetricStore;
 use landscape_common::event::DnsMetricMessage;
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse};
+use landscape_common::metric::dns::{
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse,
+};
 use tokio::sync::mpsc;
 
 #[derive(Clone)]

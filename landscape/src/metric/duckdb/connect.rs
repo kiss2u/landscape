@@ -1,8 +1,8 @@
 use duckdb::Statement;
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
-    ConnectMetric, ConnectSortKey, SortOrder,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    ConnectSortKey, SortOrder,
 };
 
 pub enum ConnectQuery {
@@ -36,7 +36,6 @@ pub const SUMMARY_INSERT_SQL: &str = "
         last_report_time, total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, status
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
 ";
-
 
 pub fn update_summary_by_metric(
     stmt: &mut Statement,
@@ -87,7 +86,8 @@ pub fn create_summaries_table(conn: &Connection) {
             PRIMARY KEY (create_time, cpu_id)
         )",
         [],
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 pub fn create_metrics_table(conn: &Connection) -> duckdb::Result<()> {
@@ -133,31 +133,25 @@ pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMe
     let mut stmt = conn.prepare(stmt).unwrap();
 
     let rows = stmt
-        .query_map(
-            params![
-                key.create_time as i64,
-                key.cpu_id as i64,
-            ],
-            |row| {
-                Ok(ConnectMetric {
-                    key: key.clone(),
-                    report_time: row.get(0)?,
-                    ingress_bytes: row.get(1)?,
-                    ingress_packets: row.get(2)?,
-                    egress_bytes: row.get(3)?,
-                    egress_packets: row.get(4)?,
-                    status: row.get::<_, u8>(5)?.into(),
-                    src_ip: row.get::<_, String>(6)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-                    dst_ip: row.get::<_, String>(7)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-                    src_port: row.get::<_, i64>(8)? as u16,
-                    dst_port: row.get::<_, i64>(9)? as u16,
-                    l4_proto: row.get::<_, i64>(10)? as u8,
-                    l3_proto: row.get::<_, i64>(11)? as u8,
-                    flow_id: row.get::<_, i64>(12)? as u8,
-                    trace_id: row.get::<_, i64>(13)? as u8,
-                })
-            },
-        )
+        .query_map(params![key.create_time as i64, key.cpu_id as i64,], |row| {
+            Ok(ConnectMetric {
+                key: key.clone(),
+                report_time: row.get(0)?,
+                ingress_bytes: row.get(1)?,
+                ingress_packets: row.get(2)?,
+                egress_bytes: row.get(3)?,
+                egress_packets: row.get(4)?,
+                status: row.get::<_, u8>(5)?.into(),
+                src_ip: row.get::<_, String>(6)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+                dst_ip: row.get::<_, String>(7)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+                src_port: row.get::<_, i64>(8)? as u16,
+                dst_port: row.get::<_, i64>(9)? as u16,
+                l4_proto: row.get::<_, i64>(10)? as u8,
+                l3_proto: row.get::<_, i64>(11)? as u8,
+                flow_id: row.get::<_, i64>(12)? as u8,
+                trace_id: row.get::<_, i64>(13)? as u8,
+            })
+        })
         .unwrap();
 
     rows.filter_map(Result::ok).collect()

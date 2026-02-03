@@ -7,7 +7,9 @@ use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
     ConnectRealtimeStatus,
 };
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsSummaryResponse};
+use landscape_common::metric::dns::{
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsSummaryResponse,
+};
 use serde_json::Value;
 
 use crate::{api::LandscapeApiResp, error::LandscapeApiResult};

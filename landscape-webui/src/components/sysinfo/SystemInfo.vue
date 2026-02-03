@@ -74,7 +74,9 @@ const uptime = computed(() => {
     <n-flex vertical :size="12">
       <!-- Hostname - Featured -->
       <n-flex vertical :size="4">
-        <n-text depth="3" class="info-label">{{ t("sysinfo.hostname") }}</n-text>
+        <n-text depth="3" class="info-label">{{
+          t("sysinfo.hostname")
+        }}</n-text>
         <n-text class="info-value large">
           {{ sysinfo.host_name || "--" }}
         </n-text>
@@ -84,7 +86,9 @@ const uptime = computed(() => {
       <n-flex :size="12">
         <!-- OS Info -->
         <n-flex vertical :size="4" style="flex: 1; min-width: 0">
-          <n-text depth="3" class="info-label">{{ t("sysinfo.system") }}</n-text>
+          <n-text depth="3" class="info-label">{{
+            t("sysinfo.system")
+          }}</n-text>
           <n-text class="info-value">
             {{ sysinfo.system_name || "--" }}
           </n-text>
@@ -92,7 +96,9 @@ const uptime = computed(() => {
 
         <!-- Kernel -->
         <n-flex vertical :size="4" style="flex: 1; min-width: 0">
-          <n-text depth="3" class="info-label">{{ t("sysinfo.kernel") }}</n-text>
+          <n-text depth="3" class="info-label">{{
+            t("sysinfo.kernel")
+          }}</n-text>
           <n-ellipsis class="info-value" :tooltip="{ width: 300 }">
             {{ sysinfo.kernel_version || "--" }}
           </n-ellipsis>
@@ -106,7 +112,9 @@ const uptime = computed(() => {
     <n-flex vertical :size="8">
       <!-- Landscape Router Version -->
       <n-flex justify="space-between" align="center">
-        <n-text depth="3" style="font-size: 12px">{{ t("sysinfo.landscape_router") }}</n-text>
+        <n-text depth="3" style="font-size: 12px">{{
+          t("sysinfo.landscape_router")
+        }}</n-text>
         <n-tooltip v-if="isVersionMismatch" trigger="hover" placement="top">
           <template #trigger>
             <n-tag size="small" type="error" :bordered="false">
@@ -117,8 +125,12 @@ const uptime = computed(() => {
             </n-tag>
           </template>
           <div>
-            <div style="font-weight: 600; margin-bottom: 4px">{{ t("sysinfo.version_mismatch") }}</div>
-            <div>{{ t("sysinfo.backend") }}: {{ sysinfo.landscape_version }}</div>
+            <div style="font-weight: 600; margin-bottom: 4px">
+              {{ t("sysinfo.version_mismatch") }}
+            </div>
+            <div>
+              {{ t("sysinfo.backend") }}: {{ sysinfo.landscape_version }}
+            </div>
             <div>{{ t("sysinfo.frontend") }}: {{ ui_version }}</div>
             <div style="margin-top: 8px; opacity: 0.8; font-size: 12px">
               {{ t("sysinfo.check_browser_cache") }}
@@ -132,7 +144,9 @@ const uptime = computed(() => {
 
       <!-- Uptime -->
       <n-flex justify="space-between" align="center">
-        <n-text depth="3" style="font-size: 12px">{{ t("sysinfo.uptime") }}</n-text>
+        <n-text depth="3" style="font-size: 12px">{{
+          t("sysinfo.uptime")
+        }}</n-text>
         <n-flex align="center" :size="6">
           <n-text class="info-value uptime">{{ uptime || "--" }}</n-text>
           <n-tooltip trigger="hover" placement="top">

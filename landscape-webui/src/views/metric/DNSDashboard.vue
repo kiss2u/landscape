@@ -1,13 +1,28 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { useThemeVars, NScrollbar } from 'naive-ui';
-import { get_dns_summary, DnsSummaryResponse } from '@/api/metric/dns';
-import { useFrontEndStore } from '@/stores/front_end_config';
-import { NGrid, NGridItem, NCard, NStatistic, NProgress, NList, NListItem, NSpace, NText, NSkeleton, NEmpty, NNumberAnimation, NEllipsis, NFlex } from 'naive-ui';
+import { ref, onMounted, watch, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { useThemeVars, NScrollbar } from "naive-ui";
+import { get_dns_summary, DnsSummaryResponse } from "@/api/metric/dns";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import {
+  NGrid,
+  NGridItem,
+  NCard,
+  NStatistic,
+  NProgress,
+  NList,
+  NListItem,
+  NSpace,
+  NText,
+  NSkeleton,
+  NEmpty,
+  NNumberAnimation,
+  NEllipsis,
+  NFlex,
+} from "naive-ui";
 
 const props = defineProps<{
-    timeRange: [number, number] | null
+  timeRange: [number, number] | null;
 }>();
 
 const summary = ref<DnsSummaryResponse | null>(null);
@@ -17,55 +32,95 @@ const themeVars = useThemeVars();
 const frontEndStore = useFrontEndStore();
 
 const loadSummary = async () => {
-    loading.value = true;
-    try {
-        const params: any = {};
-        if (props.timeRange) {
-            params.start_time = props.timeRange[0];
-            params.end_time = props.timeRange[1];
-        }
-        summary.value = await get_dns_summary(params);
-    } catch (e) {
-        console.error(e);
-    } finally {
-        loading.value = false;
+  loading.value = true;
+  try {
+    const params: any = {};
+    if (props.timeRange) {
+      params.start_time = props.timeRange[0];
+      params.end_time = props.timeRange[1];
     }
+    summary.value = await get_dns_summary(params);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    loading.value = false;
+  }
 };
 
 onMounted(loadSummary);
 watch(() => props.timeRange, loadSummary);
 
-const calculatePercentFromValues = (hit: number | undefined, total: number | undefined) => {
-    if (hit === undefined || total === undefined || total === 0) return null;
-    return Number(((hit / total) * 100).toFixed(1));
+const calculatePercentFromValues = (
+  hit: number | undefined,
+  total: number | undefined,
+) => {
+  if (hit === undefined || total === undefined || total === 0) return null;
+  return Number(((hit / total) * 100).toFixed(1));
 };
 
 const calculatePercent = (count: number) => {
-    if (!summary.value || summary.value.total_queries === 0) return 0;
-    return Number(((count / summary.value.total_queries) * 100).toFixed(1));
+  if (!summary.value || summary.value.total_queries === 0) return 0;
+  return Number(((count / summary.value.total_queries) * 100).toFixed(1));
 };
 
 const latencyStats = computed(() => [
-  { label: t('metric.dash.avg'), value: summary.value?.avg_duration_ms, color: themeVars.value.successColor },
-  { label: t('metric.dash.p50'), value: summary.value?.p50_duration_ms, color: themeVars.value.infoColor },
-  { label: t('metric.dash.p95'), value: summary.value?.p95_duration_ms, color: themeVars.value.warningColor },
-  { label: t('metric.dash.p99'), value: summary.value?.p99_duration_ms, color: themeVars.value.errorColor },
-  { label: t('metric.dash.max'), value: summary.value?.max_duration_ms, color: themeVars.value.primaryColor }
+  {
+    label: t("metric.dash.avg"),
+    value: summary.value?.avg_duration_ms,
+    color: themeVars.value.successColor,
+  },
+  {
+    label: t("metric.dash.p50"),
+    value: summary.value?.p50_duration_ms,
+    color: themeVars.value.infoColor,
+  },
+  {
+    label: t("metric.dash.p95"),
+    value: summary.value?.p95_duration_ms,
+    color: themeVars.value.warningColor,
+  },
+  {
+    label: t("metric.dash.p99"),
+    value: summary.value?.p99_duration_ms,
+    color: themeVars.value.errorColor,
+  },
+  {
+    label: t("metric.dash.max"),
+    value: summary.value?.max_duration_ms,
+    color: themeVars.value.primaryColor,
+  },
 ]);
 
 const dashboardLists = computed(() => [
-  { title: t('metric.dash.most_queried_domains'), data: summary.value?.top_domains, type: 'domain' },
-  { title: t('metric.dash.active_clients'), data: summary.value?.top_clients, type: 'client' },
-  { title: t('metric.dash.latency_hotspots'), subtitle: t('metric.dash.latency_subtitle'), data: summary.value?.slowest_domains, type: 'latency' },
-  { title: t('metric.dash.top_blocked'), data: summary.value?.top_blocked, type: 'blocked' }
+  {
+    title: t("metric.dash.most_queried_domains"),
+    data: summary.value?.top_domains,
+    type: "domain",
+  },
+  {
+    title: t("metric.dash.active_clients"),
+    data: summary.value?.top_clients,
+    type: "client",
+  },
+  {
+    title: t("metric.dash.latency_hotspots"),
+    subtitle: t("metric.dash.latency_subtitle"),
+    data: summary.value?.slowest_domains,
+    type: "latency",
+  },
+  {
+    title: t("metric.dash.top_blocked"),
+    data: summary.value?.top_blocked,
+    type: "blocked",
+  },
 ]);
 
 const formatDuration = (ms: number | undefined) => {
-  if (ms === undefined) return '-';
+  if (ms === undefined) return "-";
   if (ms >= 1000) {
-      return (ms / 1000).toFixed(2) + 's';
+    return (ms / 1000).toFixed(2) + "s";
   }
-  return ms.toFixed(1) + 'ms';
+  return ms.toFixed(1) + "ms";
 };
 
 defineExpose({ refresh: loadSummary });
@@ -74,7 +129,13 @@ defineExpose({ refresh: loadSummary });
 <template>
   <div class="dns-dashboard">
     <!-- Top Stats Row -->
-    <n-grid cols="5" :x-gap="12" :y-gap="12" item-responsive style="margin-bottom: 16px">
+    <n-grid
+      cols="5"
+      :x-gap="12"
+      :y-gap="12"
+      item-responsive
+      style="margin-bottom: 16px"
+    >
       <!-- Total Queries with breakdown -->
       <n-grid-item span="0:5 640:1">
         <n-card size="small" :bordered="false" class="metric-card">
@@ -83,14 +144,18 @@ defineExpose({ refresh: loadSummary });
               <n-number-animation :from="0" :to="summary?.total_queries || 0" />
             </n-statistic>
             <div class="hit-breakdown">
-                <div class="breakdown-item">
-                    <span class="label">{{ t('metric.dash.nxdomain') }}:</span>
-                    <span class="val">{{ summary?.nxdomain_count || 0 }}</span>
-                </div>
-                <div class="breakdown-item">
-                    <span class="label">{{ t('metric.dash.errors') }}:</span>
-                    <span class="val" :class="{ 'error': (summary?.error_count || 0) > 0 }">{{ summary?.error_count || 0 }}</span>
-                </div>
+              <div class="breakdown-item">
+                <span class="label">{{ t("metric.dash.nxdomain") }}:</span>
+                <span class="val">{{ summary?.nxdomain_count || 0 }}</span>
+              </div>
+              <div class="breakdown-item">
+                <span class="label">{{ t("metric.dash.errors") }}:</span>
+                <span
+                  class="val"
+                  :class="{ error: (summary?.error_count || 0) > 0 }"
+                  >{{ summary?.error_count || 0 }}</span
+                >
+              </div>
             </div>
           </div>
         </n-card>
@@ -101,37 +166,97 @@ defineExpose({ refresh: loadSummary });
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
             <n-statistic :label="t('metric.dash.cache_hit_rate')">
-              <template #suffix v-if="calculatePercentFromValues(summary?.cache_hit_count, summary?.total_effective_queries) !== null"><span class="suffix">%</span></template>
-              <n-number-animation 
-                v-if="calculatePercentFromValues(summary?.cache_hit_count, summary?.total_effective_queries) !== null"
-                :from="0" 
-                :to="calculatePercentFromValues(summary?.cache_hit_count, summary?.total_effective_queries) || 0" 
-                :precision="1" 
+              <template
+                #suffix
+                v-if="
+                  calculatePercentFromValues(
+                    summary?.cache_hit_count,
+                    summary?.total_effective_queries,
+                  ) !== null
+                "
+                ><span class="suffix">%</span></template
+              >
+              <n-number-animation
+                v-if="
+                  calculatePercentFromValues(
+                    summary?.cache_hit_count,
+                    summary?.total_effective_queries,
+                  ) !== null
+                "
+                :from="0"
+                :to="
+                  calculatePercentFromValues(
+                    summary?.cache_hit_count,
+                    summary?.total_effective_queries,
+                  ) || 0
+                "
+                :precision="1"
               />
-              <n-text v-else depth="3" style="font-size: 14px">{{ t('metric.dash.no_data') }}</n-text>
+              <n-text v-else depth="3" style="font-size: 14px">{{
+                t("metric.dash.no_data")
+              }}</n-text>
             </n-statistic>
             <div class="hit-breakdown">
-                <div class="breakdown-item">
-                    <span class="label">{{ t('metric.dash.v4') }}:</span>
-                    <span class="val" v-if="calculatePercentFromValues(summary?.hit_count_v4, summary?.total_v4) !== null">
-                        {{ calculatePercentFromValues(summary?.hit_count_v4, summary?.total_v4) }}%
-                    </span>
-                    <span class="val none" v-else>-</span>
-                </div>
-                <div class="breakdown-item">
-                    <span class="label">{{ t('metric.dash.v6') }}:</span>
-                    <span class="val" v-if="calculatePercentFromValues(summary?.hit_count_v6, summary?.total_v6) !== null">
-                        {{ calculatePercentFromValues(summary?.hit_count_v6, summary?.total_v6) }}%
-                    </span>
-                    <span class="val none" v-else>-</span>
-                </div>
-                <div class="breakdown-item">
-                    <span class="label">{{ t('metric.dash.other') }}:</span>
-                    <span class="val" v-if="calculatePercentFromValues(summary?.hit_count_other, summary?.total_other) !== null">
-                        {{ calculatePercentFromValues(summary?.hit_count_other, summary?.total_other) }}%
-                    </span>
-                    <span class="val none" v-else>-</span>
-                </div>
+              <div class="breakdown-item">
+                <span class="label">{{ t("metric.dash.v4") }}:</span>
+                <span
+                  class="val"
+                  v-if="
+                    calculatePercentFromValues(
+                      summary?.hit_count_v4,
+                      summary?.total_v4,
+                    ) !== null
+                  "
+                >
+                  {{
+                    calculatePercentFromValues(
+                      summary?.hit_count_v4,
+                      summary?.total_v4,
+                    )
+                  }}%
+                </span>
+                <span class="val none" v-else>-</span>
+              </div>
+              <div class="breakdown-item">
+                <span class="label">{{ t("metric.dash.v6") }}:</span>
+                <span
+                  class="val"
+                  v-if="
+                    calculatePercentFromValues(
+                      summary?.hit_count_v6,
+                      summary?.total_v6,
+                    ) !== null
+                  "
+                >
+                  {{
+                    calculatePercentFromValues(
+                      summary?.hit_count_v6,
+                      summary?.total_v6,
+                    )
+                  }}%
+                </span>
+                <span class="val none" v-else>-</span>
+              </div>
+              <div class="breakdown-item">
+                <span class="label">{{ t("metric.dash.other") }}:</span>
+                <span
+                  class="val"
+                  v-if="
+                    calculatePercentFromValues(
+                      summary?.hit_count_other,
+                      summary?.total_other,
+                    ) !== null
+                  "
+                >
+                  {{
+                    calculatePercentFromValues(
+                      summary?.hit_count_other,
+                      summary?.total_other,
+                    )
+                  }}%
+                </span>
+                <span class="val none" v-else>-</span>
+              </div>
             </div>
           </div>
         </n-card>
@@ -143,16 +268,20 @@ defineExpose({ refresh: loadSummary });
           <div class="metric-content">
             <n-statistic :label="t('metric.dash.block_rate')">
               <template #suffix><span class="suffix">%</span></template>
-              <n-number-animation :from="0" :to="calculatePercent(summary?.block_count || 0)" :precision="1" />
+              <n-number-animation
+                :from="0"
+                :to="calculatePercent(summary?.block_count || 0)"
+                :precision="1"
+              />
             </n-statistic>
             <div class="metric-progress-container">
-               <n-progress 
-                type="line" 
-                :percentage="calculatePercent(summary?.block_count || 0)" 
-                :show-indicator="false" 
-                size="tiny" 
+              <n-progress
+                type="line"
+                :percentage="calculatePercent(summary?.block_count || 0)"
+                :show-indicator="false"
+                size="tiny"
                 status="warning"
-               />
+              />
             </div>
           </div>
         </n-card>
@@ -162,14 +291,26 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item span="0:5 640:2">
         <n-card size="small" :bordered="false" class="metric-card latency-card">
           <div class="latency-header">
-            <span class="latency-title">{{ t('metric.dash.query_latency') }}</span>
-            <span class="latency-unit">{{ t('metric.dash.milliseconds') }}</span>
+            <span class="latency-title">{{
+              t("metric.dash.query_latency")
+            }}</span>
+            <span class="latency-unit">{{
+              t("metric.dash.milliseconds")
+            }}</span>
           </div>
           <div class="latency-grid">
-            <div class="latency-stat" v-for="stat in latencyStats" :key="stat.label">
+            <div
+              class="latency-stat"
+              v-for="stat in latencyStats"
+              :key="stat.label"
+            >
               <div class="latency-label">{{ stat.label }}</div>
               <div class="latency-value" :style="{ color: stat.color }">
-                <n-number-animation :from="0" :to="stat.value || 0" :precision="1" />
+                <n-number-animation
+                  :from="0"
+                  :to="stat.value || 0"
+                  :precision="1"
+                />
               </div>
             </div>
           </div>
@@ -179,12 +320,18 @@ defineExpose({ refresh: loadSummary });
 
     <!-- Main Lists Grid -->
     <n-grid cols="4" :x-gap="16" :y-gap="16" item-responsive>
-      <n-grid-item v-for="list in dashboardLists" :key="list.title" span="0:4 640:1">
+      <n-grid-item
+        v-for="list in dashboardLists"
+        :key="list.title"
+        span="0:4 640:1"
+      >
         <n-card size="small" class="list-card">
           <template #header>
             <n-flex justify="space-between" align="baseline">
               <span class="card-title">{{ list.title }}</span>
-              <span v-if="list.subtitle" class="card-subtitle">{{ list.subtitle }}</span>
+              <span v-if="list.subtitle" class="card-subtitle">{{
+                list.subtitle
+              }}</span>
             </n-flex>
           </template>
           <div class="card-content-wrapper">
@@ -196,36 +343,59 @@ defineExpose({ refresh: loadSummary });
               <div class="scrollbar-content">
                 <n-list hoverable size="small" :show-divider="false">
                   <n-list-item v-for="item in list.data" :key="item.name">
-                    <n-flex vertical :wrap="false" style="width: 100%;">
+                    <n-flex vertical :wrap="false" style="width: 100%">
                       <!-- Header row with domain and value -->
-                      <n-flex justify="space-between" align="center" :wrap="false">
-                        <n-ellipsis 
+                      <n-flex
+                        justify="space-between"
+                        align="center"
+                        :wrap="false"
+                      >
+                        <n-ellipsis
                           tooltip
-                          :class="['domain-text', list.type === 'blocked' ? 'danger' : '']" 
-                          style="flex: 1; min-width: 0;"
+                          :class="[
+                            'domain-text',
+                            list.type === 'blocked' ? 'danger' : '',
+                          ]"
+                          style="flex: 1; min-width: 0"
                         >
-                          {{ list.type === 'client' ? frontEndStore.MASK_INFO(item.name) : item.name }}
+                          {{
+                            list.type === "client"
+                              ? frontEndStore.MASK_INFO(item.name)
+                              : item.name
+                          }}
                         </n-ellipsis>
-                        <n-text v-if="list.type === 'latency'" type="warning" class="latency-text">
+                        <n-text
+                          v-if="list.type === 'latency'"
+                          type="warning"
+                          class="latency-text"
+                        >
                           {{ formatDuration(item.value) }}
                         </n-text>
-                        <n-text v-else depth="3" class="count-text">{{ item.count }}</n-text>
+                        <n-text v-else depth="3" class="count-text">{{
+                          item.count
+                        }}</n-text>
                       </n-flex>
-                      
+
                       <!-- Progress bars for domain and client -->
-                      <n-progress 
-                          v-if="list.type === 'domain' || list.type === 'client'"
-                          type="line" 
-                          :percentage="calculatePercent(item.count)" 
-                          :show-indicator="false" 
-                          size="tiny" 
-                          :status="list.type === 'client' ? 'info' : 'default'"
-                          class="item-progress" 
+                      <n-progress
+                        v-if="list.type === 'domain' || list.type === 'client'"
+                        type="line"
+                        :percentage="calculatePercent(item.count)"
+                        :show-indicator="false"
+                        size="tiny"
+                        :status="list.type === 'client' ? 'info' : 'default'"
+                        class="item-progress"
                       />
-                      
+
                       <!-- Meta text for latency items -->
-                      <n-text v-if="list.type === 'latency'" depth="3" class="item-meta">
-                        {{ t('metric.dash.from_samples', { count: item.count }) }}
+                      <n-text
+                        v-if="list.type === 'latency'"
+                        depth="3"
+                        class="item-meta"
+                      >
+                        {{
+                          t("metric.dash.from_samples", { count: item.count })
+                        }}
                       </n-text>
                     </n-flex>
                   </n-list-item>
@@ -251,53 +421,52 @@ defineExpose({ refresh: loadSummary });
 }
 
 .metric-content {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
 }
 
 .metric-progress-container {
-    height: 4px; /* Fixed height for progress slot */
-    margin-top: 10px;
+  height: 4px; /* Fixed height for progress slot */
+  margin-top: 10px;
 }
 
-
 .hit-breakdown {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 8px;
-    background: rgba(128, 128, 128, 0.05);
-    padding: 2px 6px;
-    border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  background: rgba(128, 128, 128, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .breakdown-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .breakdown-item .label {
-    font-size: 10px;
-    color: #888;
-    line-height: 1;
+  font-size: 10px;
+  color: #888;
+  line-height: 1;
 }
 
 .breakdown-item .val {
-    font-size: 11px;
-    font-weight: 600;
-    color: #2080f0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2080f0;
 }
 
 .breakdown-item .val.none {
-    color: #666;
-    font-weight: 400;
+  color: #666;
+  font-weight: 400;
 }
 
 .breakdown-item .val.error {
-    color: #e88080;
-    font-weight: 700;
+  color: #e88080;
+  font-weight: 700;
 }
 
 .suffix {
@@ -307,22 +476,21 @@ defineExpose({ refresh: loadSummary });
 }
 
 .list-card {
-    height: 600px; /* Unified fixed height to ensure all cards align even if empty */
-    display: flex;
-    flex-direction: column;
+  height: 600px; /* Unified fixed height to ensure all cards align even if empty */
+  display: flex;
+  flex-direction: column;
 }
 
 :deep(.list-card.n-card > .n-card__content) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 0 0 12px 0 !important; /* Zero horizontal padding, managed by inner wrapper */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 12px 0 !important; /* Zero horizontal padding, managed by inner wrapper */
 }
 
 :deep(.list-card.n-card > .n-card-header) {
-    padding: 12px 16px !important;
+  padding: 12px 16px !important;
 }
-
 
 .card-content-wrapper {
   padding: 10px 0 10px 16px;
@@ -363,10 +531,9 @@ defineExpose({ refresh: loadSummary });
   border-radius: 4px;
 }
 
-
 .item-meta {
-    font-size: 11px;
-    margin-top: -2px;
+  font-size: 11px;
+  margin-top: -2px;
 }
 
 .item-progress {

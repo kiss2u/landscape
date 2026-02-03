@@ -1,6 +1,9 @@
 use duckdb::Connection;
 use landscape_common::metric::connect::SortOrder;
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSortKey, DnsSummaryResponse, DnsStatEntry};
+use landscape_common::metric::dns::{
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSortKey, DnsStatEntry,
+    DnsSummaryResponse,
+};
 
 pub enum DnsQuery {
     History(DnsHistoryQueryParams),
@@ -38,7 +41,10 @@ pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
     )
 }
 
-pub fn query_dns_history(conn: &Connection, mut params: DnsHistoryQueryParams) -> DnsHistoryResponse {
+pub fn query_dns_history(
+    conn: &Connection,
+    mut params: DnsHistoryQueryParams,
+) -> DnsHistoryResponse {
     let mut where_clauses = Vec::new();
     let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
 
@@ -155,7 +161,10 @@ pub fn query_dns_history(conn: &Connection, mut params: DnsHistoryQueryParams) -
             duration_ms: row.get::<_, i64>(5)? as u32,
             src_ip: row.get::<_, String>(6)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
             answers,
-            status: serde_json::from_str(&row.get::<_, String>(8).unwrap_or_else(|_| "\"normal\"".to_string())).unwrap_or_default(),
+            status: serde_json::from_str(
+                &row.get::<_, String>(8).unwrap_or_else(|_| "\"normal\"".to_string()),
+            )
+            .unwrap_or_default(),
         })
     });
 
@@ -171,10 +180,8 @@ pub fn query_dns_history(conn: &Connection, mut params: DnsHistoryQueryParams) -
 }
 
 pub fn cleanup_old_dns_metrics(conn: &Connection, cutoff: u64) {
-    let _ = conn.execute(
-        "DELETE FROM dns_metrics WHERE report_time < ?1",
-        duckdb::params![cutoff as i64],
-    );
+    let _ = conn
+        .execute("DELETE FROM dns_metrics WHERE report_time < ?1", duckdb::params![cutoff as i64]);
 }
 
 pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> DnsSummaryResponse {
@@ -230,28 +237,48 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         FROM dns_metrics {}",
         where_stmt
     );
-    
-    let (total_queries, cache_hit_count, total_effective_queries, total_v4, hit_count_v4, total_v6, hit_count_v6, total_other, hit_count_other, block_count, nxdomain_count, error_count, avg_duration_ms, p50_duration_ms, p95_duration_ms, p99_duration_ms, max_duration_ms) = conn.query_row(&stats_sql, &param_refs[..], |row| {
-        Ok((
-            row.get::<_, i64>(0)? as usize,
-            row.get::<_, i64>(1)? as usize,
-            row.get::<_, i64>(2)? as usize,
-            row.get::<_, i64>(3)? as usize,
-            row.get::<_, i64>(4)? as usize,
-            row.get::<_, i64>(5)? as usize,
-            row.get::<_, i64>(6)? as usize,
-            row.get::<_, i64>(7)? as usize,
-            row.get::<_, i64>(8)? as usize,
-            row.get::<_, i64>(9)? as usize,
-            row.get::<_, i64>(10)? as usize,
-            row.get::<_, i64>(11)? as usize,
-            row.get::<_, Option<f64>>(12)?.unwrap_or(0.0),
-            row.get::<_, Option<f64>>(13)?.unwrap_or(0.0),
-            row.get::<_, Option<f64>>(14)?.unwrap_or(0.0),
-            row.get::<_, Option<f64>>(15)?.unwrap_or(0.0),
-            row.get::<_, Option<f64>>(16)?.unwrap_or(0.0),
-        ))
-    }).unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0));
+
+    let (
+        total_queries,
+        cache_hit_count,
+        total_effective_queries,
+        total_v4,
+        hit_count_v4,
+        total_v6,
+        hit_count_v6,
+        total_other,
+        hit_count_other,
+        block_count,
+        nxdomain_count,
+        error_count,
+        avg_duration_ms,
+        p50_duration_ms,
+        p95_duration_ms,
+        p99_duration_ms,
+        max_duration_ms,
+    ) = conn
+        .query_row(&stats_sql, &param_refs[..], |row| {
+            Ok((
+                row.get::<_, i64>(0)? as usize,
+                row.get::<_, i64>(1)? as usize,
+                row.get::<_, i64>(2)? as usize,
+                row.get::<_, i64>(3)? as usize,
+                row.get::<_, i64>(4)? as usize,
+                row.get::<_, i64>(5)? as usize,
+                row.get::<_, i64>(6)? as usize,
+                row.get::<_, i64>(7)? as usize,
+                row.get::<_, i64>(8)? as usize,
+                row.get::<_, i64>(9)? as usize,
+                row.get::<_, i64>(10)? as usize,
+                row.get::<_, i64>(11)? as usize,
+                row.get::<_, Option<f64>>(12)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(13)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(14)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(15)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(16)?.unwrap_or(0.0),
+            ))
+        })
+        .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0));
 
     // 2. Top Clients
     let top_clients_sql = format!(
@@ -259,13 +286,17 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         where_stmt
     );
     let mut stmt = conn.prepare(&top_clients_sql).unwrap();
-    let top_clients = stmt.query_map(&param_refs[..], |row| {
-        Ok(DnsStatEntry {
-            name: row.get(0)?,
-            count: row.get::<_, i64>(1)? as usize,
-            value: None,
+    let top_clients = stmt
+        .query_map(&param_refs[..], |row| {
+            Ok(DnsStatEntry {
+                name: row.get(0)?,
+                count: row.get::<_, i64>(1)? as usize,
+                value: None,
+            })
         })
-    }).unwrap().filter_map(Result::ok).collect();
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
 
     // 3. Top Domains
     let top_domains_sql = format!(
@@ -273,13 +304,17 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         where_stmt
     );
     let mut stmt = conn.prepare(&top_domains_sql).unwrap();
-    let top_domains = stmt.query_map(&param_refs[..], |row| {
-        Ok(DnsStatEntry {
-            name: row.get(0)?,
-            count: row.get::<_, i64>(1)? as usize,
-            value: None,
+    let top_domains = stmt
+        .query_map(&param_refs[..], |row| {
+            Ok(DnsStatEntry {
+                name: row.get(0)?,
+                count: row.get::<_, i64>(1)? as usize,
+                value: None,
+            })
         })
-    }).unwrap().filter_map(Result::ok).collect();
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
 
     // 4. Top Blocked
     let top_blocked_sql = format!(
@@ -287,13 +322,17 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         if where_stmt.is_empty() { "WHERE 1=1" } else { &where_stmt }
     );
     let mut stmt = conn.prepare(&top_blocked_sql).unwrap();
-    let top_blocked = stmt.query_map(&param_refs[..], |row| {
-        Ok(DnsStatEntry {
-            name: row.get(0)?,
-            count: row.get::<_, i64>(1)? as usize,
-            value: None,
+    let top_blocked = stmt
+        .query_map(&param_refs[..], |row| {
+            Ok(DnsStatEntry {
+                name: row.get(0)?,
+                count: row.get::<_, i64>(1)? as usize,
+                value: None,
+            })
         })
-    }).unwrap().filter_map(Result::ok).collect();
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
 
     // 5. Slowest Domains
     let slowest_sql = format!(
@@ -301,13 +340,17 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         where_stmt
     );
     let mut stmt = conn.prepare(&slowest_sql).unwrap();
-    let slowest_domains = stmt.query_map(&param_refs[..], |row| {
-        Ok(DnsStatEntry {
-            name: row.get(0)?,
-            count: row.get::<_, i64>(2)? as usize,
-            value: Some(row.get(1)?),
+    let slowest_domains = stmt
+        .query_map(&param_refs[..], |row| {
+            Ok(DnsStatEntry {
+                name: row.get(0)?,
+                count: row.get::<_, i64>(2)? as usize,
+                value: Some(row.get(1)?),
+            })
         })
-    }).unwrap().filter_map(Result::ok).collect();
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect();
 
     DnsSummaryResponse {
         total_queries,

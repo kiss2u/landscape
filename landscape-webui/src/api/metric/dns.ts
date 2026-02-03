@@ -1,17 +1,12 @@
 import axiosService from "@/api";
-import type { 
-  DnsMetric, 
-  DnsHistoryResponse, 
-  DnsStatEntry, 
-  DnsSummaryResponse 
+import type {
+  DnsMetric,
+  DnsHistoryResponse,
+  DnsStatEntry,
+  DnsSummaryResponse,
 } from "landscape-types/common/metric/dns";
 
-export type { 
-  DnsMetric, 
-  DnsHistoryResponse, 
-  DnsStatEntry, 
-  DnsSummaryResponse 
-};
+export type { DnsMetric, DnsHistoryResponse, DnsStatEntry, DnsSummaryResponse };
 
 export async function get_dns_history(params?: {
   start_time?: number;

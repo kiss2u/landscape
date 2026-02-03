@@ -7,8 +7,8 @@ use tokio::sync::{mpsc, RwLock};
 
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
-    ConnectMetric, ConnectRealtimeStatus, ConnectStatusType,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    ConnectRealtimeStatus, ConnectStatusType,
 };
 
 use crate::metric::duckdb::DuckMetricStore;
@@ -63,8 +63,8 @@ impl ConnectMetricManager {
                             } else {
                                 let key = metric.key.clone();
 
-                                let status =
-                                    realtime_set.entry(key.clone()).or_insert(ConnectRealtimeStatus {
+                                let status = realtime_set.entry(key.clone()).or_insert(
+                                    ConnectRealtimeStatus {
                                         key: key.clone(),
                                         src_ip: metric.src_ip,
                                         dst_ip: metric.dst_ip,
@@ -79,7 +79,8 @@ impl ConnectMetricManager {
                                         ingress_pps: 0,
                                         egress_pps: 0,
                                         last_metric: None,
-                                    });
+                                    },
+                                );
 
                                 if let Some(old_metric) = &status.last_metric {
                                     let delta_time_ms =
@@ -88,8 +89,9 @@ impl ConnectMetricManager {
                                         let delta_ingress_bytes = metric
                                             .ingress_bytes
                                             .saturating_sub(old_metric.ingress_bytes);
-                                        let delta_egress_bytes =
-                                            metric.egress_bytes.saturating_sub(old_metric.egress_bytes);
+                                        let delta_egress_bytes = metric
+                                            .egress_bytes
+                                            .saturating_sub(old_metric.egress_bytes);
                                         let delta_ingress_pkts = metric
                                             .ingress_packets
                                             .saturating_sub(old_metric.ingress_packets);
@@ -166,10 +168,7 @@ impl ConnectMetricManager {
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         let realtime_metrics = self.realtime_metrics.read().await;
 
-        let mut result: Vec<ConnectRealtimeStatus> = realtime_metrics
-            .values()
-            .cloned()
-            .collect();
+        let mut result: Vec<ConnectRealtimeStatus> = realtime_metrics.values().cloned().collect();
 
         result.sort_by(|a, b| a.key.create_time.cmp(&b.key.create_time));
         result

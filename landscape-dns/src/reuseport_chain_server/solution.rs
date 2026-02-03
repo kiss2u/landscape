@@ -149,7 +149,9 @@ impl ResolutionRule {
             Err(e) => {
                 let code = if let Some(proto_err) = e.proto() {
                     match proto_err.kind() {
-                        hickory_proto::ProtoErrorKind::NoRecordsFound { response_code, .. } => *response_code,
+                        hickory_proto::ProtoErrorKind::NoRecordsFound { response_code, .. } => {
+                            *response_code
+                        }
                         _ => {
                             tracing::error!(
                                 "[flow_id: {:?}, config: {}] DNS resolution failed (proto) for {}: {}",

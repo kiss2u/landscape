@@ -9,7 +9,7 @@ import {
   ConnectHistoryQueryParams,
 } from "landscape-types/common/metric/connect";
 
-export * from './dns';
+export * from "./dns";
 
 export async function get_connect_global_stats(): Promise<ConnectGlobalStats> {
   let data = await axiosService.get("metric/connects/global_stats");

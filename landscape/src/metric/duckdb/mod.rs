@@ -1,9 +1,10 @@
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
-    ConnectMetric,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
 };
-use landscape_common::metric::dns::{DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse};
+use landscape_common::metric::dns::{
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse,
+};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
@@ -32,7 +33,7 @@ pub enum DBMessage {
     // Write Operations
     InsertMetric(ConnectMetric),
     InsertDnsMetric(DnsMetric),
-    
+
     // Command Operations (Maintenance/Cleanup)
     CollectAndCleanupOldMetrics {
         cutoff: u64,
@@ -79,12 +80,14 @@ pub fn start_db_thread(
     let mut metrics_appender = conn.appender("metrics").unwrap();
     let mut dns_appender = conn.appender("dns_metrics").unwrap();
     let mut summary_stmt = conn.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
-    
+
     let mut batch_count = 0;
-    let flush_interval = std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
+    let flush_interval =
+        std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let mut last_flush = std::time::Instant::now();
     let mut last_cleanup = std::time::Instant::now();
-    let cleanup_interval = std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS);
+    let cleanup_interval =
+        std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS);
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
@@ -115,7 +118,8 @@ pub fn start_db_thread(
                                 },
                             ]);
 
-                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok() {
+                            if connect::update_summary_by_metric(&mut summary_stmt, &metric).is_ok()
+                            {
                                 batch_count += 1;
                             }
                         }
@@ -163,7 +167,7 @@ pub fn start_db_thread(
                         last_flush = std::time::Instant::now();
                     }
                 }
-                Ok(None) => break, 
+                Ok(None) => break,
                 Err(_) => {
                     if batch_count > 0 {
                         let _ = metrics_appender.flush();
@@ -299,7 +303,7 @@ impl DuckMetricStore {
         let (resp, rx) = oneshot::channel();
         let q = dns::DnsQuery::Summary(params);
         if self.tx.send(DBMessage::DnsQuery { query: q, resp }).await.is_err() {
-             return DnsSummaryResponse {
+            return DnsSummaryResponse {
                 total_queries: 0,
                 total_effective_queries: 0,
                 cache_hit_count: 0,

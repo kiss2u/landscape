@@ -130,7 +130,8 @@ const getUsageColor = (percentage: number) => {
 
       <n-flex justify="space-between">
         <n-text depth="3" style="font-size: 12px">
-          {{ t("sysinfo.used") }}: {{ swapData.enabled ? swapData.used + " GB" : "--" }}
+          {{ t("sysinfo.used") }}:
+          {{ swapData.enabled ? swapData.used + " GB" : "--" }}
         </n-text>
         <n-text depth="3" style="font-size: 12px">
           {{ t("sysinfo.total") }}:

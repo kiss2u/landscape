@@ -217,16 +217,16 @@ async function refreshGlobalStats() {
   .hide-on-small {
     display: none;
   }
-  
+
   /* 缩小统计文字 */
   :deep(.n-flex) span {
     font-size: 11px !important;
   }
-  
+
   :deep(.n-flex) span[style*="font-size: 13px"] {
     font-size: 11px !important;
   }
-  
+
   :deep(.n-flex) span[style*="font-size: 11px"] {
     font-size: 10px !important;
   }
