@@ -2,18 +2,18 @@
 import type { SortOrder } from "./connect.d";
 
 export type DnsHistoryQueryParams = {
-  start_time: bigint | null;
-  end_time: bigint | null;
-  limit: number | null;
-  offset: number | null;
-  domain: string | null;
-  src_ip: string | null;
-  query_type: string | null;
-  status: DnsResultStatus | null;
-  min_duration_ms: number | null;
-  max_duration_ms: number | null;
-  sort_key: DnsSortKey | null;
-  sort_order: SortOrder | null;
+  start_time?: bigint;
+  end_time?: bigint;
+  limit?: number;
+  offset?: number;
+  domain?: string;
+  src_ip?: string;
+  query_type?: string;
+  status?: DnsResultStatus;
+  min_duration_ms?: number;
+  max_duration_ms?: number;
+  sort_key?: DnsSortKey;
+  sort_order?: SortOrder;
 };
 
 export type DnsHistoryResponse = { items: Array<DnsMetric>; total: number };
@@ -40,11 +40,7 @@ export type DnsResultStatus =
 
 export type DnsSortKey = "time" | "domain" | "duration";
 
-export type DnsStatEntry = {
-  name: string;
-  count: number;
-  value: number | null;
-};
+export type DnsStatEntry = { name: string; count: number; value?: number };
 
 export type DnsSummaryResponse = {
   total_queries: number;

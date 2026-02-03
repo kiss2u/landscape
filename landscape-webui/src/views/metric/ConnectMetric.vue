@@ -81,7 +81,7 @@ async function refreshGlobalStats() {
   <n-flex style="flex: 1; overflow: hidden; margin-bottom: 10px" vertical>
     <!-- 全局页头：包含切换器和系统级实时统计 -->
     <n-flex align="center" justify="space-between" style="padding: 4px 0">
-      <n-flex align="center" size="large">
+      <n-flex align="center" size="large" :wrap="true">
         <n-radio-group v-model:value="viewMode" size="medium" type="button">
           <n-radio-button value="live">实时活跃连接</n-radio-button>
           <n-radio-button value="history">历史连接查询</n-radio-button>
@@ -115,7 +115,7 @@ async function refreshGlobalStats() {
                 :style="{ fontWeight: 'bold', color: themeVars.infoColor }"
                 >{{ formatRate(systemStats.egressBps) }}</span
               >
-              <span style="font-size: 11px; color: #aaa"
+              <span style="font-size: 11px; color: #aaa" class="hide-on-small"
                 >({{ formatPackets(systemStats.egressPps) }})</span
               >
             </n-flex>
@@ -127,7 +127,7 @@ async function refreshGlobalStats() {
                 :style="{ fontWeight: 'bold', color: themeVars.successColor }"
                 >{{ formatRate(systemStats.ingressBps) }}</span
               >
-              <span style="font-size: 11px; color: #aaa"
+              <span style="font-size: 11px; color: #aaa" class="hide-on-small"
                 >({{ formatPackets(systemStats.ingressPps) }})</span
               >
             </n-flex>
@@ -210,6 +210,25 @@ async function refreshGlobalStats() {
   100% {
     transform: scale(0.95);
     box-shadow: 0 0 0 0 rgba(0, 210, 255, 0);
+  }
+}
+
+@media (max-width: 768px) {
+  .hide-on-small {
+    display: none;
+  }
+  
+  /* 缩小统计文字 */
+  :deep(.n-flex) span {
+    font-size: 11px !important;
+  }
+  
+  :deep(.n-flex) span[style*="font-size: 13px"] {
+    font-size: 11px !important;
+  }
+  
+  :deep(.n-flex) span[style*="font-size: 11px"] {
+    font-size: 10px !important;
   }
 }
 </style>

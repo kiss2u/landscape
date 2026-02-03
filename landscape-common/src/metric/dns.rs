@@ -11,7 +11,7 @@ pub enum DnsResultStatus {
     Hit,      // 命中缓存
     NxDomain, // 域名不存在
     #[default]
-    Normal,   // 正常透传
+    Normal, // 正常透传
     Error,    // 异常
 }
 
@@ -43,17 +43,29 @@ pub enum DnsSortKey {
 #[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
 #[ts(export, export_to = "common/metric/dns.d.ts")]
 pub struct DnsHistoryQueryParams {
+    #[ts(optional)]
     pub start_time: Option<u64>,
+    #[ts(optional)]
     pub end_time: Option<u64>,
+    #[ts(optional)]
     pub limit: Option<usize>,
+    #[ts(optional)]
     pub offset: Option<usize>,
+    #[ts(optional)]
     pub domain: Option<String>,
+    #[ts(optional)]
     pub src_ip: Option<String>,
+    #[ts(optional)]
     pub query_type: Option<String>,
+    #[ts(optional)]
     pub status: Option<DnsResultStatus>,
+    #[ts(optional)]
     pub min_duration_ms: Option<u32>,
+    #[ts(optional)]
     pub max_duration_ms: Option<u32>,
+    #[ts(optional)]
     pub sort_key: Option<DnsSortKey>,
+    #[ts(optional)]
     pub sort_order: Option<crate::metric::connect::SortOrder>,
 }
 
@@ -95,6 +107,6 @@ pub struct DnsSummaryResponse {
 pub struct DnsStatEntry {
     pub name: String,
     pub count: usize,
+    #[ts(optional)]
     pub value: Option<f64>,
 }
-

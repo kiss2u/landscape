@@ -111,7 +111,7 @@ const totalStats = computed(() => {
 </script>
 
 <template>
-  <div style="display: contents">
+  <n-flex vertical style="flex: 1; overflow: hidden">
     <!-- 实时模式专用工具栏 -->
     <n-flex align="center" :wrap="true" style="margin-bottom: 12px">
       <n-input
@@ -202,7 +202,7 @@ const totalStats = computed(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="过滤活跃连接" :value="totalStats.count" />
         </n-card>
@@ -211,7 +211,7 @@ const totalStats = computed(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="实时总上行">
             <span :style="{ color: themeVars.infoColor, fontWeight: 'bold' }">
@@ -224,7 +224,7 @@ const totalStats = computed(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="实时总下行">
             <span
@@ -239,7 +239,7 @@ const totalStats = computed(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="入站流量 PPS">
             <span style="color: #888">
@@ -252,7 +252,7 @@ const totalStats = computed(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="出站流量 PPS">
             <span style="color: #888">
@@ -267,5 +267,5 @@ const totalStats = computed(() => {
       v-if="filteredConnectMetrics"
       :connect_metrics="filteredConnectMetrics"
     />
-  </div>
+  </n-flex>
 </template>

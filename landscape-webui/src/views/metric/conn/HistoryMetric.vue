@@ -325,7 +325,7 @@ onMounted(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="过滤结果总数" :value="historyTotalStats.count" />
         </n-card>
@@ -334,7 +334,7 @@ onMounted(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="过滤结果总上行">
             <span :style="{ color: themeVars.infoColor, fontWeight: 'bold' }">
@@ -347,7 +347,7 @@ onMounted(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="过滤结果总下行">
             <span
@@ -362,7 +362,7 @@ onMounted(() => {
         <n-card
           size="small"
           :bordered="false"
-          style="background-color: #f9f9f910"
+          style="background-color: #f9f9f910; height: 100%"
         >
           <n-statistic label="过滤结果总入站">
             <span style="color: #888">
