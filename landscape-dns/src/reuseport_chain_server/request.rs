@@ -343,6 +343,13 @@ impl RequestHandler for ChainDnsRequestHandle {
             for each in redirect_list.iter() {
                 if each.is_match(&domain) {
                     redirect_records = Some(each.lookup(&domain, query_type));
+
+                    if each.is_block() {
+                        status = DnsResultStatus::Block;
+                    } else {
+                        status = DnsResultStatus::Local;
+                    }
+
                     break;
                 }
             }
@@ -350,11 +357,6 @@ impl RequestHandler for ChainDnsRequestHandle {
 
         if let Some(redirect_records_inner) = redirect_records {
             records = redirect_records_inner;
-            if records.is_empty() {
-                status = DnsResultStatus::Block;
-            } else {
-                status = DnsResultStatus::Local;
-            }
         } else {
             if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
                 records = fiter_result(result, &filter);

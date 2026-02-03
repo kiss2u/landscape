@@ -59,6 +59,10 @@ impl RedirectSolution {
 
         result
     }
+
+    pub fn is_block(&self) -> bool {
+        self.result_info.is_empty()
+    }
 }
 
 #[derive(Debug)]
