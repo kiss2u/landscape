@@ -163,10 +163,20 @@ pub struct LandscapeStoreConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
 #[ts(export, export_to = "common/config.d.ts")]
 pub struct LandscapeMetricConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub retention_days: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub batch_size: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub flush_interval_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub max_memory: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub max_threads: Option<usize>,
 }
 
@@ -195,6 +205,20 @@ pub struct GetUIConfigResponse {
 #[ts(export, export_to = "common/config.d.ts")]
 pub struct UpdateUIConfigRequest {
     pub new_ui: LandscapeUIConfig,
+    pub expected_hash: String,
+}
+
+#[derive(Serialize, TS, Debug, Clone)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct GetMetricConfigResponse {
+    pub metric: LandscapeMetricConfig,
+    pub hash: String,
+}
+
+#[derive(Deserialize, TS, Debug, Clone)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct UpdateMetricConfigRequest {
+    pub new_metric: LandscapeMetricConfig,
     pub expected_hash: String,
 }
 
@@ -440,6 +464,26 @@ pub struct MetricRuntimeConfig {
     pub flush_interval_secs: u64,
     pub max_memory: usize,
     pub max_threads: usize,
+}
+
+impl MetricRuntimeConfig {
+    pub fn update_from_file_config(&mut self, config: &LandscapeMetricConfig) {
+        if let Some(v) = config.retention_days {
+            self.retention_days = v;
+        }
+        if let Some(v) = config.batch_size {
+            self.batch_size = v;
+        }
+        if let Some(v) = config.flush_interval_secs {
+            self.flush_interval_secs = v;
+        }
+        if let Some(v) = config.max_memory {
+            self.max_memory = v;
+        }
+        if let Some(v) = config.max_threads {
+            self.max_threads = v;
+        }
+    }
 }
 
 impl StoreRuntimeConfig {

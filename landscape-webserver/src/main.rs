@@ -85,7 +85,7 @@ use crate::{
     service::{
         route::get_route_paths, route_lan::get_route_lan_paths, route_wan::get_route_wan_paths,
     },
-    sys_service::config_service::get_config_paths,
+    sys_service::config::get_config_paths,
 };
 
 const DNS_EVENT_CHANNEL_SIZE: usize = 128;

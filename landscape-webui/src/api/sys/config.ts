@@ -1,7 +1,10 @@
 import axiosService from "@/api";
 import type {
+  GetMetricConfigResponse,
   GetUIConfigResponse,
+  LandscapeMetricConfig,
   LandscapeUIConfig,
+  UpdateMetricConfigRequest,
   UpdateUIConfigRequest,
 } from "landscape-types/common/config";
 
@@ -44,4 +47,20 @@ export async function update_ui_config(
   payload: UpdateUIConfigRequest,
 ): Promise<void> {
   await axiosService.post(`sys_service/config/edit/ui`, payload);
+}
+
+export async function get_metric_config(): Promise<LandscapeMetricConfig> {
+  const response = await axiosService.get(`sys_service/config/metric`);
+  return response.data;
+}
+
+export async function get_metric_config_edit(): Promise<GetMetricConfigResponse> {
+  const response = await axiosService.get(`sys_service/config/edit/metric`);
+  return response.data;
+}
+
+export async function update_metric_config(
+  payload: UpdateMetricConfigRequest,
+): Promise<void> {
+  await axiosService.post(`sys_service/config/edit/metric`, payload);
 }

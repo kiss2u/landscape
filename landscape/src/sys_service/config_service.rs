@@ -1,6 +1,8 @@
 use arc_swap::ArcSwap;
 use fs2::FileExt;
-use landscape_common::config::{InitConfig, LandscapeConfig, LandscapeUIConfig, RuntimeConfig};
+use landscape_common::config::{
+    InitConfig, LandscapeConfig, LandscapeMetricConfig, LandscapeUIConfig, RuntimeConfig,
+};
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::error::{LdError, LdResult};
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -55,6 +57,10 @@ impl LandscapeConfigService {
 
     pub fn get_ui_config_from_memory(&self) -> LandscapeUIConfig {
         self.config.load().ui.clone()
+    }
+
+    pub fn get_metric_config_from_memory(&self) -> LandscapeMetricConfig {
+        self.config.load().file_config.metric.clone()
     }
 
     pub fn get_config_path(&self) -> std::path::PathBuf {
@@ -137,6 +143,70 @@ impl LandscapeConfigService {
             let mut new_config = (**old).clone();
             new_config.ui = new_ui.clone();
             new_config.file_config.ui = new_ui.clone();
+            new_config
+        });
+
+        Ok(())
+    }
+    pub async fn update_metric_config(
+        &self,
+        new_metric: LandscapeMetricConfig,
+        expected_hash: String,
+    ) -> LdResult<()> {
+        let path = self.get_config_path();
+
+        let file = OpenOptions::new().read(true).write(true).create(true).open(&path)?;
+
+        file.lock_exclusive()?;
+
+        let result = {
+            let mut content = String::new();
+            let mut file_obj = &file;
+            file_obj.read_to_string(&mut content)?;
+
+            let mut hasher = Sha256::new();
+            hasher.update(content.as_bytes());
+            let current_hash = format!("{:x}", hasher.finalize());
+
+            if current_hash != expected_hash {
+                return Err(LdError::ConfigConflict);
+            }
+
+            let mut doc =
+                content.parse::<DocumentMut>().map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            let metric_value =
+                toml::to_string(&new_metric).map_err(|e| LdError::ConfigError(e.to_string()))?;
+            let metric_doc = metric_value
+                .parse::<DocumentMut>()
+                .map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            doc["metric"] = metric_doc.as_item().clone();
+
+            let new_content = doc.to_string();
+
+            let tmp_path = path.with_extension("toml.tmp");
+            let mut tmp_file =
+                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+
+            tmp_file.write_all(new_content.as_bytes())?;
+            tmp_file.sync_all()?;
+
+            std::fs::rename(&tmp_path, &path)?;
+
+            Ok::<(), LdError>(())
+        };
+
+        file.unlock()?;
+
+        if let Err(e) = result {
+            return Err(e);
+        }
+
+        self.config.rcu(|old| {
+            let mut new_config = (**old).clone();
+            new_config.metric.update_from_file_config(&new_metric);
+            new_config.file_config.metric = new_metric.clone();
             new_config
         });
 

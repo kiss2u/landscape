@@ -1,2 +1,2 @@
-pub mod config_service;
+pub mod config;
 pub mod dns_service;
