@@ -14,7 +14,7 @@ use landscape_common::{
 };
 
 use crate::connection::LandscapeMarkDNSResolver;
-use crate::reuseport_chain_server::matcher::DomainMatcher;
+use crate::server::matcher::DomainMatcher;
 use crate::DEFAULT_ENABLE_IP_VALIDATION;
 
 #[derive(Debug)]

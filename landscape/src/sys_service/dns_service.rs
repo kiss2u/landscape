@@ -8,9 +8,7 @@ use landscape_common::{
         DefaultWatchServiceStatus,
     },
 };
-use landscape_dns::{
-    reuseport_chain_server::LandscapeReusePortChainDnsServer, CheckChainDnsResult, CheckDnsReq,
-};
+use landscape_dns::{server::LandscapeDnsServer, CheckChainDnsResult, CheckDnsReq};
 use tokio::sync::mpsc;
 
 use crate::config_service::{
@@ -22,7 +20,7 @@ use crate::config_service::{
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct LandscapeDnsService {
-    dns_service: LandscapeReusePortChainDnsServer,
+    dns_service: LandscapeDnsServer,
     dns_rule_service: DNSRuleService,
     dns_redirect_rule_service: DNSRedirectService,
     geo_site_service: GeoSiteService,
@@ -38,7 +36,7 @@ impl LandscapeDnsService {
         dns_upstream_service: DnsUpstreamService,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     ) -> Self {
-        let dns_service = LandscapeReusePortChainDnsServer::new(53, msg_tx);
+        let dns_service = LandscapeDnsServer::new(53, msg_tx);
 
         // dns_service.restart(53).await;
         // dns_service.update_flow_map(&flow_rule_service.list().await).await;

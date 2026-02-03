@@ -28,8 +28,8 @@ pub fn to_common_records(records: Vec<Record>) -> Vec<CommonRecord> {
 
 pub(crate) mod connection;
 
-pub mod reuseport_chain_server;
-pub mod reuseport_server;
+pub mod listener;
+pub mod server;
 
 const DEFAULT_ENABLE_IP_VALIDATION: bool = false;
 

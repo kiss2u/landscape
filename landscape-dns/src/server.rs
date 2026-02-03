@@ -12,23 +12,22 @@ use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    convert_record_type, reuseport_chain_server::request::ChainDnsRequestHandle,
-    CheckChainDnsResult, CheckDnsReq,
+    convert_record_type, server::handler::DnsRequestHandler, CheckChainDnsResult, CheckDnsReq,
 };
 
 pub(crate) mod matcher;
-pub(crate) mod request;
-pub(crate) mod solution;
+pub(crate) mod handler;
+pub(crate) mod rule;
 
 #[derive(Clone)]
-pub struct LandscapeReusePortChainDnsServer {
+pub struct LandscapeDnsServer {
     pub status: DefaultWatchServiceStatus,
-    flow_dns_server: Arc<Mutex<HashMap<u32, (ChainDnsRequestHandle, CancellationToken)>>>,
+    flow_dns_server: Arc<Mutex<HashMap<u32, (DnsRequestHandler, CancellationToken)>>>,
     pub addr: SocketAddr,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
 }
 
-impl LandscapeReusePortChainDnsServer {
+impl LandscapeDnsServer {
     pub fn new(listen_port: u16, msg_tx: Option<mpsc::Sender<DnsMetricMessage>>) -> Self {
         crate::check_resolver_conf();
         let status = DefaultWatchServiceStatus::new();
@@ -53,7 +52,7 @@ impl LandscapeReusePortChainDnsServer {
             }
         }
 
-        let handler = ChainDnsRequestHandle::new(info, flow_id, self.msg_tx.clone());
+        let handler = DnsRequestHandler::new(info, flow_id, self.msg_tx.clone());
         let token = start_dns_server(flow_id, self.addr, handler.clone()).await;
 
         {
@@ -83,9 +82,9 @@ impl LandscapeReusePortChainDnsServer {
 pub async fn start_dns_server(
     flow_id: u32,
     addr: SocketAddr,
-    handler: ChainDnsRequestHandle,
+    handler: DnsRequestHandler,
 ) -> CancellationToken {
-    let Ok((udp, sock_fd)) = crate::reuseport_server::listener::create_udp_socket(addr).await
+    let Ok((udp, sock_fd)) = crate::listener::create_udp_socket(addr).await
     else {
         tracing::error!("[flow: {flow_id}]: create udp socket error");
         let result = CancellationToken::new();

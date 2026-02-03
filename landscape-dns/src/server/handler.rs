@@ -19,7 +19,7 @@ use lru::LruCache;
 use tokio::sync::{mpsc, Mutex};
 
 use crate::{
-    reuseport_chain_server::solution::{RedirectSolution, ResolutionRule},
+    server::rule::{RedirectSolution, ResolutionRule},
     CacheDNSItem, CheckChainDnsResult, DNSCache,
 };
 use landscape_common::{
@@ -31,7 +31,7 @@ use landscape_common::{
 };
 
 #[derive(Clone, Debug)]
-pub struct ChainDnsRequestHandle {
+pub struct DnsRequestHandler {
     redirect_solution: Arc<ArcSwap<Vec<RedirectSolution>>>,
     resolves: Arc<ArcSwap<BTreeMap<u32, ResolutionRule>>>,
     pub cache: Arc<Mutex<DNSCache>>,
@@ -39,12 +39,12 @@ pub struct ChainDnsRequestHandle {
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
 }
 
-impl ChainDnsRequestHandle {
+impl DnsRequestHandler {
     pub fn new(
         info: ChainDnsServerInitInfo,
         flow_id: u32,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
-    ) -> ChainDnsRequestHandle {
+    ) -> DnsRequestHandler {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
             resolves.insert(rule.index, ResolutionRule::new(rule, flow_id));
@@ -54,7 +54,7 @@ impl ChainDnsRequestHandle {
         let redirect_solution =
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
 
-        ChainDnsRequestHandle {
+        DnsRequestHandler {
             resolves: Arc::new(ArcSwap::from_pointee(resolves)),
             cache,
             flow_id,
@@ -300,7 +300,7 @@ impl ChainDnsRequestHandle {
 }
 
 #[async_trait::async_trait]
-impl RequestHandler for ChainDnsRequestHandle {
+impl RequestHandler for DnsRequestHandler {
     async fn handle_request<R: ResponseHandler>(
         &self,
         request: &Request,

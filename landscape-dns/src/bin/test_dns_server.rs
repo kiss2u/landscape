@@ -1,13 +1,13 @@
 use landscape_common::{config::dns::DNSRuntimeRule, dns::ChainDnsServerInitInfo};
-use landscape_dns::reuseport_chain_server::LandscapeReusePortChainDnsServer;
+use landscape_dns::server::LandscapeDnsServer;
 
-/// cargo run --package landscape-dns --bin test_reuseport_chain_server
+/// cargo run --package landscape-dns --bin test_dns_server
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     landscape_common::init_tracing!();
 
     let listen_port = 54;
-    let server = LandscapeReusePortChainDnsServer::new(listen_port, None);
+    let server = LandscapeDnsServer::new(listen_port, None);
 
     // handler
     let default_rule = vec![DNSRuntimeRule::default()];
