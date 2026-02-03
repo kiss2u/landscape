@@ -9,6 +9,8 @@ import { CountdownInst } from "naive-ui";
 import { computed, nextTick, ref, watch } from "vue";
 
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 import { mask_string } from "@/lib/common";
 import { Key } from "@vicons/tabler";
 
@@ -170,7 +172,10 @@ function build_ip_map(data: ArpScanInfo[]): Map<string, ArpInfo> {
           </td>
 
           <td class="assign-item">
-            <n-time :time="item.real_request_time"></n-time>
+            <n-time
+              :time="item.real_request_time"
+              :time-zone="prefStore.timezone"
+            ></n-time>
           </td>
           <td class="assign-item">
             <!-- {{ item.real_expire_time }} -->

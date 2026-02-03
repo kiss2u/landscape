@@ -4,6 +4,8 @@ import { computed } from "vue";
 import { HelpFilled, Time } from "@vicons/carbon";
 import { IPv6NAInfo } from "landscape-types/common/ipv6_ra_server";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const frontEndStore = useFrontEndStore();
 
@@ -79,7 +81,12 @@ const info = computed(() => {
             {{ frontEndStore.MASK_INFO(value.ip) }}
           </td>
           <td>{{ frontEndStore.MASK_INFO(value.mac) }}</td>
-          <td><n-time :time="value.active"></n-time></td>
+          <td>
+            <n-time
+              :time="value.active"
+              :time-zone="prefStore.timezone"
+            ></n-time>
+          </td>
           <td>
             <n-tag v-if="value.stale" :bordered="false" type="success">
               ACTIVE

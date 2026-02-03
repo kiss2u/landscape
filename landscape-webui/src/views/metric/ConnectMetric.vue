@@ -8,6 +8,8 @@ import LiveMetric from "./conn/LiveMetric.vue";
 import HistoryMetric from "./conn/HistoryMetric.vue";
 import { useThemeVars } from "naive-ui";
 import { Renew } from "@vicons/carbon";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const metricStore = useMetricStore();
 const themeVars = useThemeVars();
@@ -160,6 +162,7 @@ async function refreshGlobalStats() {
               :time="globalStats.last_calculate_time"
               format="yyyy-MM-dd HH:mm"
               style="color: #aaa"
+              :time-zone="prefStore.timezone"
             />
             <span style="font-size: 12px; color: #aaa; margin-left: 2px"
               >(每 24h 更新)</span

@@ -8,6 +8,8 @@ import { useFrontEndStore } from "@/stores/front_end_config";
 import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
 import { ConnectKey } from "landscape-types/common/metric/connect";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const themeVars = useThemeVars();
 const frontEndStore = useFrontEndStore();
@@ -259,6 +261,7 @@ onMounted(() => {
         style="width: 360px"
         format="yyyy-MM-dd HH:mm"
         :is-date-disabled="(ts: number) => ts > Date.now()"
+        :time-picker-props="{ timeZone: prefStore.timezone }"
       />
 
       <n-select

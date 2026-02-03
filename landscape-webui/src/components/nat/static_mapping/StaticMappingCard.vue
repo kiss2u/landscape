@@ -4,6 +4,8 @@ import { StaticNatMappingConfig } from "landscape-types/common/nat";
 import { ref } from "vue";
 import { ArrowRight, Edit, TrashCan } from "@vicons/carbon";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const frontEndStore = useFrontEndStore();
 const rule = defineModel<StaticNatMappingConfig>("rule", { required: true });
@@ -180,7 +182,12 @@ function formatIPv6(ip: string | null): string {
       <!-- Footer -->
       <div class="card-footer">
         <n-text depth="3" style="font-size: 12px">
-          更新于 <n-time :time="rule.update_at" format="yyyy-MM-dd HH:mm" />
+          更新于
+          <n-time
+            :time="rule.update_at"
+            format="yyyy-MM-dd HH:mm"
+            :time-zone="prefStore.timezone"
+          />
         </n-text>
       </div>
     </n-card>

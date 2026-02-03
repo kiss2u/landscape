@@ -11,6 +11,8 @@ import { useThemeVars } from "naive-ui";
 
 const frontEndStore = useFrontEndStore();
 const themeVars = useThemeVars();
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 interface Props {
   history: ConnectHistoryStatus;
@@ -76,6 +78,7 @@ const emit = defineEmits(["show:chart"]);
               <n-time
                 :time="history.last_report_time"
                 format="yyyy-MM-dd HH:mm:ss"
+                :time-zone="prefStore.timezone"
               />
               <div style="font-size: 10px; color: #888">
                 <n-tooltip trigger="hover">
@@ -95,6 +98,7 @@ const emit = defineEmits(["show:chart"]);
                     :time="history.key.create_time"
                     format="yyyy-MM-dd HH:mm:ss"
                     type="date"
+                    :time-zone="prefStore.timezone"
                   />
                 </n-tooltip>
               </div>

@@ -6,8 +6,10 @@ import { useThemeVars } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { InformationFilled, WarningAltFilled } from "@vicons/carbon";
 
+import { usePreferenceStore } from "@/stores/preference";
 const { t } = useI18n({ useScope: "global" });
 const themeVars = useThemeVars();
+const prefStore = usePreferenceStore();
 
 const sysinfo = ref<LandscapeSystemInfo>({
   host_name: undefined,
@@ -161,6 +163,7 @@ const uptime = computed(() => {
                 :time="sysinfo.start_at"
                 format="yyyy-MM-dd HH:mm:ss"
                 unix
+                :time-zone="prefStore.timezone"
               />
             </n-flex>
           </n-tooltip>

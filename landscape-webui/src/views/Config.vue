@@ -20,10 +20,12 @@ const themeOptions = [
   { label: "浅色模式", value: "light" },
 ];
 
-const timezoneOptions = (Intl as any).supportedValuesOf("timeZone").map((tz: string) => ({
-  label: tz,
-  value: tz,
-}));
+const timezoneOptions = (Intl as any)
+  .supportedValuesOf("timeZone")
+  .map((tz: string) => ({
+    label: tz,
+    value: tz,
+  }));
 
 onMounted(async () => {
   loading.value = true;

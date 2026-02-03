@@ -4,6 +4,8 @@ import { GeoIpSourceConfig } from "landscape-types/common/geo_ip";
 import { computed, ref } from "vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const frontEndStore = useFrontEndStore();
 const emit = defineEmits(["refresh", "refresh:keys"]);
@@ -65,6 +67,7 @@ const onGeoUpload = async (formData: FormData) => {
           <n-time
             :time="geo_ip_source.next_update_at"
             format="yyyy-MM-dd hh:mm:ss"
+            :time-zone="prefStore.timezone"
           />
         </n-descriptions-item>
       </n-descriptions>

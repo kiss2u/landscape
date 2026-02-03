@@ -2,6 +2,8 @@
 import { delete_docker_image } from "@/api/docker";
 import { DockerImageSummary } from "@/lib/docker";
 import { computed, ref } from "vue";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const props = defineProps<{
   image: DockerImageSummary;
@@ -88,7 +90,11 @@ const show_create_model = ref(false);
 
     <n-descriptions :column="1" label-placement="left">
       <n-descriptions-item label="创建时间">
-        <n-time v-if="time !== undefined" :time="time" />
+        <n-time
+          v-if="time !== undefined"
+          :time="time"
+          :time-zone="prefStore.timezone"
+        />
         <span v-else>N/A</span>
       </n-descriptions-item>
 

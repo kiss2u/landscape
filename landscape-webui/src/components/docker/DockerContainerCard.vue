@@ -14,6 +14,8 @@ import {
 import { useDockerStore } from "@/stores/status_docker";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { mask_string } from "@/lib/common";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const frontEndStore = useFrontEndStore();
 const props = defineProps<{
@@ -170,7 +172,11 @@ const tags = computed(() => {
       </n-descriptions-item>
 
       <n-descriptions-item label="创建时间">
-        <n-time v-if="time !== undefined" :time="time" />
+        <n-time
+          v-if="time !== undefined"
+          :time="time"
+          :time-zone="prefStore.timezone"
+        />
         <span v-else>N/A</span>
       </n-descriptions-item>
     </n-descriptions>

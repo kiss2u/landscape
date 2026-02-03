@@ -27,6 +27,8 @@ import {
 } from "@vicons/ionicons5";
 import { useDebounceFn } from "@vueuse/core";
 import DNSDashboard from "./DNSDashboard.vue";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const activeTab = ref("dashboard");
 const dashboardRef = ref<any>(null);
@@ -112,7 +114,11 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
           : "descend"
         : false,
     render(row) {
-      return h(NTime, { time: Number(row.report_time), type: "datetime" });
+      return h(NTime, {
+        time: Number(row.report_time),
+        type: "datetime",
+        timeZone: prefStore.timezone,
+      });
     },
   },
   {
@@ -470,6 +476,7 @@ onMounted(() => {
         :shortcuts="shortcuts"
         :placeholder="t('metric.time_range')"
         style="width: 320px"
+        :time-picker-props="{ timeZone: prefStore.timezone }"
       />
       <n-tooltip trigger="hover">
         <template #trigger>

@@ -11,6 +11,8 @@ import { useThemeVars } from "naive-ui";
 
 const frontEndStore = useFrontEndStore();
 const themeVars = useThemeVars();
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 interface Props {
   conn: ConnectRealtimeStatus;
@@ -81,7 +83,11 @@ const emit = defineEmits(["show:chart"]);
                 <div style="cursor: help">
                   <n-flex align="center" :wrap="false" size="small">
                     <span style="color: #888; font-size: 12px">活跃于</span>
-                    <n-time :time="lastActiveTime(conn)" format="HH:mm:ss" />
+                    <n-time
+                      :time="lastActiveTime(conn)"
+                      format="HH:mm:ss"
+                      :time-zone="prefStore.timezone"
+                    />
                     <n-divider vertical />
                     <span style="color: #888; font-size: 12px">
                       {{
@@ -98,6 +104,7 @@ const emit = defineEmits(["show:chart"]);
               <n-time
                 :time="conn.key.create_time"
                 format="yyyy-MM-dd HH:mm:ss"
+                :time-zone="prefStore.timezone"
               />
             </n-tooltip>
           </n-flex>

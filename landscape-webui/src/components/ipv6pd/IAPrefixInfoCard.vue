@@ -4,6 +4,8 @@ import { computed } from "vue";
 import { HelpFilled } from "@vicons/carbon";
 import { LDIAPrefix } from "landscape-types/common/ipv6_pd";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { usePreferenceStore } from "@/stores/preference";
+const prefStore = usePreferenceStore();
 
 const frontEndStore = useFrontEndStore();
 
@@ -109,7 +111,11 @@ const status = computed(() => {
             </n-popover>
           </n-flex>
         </template>
-        <n-time :time="config.last_update_time" format="yyyy-MM-dd hh:mm:ss" />
+        <n-time
+          :time="config.last_update_time"
+          format="yyyy-MM-dd hh:mm:ss"
+          :time-zone="prefStore.timezone"
+        />
       </n-descriptions-item>
     </n-descriptions>
     <n-flex
