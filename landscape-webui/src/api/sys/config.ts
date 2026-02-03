@@ -1,4 +1,9 @@
 import axiosService from "@/api";
+import type {
+  GetUIConfigResponse,
+  LandscapeUIConfig,
+  UpdateUIConfigRequest,
+} from "landscape-types/common/config";
 
 export async function get_init_config(): Promise<void> {
   try {
@@ -23,4 +28,20 @@ export async function get_init_config(): Promise<void> {
   } catch (error) {
     console.error("下载配置失败", error);
   }
+}
+
+export async function get_ui_config(): Promise<LandscapeUIConfig> {
+  const response = await axiosService.get(`sys_service/config/ui`);
+  return response.data;
+}
+
+export async function get_ui_config_edit(): Promise<GetUIConfigResponse> {
+  const response = await axiosService.get(`sys_service/config/edit/ui`);
+  return response.data;
+}
+
+export async function update_ui_config(
+  payload: UpdateUIConfigRequest,
+): Promise<void> {
+  await axiosService.post(`sys_service/config/edit/ui`, payload);
 }

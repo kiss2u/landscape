@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { darkTheme } from "naive-ui";
-import { dateZhCN, zhCN } from "naive-ui";
-
+import { darkTheme, enUS, zhCN, dateZhCN, dateEnUS } from "naive-ui";
+import { computed, onMounted } from "vue";
+import { usePreferenceStore } from "@/stores/preference";
 import Env from "@/components/Env.vue";
+
+const prefStore = usePreferenceStore();
+
+onMounted(() => {
+  prefStore.loadPreference();
+});
+
+const currentLocale = computed(() => {
+  return prefStore.language === "en" ? enUS : zhCN;
+});
+
+const currentDateLocale = computed(() => {
+  return prefStore.language === "en" ? dateEnUS : dateZhCN;
+});
+
+const currentTheme = computed(() => {
+  return darkTheme;
+});
 </script>
 
 <template>
   <n-config-provider
-    :locale="zhCN"
-    :date-locale="dateZhCN"
-    :theme="darkTheme"
+    :locale="currentLocale"
+    :date-locale="currentDateLocale"
+    :theme="currentTheme"
     style="display: flex; flex: 1"
     :theme-overrides="{ common: { fontWeightStrong: '600' } }"
   >

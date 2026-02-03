@@ -170,7 +170,35 @@ pub struct LandscapeMetricConfig {
     pub max_threads: Option<usize>,
 }
 
-/// Read & Write <CONFIG_PATH>/config.toml
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct LandscapeUIConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub timezone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub theme: Option<String>,
+}
+
+#[derive(Serialize, TS, Debug, Clone)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct GetUIConfigResponse {
+    pub ui: LandscapeUIConfig,
+    pub hash: String,
+}
+
+#[derive(Deserialize, TS, Debug, Clone)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct UpdateUIConfigRequest {
+    pub new_ui: LandscapeUIConfig,
+    pub expected_hash: String,
+}
+
+/// Read & Write <CONFIG_PATH>/landscape.toml
 #[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
 #[ts(export, export_to = "common/config.d.ts")]
 pub struct LandscapeConfig {
@@ -184,6 +212,8 @@ pub struct LandscapeConfig {
     pub store: LandscapeStoreConfig,
     #[serde(default)]
     pub metric: LandscapeMetricConfig,
+    #[serde(default)]
+    pub ui: LandscapeUIConfig,
 }
 
 ///
@@ -198,6 +228,7 @@ pub struct RuntimeConfig {
     pub web: WebRuntimeConfig,
     pub store: StoreRuntimeConfig,
     pub metric: MetricRuntimeConfig,
+    pub ui: LandscapeUIConfig,
 }
 
 fn default_home_path() -> PathBuf {
@@ -301,6 +332,7 @@ impl RuntimeConfig {
             web,
             store,
             metric,
+            ui: config.ui.clone(),
             file_config: config,
         };
 

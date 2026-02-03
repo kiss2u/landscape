@@ -1,21 +1,33 @@
-use landscape_common::config::{InitConfig, RuntimeConfig};
+use arc_swap::ArcSwap;
+use fs2::FileExt;
+use landscape_common::config::{InitConfig, LandscapeConfig, LandscapeUIConfig, RuntimeConfig};
 use landscape_common::database::LandscapeDBTrait;
+use landscape_common::error::{LdError, LdResult};
 use landscape_database::provider::LandscapeDBServiceProvider;
+use sha2::{Digest, Sha256};
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use std::sync::Arc;
+use toml_edit::DocumentMut;
 
 #[derive(Clone)]
 pub struct LandscapeConfigService {
-    config: RuntimeConfig,
+    config: Arc<ArcSwap<RuntimeConfig>>,
     store: LandscapeDBServiceProvider,
 }
 
 impl LandscapeConfigService {
     pub async fn new(config: RuntimeConfig, store: LandscapeDBServiceProvider) -> Self {
-        LandscapeConfigService { config, store }
+        LandscapeConfigService {
+            config: Arc::new(ArcSwap::from_pointee(config)),
+            store,
+        }
     }
 
     pub async fn export_init_config(&self) -> InitConfig {
+        let config = self.config.load();
         InitConfig {
-            config: self.config.file_config.clone(),
+            config: config.file_config.clone(),
             ifaces: self.store.iface_store().list().await.unwrap(),
             ipconfigs: self.store.iface_ip_service_store().list().await.unwrap(),
             nats: self.store.nat_service_store().list().await.unwrap(),
@@ -39,5 +51,95 @@ impl LandscapeConfigService {
             dns_redirects: self.store.dns_redirect_rule_store().list().await.unwrap(),
             dns_upstream_configs: self.store.dns_upstream_config_store().list().await.unwrap(),
         }
+    }
+
+    pub fn get_ui_config_from_memory(&self) -> LandscapeUIConfig {
+        self.config.load().ui.clone()
+    }
+
+    pub fn get_config_path(&self) -> std::path::PathBuf {
+        self.config.load().home_path.join(landscape_common::LAND_CONFIG)
+    }
+
+    pub async fn get_config_with_hash(&self) -> LdResult<(LandscapeConfig, String)> {
+        let path = self.get_config_path();
+
+        let content = if path.exists() { std::fs::read_to_string(&path)? } else { String::new() };
+
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+
+        let config: LandscapeConfig = if content.is_empty() {
+            LandscapeConfig::default()
+        } else {
+            toml::from_str(&content).map_err(|e| LdError::ConfigError(e.to_string()))?
+        };
+
+        Ok((config, hash))
+    }
+
+    pub async fn update_ui_config(
+        &self,
+        new_ui: LandscapeUIConfig,
+        expected_hash: String,
+    ) -> LdResult<()> {
+        let path = self.get_config_path();
+
+        let file = OpenOptions::new().read(true).write(true).create(true).open(&path)?;
+
+        file.lock_exclusive()?;
+
+        let result = {
+            let mut content = String::new();
+            let mut file_obj = &file;
+            file_obj.read_to_string(&mut content)?;
+
+            let mut hasher = Sha256::new();
+            hasher.update(content.as_bytes());
+            let current_hash = format!("{:x}", hasher.finalize());
+
+            if current_hash != expected_hash {
+                return Err(LdError::ConfigConflict);
+            }
+
+            let mut doc =
+                content.parse::<DocumentMut>().map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            let ui_value =
+                toml::to_string(&new_ui).map_err(|e| LdError::ConfigError(e.to_string()))?;
+            let ui_doc =
+                ui_value.parse::<DocumentMut>().map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            doc["ui"] = ui_doc.as_item().clone();
+
+            let new_content = doc.to_string();
+
+            let tmp_path = path.with_extension("toml.tmp");
+            let mut tmp_file =
+                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+
+            tmp_file.write_all(new_content.as_bytes())?;
+            tmp_file.sync_all()?;
+
+            std::fs::rename(&tmp_path, &path)?;
+
+            Ok::<(), LdError>(())
+        };
+
+        file.unlock()?;
+
+        if let Err(e) = result {
+            return Err(e);
+        }
+
+        self.config.rcu(|old| {
+            let mut new_config = (**old).clone();
+            new_config.ui = new_ui.clone();
+            new_config.file_config.ui = new_ui.clone();
+            new_config
+        });
+
+        Ok(())
     }
 }

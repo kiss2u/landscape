@@ -12,6 +12,9 @@ landscape-protobuf = { path = "../landscape-protobuf" }
 
 paste = { workspace = true }
 toml = { workspace = true }
+toml_edit = { workspace = true }
+fs2 = { workspace = true }
+sha2 = { workspace = true }
 # const_format = { workspace = true }
 # rusty_network_manager = "0.5.1"
 tokio-stream = "0.1.14"

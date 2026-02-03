@@ -31,6 +31,12 @@ pub enum LdError {
 
     #[error(transparent)]
     PtyError(#[from] PtyError),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
+    #[error("Configuration has been modified by others. Please refresh and try again.")]
+    ConfigConflict,
 }
 
 pub type LdResult<T> = Result<T, LdError>;
