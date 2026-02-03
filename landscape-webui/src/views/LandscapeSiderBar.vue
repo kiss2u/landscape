@@ -28,14 +28,17 @@ const route = useRoute();
 const router = useRouter();
 const ptyStore = usePtyStore();
 
-const menu_active_key = ref(
-  route.name && typeof route.name === "string" ? route.name : "",
-);
+const menu_active_key = ref<string>("");
 
-// const route_path = computed(() => route.name);
-// watch(route_path, (path) => {
-//   console.log(path);
-// });
+watch(
+  () => route.path,
+  (path) => {
+    // Remove the leading slash to match menu keys
+    const key = path.startsWith("/") ? path.substring(1) : path;
+    menu_active_key.value = key;
+  },
+  { immediate: true },
+);
 const collapsed = ref(true);
 
 function click_menu(key: string) {
@@ -140,7 +143,25 @@ const menuOptions: MenuOption[] = [
     children: [
       {
         label: "连接信息",
-        key: "metric/conn",
+        key: "connect-info",
+        children: [
+          {
+            label: "活跃连接",
+            key: "metric/conn/live",
+          },
+          {
+            label: "源IP统计",
+            key: "metric/conn/src",
+          },
+          {
+            label: "目的IP统计",
+            key: "metric/conn/dst",
+          },
+          {
+            label: "历史查询",
+            key: "metric/conn/history",
+          },
+        ],
       },
       {
         label: "DNS 指标",

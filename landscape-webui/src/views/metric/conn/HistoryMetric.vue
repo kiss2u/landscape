@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, watch } from "vue";
 import { ConnectFilter } from "@/lib/metric.rs";
-import { get_connect_history } from "@/api/metric";
+import { get_connect_history, get_connect_global_stats } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
-import { ConnectKey } from "landscape-types/common/metric/connect";
+import {
+  ConnectKey,
+  ConnectGlobalStats,
+} from "landscape-types/common/metric/connect";
 import { usePreferenceStore } from "@/stores/preference";
+import { Renew } from "@vicons/carbon";
+import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher.vue";
+
 const prefStore = usePreferenceStore();
 
 const themeVars = useThemeVars();
@@ -23,6 +29,26 @@ const sortKey = ref<"time" | "port" | "ingress" | "egress" | "duration">(
   "time",
 );
 const sortOrder = ref<"asc" | "desc">("desc");
+
+// 全局历史统计
+const globalStats = ref<ConnectGlobalStats | null>(null);
+const refreshingGlobalStats = ref(false);
+
+const refreshGlobalStats = async () => {
+  if (refreshingGlobalStats.value) return;
+  refreshingGlobalStats.value = true;
+  try {
+    const [stats] = await Promise.all([
+      get_connect_global_stats(),
+      new Promise((resolve) => setTimeout(resolve, 500)),
+    ]);
+    globalStats.value = stats;
+  } catch (e) {
+    console.error(e);
+  } finally {
+    refreshingGlobalStats.value = false;
+  }
+};
 
 // 图表展示状态
 const showChart = ref(false);
@@ -184,12 +210,61 @@ watch(
 );
 
 onMounted(() => {
+  refreshGlobalStats();
   fetchHistory();
 });
 </script>
 
 <template>
   <n-flex vertical style="flex: 1; overflow: hidden">
+    <!-- 历史全局统计面板 -->
+    <n-card
+      v-if="globalStats"
+      size="small"
+      :bordered="false"
+      style="margin-bottom: 12px; background-color: #f9f9f910"
+    >
+      <n-flex align="center" justify="space-between">
+        <ConnectViewSwitcher />
+
+        <n-flex align="center" size="large">
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">历史连接总数:</span>
+            <span style="font-weight: bold">{{
+              globalStats.total_connect_count
+            }}</span>
+          </n-flex>
+          <n-divider vertical />
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">累计总上传:</span>
+            <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
+              formatSize(globalStats.total_egress_bytes)
+            }}</span>
+          </n-flex>
+          <n-divider vertical />
+          <n-flex align="center" size="small">
+            <span style="color: #888; font-size: 13px">累计总下载:</span>
+            <span
+              :style="{ fontWeight: 'bold', color: themeVars.successColor }"
+              >{{ formatSize(globalStats.total_ingress_bytes) }}</span
+            >
+          </n-flex>
+
+          <n-button
+            quaternary
+            circle
+            size="tiny"
+            @click="refreshGlobalStats"
+            :loading="refreshingGlobalStats"
+          >
+            <template #icon>
+              <n-icon><Renew /></n-icon>
+            </template>
+          </n-button>
+        </n-flex>
+      </n-flex>
+    </n-card>
+
     <!-- 历史模式专用工具栏 -->
     <n-flex
       align="center"
