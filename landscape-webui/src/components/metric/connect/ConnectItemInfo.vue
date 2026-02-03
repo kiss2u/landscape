@@ -125,15 +125,11 @@ const emit = defineEmits(["show:chart"]);
             style="width: 800px; font-variant-numeric: tabular-nums"
           >
             {{
-              `${
-                frontEndStore.presentation_mode
-                  ? mask_string(conn.src_ip)
-                  : conn.src_ip
-              }:${conn.src_port} => ${
-                frontEndStore.presentation_mode
-                  ? mask_string(conn.dst_ip)
-                  : conn.dst_ip
-              }:${conn.dst_port}`
+              `${frontEndStore.MASK_INFO(conn.src_ip)}:${frontEndStore.MASK_PORT(
+                conn.src_port,
+              )} => ${frontEndStore.MASK_INFO(
+                conn.dst_ip,
+              )}:${frontEndStore.MASK_PORT(conn.dst_port)}`
             }}
           </n-flex>
 

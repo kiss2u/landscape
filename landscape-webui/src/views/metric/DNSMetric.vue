@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, h, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { DnsMetric, get_dns_history } from "@/api/metric";
 import { NDataTable, NTag, NTime, NButton, NSpace, NInput, NDatePicker, NIcon, NTooltip, NTabs, NTabPane, NSelect, NInputNumber } from "naive-ui";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import type { DataTableColumns } from 'naive-ui'
 import { Refresh, TrashOutline, HelpCircleOutline, TimeOutline } from "@vicons/ionicons5";
 import { useDebounceFn } from "@vueuse/core";
@@ -11,6 +12,7 @@ import DNSDashboard from "./DNSDashboard.vue";
 const activeTab = ref('dashboard');
 const dashboardRef = ref<any>(null);
 const { t } = useI18n();
+const frontEndStore = useFrontEndStore();
 
 const data = ref<DnsMetric[]>([]);
 const loading = ref(false);
@@ -109,7 +111,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     key: 'src_ip', 
     width: 140,
     render(row) {
-        return formatIp(String(row.src_ip))
+        return frontEndStore.MASK_INFO(formatIp(String(row.src_ip)))
     }
   },
   { 
@@ -163,7 +165,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
       },
       render(row) {
           if (!row.answers || row.answers.length === 0) return "-";
-          return row.answers.map(formatIp).join(", ");
+          return row.answers.map(ip => frontEndStore.MASK_INFO(formatIp(ip))).join(", ");
       }
   }
 ])

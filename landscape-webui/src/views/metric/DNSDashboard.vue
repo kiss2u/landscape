@@ -3,6 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useThemeVars, NScrollbar } from 'naive-ui';
 import { get_dns_summary, DnsSummaryResponse } from '@/api/metric/dns';
+import { useFrontEndStore } from '@/stores/front_end_config';
 import { NGrid, NGridItem, NCard, NStatistic, NProgress, NList, NListItem, NSpace, NText, NSkeleton, NEmpty, NNumberAnimation, NEllipsis, NFlex } from 'naive-ui';
 
 const props = defineProps<{
@@ -13,6 +14,7 @@ const summary = ref<DnsSummaryResponse | null>(null);
 const loading = ref(true);
 const { t } = useI18n();
 const themeVars = useThemeVars();
+const frontEndStore = useFrontEndStore();
 
 const loadSummary = async () => {
     loading.value = true;
@@ -198,10 +200,11 @@ defineExpose({ refresh: loadSummary });
                       <!-- Header row with domain and value -->
                       <n-flex justify="space-between" align="center" :wrap="false">
                         <n-ellipsis 
+                          tooltip
                           :class="['domain-text', list.type === 'blocked' ? 'danger' : '']" 
                           style="flex: 1; min-width: 0;"
                         >
-                          {{ item.name }}
+                          {{ list.type === 'client' ? frontEndStore.MASK_INFO(item.name) : item.name }}
                         </n-ellipsis>
                         <n-text v-if="list.type === 'latency'" type="warning" class="latency-text">
                           {{ formatDuration(item.value) }}

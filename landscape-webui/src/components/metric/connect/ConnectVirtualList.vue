@@ -4,6 +4,9 @@ import {
   ConnectKey,
   ConnectRealtimeStatus,
 } from "landscape-types/common/metric/connect";
+import { useFrontEndStore } from "@/stores/front_end_config";
+
+const frontEndStore = useFrontEndStore();
 
 interface Props {
   connect_metrics: ConnectRealtimeStatus[];
@@ -15,7 +18,7 @@ const show_chart_key = ref<ConnectKey | null>(null);
 const show_chart_title = ref("");
 async function show_chart_drawer(conn: ConnectRealtimeStatus) {
   show_chart_key.value = conn.key;
-  show_chart_title.value = `${conn.src_ip}:${conn.src_port} => ${conn.dst_ip}:${conn.dst_port}`;
+  show_chart_title.value = `${frontEndStore.MASK_INFO(conn.src_ip)}:${frontEndStore.MASK_PORT(conn.src_port)} => ${frontEndStore.MASK_INFO(conn.dst_ip)}:${frontEndStore.MASK_PORT(conn.dst_port)}`;
   show_chart.value = true;
 }
 </script>

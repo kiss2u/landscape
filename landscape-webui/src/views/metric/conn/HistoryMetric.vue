@@ -4,11 +4,13 @@ import { ConnectFilter } from "@/lib/metric.rs";
 import { get_connect_history } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
 import { ConnectKey } from "landscape-types/common/metric/connect";
 
 const themeVars = useThemeVars();
+const frontEndStore = useFrontEndStore();
 
 // 1. 声明所有基础响应式状态 (State)
 const historicalData = ref<any[]>([]);
@@ -32,7 +34,7 @@ const customTimeRange = ref<[number, number] | null>(null);
 
 const showChartDrawer = (history: any) => {
   showChartKey.value = history.key;
-  showChartTitle.value = `${history.src_ip}:${history.src_port} => ${history.dst_ip}:${history.dst_port}`;
+  showChartTitle.value = `${frontEndStore.MASK_INFO(history.src_ip)}:${frontEndStore.MASK_PORT(history.src_port)} => ${frontEndStore.MASK_INFO(history.dst_ip)}:${frontEndStore.MASK_PORT(history.dst_port)}`;
   showChart.value = true;
 };
 
