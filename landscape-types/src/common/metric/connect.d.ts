@@ -97,4 +97,14 @@ export type ConnectSortKey =
 
 export type ConnectStatusType = "unknow" | "active" | "disabled";
 
+export type IpAggregatedStats = {
+  ingress_bps: number;
+  egress_bps: number;
+  ingress_pps: number;
+  egress_pps: number;
+  active_conns: number;
+};
+
+export type IpRealtimeStat = { ip: string; stats: IpAggregatedStats };
+
 export type SortOrder = "asc" | "desc";

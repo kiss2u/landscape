@@ -7,9 +7,20 @@ import {
   ConnectHistoryStatus,
   ConnectGlobalStats,
   ConnectHistoryQueryParams,
+  IpRealtimeStat,
 } from "landscape-types/common/metric/connect";
 
 export * from "./dns";
+
+export async function get_src_ip_stats(): Promise<IpRealtimeStat[]> {
+  let data = await axiosService.get("metric/connects/src_ip_stats");
+  return data.data;
+}
+
+export async function get_dst_ip_stats(): Promise<IpRealtimeStat[]> {
+  let data = await axiosService.get("metric/connects/dst_ip_stats");
+  return data.data;
+}
 
 export async function get_connect_global_stats(): Promise<ConnectGlobalStats> {
   let data = await axiosService.get("metric/connects/global_stats");

@@ -1,23 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useMetricStore } from "@/stores/status_metric";
 import { formatRate, formatPackets, formatSize } from "@/lib/util";
 import { get_connect_global_stats } from "@/api/metric";
 import type { ConnectGlobalStats } from "landscape-types/common/metric/connect";
-import LiveMetric from "./conn/LiveMetric.vue";
-import HistoryMetric from "./conn/HistoryMetric.vue";
 import { useThemeVars } from "naive-ui";
 import { Renew } from "@vicons/carbon";
 import { usePreferenceStore } from "@/stores/preference";
-const prefStore = usePreferenceStore();
 
+const prefStore = usePreferenceStore();
 const metricStore = useMetricStore();
 const themeVars = useThemeVars();
+const route = useRoute();
+const router = useRouter();
 
-// 视图模式: live (实时) | history (历史)
-const viewMode = ref<"live" | "history" | any>("live");
+// 路由与视图模式映射
+const viewMode = computed({
+  get: () => {
+    const lastPart = route.path.split("/").pop();
+    return lastPart || "live";
+  },
+  set: (val) => {
+    router.push(`/metric/conn/${val}`);
+  },
+});
+
 const globalStats = ref<ConnectGlobalStats | null>(null);
-
 let timer: any = null;
 
 onMounted(async () => {
@@ -28,7 +37,8 @@ onMounted(async () => {
   refreshGlobalStats();
 
   timer = setInterval(async () => {
-    if (viewMode.value === "live") {
+    // 只有在实时相关的页面才自动刷新 store
+    if (["live", "src", "dst"].includes(viewMode.value)) {
       await metricStore.UPDATE_INFO();
     }
   }, 5000);
@@ -39,7 +49,7 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
-// 系统全局汇总 (未过滤实时指标，用于顶部 Header)
+// 系统全局汇总
 const systemStats = computed(() => {
   const stats = {
     ingressBps: 0,
@@ -68,7 +78,7 @@ async function refreshGlobalStats() {
   try {
     const [stats] = await Promise.all([
       get_connect_global_stats(),
-      new Promise((resolve) => setTimeout(resolve, 500)), // 至少显示 500ms loading
+      new Promise((resolve) => setTimeout(resolve, 500)),
     ]);
     globalStats.value = stats;
   } catch (e) {
@@ -85,12 +95,14 @@ async function refreshGlobalStats() {
     <n-flex align="center" justify="space-between" style="padding: 4px 0">
       <n-flex align="center" size="large" :wrap="true">
         <n-radio-group v-model:value="viewMode" size="medium" type="button">
-          <n-radio-button value="live">实时活跃连接</n-radio-button>
-          <n-radio-button value="history">历史连接查询</n-radio-button>
+          <n-radio-button value="live">活跃连接</n-radio-button>
+          <n-radio-button value="src">源IP统计</n-radio-button>
+          <n-radio-button value="dst">目的IP统计</n-radio-button>
+          <n-radio-button value="history">历史查询</n-radio-button>
         </n-radio-group>
 
         <n-tag
-          v-if="viewMode === 'live'"
+          v-if="['live', 'src', 'dst'].includes(viewMode)"
           :bordered="false"
           type="info"
           size="small"
@@ -104,33 +116,27 @@ async function refreshGlobalStats() {
 
         <n-divider vertical />
 
-        <!-- 动态面板：根据模式切换统计内容 -->
-        <n-flex align="center" size="large" v-if="viewMode === 'live'">
+        <!-- 动态面板 -->
+        <n-flex align="center" size="large" v-if="viewMode !== 'history'">
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">活跃连接:</span>
+            <span style="color: #888; font-size: 13px">总活跃连接:</span>
             <span style="font-weight: bold">{{ systemStats.count }}</span>
           </n-flex>
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">系统上行:</span>
+            <span style="color: #888; font-size: 13px">总上行:</span>
             <n-flex align="center" size="small" :wrap="false">
               <span
                 :style="{ fontWeight: 'bold', color: themeVars.infoColor }"
                 >{{ formatRate(systemStats.egressBps) }}</span
               >
-              <span style="font-size: 11px; color: #aaa" class="hide-on-small"
-                >({{ formatPackets(systemStats.egressPps) }})</span
-              >
             </n-flex>
           </n-flex>
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">系统下行:</span>
+            <span style="color: #888; font-size: 13px">总下行:</span>
             <n-flex align="center" size="small" :wrap="false">
               <span
                 :style="{ fontWeight: 'bold', color: themeVars.successColor }"
                 >{{ formatRate(systemStats.ingressBps) }}</span
-              >
-              <span style="font-size: 11px; color: #aaa" class="hide-on-small"
-                >({{ formatPackets(systemStats.ingressPps) }})</span
               >
             </n-flex>
           </n-flex>
@@ -156,37 +162,28 @@ async function refreshGlobalStats() {
               >{{ formatSize(globalStats.total_ingress_bytes) }}</span
             >
           </n-flex>
-          <n-flex align="center" size="small" :wrap="false">
-            <span style="color: #888; font-size: 13px">更新于:</span>
-            <n-time
-              :time="globalStats.last_calculate_time"
-              format="yyyy-MM-dd HH:mm"
-              style="color: #aaa"
-              :time-zone="prefStore.timezone"
-            />
-            <span style="font-size: 12px; color: #aaa; margin-left: 2px"
-              >(每 24h 更新)</span
-            >
-            <n-button
-              quaternary
-              circle
-              size="tiny"
-              @click="refreshGlobalStats"
-              :loading="refreshingStats"
-              style="margin-left: 4px"
-            >
-              <template #icon>
-                <n-icon><Renew /></n-icon>
-              </template>
-            </n-button>
-          </n-flex>
+          <n-button
+            quaternary
+            circle
+            size="tiny"
+            @click="refreshGlobalStats"
+            :loading="refreshingStats"
+            style="margin-left: 4px"
+          >
+            <template #icon>
+              <n-icon><Renew /></n-icon>
+            </template>
+          </n-button>
         </n-flex>
       </n-flex>
     </n-flex>
 
-    <!-- 子视图切换 -->
-    <LiveMetric v-if="viewMode === 'live'" />
-    <HistoryMetric v-else />
+    <!-- 子路由内容 -->
+    <router-view v-slot="{ Component }">
+      <keep-alive>
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
   </n-flex>
 </template>
 
@@ -213,25 +210,6 @@ async function refreshGlobalStats() {
   100% {
     transform: scale(0.95);
     box-shadow: 0 0 0 0 rgba(0, 210, 255, 0);
-  }
-}
-
-@media (max-width: 768px) {
-  .hide-on-small {
-    display: none;
-  }
-
-  /* 缩小统计文字 */
-  :deep(.n-flex) span {
-    font-size: 11px !important;
-  }
-
-  :deep(.n-flex) span[style*="font-size: 13px"] {
-    font-size: 11px !important;
-  }
-
-  :deep(.n-flex) span[style*="font-size: 11px"] {
-    font-size: 10px !important;
   }
 }
 </style>

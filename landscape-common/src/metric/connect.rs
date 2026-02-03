@@ -214,3 +214,24 @@ pub struct ConnectHistoryStatus {
 
     pub status: u8,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct IpAggregatedStats {
+    #[ts(type = "number")]
+    pub ingress_bps: u64,
+    #[ts(type = "number")]
+    pub egress_bps: u64,
+    #[ts(type = "number")]
+    pub ingress_pps: u64,
+    #[ts(type = "number")]
+    pub egress_pps: u64,
+    pub active_conns: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct IpRealtimeStat {
+    pub ip: IpAddr,
+    pub stats: IpAggregatedStats,
+}

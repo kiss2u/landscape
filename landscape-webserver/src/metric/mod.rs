@@ -5,7 +5,7 @@ use axum::{
 };
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectRealtimeStatus,
+    ConnectRealtimeStatus, IpRealtimeStat,
 };
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsSummaryResponse,
@@ -23,6 +23,8 @@ pub async fn get_metric_service_paths() -> Router<LandscapeApp> {
         .route("/connects/chart", post(get_connect_metric_info))
         .route("/connects/history", get(get_connect_history))
         .route("/connects/global_stats", get(get_connect_global_stats))
+        .route("/connects/src_ip_stats", get(get_src_ip_stats))
+        .route("/connects/dst_ip_stats", get(get_dst_ip_stats))
         .route("/dns/history", get(get_dns_history))
         .route("/dns/summary", get(get_dns_summary))
 }
@@ -72,5 +74,18 @@ pub async fn get_dns_summary(
     Query(params): Query<DnsHistoryQueryParams>,
 ) -> LandscapeApiResult<DnsSummaryResponse> {
     let data = state.metric_service.data.dns_metric.get_dns_summary(params).await;
+    LandscapeApiResp::success(data)
+}
+pub async fn get_src_ip_stats(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<IpRealtimeStat>> {
+    let data = state.metric_service.data.connect_metric.get_src_ip_stats().await;
+    LandscapeApiResp::success(data)
+}
+
+pub async fn get_dst_ip_stats(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<IpRealtimeStat>> {
+    let data = state.metric_service.data.connect_metric.get_dst_ip_stats().await;
     LandscapeApiResp::success(data)
 }
