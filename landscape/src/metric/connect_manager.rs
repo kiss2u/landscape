@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -14,106 +14,85 @@ use landscape_common::metric::connect::{
 use crate::metric::duckdb::DuckMetricStore;
 
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct ConnectMetricManager {
-    /// 存储所有连接事件：创建、销毁
-    active_connects: Arc<RwLock<HashSet<ConnectKey>>>,
-    /// 实时速率缓存: Key -> (上一次的指标, 当前算出的状态)
+    /// 实时速率缓存: Key -> 当前算出的状态
+    /// 我们只保留活跃的连接在内存中
     realtime_metrics: Arc<RwLock<HashMap<ConnectKey, ConnectRealtimeStatus>>>,
     msg_channel: mpsc::Sender<ConnectMessage>,
-    pub metric_store: DuckMetricStore,
-    pub global_stats: Arc<RwLock<ConnectGlobalStats>>,
+    metric_store: DuckMetricStore,
+    global_stats: Arc<RwLock<ConnectGlobalStats>>,
 }
 
-#[allow(unused_variables)]
 impl ConnectMetricManager {
     pub fn with_store(metric_store: DuckMetricStore) -> Self {
-        let active_connects = Arc::new(RwLock::new(HashSet::new()));
         let realtime_metrics = Arc::new(RwLock::new(HashMap::new()));
         let (msg_channel, mut message_rx) = mpsc::channel(1024);
 
         let metric_store_clone = metric_store.clone();
-        let realtime_metrics_clone_for_msg = realtime_metrics.clone();
-        let active_connects_clone_for_msg = active_connects.clone();
+        let realtime_metrics_clone = realtime_metrics.clone();
 
         tokio::spawn(async move {
             while let Some(msg) = message_rx.recv().await {
                 match msg {
                     ConnectMessage::Metric(metric) => {
-                        // 更新活跃连接状态
-                        {
-                            let mut active_set = active_connects_clone_for_msg.write().await;
-                            match metric.status {
-                                ConnectStatusType::Active => {
-                                    active_set.insert(metric.key.clone());
+                        // 1. 更新数据库 (异步发送到 DB 线程)
+                        metric_store_clone.insert_metric(metric.clone()).await;
+
+                        // 2. 更新内存中的活跃状态和实时速率
+                        let mut realtime_set = realtime_metrics_clone.write().await;
+
+                        if metric.status == ConnectStatusType::Disabled {
+                            realtime_set.remove(&metric.key);
+                        } else if metric.status == ConnectStatusType::Active {
+                            let key = metric.key.clone();
+                            let status = realtime_set.entry(key.clone()).or_insert_with(|| {
+                                ConnectRealtimeStatus {
+                                    key,
+                                    src_ip: metric.src_ip,
+                                    dst_ip: metric.dst_ip,
+                                    src_port: metric.src_port,
+                                    dst_port: metric.dst_port,
+                                    l4_proto: metric.l4_proto,
+                                    l3_proto: metric.l3_proto,
+                                    flow_id: metric.flow_id,
+                                    trace_id: metric.trace_id,
+                                    ingress_bps: 0,
+                                    egress_bps: 0,
+                                    ingress_pps: 0,
+                                    egress_pps: 0,
+                                    last_metric: None,
                                 }
-                                ConnectStatusType::Disabled => {
-                                    active_set.remove(&metric.key);
+                            });
+
+                            if let Some(old_metric) = &status.last_metric {
+                                let delta_time_ms =
+                                    metric.report_time.saturating_sub(old_metric.report_time);
+                                if delta_time_ms > 0 {
+                                    // 速率计算公式: (delta_bytes * 8位 / (ms/1000)) = delta_bytes * 8000 / ms
+                                    status.ingress_bps = (metric
+                                        .ingress_bytes
+                                        .saturating_sub(old_metric.ingress_bytes)
+                                        * 8000)
+                                        / delta_time_ms;
+                                    status.egress_bps = (metric
+                                        .egress_bytes
+                                        .saturating_sub(old_metric.egress_bytes)
+                                        * 8000)
+                                        / delta_time_ms;
+                                    status.ingress_pps = (metric
+                                        .ingress_packets
+                                        .saturating_sub(old_metric.ingress_packets)
+                                        * 1000)
+                                        / delta_time_ms;
+                                    status.egress_pps = (metric
+                                        .egress_packets
+                                        .saturating_sub(old_metric.egress_packets)
+                                        * 1000)
+                                        / delta_time_ms;
                                 }
-                                _ => {}
                             }
+                            status.last_metric = Some(metric);
                         }
-
-                        // 计算实时速率
-                        {
-                            let mut realtime_set = realtime_metrics_clone_for_msg.write().await;
-
-                            if metric.status == ConnectStatusType::Disabled {
-                                realtime_set.remove(&metric.key);
-                            } else {
-                                let key = metric.key.clone();
-
-                                let status = realtime_set.entry(key.clone()).or_insert(
-                                    ConnectRealtimeStatus {
-                                        key: key.clone(),
-                                        src_ip: metric.src_ip,
-                                        dst_ip: metric.dst_ip,
-                                        src_port: metric.src_port,
-                                        dst_port: metric.dst_port,
-                                        l4_proto: metric.l4_proto,
-                                        l3_proto: metric.l3_proto,
-                                        flow_id: metric.flow_id,
-                                        trace_id: metric.trace_id,
-                                        ingress_bps: 0,
-                                        egress_bps: 0,
-                                        ingress_pps: 0,
-                                        egress_pps: 0,
-                                        last_metric: None,
-                                    },
-                                );
-
-                                if let Some(old_metric) = &status.last_metric {
-                                    let delta_time_ms =
-                                        metric.report_time.saturating_sub(old_metric.report_time);
-                                    if delta_time_ms > 0 {
-                                        let delta_ingress_bytes = metric
-                                            .ingress_bytes
-                                            .saturating_sub(old_metric.ingress_bytes);
-                                        let delta_egress_bytes = metric
-                                            .egress_bytes
-                                            .saturating_sub(old_metric.egress_bytes);
-                                        let delta_ingress_pkts = metric
-                                            .ingress_packets
-                                            .saturating_sub(old_metric.ingress_packets);
-                                        let delta_egress_pkts = metric
-                                            .egress_packets
-                                            .saturating_sub(old_metric.egress_packets);
-
-                                        status.ingress_bps =
-                                            (delta_ingress_bytes * 8000) / delta_time_ms;
-                                        status.egress_bps =
-                                            (delta_egress_bytes * 8000) / delta_time_ms;
-                                        status.ingress_pps =
-                                            (delta_ingress_pkts * 1000) / delta_time_ms;
-                                        status.egress_pps =
-                                            (delta_egress_pkts * 1000) / delta_time_ms;
-                                    }
-                                }
-                                status.last_metric = Some(metric.clone());
-                            }
-                        }
-
-                        metric_store_clone.insert_metric(metric).await;
                     }
                 }
             }
@@ -138,7 +117,6 @@ impl ConnectMetricManager {
         }
 
         ConnectMetricManager {
-            active_connects,
             realtime_metrics,
             msg_channel,
             metric_store,
@@ -167,10 +145,9 @@ impl ConnectMetricManager {
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         let realtime_metrics = self.realtime_metrics.read().await;
-
         let mut result: Vec<ConnectRealtimeStatus> = realtime_metrics.values().cloned().collect();
-
-        result.sort_by(|a, b| a.key.create_time.cmp(&b.key.create_time));
+        // 按创建时间排序
+        result.sort_by_key(|r| r.key.create_time);
         result
     }
 
