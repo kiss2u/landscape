@@ -8,7 +8,7 @@ use landscape_common::{
 pub use landscape_common::dns::check::{
     CheckChainDnsResult, CheckDnsReq, CheckDnsResult, LandscapeRecord as CommonRecord,
 };
-use lru::LruCache;
+use moka::future::Cache;
 use std::{collections::HashSet, path::PathBuf, time::Instant};
 
 pub fn to_common_records(records: Vec<Record>) -> Vec<CommonRecord> {
@@ -32,6 +32,8 @@ pub mod listener;
 pub mod server;
 
 const DEFAULT_ENABLE_IP_VALIDATION: bool = false;
+pub const DEFAULT_DNS_CACHE_CAPACITY: u64 = 4096;
+pub const DEFAULT_DNS_CACHE_TTL: u64 = 24 * 60 * 60;
 
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
 static RESOLVER_CONF_LD_BACK: &'static str = "/etc/resolv.conf.ld_back";
@@ -114,4 +116,5 @@ impl CacheDNSItem {
     }
 }
 
-pub type DNSCache = LruCache<(String, RecordType), Vec<CacheDNSItem>>;
+// 移除 Clone trait，moka Cache 内部有 Arc
+pub type DNSCache = Cache<(String, RecordType), std::sync::Arc<Vec<CacheDNSItem>>>;

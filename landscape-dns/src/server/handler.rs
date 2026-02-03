@@ -1,8 +1,7 @@
 use std::{
     collections::{BTreeMap, HashSet},
-    num::NonZeroUsize,
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant},
     vec,
 };
 
@@ -15,8 +14,8 @@ use hickory_server::{
     authority::MessageResponseBuilder,
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
-use lru::LruCache;
-use tokio::sync::{mpsc, Mutex};
+use moka::future::Cache;
+use tokio::sync::mpsc;
 
 use crate::{
     server::rule::{RedirectSolution, ResolutionRule},
@@ -34,7 +33,7 @@ use landscape_common::{
 pub struct DnsRequestHandler {
     redirect_solution: Arc<ArcSwap<Vec<RedirectSolution>>>,
     resolves: Arc<ArcSwap<BTreeMap<u32, ResolutionRule>>>,
-    pub cache: Arc<Mutex<DNSCache>>,
+    pub cache: Arc<ArcSwap<DNSCache>>,
     pub flow_id: u32,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
 }
@@ -49,14 +48,17 @@ impl DnsRequestHandler {
         for rule in info.dns_rules.into_iter() {
             resolves.insert(rule.index, ResolutionRule::new(rule, flow_id));
         }
-        let cache = Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(2048).unwrap())));
+        let cache = Cache::builder()
+            .max_capacity(crate::DEFAULT_DNS_CACHE_CAPACITY)
+            .time_to_live(Duration::from_secs(crate::DEFAULT_DNS_CACHE_TTL))
+            .build();
 
         let redirect_solution =
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
 
         DnsRequestHandler {
             resolves: Arc::new(ArcSwap::from_pointee(resolves)),
-            cache,
+            cache: Arc::new(ArcSwap::from_pointee(cache)),
             flow_id,
             redirect_solution: Arc::new(ArcSwap::from_pointee(redirect_solution)),
             msg_tx,
@@ -66,94 +68,83 @@ impl DnsRequestHandler {
     pub async fn renew_rules(&mut self, info: ChainDnsServerInitInfo) {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
-            // println!("dns_rules: {:?}", rule);
             resolves.insert(rule.index, ResolutionRule::new(rule, self.flow_id));
         }
 
-        let mut cache = LruCache::new(NonZeroUsize::new(2048).unwrap());
+        let new_cache: DNSCache = Cache::builder()
+            .max_capacity(crate::DEFAULT_DNS_CACHE_CAPACITY)
+            .time_to_live(Duration::from_secs(crate::DEFAULT_DNS_CACHE_TTL))
+            .build();
 
-        if let Ok(old_cache) = self.cache.try_lock() {
-            let mut update_dns_mark_list: HashSet<FlowMarkInfo> = HashSet::new();
-            let mut del_dns_mark_list: HashSet<FlowMarkInfo> = HashSet::new();
+        let current_cache = self.cache.load();
+        
+        // 遍历旧 Cache，迁移并更新有效数据
+        let mut update_dns_mark_list: HashSet<FlowMarkInfo> = HashSet::new();
 
-            for ((domain, req_type), value) in old_cache.iter() {
-                'resolver: for (_index, resolver) in resolves.iter() {
-                    if resolver.is_match(&domain) {
-                        let new_mark = resolver.mark().clone();
-                        // println!("old domain match resolver: {domain:?}");
-                        let mut cache_items = vec![];
-                        // println!(
-                        //     "resolves: {:?}: match: {domain:?}, new_mark: {new_mark:?}",
-                        //     resolver.config
-                        // );
-                        for cache_item in value.iter() {
-                            // 新配置是 NoMark 的排除
-                            match (
-                                cache_item.mark.mark.need_insert_in_ebpf_map(),
-                                new_mark.mark.need_insert_in_ebpf_map(),
-                            ) {
-                                (true, true) => {
-                                    // 规则更新前后都需要写入 ebpf map
-                                    // 因为现在是创建新的 map 所以即使一样也需要更新
-                                    update_dns_mark_list
-                                        .extend(cache_item.get_update_rules_with_mark(&new_mark));
-                                }
-                                (true, false) => {
-                                    // 原先已经写入了
-                                    // 现在不需要了
-                                    del_dns_mark_list.extend(cache_item.get_update_rules());
-                                }
-                                (false, true) => {
-                                    // 原先没写入
-                                    // 目前需要缓存了
-                                    update_dns_mark_list
-                                        .extend(cache_item.get_update_rules_with_mark(&new_mark));
-                                }
-                                (false, false) => {
-                                    // 原先没缓存，现在也不需要存储的
-                                }
+        for (key, value) in current_cache.iter() {
+            let (domain, req_type) = &*key;
+            'resolver: for (_index, resolver) in resolves.iter() {
+                if resolver.is_match(&domain) {
+                    let new_mark = resolver.mark().clone();
+                    let mut cache_items = vec![];
+
+                    for cache_item in value.iter() {
+                        // 新配置是 NoMark 的排除
+                        match (
+                            cache_item.mark.mark.need_insert_in_ebpf_map(),
+                            new_mark.mark.need_insert_in_ebpf_map(),
+                        ) {
+                            (true, true) => {
+                                // 规则更新前后都需要写入 ebpf map
+                                // 因为现在是创建新的 map 所以即使一样也需要更新
+                                update_dns_mark_list
+                                    .extend(cache_item.get_update_rules_with_mark(&new_mark));
                             }
+                            (true, false) => {
+                                // 原先已经写入了
+                                // 现在不需要了, 由于 map 是重新创建的，所以这里不需要显式删除
+                                // 只需要不加入 new_map 即可
+                            }
+                            (false, true) => {
+                                // 原先没写入
+                                // 目前需要缓存了
+                                update_dns_mark_list
+                                    .extend(cache_item.get_update_rules_with_mark(&new_mark));
+                            }
+                            _ => {}
+                        }
 
-                            let mut new_record = cache_item.clone();
-                            new_record.mark = new_mark.clone();
-                            new_record.filter = resolver.filter_mode();
-                            new_record.min_ttl =
-                                if new_record.min_ttl < 5 { new_record.min_ttl } else { 5 };
-                            cache_items.push(new_record);
-                        }
-                        if !cache_items.is_empty() {
-                            cache.push((domain.clone(), req_type.clone()), cache_items);
-                        }
-                        break 'resolver;
+                        let mut new_record = cache_item.clone();
+                        new_record.mark = new_mark.clone();
+                        new_record.filter = resolver.filter_mode();
+                        new_record.min_ttl =
+                            if new_record.min_ttl < 5 { new_record.min_ttl } else { 5 };
+                        cache_items.push(new_record);
                     }
+                    if !cache_items.is_empty() {
+                        new_cache.insert((domain.clone(), req_type.clone()), Arc::new(cache_items)).await;
+                    }
+                    break 'resolver;
                 }
             }
-            tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
-
-            landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(
-                self.flow_id,
-                update_dns_mark_list.into_iter().collect(),
-            );
-            // landscape_ebpf::map_setting::flow_dns::del_flow_dns_mark_rules(
-            //     self.flow_id,
-            //     del_dns_mark_list.into_iter().collect(),
-            // );
         }
+        
+        tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
 
-        // for ((domain, req_type), value) in cache.iter() {
-        //     println!("domain: {:?},req_type: {:?},  value: {:?}", domain, req_type, value);
-        // }
+        landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(
+            self.flow_id,
+            update_dns_mark_list.into_iter().collect(),
+        );
 
+        // 先更新规则
         self.resolves.store(Arc::new(resolves));
-        {
-            let mut old_cache = self.cache.lock().await;
-            *old_cache = cache;
-        }
+        // 再替换 Cache
+        self.cache.store(Arc::new(new_cache));
 
         let redirect_solution =
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
         self.redirect_solution.store(Arc::new(redirect_solution));
-        // TODO: 应当只清理当前 Flow 的缓存
+        
         landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
     }
 
@@ -219,8 +210,8 @@ impl DnsRequestHandler {
         domain: &str,
         query_type: RecordType,
     ) -> Option<(Vec<Record>, FilterResult)> {
-        let mut cache = self.cache.lock().await;
-        if let Some(records) = cache.get(&(domain.to_string(), query_type)) {
+        let cache = self.cache.load();
+        if let Some(records) = cache.get(&(domain.to_string(), query_type)).await {
             let mut is_expire = false;
             let mut valid_records: Vec<Record> = vec![];
             let mut ret_fiter = FilterResult::Unfilter;
@@ -238,10 +229,11 @@ impl DnsRequestHandler {
                     d.set_ttl(min_ttl - insert_time_elapsed);
                     d
                 }));
-                // tracing::debug!("query {domain} , filter: {filter:?}, result: {valid_records:?}");
             }
 
             if is_expire {
+                // 如果发现过期，主动移除缓存（Lazy expiration）
+                cache.invalidate(&(domain.to_string(), query_type)).await;
                 return None;
             }
 
@@ -274,14 +266,10 @@ impl DnsRequestHandler {
         };
         let update_dns_mark_list = cache_item.get_update_rules();
 
-        let mut cache = self.cache.lock().await;
-        // tracing::info!("setting ip into cache: {:?}", cache_item);
-        let old_cache = cache.put((domain.to_string(), query_type), vec![cache_item]);
-        drop(cache);
-        if let Some(_) = old_cache {
-            // TODO 检查新旧变化, 看看是否移出旧的标识
-            // tracing::info!("setting ip into cache: {:?}", item);
-        }
+        let cache = self.cache.load();
+        // 使用 Vec 包装并放入 Arc
+        cache.insert((domain.to_string(), query_type), Arc::new(vec![cache_item])).await;
+
         // 将 mark 写入 mark ebpf map
         if mark.mark.need_insert_in_ebpf_map() {
             tracing::info!(
@@ -359,7 +347,7 @@ impl RequestHandler for DnsRequestHandler {
             records = redirect_records_inner;
         } else {
             if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
-                records = fiter_result(result, &filter);
+                records = filter_result(result, &filter);
                 status = DnsResultStatus::Hit;
             } else {
                 {
@@ -381,7 +369,7 @@ impl RequestHandler for DnsRequestHandler {
                                         .await;
                                     }
                                     status = DnsResultStatus::Normal;
-                                    fiter_result(rdata_vec, &resolver.filter_mode())
+                                    filter_result(rdata_vec, &resolver.filter_mode())
                                 }
                                 Err(error_code) => {
                                     status = if error_code == ResponseCode::NXDomain {
@@ -514,7 +502,7 @@ fn serve_failed() -> ResponseInfo {
     header.into()
 }
 
-fn fiter_result(un_filter_records: Vec<Record>, filter: &FilterResult) -> Vec<Record> {
+fn filter_result(un_filter_records: Vec<Record>, filter: &FilterResult) -> Vec<Record> {
     let mut valid_records = Vec::with_capacity(un_filter_records.len());
     for rdata in un_filter_records.into_iter() {
         if matches!(filter, FilterResult::Unfilter) {
