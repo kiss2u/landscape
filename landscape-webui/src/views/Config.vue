@@ -29,7 +29,7 @@ onMounted(async () => {
       dnsStore.loadDnsConfig(),
     ]);
   } catch (e) {
-    message.error("加载配置失败");
+    message.error(t("config.load_failed"));
     console.error(e);
   } finally {
     loading.value = false;
@@ -39,42 +39,46 @@ onMounted(async () => {
 
 <template>
   <div class="config-container">
-    <n-row gutter="48">
-      <n-col :span="18">
-        <n-space vertical size="large">
-          <UIConfigCard />
-          <DNSConfigCard />
-          <MetricConfigCard />
-          <BackupConfigCard />
-          <div style="height: 400px"></div>
-        </n-space>
-      </n-col>
-      <n-col :span="6">
-        <div class="anchor-wrapper">
-          <!-- 使用 n-anchor 自带的 affix 功能，并设置合适的顶部距离 -->
-          <n-anchor
-            affix
-            :top="60"
-            :offset-top="60"
-            :bound="24"
-            :ignore-gap="true"
-            listen-to=".main-body"
-            style="width: 200px"
-          >
-            <n-card
-              title="配置目录"
-              size="small"
-              :segmented="{ content: true }"
-            >
-              <n-anchor-link title="偏好设置" href="#ui-config" />
-              <n-anchor-link title="DNS 配置" href="#dns-config" />
-              <n-anchor-link title="指标配置" href="#metric-config" />
-              <n-anchor-link title="备份导出" href="#backup-config" />
-            </n-card>
-          </n-anchor>
-        </div>
-      </n-col>
-    </n-row>
+    <div class="main-content">
+      <n-space vertical size="large">
+        <UIConfigCard />
+        <DNSConfigCard />
+        <MetricConfigCard />
+        <BackupConfigCard />
+        <div style="height: 400px"></div>
+      </n-space>
+    </div>
+
+    <!-- 侧边目录容器 -->
+    <div class="side-nav hidden-mobile">
+      <n-anchor
+        affix
+        :top="70"
+        :offset-top="70"
+        :bound="24"
+        :ignore-gap="true"
+        listen-to=".main-body"
+        style="width: 200px"
+      >
+        <n-card
+          :title="t('config.directory')"
+          size="small"
+          :segmented="{ content: true }"
+          class="anchor-card"
+        >
+          <n-anchor-link :title="t('config.ui_title')" href="#ui-config" />
+          <n-anchor-link :title="t('config.dns_title')" href="#dns-config" />
+          <n-anchor-link
+            :title="t('config.metric_title')"
+            href="#metric-config"
+          />
+          <n-anchor-link
+            :title="t('config.backup_title')"
+            href="#backup-config"
+          />
+        </n-card>
+      </n-anchor>
+    </div>
   </div>
 </template>
 
@@ -82,19 +86,38 @@ onMounted(async () => {
 .config-container {
   padding: 24px;
   width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 48px;
 }
 
-.anchor-wrapper {
-  position: relative;
-  height: 100%;
+.main-content {
+  flex: 1;
+  min-width: 0; /* 防止内容撑破 flex 容器 */
+}
+
+.side-nav {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.anchor-card {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+}
+
+/* 响应式：在窄屏下隐藏目录，主内容自动占满 */
+@media (max-width: 992px) {
+  .hidden-mobile {
+    display: none;
+  }
+  .config-container {
+    gap: 0;
+  }
 }
 
 :deep(.n-anchor-link) {
   font-size: 14px;
-  padding: 8px 16px;
-}
-
-:deep(.n-card-header) {
-  padding: 12px 16px !important;
 }
 </style>

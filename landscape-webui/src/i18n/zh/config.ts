@@ -1,0 +1,42 @@
+export default {
+  directory: "配置目录",
+  ui_title: "系统偏好设置",
+  dns_title: "DNS 全局配置",
+  metric_title: "指标监控配置",
+  backup_title: "备份与导出",
+
+  save_ui: "保存设置",
+  save_dns: "保存 DNS 配置",
+  save_metric: "保存指标配置",
+
+  language: "语言设定",
+  theme: "外观主题",
+  theme_placeholder: "浅色模式适配中，暂不可用",
+  timezone: "系统时区",
+  timezone_placeholder: "请选择或搜索，例如: Asia/Shanghai",
+
+  cache_capacity: "缓存容量",
+  cache_capacity_desc: "DNS 缓存允许保存的最大记录数",
+  cache_ttl: "缓存 TTL (秒)",
+  cache_ttl_desc: "DNS 缓存记录的最长保存时间",
+
+  retention_days: "数据保存天数",
+  retention_days_desc: "历史连接和流量指标数据的保存期限（天）",
+  flush_interval: "刷新间隔 (秒)",
+  flush_interval_desc: "指标刷新到存储的间隔时间",
+  batch_size: "批处理大小",
+  batch_size_desc: "每次写入存储的最大记录数",
+  max_memory: "最大内存限制 (MB)",
+  max_memory_desc: "指标缓存允许占用的最大内存",
+  max_threads: "并发处理线程",
+  max_threads_desc: "用于处理指标数据的后台线程数",
+
+  backup_desc:
+    "你可以将当前路由器的所有配置（除 Docker 相关）导出为一个初始化文件，用于快速恢复或迁移。",
+  export_init: "导出当前所有配置为 Init 文件",
+
+  load_failed: "加载配置失败",
+  save_success: "保存成功",
+  save_failed: "保存失败",
+  conflict: "配置冲突，请刷新后重试",
+};

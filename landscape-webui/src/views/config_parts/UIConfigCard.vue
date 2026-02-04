@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { usePreferenceStore } from "@/stores/preference";
 import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 const prefStore = usePreferenceStore();
 const message = useMessage();
+const { t } = useI18n();
 
 const languageOptions = [
   { label: "简体中文", value: "zh-CN" },
@@ -25,46 +27,48 @@ const timezoneOptions = (Intl as any)
 async function handleSave() {
   try {
     await prefStore.savePreference();
-    message.success("系统设置保存成功");
+    message.success(t("config.save_success"));
   } catch (e: any) {
     if (e.response?.status === 409) {
-      message.error("配置冲突，请刷新后重试");
+      message.error(t("config.conflict"));
     } else {
-      message.error("保存失败: " + e.message);
+      message.error(t("config.save_failed") + ": " + e.message);
     }
   }
 }
 </script>
 
 <template>
-  <n-card title="系统偏好设置" segmented id="ui-config">
+  <n-card :title="t('config.ui_title')" segmented id="ui-config">
     <template #header-extra>
-      <n-button type="primary" @click="handleSave"> 保存设置 </n-button>
+      <n-button type="primary" @click="handleSave">
+        {{ t("config.save_ui") }}
+      </n-button>
     </template>
 
     <n-form label-placement="left" label-width="120">
-      <n-form-item label="语言设定">
+      <n-form-item :label="t('config.language')">
         <n-select
           v-model:value="prefStore.language"
           :options="languageOptions"
           style="max-width: 300px"
         />
       </n-form-item>
-      <n-form-item label="外观主题">
+      <n-form-item :label="t('config.theme')">
         <n-select
           v-model:value="prefStore.theme"
           :options="themeOptions"
           disabled
-          placeholder="浅色模式适配中，暂不可用"
+          :placeholder="t('config.theme_placeholder')"
           style="max-width: 300px"
         />
       </n-form-item>
-      <n-form-item label="系统时区">
+      <n-form-item :label="t('config.timezone')">
         <n-select
           v-model:value="prefStore.timezone"
           filterable
           :options="timezoneOptions"
-          placeholder="请选择或搜索，例如: Asia/Shanghai"
+          :placeholder="t('config.timezone_placeholder')"
           style="max-width: 400px"
         />
       </n-form-item>

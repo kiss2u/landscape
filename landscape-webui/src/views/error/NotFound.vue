@@ -12,11 +12,13 @@ const goHome = () => {
   <div class="not-found">
     <n-result
       status="404"
-      title="404 资源不存在"
-      description="您访问的路径可能已被移除，或从未存在过。"
+      :title="$t('error.not_found_title')"
+      :description="$t('error.not_found_desc')"
     >
       <template #footer>
-        <n-button type="primary" secondary @click="goHome"> 返回首页 </n-button>
+        <n-button type="primary" secondary @click="goHome">
+          {{ $t("error.back_home") }}
+        </n-button>
       </template>
     </n-result>
   </div>

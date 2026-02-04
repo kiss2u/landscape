@@ -1,33 +1,35 @@
 <script setup lang="ts">
 import { useMetricConfigStore } from "@/stores/metric_config";
 import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 const metricStore = useMetricConfigStore();
 const message = useMessage();
+const { t } = useI18n();
 
 async function handleSaveMetric() {
   try {
     await metricStore.saveMetricConfig();
-    message.success("指标配置保存成功");
+    message.success(t("config.save_success"));
   } catch (e: any) {
     if (e.response?.status === 409) {
-      message.error("指标配置冲突，请刷新后重试");
+      message.error(t("config.conflict"));
     } else {
-      message.error("保存失败: " + e.message);
+      message.error(t("config.save_failed") + ": " + e.message);
     }
   }
 }
 </script>
 
 <template>
-  <n-card title="指标监控配置" segmented id="metric-config">
+  <n-card :title="t('config.metric_title')" segmented id="metric-config">
     <template #header-extra>
       <n-button type="primary" @click="handleSaveMetric">
-        保存指标配置
+        {{ t("config.save_metric") }}
       </n-button>
     </template>
     <n-form label-placement="left" label-width="120">
-      <n-form-item label="数据保存天数">
+      <n-form-item :label="t('config.retention_days')">
         <n-input-number
           v-model:value="metricStore.retentionDays"
           :min="1"
@@ -35,9 +37,9 @@ async function handleSaveMetric() {
           placeholder="7"
           style="width: 200px"
         />
-        <template #feedback> 历史连接和流量指标数据的保存期限（天） </template>
+        <template #feedback> {{ t("config.retention_days_desc") }} </template>
       </n-form-item>
-      <n-form-item label="刷新间隔 (秒)">
+      <n-form-item :label="t('config.flush_interval')">
         <n-input-number
           v-model:value="metricStore.flushIntervalSecs"
           :min="1"
@@ -45,9 +47,9 @@ async function handleSaveMetric() {
           placeholder="5"
           style="width: 200px"
         />
-        <template #feedback> 指标刷新到存储的间隔时间 </template>
+        <template #feedback> {{ t("config.flush_interval_desc") }} </template>
       </n-form-item>
-      <n-form-item label="批处理大小">
+      <n-form-item :label="t('config.batch_size')">
         <n-input-number
           v-model:value="metricStore.batchSize"
           :min="100"
@@ -55,9 +57,9 @@ async function handleSaveMetric() {
           placeholder="2000"
           style="width: 200px"
         />
-        <template #feedback> 每次写入存储的最大记录数 </template>
+        <template #feedback> {{ t("config.batch_size_desc") }} </template>
       </n-form-item>
-      <n-form-item label="最大内存限制 (MB)">
+      <n-form-item :label="t('config.max_memory')">
         <n-input-number
           v-model:value="metricStore.maxMemory"
           :min="32"
@@ -65,9 +67,9 @@ async function handleSaveMetric() {
           placeholder="128"
           style="width: 200px"
         />
-        <template #feedback> 指标缓存允许占用的最大内存 </template>
+        <template #feedback> {{ t("config.max_memory_desc") }} </template>
       </n-form-item>
-      <n-form-item label="并发处理线程">
+      <n-form-item :label="t('config.max_threads')">
         <n-input-number
           v-model:value="metricStore.maxThreads"
           :min="1"
@@ -75,7 +77,7 @@ async function handleSaveMetric() {
           placeholder="1"
           style="width: 200px"
         />
-        <template #feedback> 用于处理指标数据的后台线程数 </template>
+        <template #feedback> {{ t("config.max_threads_desc") }} </template>
       </n-form-item>
     </n-form>
   </n-card>
