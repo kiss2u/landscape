@@ -23,7 +23,7 @@ use crate::{
     CacheDNSItem, CheckChainDnsResult, DNSCache,
 };
 use landscape_common::{
-    config::dns::FilterResult,
+    config::{dns::FilterResult, DnsRuntimeConfig},
     dns::ChainDnsServerInitInfo,
     event::DnsMetricMessage,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
@@ -42,6 +42,7 @@ pub struct DnsRequestHandler {
 impl DnsRequestHandler {
     pub fn new(
         info: ChainDnsServerInitInfo,
+        dns_config: DnsRuntimeConfig,
         flow_id: u32,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     ) -> DnsRequestHandler {
@@ -50,8 +51,8 @@ impl DnsRequestHandler {
             resolves.insert(rule.index, ResolutionRule::new(rule, flow_id));
         }
         let cache = Cache::builder()
-            .max_capacity(info.dns_config.cache_capacity as u64)
-            .time_to_live(Duration::from_secs(info.dns_config.cache_ttl as u64))
+            .max_capacity(dns_config.cache_capacity as u64)
+            .time_to_live(Duration::from_secs(dns_config.cache_ttl as u64))
             .build();
 
         let redirect_solution =
@@ -66,15 +67,15 @@ impl DnsRequestHandler {
         }
     }
 
-    pub async fn renew_rules(&mut self, info: ChainDnsServerInitInfo) {
+    pub async fn renew_rules(&mut self, info: ChainDnsServerInitInfo, dns_config: DnsRuntimeConfig) {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
             resolves.insert(rule.index, ResolutionRule::new(rule, self.flow_id));
         }
 
         let new_cache: DNSCache = Cache::builder()
-            .max_capacity(info.dns_config.cache_capacity as u64)
-            .time_to_live(Duration::from_secs(info.dns_config.cache_ttl as u64))
+            .max_capacity(dns_config.cache_capacity as u64)
+            .time_to_live(Duration::from_secs(dns_config.cache_ttl as u64))
             .build();
 
         // Migrate valid cache items to new cache and collect eBPF updates

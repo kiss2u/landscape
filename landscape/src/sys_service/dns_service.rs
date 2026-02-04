@@ -116,14 +116,13 @@ impl LandscapeDnsService {
             tracing::info!("load rule: {:?}ms", time.elapsed().as_millis());
 
             // convert init
-            let mut dns_rules = self
+            let dns_rules = self
                 .geo_site_service
                 .convert_to_chain_init_config(flow_dns_rules, dns_redirect_rules, upstream_configs)
                 .await;
-            dns_rules.dns_config = self.dns_config.clone();
-
+ 
             tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
-            self.dns_service.refresh_flow_server(flow_id, dns_rules).await;
+            self.dns_service.refresh_flow_server(flow_id, dns_rules, self.dns_config.clone()).await;
             tracing::info!(
                 "[flow_id: {flow_id}] init all DNS rule: {:?}ms",
                 time.elapsed().as_millis()
@@ -140,7 +139,7 @@ impl LandscapeDnsService {
                 let dns_redirect_rules =
                     self.dns_redirect_rule_service.list_flow_configs(flow_id).await;
 
-                let mut dns_rules = self
+                let dns_rules = self
                     .geo_site_service
                     .convert_to_chain_init_config(
                         flow_dns_rules,
@@ -148,9 +147,8 @@ impl LandscapeDnsService {
                         upstream_configs,
                     )
                     .await;
-                dns_rules.dns_config = self.dns_config.clone();
-
-                self.dns_service.refresh_flow_server(flow_id, dns_rules).await;
+ 
+                self.dns_service.refresh_flow_server(flow_id, dns_rules, self.dns_config.clone()).await;
             }
             tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
         }

@@ -6,7 +6,8 @@ use std::{
 
 use hickory_server::ServerFuture;
 use landscape_common::{
-    dns::ChainDnsServerInitInfo, event::DnsMetricMessage, service::DefaultWatchServiceStatus,
+    config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo, event::DnsMetricMessage,
+    service::DefaultWatchServiceStatus,
 };
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -43,16 +44,21 @@ impl LandscapeDnsServer {
         &self.status
     }
 
-    pub async fn refresh_flow_server(&self, flow_id: u32, info: ChainDnsServerInitInfo) {
+    pub async fn refresh_flow_server(
+        &self,
+        flow_id: u32,
+        info: ChainDnsServerInitInfo,
+        dns_config: DnsRuntimeConfig,
+    ) {
         {
             let mut lock = self.flow_dns_server.lock().await;
             if let Some((old_handler, _)) = lock.get_mut(&flow_id) {
-                old_handler.renew_rules(info).await;
+                old_handler.renew_rules(info, dns_config).await;
                 return;
             }
         }
 
-        let handler = DnsRequestHandler::new(info, flow_id, self.msg_tx.clone());
+        let handler = DnsRequestHandler::new(info, dns_config, flow_id, self.msg_tx.clone());
         let token = start_dns_server(flow_id, self.addr, handler.clone()).await;
 
         {
