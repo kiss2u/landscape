@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
 use landscape_common::{
-    config::dhcp_v6_client::IPV6PDServiceConfig,
+    dhcp::v6_client::config::IPV6PDServiceConfig,
     observer::IfaceObserverAction,
     service::{
         controller_service_v2::ControllerService, service_manager_v2::ServiceManager,

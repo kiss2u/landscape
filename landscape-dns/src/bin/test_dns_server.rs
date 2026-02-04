@@ -1,4 +1,7 @@
-use landscape_common::{config::dns::DNSRuntimeRule, dns::ChainDnsServerInitInfo};
+use landscape_common::{
+    config::{dns::DNSRuntimeRule, DnsRuntimeConfig},
+    dns::ChainDnsServerInitInfo,
+};
 use landscape_dns::server::LandscapeDnsServer;
 
 /// cargo run --package landscape-dns --bin test_dns_server
@@ -14,7 +17,7 @@ async fn main() -> std::io::Result<()> {
 
     let info = ChainDnsServerInitInfo { dns_rules: default_rule, redirect_rules: vec![] };
     println!("=============================================");
-    server.refresh_flow_server(0, info).await;
+    server.refresh_flow_server(0, info, DnsRuntimeConfig::default()).await;
 
     let _ = tokio::signal::ctrl_c().await;
 

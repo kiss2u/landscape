@@ -1,4 +1,3 @@
-pub mod dhcp_v6_client;
 pub mod dns;
 pub mod firewall;
 pub mod flow;
@@ -20,7 +19,7 @@ use std::{
 };
 
 use crate::dhcp::v4_server::config::DHCPv4ServiceConfig;
-use dhcp_v6_client::IPV6PDServiceConfig;
+use crate::dhcp::v6_client::config::IPV6PDServiceConfig;
 use dns::DNSRuleConfig;
 use firewall::FirewallServiceConfig;
 use flow::FlowWanServiceConfig;

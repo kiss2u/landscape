@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use landscape_common::{
-    config::dhcp_v6_client::IPV6PDServiceConfig, service::DefaultWatchServiceStatus,
+    dhcp::v6_client::config::IPV6PDServiceConfig, service::DefaultWatchServiceStatus,
 };
 use landscape_common::{ipv6_pd::LDIAPrefix, service::controller_service_v2::ControllerService};
 

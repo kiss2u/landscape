@@ -1,6 +1,6 @@
 use landscape_common::{
-    config::dhcp_v6_client::{IPV6PDConfig, IPV6PDServiceConfig},
     database::repository::UpdateActiveModel,
+    dhcp::v6_client::config::{IPV6PDConfig, IPV6PDServiceConfig},
     net::MacAddr,
 };
 use sea_orm::{entity::prelude::*, ActiveValue::Set};

@@ -1,6 +1,6 @@
 use landscape_common::{
-    dhcp::v4_server::config::DHCPv4ServiceConfig,
     database::{repository::Repository, LandscapeDBTrait, LandscapeServiceDBTrait},
+    dhcp::v4_server::config::DHCPv4ServiceConfig,
 };
 use sea_orm::DatabaseConnection;
 
