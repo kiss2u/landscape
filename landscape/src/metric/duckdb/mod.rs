@@ -1,6 +1,7 @@
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    MetricResolution,
 };
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse,
@@ -28,6 +29,9 @@ pub mod dns;
 
 use landscape_common::config::MetricRuntimeConfig;
 
+const MS_PER_HOUR: u64 = 3600 * 1000;
+const MS_PER_DAY: u64 = 24 * 3600 * 1000;
+
 /// Database operation messages
 pub enum DBMessage {
     // Write Operations
@@ -36,7 +40,10 @@ pub enum DBMessage {
 
     // Command Operations (Maintenance/Cleanup)
     CollectAndCleanupOldMetrics {
-        cutoff: u64,
+        cutoff_raw: u64,
+        cutoff_1h: u64,
+        cutoff_1d: u64,
+        cutoff_dns: u64,
         resp: oneshot::Sender<Box<Vec<ConnectMetric>>>,
     },
 
@@ -77,9 +84,11 @@ pub fn start_db_thread(
     dns::create_dns_table(&conn).unwrap();
 
     // 状态管理
-    let mut metrics_appender = conn.appender("metrics").unwrap();
+    let mut metrics_appender = conn.appender("conn_metrics").unwrap();
     let mut dns_appender = conn.appender("dns_metrics").unwrap();
     let mut summary_stmt = conn.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
+    let mut metrics_1h_stmt = conn.prepare(connect::METRICS_1H_INSERT_SQL).unwrap();
+    let mut metrics_1d_stmt = conn.prepare(connect::METRICS_1D_INSERT_SQL).unwrap();
 
     let mut batch_count = 0;
     let flush_interval =
@@ -108,6 +117,38 @@ pub fn start_db_thread(
                                 key.create_time as i64,
                                 key.cpu_id as i64,
                                 metric.report_time as i64,
+                                metric.ingress_bytes as i64,
+                                metric.ingress_packets as i64,
+                                metric.egress_bytes as i64,
+                                metric.egress_packets as i64,
+                                {
+                                    let v: u8 = metric.status.clone().into();
+                                    v as i64
+                                },
+                            ]);
+
+                            // Insert into Hourly Table (Truncate to hour)
+                            let hour_ts = (metric.report_time / MS_PER_HOUR) * MS_PER_HOUR;
+                            let _ = metrics_1h_stmt.execute(params![
+                                key.create_time as i64,
+                                key.cpu_id as i64,
+                                hour_ts as i64,
+                                metric.ingress_bytes as i64,
+                                metric.ingress_packets as i64,
+                                metric.egress_bytes as i64,
+                                metric.egress_packets as i64,
+                                {
+                                    let v: u8 = metric.status.clone().into();
+                                    v as i64
+                                },
+                            ]);
+
+                            // Insert into Daily Table (Truncate to day)
+                            let day_ts = (metric.report_time / MS_PER_DAY) * MS_PER_DAY;
+                            let _ = metrics_1d_stmt.execute(params![
+                                key.create_time as i64,
+                                key.cpu_id as i64,
+                                day_ts as i64,
                                 metric.ingress_bytes as i64,
                                 metric.ingress_packets as i64,
                                 metric.egress_bytes as i64,
@@ -149,13 +190,22 @@ pub fn start_db_thread(
                         }
 
                         // --- 管理类操作 ---
-                        DBMessage::CollectAndCleanupOldMetrics { cutoff, resp } => {
+                        DBMessage::CollectAndCleanupOldMetrics {
+                            cutoff_raw,
+                            cutoff_1h,
+                            cutoff_1d,
+                            cutoff_dns,
+                            resp,
+                        } => {
                             let _ = metrics_appender.flush();
                             let _ = dns_appender.flush();
                             batch_count = 0;
                             last_flush = std::time::Instant::now();
-                            let result = connect::collect_and_cleanup_old_metrics(&conn, cutoff);
-                            dns::cleanup_old_dns_metrics(&conn, cutoff);
+                            let result = connect::collect_and_cleanup_old_metrics(
+                                &conn, cutoff_raw, cutoff_1h, cutoff_1d,
+                            );
+
+                            dns::cleanup_old_dns_metrics(&conn, cutoff_dns);
                             let _ = resp.send(result);
                         }
                     }
@@ -179,10 +229,17 @@ pub fn start_db_thread(
             }
 
             if last_cleanup.elapsed() > cleanup_interval {
-                let retention_days = metric_config.retention_days.max(1);
-                let cutoff = landscape_common::utils::time::get_current_time_ms()
-                    .unwrap_or_default()
-                    .saturating_sub(retention_days as u64 * 24 * 3600 * 1000);
+                let now_ms =
+                    landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+
+                let cutoff_raw =
+                    now_ms.saturating_sub(metric_config.conn_retention_days * MS_PER_DAY);
+                let cutoff_1h =
+                    now_ms.saturating_sub(metric_config.conn_retention_hour_days * MS_PER_DAY);
+                let cutoff_1d =
+                    now_ms.saturating_sub(metric_config.conn_retention_day_days * MS_PER_DAY);
+                let cutoff_dns =
+                    now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
 
                 let _ = metrics_appender.flush();
                 let _ = dns_appender.flush();
@@ -190,9 +247,17 @@ pub fn start_db_thread(
                 last_flush = std::time::Instant::now();
                 last_cleanup = std::time::Instant::now();
 
-                let _ = connect::collect_and_cleanup_old_metrics(&conn, cutoff);
-                dns::cleanup_old_dns_metrics(&conn, cutoff);
-                tracing::info!("Auto cleanup old metrics, cutoff: {}", cutoff);
+                let _ = connect::collect_and_cleanup_old_metrics(
+                    &conn, cutoff_raw, cutoff_1h, cutoff_1d,
+                );
+                dns::cleanup_old_dns_metrics(&conn, cutoff_dns);
+                tracing::info!(
+                    "Auto cleanup metrics, raw: {}, 1h: {}, 1d: {}, dns: {}",
+                    cutoff_raw,
+                    cutoff_1h,
+                    cutoff_1d,
+                    cutoff_dns
+                );
             }
         }
     });
@@ -223,9 +288,13 @@ impl DuckMetricStore {
         let _ = self.tx.send(DBMessage::InsertMetric(metric)).await;
     }
 
-    pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
+    pub async fn query_metric_by_key(
+        &self,
+        key: ConnectKey,
+        resolution: MetricResolution,
+    ) -> Vec<ConnectMetric> {
         let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::ByKey(key);
+        let q = connect::ConnectQuery::ByKey(key, resolution);
         if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
             return Vec::new();
         }
@@ -247,9 +316,26 @@ impl DuckMetricStore {
         }
     }
 
-    pub async fn collect_and_cleanup_old_metrics(&self, cutoff: u64) -> Box<Vec<ConnectMetric>> {
+    pub async fn collect_and_cleanup_old_metrics(
+        &self,
+        cutoff_raw: u64,
+        cutoff_1h: u64,
+        cutoff_1d: u64,
+    ) -> Box<Vec<ConnectMetric>> {
         let (resp, rx) = oneshot::channel();
-        let _ = self.tx.send(DBMessage::CollectAndCleanupOldMetrics { cutoff, resp }).await;
+        let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+        let cutoff_dns = now_ms.saturating_sub(self.config.dns_retention_days * MS_PER_DAY);
+
+        let _ = self
+            .tx
+            .send(DBMessage::CollectAndCleanupOldMetrics {
+                cutoff_raw,
+                cutoff_1h,
+                cutoff_1d,
+                cutoff_dns,
+                resp,
+            })
+            .await;
         rx.await.unwrap()
     }
 

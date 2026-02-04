@@ -64,16 +64,23 @@ pub const NAMESPACE_REGISTER_SOCK: &str = "register.sock";
 pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 /// web resource
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
-/// metric
+// --- Metric Settings ---
 pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
-pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 1;
+pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 2;
 
-pub const DEFAULT_METRIC_RETENTION_DAYS: u64 = 7;
+// Metric Retention Defaults (Days)
+pub const DEFAULT_CONN_METRIC_RETENTION_DAYS: u64 = 7;
+pub const DEFAULT_CONN_METRIC_RETENTION_DAYS_1H: u64 = 30;
+pub const DEFAULT_CONN_METRIC_RETENTION_DAYS_1D: u64 = 180;
+pub const DEFAULT_DNS_METRIC_RETENTION_DAYS: u64 = 7;
+
+// Metric Performance & Storage Defaults
 pub const DEFAULT_METRIC_BATCH_SIZE: usize = 2000;
 pub const DEFAULT_METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
 pub const DEFAULT_METRIC_MAX_MEMORY: usize = 128;
 pub const DEFAULT_METRIC_MAX_THREADS: usize = 1;
 
+// --- DNS Settings ---
 pub const DEFAULT_DNS_CACHE_CAPACITY: u32 = 4096;
 pub const DEFAULT_DNS_CACHE_TTL: u32 = 24 * 60 * 60;
 

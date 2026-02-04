@@ -9,12 +9,14 @@ use tokio::sync::{mpsc, RwLock};
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectRealtimeStatus, ConnectStatusType, IpAggregatedStats, IpRealtimeStat,
+    ConnectRealtimeStatus, ConnectStatusType, IpAggregatedStats, IpRealtimeStat, MetricResolution,
 };
 
 use crate::metric::duckdb::DuckMetricStore;
 
 const MAX_REPORT_INTERVAL_MS: u64 = 5000;
+const HOUR_RESOLUTION_THRESHOLD_MS: u64 = 30 * 24 * 3600 * 1000;
+const DAY_RESOLUTION_THRESHOLD_MS: u64 = 180 * 24 * 3600 * 1000;
 
 #[derive(Clone)]
 pub struct ConnectMetricManager {
@@ -262,7 +264,26 @@ impl ConnectMetricManager {
     }
 
     pub async fn query_metric_by_key(&self, key: ConnectKey) -> Vec<ConnectMetric> {
-        self.metric_store.query_metric_by_key(key).await
+        let now = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+        let age_ms = now.saturating_sub(key.create_time);
+
+        let resolution = if age_ms > DAY_RESOLUTION_THRESHOLD_MS {
+            MetricResolution::Day
+        } else if age_ms > HOUR_RESOLUTION_THRESHOLD_MS {
+            MetricResolution::Hour
+        } else {
+            MetricResolution::Second
+        };
+
+        self.metric_store.query_metric_by_key(key, resolution).await
+    }
+
+    pub async fn query_metric_by_key_with_resolution(
+        &self,
+        key: ConnectKey,
+        resolution: MetricResolution,
+    ) -> Vec<ConnectMetric> {
+        self.metric_store.query_metric_by_key(key, resolution).await
     }
 
     pub async fn history_summaries_complex(

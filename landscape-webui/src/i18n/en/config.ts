@@ -20,9 +20,19 @@ export default {
   cache_ttl: "Cache TTL (s)",
   cache_ttl_desc: "Maximum retention time for DNS cache records",
 
-  retention_days: "Retention Days",
-  retention_days_desc:
-    "Retention period for historical connection and traffic metrics (days)",
+  conn_retention_days: "Conn Retention (Raw)",
+  conn_retention_days_desc:
+    "Retention period for raw connection metrics (5s interval) in days",
+  conn_retention_hour_days: "Conn Retention (Hour)",
+  conn_retention_hour_days_desc:
+    "Retention period for hourly aggregated connection metrics in days",
+  conn_retention_day_days: "Conn Retention (Day)",
+  conn_retention_day_days_desc:
+    "Retention period for daily aggregated connection metrics in days",
+  dns_retention_days: "DNS Retention (Days)",
+  dns_retention_days_desc:
+    "Retention period for DNS query logs and metrics in days",
+  performance_settings: "Performance Settings",
   flush_interval: "Flush Interval (s)",
   flush_interval_desc: "Interval for flushing metrics to storage",
   batch_size: "Batch Size",

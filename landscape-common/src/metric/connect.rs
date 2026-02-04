@@ -22,6 +22,23 @@ pub enum ConnectStatusType {
     Disabled,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub enum MetricResolution {
+    #[serde(rename = "second")]
+    Second,
+    #[serde(rename = "hour")]
+    Hour,
+    #[serde(rename = "day")]
+    Day,
+}
+
+impl Default for MetricResolution {
+    fn default() -> Self {
+        MetricResolution::Second
+    }
+}
+
 impl From<u8> for ConnectStatusType {
     fn from(value: u8) -> Self {
         match value {
@@ -234,4 +251,12 @@ pub struct IpAggregatedStats {
 pub struct IpRealtimeStat {
     pub ip: IpAddr,
     pub stats: IpAggregatedStats,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct MetricChartRequest {
+    pub key: ConnectKey,
+    #[ts(optional)]
+    pub resolution: Option<MetricResolution>,
 }

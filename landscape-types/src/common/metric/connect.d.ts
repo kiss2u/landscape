@@ -107,4 +107,11 @@ export type IpAggregatedStats = {
 
 export type IpRealtimeStat = { ip: string; stats: IpAggregatedStats };
 
+export type MetricChartRequest = {
+  key: ConnectKey;
+  resolution?: MetricResolution;
+};
+
+export type MetricResolution = "second" | "hour" | "day";
+
 export type SortOrder = "asc" | "desc";

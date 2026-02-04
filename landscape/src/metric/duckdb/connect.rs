@@ -2,11 +2,11 @@ use duckdb::Statement;
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectSortKey, SortOrder,
+    ConnectSortKey, MetricResolution, SortOrder,
 };
 
 pub enum ConnectQuery {
-    ByKey(ConnectKey),
+    ByKey(ConnectKey, MetricResolution),
     ActiveKeys,
     HistorySummaries(ConnectHistoryQueryParams),
     GlobalStats,
@@ -21,7 +21,9 @@ pub enum ConnectQueryResult {
 
 pub fn handle_query(conn: &Connection, query: ConnectQuery) -> ConnectQueryResult {
     match query {
-        ConnectQuery::ByKey(ref key) => ConnectQueryResult::Metrics(query_metric_by_key(conn, key)),
+        ConnectQuery::ByKey(ref key, resolution) => {
+            ConnectQueryResult::Metrics(query_metric_by_key(conn, key, resolution))
+        }
         ConnectQuery::ActiveKeys => ConnectQueryResult::Keys(current_active_connect_keys(conn)),
         ConnectQuery::HistorySummaries(params) => {
             ConnectQueryResult::HistoryStatuses(query_historical_summaries_complex(conn, params))
@@ -31,10 +33,24 @@ pub fn handle_query(conn: &Connection, query: ConnectQuery) -> ConnectQueryResul
 }
 
 pub const SUMMARY_INSERT_SQL: &str = "
-    INSERT OR REPLACE INTO connect_summaries (
+    INSERT OR REPLACE INTO conn_summaries (
         create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,
         last_report_time, total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, status
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+";
+
+pub const METRICS_1H_INSERT_SQL: &str = "
+    INSERT OR REPLACE INTO conn_metrics_1h (
+        create_time, cpu_id, report_time, 
+        ingress_bytes, ingress_packets, egress_bytes, egress_packets, status
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+";
+
+pub const METRICS_1D_INSERT_SQL: &str = "
+    INSERT OR REPLACE INTO conn_metrics_1d (
+        create_time, cpu_id, report_time, 
+        ingress_bytes, ingress_packets, egress_bytes, egress_packets, status
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
 ";
 
 pub fn update_summary_by_metric(
@@ -66,7 +82,7 @@ pub fn update_summary_by_metric(
 
 pub fn create_summaries_table(conn: &Connection) {
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS connect_summaries (
+        "CREATE TABLE IF NOT EXISTS conn_summaries (
             create_time UBIGINT,
             cpu_id INTEGER,
             src_ip VARCHAR,
@@ -93,7 +109,7 @@ pub fn create_summaries_table(conn: &Connection) {
 pub fn create_metrics_table(conn: &Connection) -> duckdb::Result<()> {
     conn.execute_batch(
         "
-        CREATE TABLE IF NOT EXISTS metrics (
+        CREATE TABLE IF NOT EXISTS conn_metrics (
             create_time UBIGINT,
             cpu_id INTEGER,
             report_time BIGINT,
@@ -103,12 +119,47 @@ pub fn create_metrics_table(conn: &Connection) -> duckdb::Result<()> {
             egress_packets BIGINT,
             status INTEGER
         );
+
+        CREATE TABLE IF NOT EXISTS conn_metrics_1h (
+            create_time UBIGINT,
+            cpu_id INTEGER,
+            report_time BIGINT,
+            ingress_bytes BIGINT,
+            ingress_packets BIGINT,
+            egress_bytes BIGINT,
+            egress_packets BIGINT,
+            status INTEGER,
+            PRIMARY KEY (create_time, cpu_id, report_time)
+        );
+
+        CREATE TABLE IF NOT EXISTS conn_metrics_1d (
+            create_time UBIGINT,
+            cpu_id INTEGER,
+            report_time BIGINT,
+            ingress_bytes BIGINT,
+            ingress_packets BIGINT,
+            egress_bytes BIGINT,
+            egress_packets BIGINT,
+            status INTEGER,
+            PRIMARY KEY (create_time, cpu_id, report_time)
+        );
         ",
     )
 }
 
-pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMetric> {
-    let stmt = "
+pub fn query_metric_by_key(
+    conn: &Connection,
+    key: &ConnectKey,
+    resolution: MetricResolution,
+) -> Vec<ConnectMetric> {
+    let table = match resolution {
+        MetricResolution::Second => "conn_metrics",
+        MetricResolution::Hour => "conn_metrics_1h",
+        MetricResolution::Day => "conn_metrics_1d",
+    };
+
+    let stmt_str = format!(
+        "
         SELECT 
             m.report_time,
             m.ingress_bytes,
@@ -124,13 +175,15 @@ pub fn query_metric_by_key(conn: &Connection, key: &ConnectKey) -> Vec<ConnectMe
             s.l3_proto,
             s.flow_id,
             s.trace_id
-        FROM metrics m
-        JOIN connect_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
+        FROM {} m
+        JOIN conn_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
         WHERE m.create_time = ?1 AND m.cpu_id = ?2
         ORDER BY m.report_time
-    ";
+    ",
+        table
+    );
 
-    let mut stmt = conn.prepare(stmt).unwrap();
+    let mut stmt = conn.prepare(&stmt_str).unwrap();
 
     let rows = stmt
         .query_map(params![key.create_time as i64, key.cpu_id as i64,], |row| {
@@ -223,7 +276,7 @@ pub fn query_historical_summaries_complex(
         SELECT 
             create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,
             total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, last_report_time, status
-        FROM connect_summaries
+        FROM conn_summaries
         {}
         ORDER BY {} {}
         {}
@@ -273,7 +326,7 @@ pub fn query_historical_summaries_complex(
 pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
     let stmt = "
         SELECT create_time, cpu_id
-        FROM connect_summaries
+        FROM conn_summaries
         WHERE status = 1
     ";
 
@@ -309,7 +362,7 @@ pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
             SUM(total_ingress_pkts), 
             SUM(total_egress_pkts), 
             COUNT(*) 
-        FROM connect_summaries
+        FROM conn_summaries
     ";
 
     let mut stmt = match conn.prepare(stmt) {
@@ -334,21 +387,26 @@ pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
     res.unwrap_or_default()
 }
 
-pub fn collect_and_cleanup_old_metrics(conn: &Connection, cutoff: u64) -> Box<Vec<ConnectMetric>> {
+pub fn collect_and_cleanup_old_metrics(
+    conn: &Connection,
+    cutoff_raw: u64,
+    cutoff_1h: u64,
+    cutoff_1d: u64,
+) -> Box<Vec<ConnectMetric>> {
     // Fetch expired metric records
     let stmt = "
         SELECT 
             s.create_time, s.cpu_id, s.src_ip, s.dst_ip, s.src_port, s.dst_port, s.l4_proto, s.l3_proto, s.flow_id, s.trace_id,
             m.report_time, m.ingress_bytes, m.ingress_packets, m.egress_bytes, m.egress_packets, m.status
-        FROM metrics m
-        JOIN connect_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
+        FROM conn_metrics m
+        JOIN conn_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
         WHERE m.report_time < ?1
     ";
 
     let mut stmt = conn.prepare(stmt).unwrap();
 
     let metrics = stmt
-        .query_map([cutoff as i64], |row| {
+        .query_map([cutoff_raw as i64], |row| {
             let key = ConnectKey {
                 create_time: row.get::<_, i64>(0)? as u64,
                 cpu_id: row.get::<_, i64>(1)? as u32,
@@ -377,11 +435,19 @@ pub fn collect_and_cleanup_old_metrics(conn: &Connection, cutoff: u64) -> Box<Ve
         .collect::<Vec<_>>();
 
     // Delete expired metric records
-    let deleted_metrics =
-        conn.execute("DELETE FROM metrics WHERE report_time < ?1", params![cutoff as i64]).unwrap();
+    let deleted_metrics = conn
+        .execute("DELETE FROM conn_metrics WHERE report_time < ?1", params![cutoff_raw as i64])
+        .unwrap();
+
+    let _ = conn
+        .execute("DELETE FROM conn_metrics_1h WHERE report_time < ?1", params![cutoff_1h as i64])
+        .unwrap();
+    let _ = conn
+        .execute("DELETE FROM conn_metrics_1d WHERE report_time < ?1", params![cutoff_1d as i64])
+        .unwrap();
 
     let size = conn
-        .prepare("SELECT COUNT(*) FROM metrics")
+        .prepare("SELECT COUNT(*) FROM conn_metrics")
         .unwrap()
         .query_row([], |row| row.get::<_, usize>(0))
         .unwrap();
@@ -393,8 +459,8 @@ pub fn collect_and_cleanup_old_metrics(conn: &Connection, cutoff: u64) -> Box<Ve
 
     let deleted_summaries = conn
         .execute(
-            "DELETE FROM connect_summaries WHERE last_report_time < ?1",
-            params![cutoff as i64],
+            "DELETE FROM conn_summaries WHERE last_report_time < ?1",
+            params![cutoff_1d as i64],
         )
         .unwrap_or(0);
     tracing::info!(

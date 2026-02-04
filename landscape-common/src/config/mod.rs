@@ -163,7 +163,17 @@ pub struct LandscapeStoreConfig {
 pub struct LandscapeMetricConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub retention_days: Option<u64>,
+    pub conn_retention_days: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub conn_retention_hour_days: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub conn_retention_day_days: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub dns_retention_days: Option<u64>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub batch_size: Option<usize>,
@@ -362,10 +372,22 @@ impl RuntimeConfig {
         };
 
         let metric = MetricRuntimeConfig {
-            retention_days: config
+            conn_retention_days: config
                 .metric
-                .retention_days
-                .unwrap_or(crate::DEFAULT_METRIC_RETENTION_DAYS),
+                .conn_retention_days
+                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_DAYS),
+            conn_retention_hour_days: config
+                .metric
+                .conn_retention_hour_days
+                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_DAYS_1H),
+            conn_retention_day_days: config
+                .metric
+                .conn_retention_day_days
+                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_DAYS_1D),
+            dns_retention_days: config
+                .metric
+                .dns_retention_days
+                .unwrap_or(crate::DEFAULT_DNS_METRIC_RETENTION_DAYS),
             batch_size: config.metric.batch_size.unwrap_or(crate::DEFAULT_METRIC_BATCH_SIZE),
             flush_interval_secs: config
                 .metric
@@ -425,8 +447,11 @@ impl RuntimeConfig {
          [Store]\n\
          Database Connect: {}\n\
          \n\
-         [Metric]\n\
-         Retention Days: {} days\n\
+          [Metric]\n\
+         Retention Days (Raw): {} days\n\
+         Retention Days (1h): {} days\n\
+         Retention Days (1d): {} days\n\
+         Retention Days (DNS): {} days\n\
          Batch Size: {}\n\
          Flush Interval: {}s\n\
          Max Memory: {}MB\n\
@@ -442,7 +467,10 @@ impl RuntimeConfig {
             address_http_str,
             address_https_str,
             self.store.database_path,
-            self.metric.retention_days,
+            self.metric.conn_retention_days,
+            self.metric.conn_retention_hour_days,
+            self.metric.conn_retention_day_days,
+            self.metric.dns_retention_days,
             self.metric.batch_size,
             self.metric.flush_interval_secs,
             self.metric.max_memory,
@@ -490,7 +518,10 @@ pub struct StoreRuntimeConfig {
 
 #[derive(Clone, Debug)]
 pub struct MetricRuntimeConfig {
-    pub retention_days: u64,
+    pub conn_retention_days: u64,
+    pub conn_retention_hour_days: u64,
+    pub conn_retention_day_days: u64,
+    pub dns_retention_days: u64,
     pub batch_size: usize,
     pub flush_interval_secs: u64,
     pub max_memory: usize,
@@ -505,8 +536,17 @@ pub struct DnsRuntimeConfig {
 
 impl MetricRuntimeConfig {
     pub fn update_from_file_config(&mut self, config: &LandscapeMetricConfig) {
-        if let Some(v) = config.retention_days {
-            self.retention_days = v;
+        if let Some(v) = config.conn_retention_days {
+            self.conn_retention_days = v;
+        }
+        if let Some(v) = config.conn_retention_hour_days {
+            self.conn_retention_hour_days = v;
+        }
+        if let Some(v) = config.conn_retention_day_days {
+            self.conn_retention_day_days = v;
+        }
+        if let Some(v) = config.dns_retention_days {
+            self.dns_retention_days = v;
         }
         if let Some(v) = config.batch_size {
             self.batch_size = v;

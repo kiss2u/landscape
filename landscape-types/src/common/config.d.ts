@@ -49,7 +49,10 @@ export type LandscapeLogConfig = {
 };
 
 export type LandscapeMetricConfig = {
-  retention_days?: bigint;
+  conn_retention_days?: bigint;
+  conn_retention_hour_days?: bigint;
+  conn_retention_day_days?: bigint;
+  dns_retention_days?: bigint;
   batch_size?: number;
   flush_interval_secs?: bigint;
   max_memory?: number;

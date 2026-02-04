@@ -29,16 +29,73 @@ async function handleSaveMetric() {
       </n-button>
     </template>
     <n-form label-placement="left" label-width="120">
-      <n-form-item :label="t('config.retention_days')">
+      <n-divider title-placement="left">
+        {{ t("config.conn_retention_days") }}
+      </n-divider>
+      <n-grid x-gap="12" :cols="3">
+        <n-gi>
+          <n-form-item :label="t('config.conn_retention_days')">
+            <n-input-number
+              v-model:value="metricStore.connRetentionDays"
+              :min="1"
+              :max="365"
+              placeholder="7"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.conn_retention_days_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.conn_retention_hour_days')">
+            <n-input-number
+              v-model:value="metricStore.connRetentionHourDays"
+              :min="1"
+              :max="365"
+              placeholder="30"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.conn_retention_hour_days_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.conn_retention_day_days')">
+            <n-input-number
+              v-model:value="metricStore.connRetentionDayDays"
+              :min="1"
+              :max="3650"
+              placeholder="180"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.conn_retention_day_days_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+      </n-grid>
+
+      <n-divider title-placement="left">
+        {{ t("config.dns_retention_days") }}
+      </n-divider>
+      <n-form-item :label="t('config.dns_retention_days')">
         <n-input-number
-          v-model:value="metricStore.retentionDays"
+          v-model:value="metricStore.dnsRetentionDays"
           :min="1"
           :max="365"
           placeholder="7"
           style="width: 200px"
         />
-        <template #feedback> {{ t("config.retention_days_desc") }} </template>
+        <template #feedback>
+          {{ t("config.dns_retention_days_desc") }}
+        </template>
       </n-form-item>
+
+      <n-divider title-placement="left">
+        {{ t("config.performance_settings") }}
+      </n-divider>
       <n-form-item :label="t('config.flush_interval')">
         <n-input-number
           v-model:value="metricStore.flushIntervalSecs"

@@ -479,7 +479,7 @@ onMounted(() => {
       v-model:show="showChart"
       :conn="showChartKey"
       :title="showChartTitle"
-      mode="cumulative"
+      type="history"
     />
   </n-flex>
 </template>

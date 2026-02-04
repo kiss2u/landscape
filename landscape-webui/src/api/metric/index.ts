@@ -8,6 +8,7 @@ import {
   ConnectGlobalStats,
   ConnectHistoryQueryParams,
   IpRealtimeStat,
+  MetricResolution,
 } from "landscape-types/common/metric/connect";
 
 export * from "./dns";
@@ -48,10 +49,11 @@ export async function get_connect_history(
 
 export async function get_connect_metric_info(
   key: ConnectKey,
+  resolution?: MetricResolution,
 ): Promise<ConnectMetric[]> {
   let data = await axiosService.post("metric/connects/chart", {
-    ...key,
+    key,
+    resolution,
   });
-  // console.log(data.data);
   return data.data;
 }
