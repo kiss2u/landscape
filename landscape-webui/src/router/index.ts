@@ -24,59 +24,59 @@ import metric_route from "./metric";
 const inner_zone: Array<RouteRecordRaw> = [
   {
     path: "/",
-    name: "",
+    name: "routes.dashboard",
     component: Landscape,
   },
   {
     path: "/dns-redirect",
-    name: "dns-redirect",
+    name: "routes.dns-redirect",
     component: DnsRedirect,
   },
   ...service_status_route,
   {
     path: "/dns-upstream",
-    name: "dns-upstream",
+    name: "routes.dns-upstream",
     component: DnsUpstream,
   },
   {
     path: "/nat",
-    name: "nat",
+    name: "routes.nat",
     component: StaticNatMapping,
   },
   {
     path: "/flow",
-    name: "flow",
+    name: "routes.flow",
     component: Flow,
   },
   {
     path: "/topology",
-    name: "topology",
+    name: "routes.topology",
     component: Topology,
   },
   {
     path: "/docker",
-    name: "docker",
+    name: "routes.docker",
     component: Docker,
   },
   {
     path: "/firewall",
-    name: "firewall",
+    name: "routes.firewall",
     component: Firewall,
   },
   ...metric_route,
   {
     path: "/geo-domain",
-    name: "geo-domain",
+    name: "routes.geo-domain",
     component: GeoDomain,
   },
   {
     path: "/geo-ip",
-    name: "geo-ip",
+    name: "routes.geo-ip",
     component: GeoIp,
   },
   {
     path: "/config",
-    name: "config",
+    name: "routes.config",
     component: Config,
   },
   {

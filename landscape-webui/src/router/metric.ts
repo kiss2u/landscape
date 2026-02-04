@@ -8,27 +8,27 @@ import DstIpMetric from "@/views/metric/conn/DstIpMetric.vue";
 const metric_route: Array<RouteRecordRaw> = [
   {
     path: "/metric/conn/live",
-    name: "connect-live",
+    name: "routes.connect-live",
     component: LiveMetric,
   },
   {
     path: "/metric/conn/history",
-    name: "connect-history",
+    name: "routes.connect-history",
     component: HistoryMetric,
   },
   {
     path: "/metric/conn/src",
-    name: "connect-src",
+    name: "routes.connect-src",
     component: SrcIpMetric,
   },
   {
     path: "/metric/conn/dst",
-    name: "connect-dst",
+    name: "routes.connect-dst",
     component: DstIpMetric,
   },
   {
     path: "/metric/dns",
-    name: "dns-metric",
+    name: "routes.dns-metric",
     component: DNSMetric,
   },
 ];
