@@ -105,7 +105,22 @@ pub async fn auth_handler(
     };
 
     if token_data.claims.sub == auth.admin_user {
-        Ok(next.run(req).await)
+        let mut response = next.run(req).await;
+
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize;
+        if token_data.claims.exp.saturating_sub(now) < DEFAULT_EXPIRE_TIME / 2 {
+            if let Ok(new_token) = create_jwt(&token_data.claims.sub, DEFAULT_EXPIRE_TIME) {
+                if let Ok(value) = axum::http::HeaderValue::from_str(&new_token) {
+                    response.headers_mut().insert("X-Refresh-Token", value);
+                    response.headers_mut().append(
+                        axum::http::header::ACCESS_CONTROL_EXPOSE_HEADERS,
+                        axum::http::HeaderValue::from_static("X-Refresh-Token"),
+                    );
+                }
+            }
+        }
+
+        Ok(response)
     } else {
         Err(AuthError::UnauthorizedUser)?
     }

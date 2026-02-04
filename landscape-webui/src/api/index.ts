@@ -23,7 +23,13 @@ axiosService.interceptors.request.use(
 );
 
 axiosService.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const newToken = response.headers["x-refresh-token"];
+    if (newToken) {
+      localStorage.setItem(LANDSCAPE_TOKEN_KEY, newToken);
+    }
+    return response.data;
+  },
   (error) => {
     if (error.response != undefined && error.response.status != undefined) {
       const code = error.response.status;
