@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory, RouteRecordRaw } from "vue-router";
+import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
 
 import Landscape from "@/views/Landscape.vue";
 import LandscapeV2 from "@/views/LandscapeV2.vue";
@@ -16,6 +16,7 @@ import StaticNatMapping from "@/views/StaticNatMapping.vue";
 
 import DnsRedirect from "@/views/dns/DnsRedirect.vue";
 import DnsUpstream from "@/views/dns/DnsUpstream.vue";
+import NotFound from "@/views/error/NotFound.vue";
 
 import service_status_route from "./service_status";
 import metric_route from "./metric";
@@ -78,6 +79,11 @@ const inner_zone: Array<RouteRecordRaw> = [
     name: "config",
     component: Config,
   },
+  {
+    path: "/:pathMatch(.*)*",
+    name: "NotFound",
+    component: NotFound,
+  },
 ];
 
 const routes: Array<RouteRecordRaw> = [
@@ -99,6 +105,6 @@ const routes: Array<RouteRecordRaw> = [
   },
 ];
 
-const router = createRouter({ history: createWebHashHistory(), routes });
+const router = createRouter({ history: createWebHistory(), routes });
 
 export default router;

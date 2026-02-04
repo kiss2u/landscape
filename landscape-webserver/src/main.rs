@@ -336,7 +336,8 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let addr = SocketAddr::from((config.web.address, config.web.https_port));
     // spawn a second server to redirect http requests to this server
     tokio::spawn(redirect_https::redirect_http_to_https(config.web.clone()));
-    let service = handle_404.into_service();
+    let web_root = config.web.web_root.clone();
+    let service = (move || handle_404(web_root)).into_service();
 
     let serve_dir = ServeDir::new(&config.web.web_root).not_found_service(service);
 
@@ -443,8 +444,24 @@ async fn main() -> LdResult<()> {
 }
 
 /// NOT Found
-async fn handle_404() -> (StatusCode, &'static str) {
-    (StatusCode::NOT_FOUND, "Not found")
+async fn handle_404(web_root: Option<String>) -> impl axum::response::IntoResponse {
+    if let Some(web_root) = web_root {
+        let path = std::path::PathBuf::from(web_root).join("index.html");
+        if path.exists() {
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    return (
+                        StatusCode::OK,
+                        [(axum::http::header::CONTENT_TYPE, "text/html")],
+                        content,
+                    )
+                        .into_response();
+                }
+                Err(_) => {}
+            }
+        }
+    }
+    (StatusCode::NOT_FOUND, "Not found").into_response()
 }
 
 fn banner(config: &RuntimeConfig) {
