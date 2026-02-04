@@ -149,6 +149,10 @@ defineExpose({ refresh: loadSummary });
                 <span class="val">{{ summary?.nxdomain_count || 0 }}</span>
               </div>
               <div class="breakdown-item">
+                <span class="label">{{ t("metric.dash.filter") }}:</span>
+                <span class="val">{{ summary?.filter_count || 0 }}</span>
+              </div>
+              <div class="breakdown-item">
                 <span class="label">{{ t("metric.dash.errors") }}:</span>
                 <span
                   class="val"

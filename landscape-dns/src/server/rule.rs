@@ -1,6 +1,5 @@
 use std::{net::IpAddr, str::FromStr as _};
 
-use hickory_proto::op::ResponseCode;
 use hickory_proto::rr::{
     rdata::{A, AAAA},
     RData, Record, RecordType,
@@ -132,7 +131,7 @@ impl ResolutionRule {
         &self,
         domain: &str,
         query_type: RecordType,
-    ) -> Result<Vec<Record>, ResponseCode> {
+    ) -> crate::error::DnsResult<Vec<Record>> {
         match self.resolver.lookup(domain, query_type).await {
             Ok(lookup) => {
                 let result = if self.enable_ip_validation {
@@ -151,33 +150,26 @@ impl ResolutionRule {
                 Ok(result)
             }
             Err(e) => {
-                let code = if let Some(proto_err) = e.proto() {
+                use crate::error::DnsError;
+                if let Some(proto_err) = e.proto() {
                     match proto_err.kind() {
                         hickory_proto::ProtoErrorKind::NoRecordsFound { response_code, .. } => {
-                            *response_code
+                            return Err(DnsError::Protocol(*response_code));
                         }
-                        _ => {
-                            tracing::error!(
-                                "[flow_id: {:?}, config: {}] DNS resolution failed (proto) for {}: {}",
-                                self.config.flow_id,
-                                self.config.resolve_mode.id,
-                                domain,
-                                e
-                            );
-                            ResponseCode::ServFail
+                        hickory_proto::ProtoErrorKind::Timeout => {
+                            return Err(DnsError::Timeout);
                         }
+                        _ => {}
                     }
-                } else {
-                    tracing::error!(
-                        "[flow_id: {:?}, config: {}] DNS resolution failed (resolver) for {}: {}",
-                        self.config.flow_id,
-                        self.config.resolve_mode.id,
-                        domain,
-                        e
-                    );
-                    ResponseCode::ServFail
-                };
-                Err(code)
+                }
+                tracing::error!(
+                    "[flow_id: {:?}, config: {}] DNS resolution failed for {}: {}",
+                    self.config.flow_id,
+                    self.config.resolve_mode.id,
+                    domain,
+                    e
+                );
+                Err(DnsError::Internal(e.to_string()))
             }
         }
     }

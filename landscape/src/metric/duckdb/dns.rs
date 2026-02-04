@@ -211,29 +211,30 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         "SELECT 
             COUNT(*),
             COUNT(CASE WHEN status = '\"hit\"' THEN 1 END),
-            -- 有效查询总数 (排除 block 和 error)
-            COUNT(CASE WHEN status NOT IN ('\"block\"', '\"error\"') THEN 1 END),
+            -- 有效查询总数 (排除 block, filter 和 error)
+            COUNT(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             
             -- V4 统计
-            COUNT(CASE WHEN query_type = 'A' AND status NOT IN ('\"block\"', '\"error\"') THEN 1 END),
+            COUNT(CASE WHEN query_type = 'A' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type = 'A' AND status = '\"hit\"' THEN 1 END),
             
             -- V6 统计
-            COUNT(CASE WHEN query_type = 'AAAA' AND status NOT IN ('\"block\"', '\"error\"') THEN 1 END),
+            COUNT(CASE WHEN query_type = 'AAAA' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type = 'AAAA' AND status = '\"hit\"' THEN 1 END),
             
             -- 其他统计
-            COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status NOT IN ('\"block\"', '\"error\"') THEN 1 END),
+            COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status = '\"hit\"' THEN 1 END),
             
             COUNT(CASE WHEN status = '\"block\"' THEN 1 END),
+            COUNT(CASE WHEN status = '\"filter\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"nxdomain\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"error\"' THEN 1 END),
-            AVG(CASE WHEN status NOT IN ('\"block\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"error\"') THEN duration_ms END),
-            MAX(CASE WHEN status NOT IN ('\"block\"', '\"error\"') THEN duration_ms END)
+            AVG(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            MAX(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END)
         FROM dns_metrics {}",
         where_stmt
     );
@@ -249,6 +250,7 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         total_other,
         hit_count_other,
         block_count,
+        filter_count,
         nxdomain_count,
         error_count,
         avg_duration_ms,
@@ -271,14 +273,15 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
                 row.get::<_, i64>(9)? as usize,
                 row.get::<_, i64>(10)? as usize,
                 row.get::<_, i64>(11)? as usize,
-                row.get::<_, Option<f64>>(12)?.unwrap_or(0.0),
+                row.get::<_, i64>(12)? as usize,
                 row.get::<_, Option<f64>>(13)?.unwrap_or(0.0),
                 row.get::<_, Option<f64>>(14)?.unwrap_or(0.0),
                 row.get::<_, Option<f64>>(15)?.unwrap_or(0.0),
                 row.get::<_, Option<f64>>(16)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(17)?.unwrap_or(0.0),
             ))
         })
-        .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0));
+        .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0));
 
     // 2. Top Clients
     let top_clients_sql = format!(
@@ -363,6 +366,7 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         total_v6,
         total_other,
         block_count,
+        filter_count,
         nxdomain_count,
         error_count,
         avg_duration_ms,

@@ -15,8 +15,8 @@ use crate::{
     convert_record_type, server::handler::DnsRequestHandler, CheckChainDnsResult, CheckDnsReq,
 };
 
-pub(crate) mod matcher;
 pub(crate) mod handler;
+pub(crate) mod matcher;
 pub(crate) mod rule;
 
 #[derive(Clone)]
@@ -84,8 +84,7 @@ pub async fn start_dns_server(
     addr: SocketAddr,
     handler: DnsRequestHandler,
 ) -> CancellationToken {
-    let Ok((udp, sock_fd)) = crate::listener::create_udp_socket(addr).await
-    else {
+    let Ok((udp, sock_fd)) = crate::listener::create_udp_socket(addr).await else {
         tracing::error!("[flow: {flow_id}]: create udp socket error");
         let result = CancellationToken::new();
         result.cancel();

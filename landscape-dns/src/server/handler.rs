@@ -16,6 +16,7 @@ use hickory_server::{
 };
 use moka::future::Cache;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use crate::{
     server::rule::{RedirectSolution, ResolutionRule},
@@ -76,10 +77,34 @@ impl DnsRequestHandler {
             .time_to_live(Duration::from_secs(crate::DEFAULT_DNS_CACHE_TTL))
             .build();
 
+        // Migrate valid cache items to new cache and collect eBPF updates
+        let update_dns_mark_list = self.migrate_cache(&new_cache, &resolves).await;
+
+        tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
+
+        landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(
+            self.flow_id,
+            update_dns_mark_list.into_iter().collect(),
+        );
+
+        // Update local state
+        self.resolves.store(Arc::new(resolves));
+        self.cache.store(Arc::new(new_cache));
+
+        let redirect_solution: Vec<_> =
+            info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
+        self.redirect_solution.store(Arc::new(redirect_solution));
+
+        landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
+    }
+
+    async fn migrate_cache(
+        &self,
+        new_cache: &DNSCache,
+        resolves: &BTreeMap<u32, ResolutionRule>,
+    ) -> HashSet<FlowMarkInfo> {
+        let mut update_dns_mark_list = HashSet::new();
         let current_cache = self.cache.load();
-        
-        // 遍历旧 Cache，迁移并更新有效数据
-        let mut update_dns_mark_list: HashSet<FlowMarkInfo> = HashSet::new();
 
         for (key, value) in current_cache.iter() {
             let (domain, req_type) = &*key;
@@ -89,29 +114,12 @@ impl DnsRequestHandler {
                     let mut cache_items = vec![];
 
                     for cache_item in value.iter() {
-                        // 新配置是 NoMark 的排除
-                        match (
-                            cache_item.mark.mark.need_insert_in_ebpf_map(),
-                            new_mark.mark.need_insert_in_ebpf_map(),
-                        ) {
-                            (true, true) => {
-                                // 规则更新前后都需要写入 ebpf map
-                                // 因为现在是创建新的 map 所以即使一样也需要更新
-                                update_dns_mark_list
-                                    .extend(cache_item.get_update_rules_with_mark(&new_mark));
-                            }
-                            (true, false) => {
-                                // 原先已经写入了
-                                // 现在不需要了, 由于 map 是重新创建的，所以这里不需要显式删除
-                                // 只需要不加入 new_map 即可
-                            }
-                            (false, true) => {
-                                // 原先没写入
-                                // 目前需要缓存了
-                                update_dns_mark_list
-                                    .extend(cache_item.get_update_rules_with_mark(&new_mark));
-                            }
-                            _ => {}
+                        let _already_mapped = cache_item.mark.mark.need_insert_in_ebpf_map();
+                        let will_map = new_mark.mark.need_insert_in_ebpf_map();
+
+                        if will_map {
+                            update_dns_mark_list
+                                .extend(cache_item.get_update_rules_with_mark(&new_mark));
                         }
 
                         let mut new_record = cache_item.clone();
@@ -121,79 +129,59 @@ impl DnsRequestHandler {
                             if new_record.min_ttl < 5 { new_record.min_ttl } else { 5 };
                         cache_items.push(new_record);
                     }
+
                     if !cache_items.is_empty() {
-                        new_cache.insert((domain.clone(), req_type.clone()), Arc::new(cache_items)).await;
+                        new_cache
+                            .insert((domain.clone(), req_type.clone()), Arc::new(cache_items))
+                            .await;
                     }
                     break 'resolver;
                 }
             }
         }
-        
-        tracing::info!("add_dns_marks: {:?}", update_dns_mark_list);
+        update_dns_mark_list
+    }
 
-        landscape_ebpf::map_setting::flow_dns::refreash_flow_dns_inner_map(
-            self.flow_id,
-            update_dns_mark_list.into_iter().collect(),
-        );
-
-        // 先更新规则
-        self.resolves.store(Arc::new(resolves));
-        // 再替换 Cache
-        self.cache.store(Arc::new(new_cache));
-
-        let redirect_solution =
-            info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
-        self.redirect_solution.store(Arc::new(redirect_solution));
-        
-        landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
+    pub fn lookup_redirects(
+        &self,
+        domain: &str,
+        query_type: RecordType,
+    ) -> Option<(Vec<Record>, DnsResultStatus, Option<Uuid>)> {
+        let redirect_list = self.redirect_solution.load();
+        for each in redirect_list.iter() {
+            if each.is_match(domain) {
+                let records = each.lookup(domain, query_type);
+                let status =
+                    if each.is_block() { DnsResultStatus::Block } else { DnsResultStatus::Local };
+                return Some((records, status, Some(each.id)));
+            }
+        }
+        None
     }
 
     pub async fn check_domain(&self, domain: &str, query_type: RecordType) -> CheckChainDnsResult {
         let mut result = CheckChainDnsResult::default();
 
-        let records = {
-            let mut records = vec![];
-            let redirect_list = self.redirect_solution.load();
-            for each in redirect_list.iter() {
-                if each.is_match(&domain) {
-                    result.redirect_id = Some(each.id);
-                    records = each.lookup(&domain, query_type);
+        if let Some((records, _status, id)) = self.lookup_redirects(domain, query_type) {
+            result.redirect_id = id;
+            result.records = Some(crate::to_common_records(records));
+        } else {
+            let resolves = self.resolves.load();
+            for (_index, resolver) in resolves.iter() {
+                if resolver.is_match(domain) {
+                    result.rule_id = Some(resolver.get_config_id());
+
+                    if let Ok(Ok(rdata_vec)) = tokio::time::timeout(
+                        Duration::from_secs(5),
+                        resolver.lookup(domain, query_type),
+                    )
+                    .await
+                    {
+                        result.records = Some(crate::to_common_records(rdata_vec));
+                    }
                     break;
                 }
             }
-            records
-        };
-
-        if records.is_empty() {
-            {
-                let resolves = self.resolves.load();
-                for (_index, resolver) in resolves.iter() {
-                    if resolver.is_match(&domain) {
-                        result.rule_id = Some(resolver.get_config_id());
-
-                        match tokio::time::timeout(
-                            tokio::time::Duration::from_secs(5),
-                            resolver.lookup(&domain, query_type),
-                        )
-                        .await
-                        {
-                            Ok(Ok(rdata_vec)) => {
-                                result.records = Some(crate::to_common_records(rdata_vec));
-                            }
-                            Ok(Err(_)) => {
-                                // lookup 返回了错误
-                            }
-                            Err(_) => {
-                                tracing::error!("check domain timeout")
-                            }
-                        }
-                        break;
-                    }
-                }
-                drop(resolves);
-            }
-        } else {
-            result.records = Some(crate::to_common_records(records));
         }
 
         if let Some((records, _)) = self.lookup_cache(domain, query_type).await {
@@ -285,6 +273,52 @@ impl DnsRequestHandler {
             );
         }
     }
+
+    fn send_metric(
+        &self,
+        domain: String,
+        query_type: RecordType,
+        response_code: ResponseCode,
+        status: DnsResultStatus,
+        start_time: Instant,
+        src_ip: std::net::IpAddr,
+        answers: Vec<String>,
+    ) {
+        if let Some(msg_tx) = &self.msg_tx {
+            let dns_metric = DnsMetric {
+                flow_id: self.flow_id,
+                domain,
+                query_type: query_type.to_string(),
+                response_code: response_code.to_string(),
+                status,
+                report_time: landscape_common::utils::time::get_current_time_ms()
+                    .unwrap_or_default(),
+                duration_ms: start_time.elapsed().as_millis() as u32,
+                src_ip,
+                answers,
+            };
+            let _ = msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
+        }
+    }
+
+    async fn send_error_response<R: ResponseHandler>(
+        &self,
+        request: &Request,
+        mut response_handle: R,
+        code: ResponseCode,
+    ) -> ResponseInfo {
+        let mut header = Header::response_from_request(request.header());
+        header.set_response_code(code);
+        let response =
+            MessageResponseBuilder::from_message_request(request).build_no_records(header);
+        match response_handle.send_response(response).await {
+            Ok(info) => info,
+            Err(e) => {
+                tracing::error!("Error response failed: {}", e);
+                serve_failed()
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -297,201 +331,128 @@ impl RequestHandler for DnsRequestHandler {
         let start_time = Instant::now();
         let queries = request.queries();
         if queries.is_empty() {
-            let mut header = Header::response_from_request(request.header());
-            header.set_response_code(ResponseCode::FormErr);
-            let response =
-                MessageResponseBuilder::from_message_request(request).build_no_records(header);
-            let result = response_handle.send_response(response).await;
-            return match result {
-                Err(e) => {
-                    tracing::error!("Request failed: {}", e);
-                    serve_failed()
-                }
-                Ok(info) => info,
-            };
+            return self.send_error_response(request, response_handle, ResponseCode::FormErr).await;
         }
 
-        // 先只处理第一个查询
         let req = &queries[0];
         let domain = req.name().to_string();
         let query_type = req.query_type();
+        let src_ip = request.src().ip();
 
-        let response_builder = MessageResponseBuilder::from_message_request(request);
         let mut header = Header::response_from_request(request.header());
         header.set_response_code(ResponseCode::NoError);
         header.set_authoritative(true);
         header.set_recursion_available(true);
 
         let mut records = vec![];
-        let mut redirect_records = None;
         let mut status = DnsResultStatus::Normal;
 
+        // 1. Redirects
+        if let Some((redirect_records, redirect_status, _)) =
+            self.lookup_redirects(&domain, query_type)
         {
-            let redirect_list = self.redirect_solution.load();
-            for each in redirect_list.iter() {
-                if each.is_match(&domain) {
-                    redirect_records = Some(each.lookup(&domain, query_type));
+            records = redirect_records;
+            status = redirect_status;
+        }
+        // 2. Cache
+        else if let Some((cached_records, filter)) = self.lookup_cache(&domain, query_type).await
+        {
+            if is_type_filtered(query_type, &filter) {
+                status = DnsResultStatus::Filter;
+            } else {
+                records = filter_result(cached_records, &filter);
+                status = DnsResultStatus::Hit;
+            }
+        }
+        // 3. Resolution Rules (with Early Filter check)
+        else {
+            let resolves = self.resolves.load();
+            let mut resolved = false;
+            for (_index, resolver) in resolves.iter() {
+                if resolver.is_match(&domain) {
+                    resolved = true;
+                    let filter = resolver.filter_mode();
 
-                    if each.is_block() {
-                        status = DnsResultStatus::Block;
-                    } else {
-                        status = DnsResultStatus::Local;
+                    // Early return if current query type is filtered by rule
+                    if is_type_filtered(query_type, &filter) {
+                        status = DnsResultStatus::Filter;
+                        break;
                     }
 
+                    match resolver.lookup(&domain, query_type).await {
+                        Ok(rdata_vec) => {
+                            if !rdata_vec.is_empty() {
+                                self.insert(
+                                    &domain,
+                                    query_type,
+                                    rdata_vec.clone(),
+                                    resolver.mark(),
+                                    filter.clone(),
+                                )
+                                .await;
+                            }
+                            records = filter_result(rdata_vec, &filter);
+                            status = DnsResultStatus::Normal;
+                        }
+                        Err(err) => {
+                            let code = err.to_response_code();
+                            status = match code {
+                                ResponseCode::NXDomain => DnsResultStatus::NxDomain,
+                                ResponseCode::NoError => DnsResultStatus::Normal,
+                                _ => DnsResultStatus::Error,
+                            };
+                            self.send_metric(
+                                domain.clone(),
+                                query_type,
+                                code,
+                                status,
+                                start_time,
+                                src_ip,
+                                vec![],
+                            );
+                            return self.send_error_response(request, response_handle, code).await;
+                        }
+                    }
                     break;
                 }
             }
-        };
+            if !resolved {
+                status = DnsResultStatus::Normal;
+            }
+        }
 
-        if let Some(redirect_records_inner) = redirect_records {
-            records = redirect_records_inner;
+        // 4. Send Response
+        let builder = MessageResponseBuilder::from_message_request(request);
+        let result = if records.is_empty() {
+            let response = builder.build_no_records(header);
+            response_handle.send_response(response).await
         } else {
-            if let Some((result, filter)) = self.lookup_cache(&domain, query_type).await {
-                records = filter_result(result, &filter);
-                status = DnsResultStatus::Hit;
-            } else {
-                {
-                    let resolves = self.resolves.load();
-                    let mut found = false;
-                    for (_index, resolver) in resolves.iter() {
-                        if resolver.is_match(&domain) {
-                            found = true;
-                            records = match resolver.lookup(&domain, query_type).await {
-                                Ok(rdata_vec) => {
-                                    if rdata_vec.len() > 0 {
-                                        self.insert(
-                                            &domain,
-                                            query_type,
-                                            rdata_vec.clone(),
-                                            resolver.mark(),
-                                            resolver.filter_mode(),
-                                        )
-                                        .await;
-                                    }
-                                    status = DnsResultStatus::Normal;
-                                    filter_result(rdata_vec, &resolver.filter_mode())
-                                }
-                                Err(error_code) => {
-                                    status = if error_code == ResponseCode::NXDomain {
-                                        DnsResultStatus::NxDomain
-                                    } else if error_code == ResponseCode::NoError {
-                                        DnsResultStatus::Normal
-                                    } else {
-                                        DnsResultStatus::Error
-                                    };
-                                    // 构建并返回错误响应
-                                    header.set_response_code(error_code);
-                                    let response =
-                                        MessageResponseBuilder::from_message_request(request)
-                                            .build_no_records(header);
-
-                                    // 发送指标 (由于提前退出，需要在这里发送指标以便记录错误)
-                                    if let Some(msg_tx) = &self.msg_tx {
-                                        let duration_ms = start_time.elapsed().as_millis() as u32;
-                                        let dns_metric = DnsMetric {
-                                            flow_id: self.flow_id,
-                                            domain: domain.clone(),
-                                            query_type: query_type.to_string(),
-                                            response_code: header.response_code().to_string(),
-                                            status,
-                                            report_time:
-                                                landscape_common::utils::time::get_current_time_ms()
-                                                    .unwrap_or_default(),
-                                            duration_ms,
-                                            src_ip: request.src().ip(),
-                                            answers: vec![],
-                                        };
-                                        let _ =
-                                            msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
-                                    }
-
-                                    let result = response_handle.send_response(response).await;
-                                    return match result {
-                                        Err(e) => {
-                                            tracing::error!("Request failed: {}", e);
-                                            serve_failed()
-                                        }
-                                        Ok(info) => info,
-                                    };
-                                }
-                            };
-                            break;
-                        }
-                    }
-                    if !found {
-                        // 没有任何规则匹配
-                        status = DnsResultStatus::Normal;
-                    }
-                    drop(resolves);
-                }
-            }
-        }
-
-        // 如果没有找到记录，返回空响应
-        if records.is_empty() {
-            let response = response_builder.build_no_records(header);
-            let result = response_handle.send_response(response).await;
-
-            // 发送空结果指标
-            if let Some(msg_tx) = &self.msg_tx {
-                let duration_ms = start_time.elapsed().as_millis() as u32;
-                let dns_metric = DnsMetric {
-                    flow_id: self.flow_id,
-                    domain: domain.clone(),
-                    query_type: query_type.to_string(),
-                    response_code: header.response_code().to_string(),
-                    status,
-                    report_time: landscape_common::utils::time::get_current_time_ms()
-                        .unwrap_or_default(),
-                    duration_ms,
-                    src_ip: request.src().ip(),
-                    answers: vec![],
-                };
-                let _ = msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
-            }
-
-            return match result {
-                Err(e) => {
-                    tracing::error!("Record Empty and response error: {}", e);
-                    serve_failed()
-                }
-                Ok(info) => info,
-            };
-        }
-
-        let response = response_builder.build(
-            header,
-            records.iter(),
-            vec![].into_iter(),
-            vec![].into_iter(),
-            vec![].into_iter(),
+            let response = builder.build(
+                header,
+                records.iter(),
+                vec![].into_iter(),
+                vec![].into_iter(),
+                vec![].into_iter(),
+            );
+            response_handle.send_response(response).await
+        };
+        let answers = records.iter().map(|r| r.to_string()).collect();
+        self.send_metric(
+            domain,
+            query_type,
+            header.response_code(),
+            status,
+            start_time,
+            src_ip,
+            answers,
         );
 
-        let result = response_handle.send_response(response).await;
-
-        if let Some(msg_tx) = &self.msg_tx {
-            let duration_ms = start_time.elapsed().as_millis() as u32;
-            let dns_metric = DnsMetric {
-                flow_id: self.flow_id,
-                domain: domain.clone(),
-                query_type: query_type.to_string(),
-                response_code: header.response_code().to_string(),
-                status,
-                report_time: landscape_common::utils::time::get_current_time_ms()
-                    .unwrap_or_default(),
-                duration_ms,
-                src_ip: request.src().ip(),
-                answers: records.iter().map(|r| r.to_string()).collect(),
-            };
-            let _ = msg_tx.try_send(DnsMetricMessage::Metric(dns_metric));
-        }
-
         match result {
+            Ok(info) => info,
             Err(e) => {
-                tracing::error!("Request failed: {}", e);
+                tracing::error!("Response failed: {}", e);
                 serve_failed()
             }
-            Ok(info) => info,
         }
     }
 }
@@ -503,27 +464,25 @@ fn serve_failed() -> ResponseInfo {
 }
 
 fn filter_result(un_filter_records: Vec<Record>, filter: &FilterResult) -> Vec<Record> {
-    let mut valid_records = Vec::with_capacity(un_filter_records.len());
-    for rdata in un_filter_records.into_iter() {
-        if matches!(filter, FilterResult::Unfilter) {
-            valid_records.push(rdata.clone());
-        } else {
-            match (rdata.record_type(), filter) {
-                (RecordType::A, FilterResult::OnlyIPv4) => {
-                    valid_records.push(rdata.clone());
-                }
-                (RecordType::A, FilterResult::OnlyIPv6)
-                | (RecordType::AAAA, FilterResult::OnlyIPv4) => {
-                    // 过滤
-                }
-                (RecordType::AAAA, FilterResult::OnlyIPv6) => {
-                    valid_records.push(rdata.clone());
-                }
-                _ => {
-                    valid_records.push(rdata.clone());
-                }
-            }
-        }
+    if matches!(filter, FilterResult::Unfilter) {
+        return un_filter_records;
     }
-    valid_records
+    un_filter_records
+        .into_iter()
+        .filter(|r| match (r.record_type(), filter) {
+            (RecordType::A, FilterResult::OnlyIPv4) => true,
+            (RecordType::A, FilterResult::OnlyIPv6) => false,
+            (RecordType::AAAA, FilterResult::OnlyIPv4) => false,
+            (RecordType::AAAA, FilterResult::OnlyIPv6) => true,
+            _ => true,
+        })
+        .collect()
+}
+
+fn is_type_filtered(query_type: RecordType, filter: &FilterResult) -> bool {
+    match (query_type, filter) {
+        (RecordType::A, FilterResult::OnlyIPv6) => true,
+        (RecordType::AAAA, FilterResult::OnlyIPv4) => true,
+        _ => false,
+    }
 }

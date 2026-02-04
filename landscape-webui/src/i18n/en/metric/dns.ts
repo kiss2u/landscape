@@ -23,6 +23,7 @@ export default {
   status_block: "Block",
   status_local: "Local",
   status_nxdomain: "NXDomain",
+  status_filter: "Filtered",
   status_error: "Error",
   // Columns
   col_time: "Time",
@@ -40,6 +41,7 @@ export default {
     block_rate: "Block Rate",
     query_latency: "Query Latency",
     nxdomain: "NXDomain",
+    filter: "Filtered",
     errors: "Errors",
     v4: "V4",
     v6: "V6",

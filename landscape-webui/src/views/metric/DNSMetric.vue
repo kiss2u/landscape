@@ -98,6 +98,7 @@ const statusOptions = computed(() => [
   { label: t("metric.status_block"), value: "block" },
   { label: t("metric.status_local"), value: "local" },
   { label: t("metric.status_nxdomain"), value: "nxdomain" },
+  { label: t("metric.status_filter"), value: "filter" },
   { label: t("metric.status_error"), value: "error" },
 ]);
 
@@ -183,6 +184,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
         block: { type: "warning", label: t("metric.status_block") },
         hit: { type: "info", label: t("metric.status_hit").split(" (")[0] },
         nxdomain: { type: "default", label: t("metric.status_nxdomain") },
+        filter: { type: "warning", label: t("metric.status_filter") },
         normal: { type: "default", label: t("metric.status_normal") },
         error: { type: "error", label: t("metric.status_error") },
       };

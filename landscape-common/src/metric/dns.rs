@@ -10,6 +10,7 @@ pub enum DnsResultStatus {
     Block,    // 重定向空值
     Hit,      // 命中缓存
     NxDomain, // 域名不存在
+    Filter,   // 被过滤 (OnlyIPv4/OnlyIPv6)
     #[default]
     Normal, // 正常透传
     Error,    // 异常
@@ -89,6 +90,7 @@ pub struct DnsSummaryResponse {
     pub total_v6: usize,
     pub total_other: usize,
     pub block_count: usize,
+    pub filter_count: usize,
     pub nxdomain_count: usize,
     pub error_count: usize,
     pub avg_duration_ms: f64,

@@ -23,6 +23,7 @@ export default {
   status_block: "拦截",
   status_local: "本地",
   status_nxdomain: "域名不存在",
+  status_filter: "规则过滤",
   status_error: "错误",
   // 列
   col_time: "时间",
@@ -40,6 +41,7 @@ export default {
     block_rate: "拦截率",
     query_latency: "查询延迟",
     nxdomain: "域名不存在",
+    filter: "规则过滤",
     errors: "错误",
     v4: "V4",
     v6: "V6",

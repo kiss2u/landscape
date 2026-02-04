@@ -1,0 +1,44 @@
+use hickory_proto::op::ResponseCode;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DnsError {
+    #[error("DNS Protocol error: {0}")]
+    Protocol(ResponseCode),
+
+    #[error("Upstream timeout")]
+    Timeout,
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    #[error("No rule matched for domain: {0}")]
+    NoRuleMatched(String),
+
+    #[error("Io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Cache error: {0}")]
+    Cache(String),
+}
+
+impl From<ResponseCode> for DnsError {
+    fn from(code: ResponseCode) -> Self {
+        DnsError::Protocol(code)
+    }
+}
+
+impl DnsError {
+    pub fn to_response_code(&self) -> ResponseCode {
+        match self {
+            DnsError::Protocol(code) => *code,
+            DnsError::Timeout => ResponseCode::ServFail,
+            DnsError::NoRuleMatched(_) => ResponseCode::NXDomain,
+            DnsError::Internal(_) => ResponseCode::ServFail,
+            DnsError::Io(_) => ResponseCode::ServFail,
+            DnsError::Cache(_) => ResponseCode::ServFail,
+        }
+    }
+}
+
+pub type DnsResult<T> = Result<T, DnsError>;
