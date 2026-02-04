@@ -68,8 +68,6 @@ impl GeoSiteService {
         service
     }
 
-
-
     pub async fn convert_to_chain_init_config(
         &self,
         mut rules: Vec<DNSRuleConfig>,

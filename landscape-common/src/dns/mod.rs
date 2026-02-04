@@ -1,6 +1,4 @@
-use crate::config::dns::{
-    default_flow_id, DNSRuleConfig, DNSRuntimeRule, FilterResult,
-};
+use crate::config::dns::{default_flow_id, DNSRuleConfig, DNSRuntimeRule, FilterResult};
 use crate::dns::config::{DnsBindConfig, DnsUpstreamConfig};
 use crate::dns::redirect::DNSRedirectRuntimeRule;
 use crate::utils::id::gen_database_uuid;
@@ -16,7 +14,6 @@ pub struct ChainDnsServerInitInfo {
     pub dns_rules: Vec<DNSRuntimeRule>,
     pub redirect_rules: Vec<DNSRedirectRuntimeRule>,
 }
-
 
 pub fn gen_default_dns_rule_and_upstream() -> (DNSRuleConfig, DnsUpstreamConfig) {
     let upstream = DnsUpstreamConfig::default();

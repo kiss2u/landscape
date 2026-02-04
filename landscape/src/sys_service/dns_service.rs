@@ -120,7 +120,7 @@ impl LandscapeDnsService {
                 .geo_site_service
                 .convert_to_chain_init_config(flow_dns_rules, dns_redirect_rules, upstream_configs)
                 .await;
- 
+
             tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
             self.dns_service.refresh_flow_server(flow_id, dns_rules, self.dns_config.clone()).await;
             tracing::info!(
@@ -147,8 +147,10 @@ impl LandscapeDnsService {
                         upstream_configs,
                     )
                     .await;
- 
-                self.dns_service.refresh_flow_server(flow_id, dns_rules, self.dns_config.clone()).await;
+
+                self.dns_service
+                    .refresh_flow_server(flow_id, dns_rules, self.dns_config.clone())
+                    .await;
             }
             tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
         }

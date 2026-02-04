@@ -1,6 +1,8 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use axum::{handler::HandlerWithoutStateExt, http::StatusCode, routing::get, Router};
+use axum::{
+    handler::HandlerWithoutStateExt, http::StatusCode, response::IntoResponse, routing::get, Router,
+};
 
 use axum_server::tls_rustls::RustlsConfig;
 use colored::Colorize;
@@ -444,21 +446,12 @@ async fn main() -> LdResult<()> {
 }
 
 /// NOT Found
-async fn handle_404(web_root: Option<String>) -> impl axum::response::IntoResponse {
-    if let Some(web_root) = web_root {
-        let path = std::path::PathBuf::from(web_root).join("index.html");
-        if path.exists() {
-            match std::fs::read_to_string(path) {
-                Ok(content) => {
-                    return (
-                        StatusCode::OK,
-                        [(axum::http::header::CONTENT_TYPE, "text/html")],
-                        content,
-                    )
-                        .into_response();
-                }
-                Err(_) => {}
-            }
+async fn handle_404(web_root: PathBuf) -> impl IntoResponse {
+    let path = web_root.join("index.html");
+    if path.exists() {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            return (StatusCode::OK, [(axum::http::header::CONTENT_TYPE, "text/html")], content)
+                .into_response();
         }
     }
     (StatusCode::NOT_FOUND, "Not found").into_response()

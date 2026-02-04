@@ -67,7 +67,11 @@ impl DnsRequestHandler {
         }
     }
 
-    pub async fn renew_rules(&mut self, info: ChainDnsServerInitInfo, dns_config: DnsRuntimeConfig) {
+    pub async fn renew_rules(
+        &mut self,
+        info: ChainDnsServerInitInfo,
+        dns_config: DnsRuntimeConfig,
+    ) {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
             resolves.insert(rule.index, ResolutionRule::new(rule, self.flow_id));

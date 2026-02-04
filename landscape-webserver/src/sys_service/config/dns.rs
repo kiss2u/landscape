@@ -1,9 +1,9 @@
 use axum::extract::State;
-use axum_extra::extract::WithRejection;
+use axum::Json;
 use landscape_common::config::{GetDnsConfigResponse, UpdateDnsConfigRequest};
 
-use crate::api::{LandscapeApiResp, LandscapeApiResult};
-use crate::error::LandscapeApiError;
+use crate::api::LandscapeApiResp;
+use crate::error::LandscapeApiResult;
 use crate::LandscapeApp;
 
 pub async fn get_dns_config_fast(
@@ -22,7 +22,7 @@ pub async fn get_dns_config(
 
 pub async fn update_dns_config(
     State(state): State<LandscapeApp>,
-    WithRejection(payload, _): WithRejection<serde_json::Value, LandscapeApiError>,
+    Json(payload): Json<serde_json::Value>,
 ) -> LandscapeApiResult<String> {
     let request: UpdateDnsConfigRequest = serde_json::from_value(payload)?;
     state.config_service.update_dns_config(request.new_dns, request.expected_hash).await?;

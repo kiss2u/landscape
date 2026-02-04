@@ -26,6 +26,9 @@ pub enum LandscapeApiError {
 
     #[error("DHCPConflict Error: {0}")]
     DHCPConflict(String),
+
+    #[error("JSON Error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }
 
 impl LandscapeErrRespTrait for LandscapeApiError {
@@ -37,6 +40,7 @@ impl LandscapeErrRespTrait for LandscapeApiError {
             LandscapeApiError::DockerError(err) => err.get_code(),
             LandscapeApiError::LdError(_) => 500,
             LandscapeApiError::DHCPConflict(_) => 301_400,
+            LandscapeApiError::JsonError(_) => 400,
         }
     }
 }
