@@ -1,4 +1,3 @@
-pub mod dhcp_v4_server;
 pub mod dhcp_v6_client;
 pub mod dns;
 pub mod firewall;
@@ -20,7 +19,7 @@ use std::{
     path::PathBuf,
 };
 
-use dhcp_v4_server::DHCPv4ServiceConfig;
+use crate::dhcp::v4_server::config::DHCPv4ServiceConfig;
 use dhcp_v6_client::IPV6PDServiceConfig;
 use dns::DNSRuleConfig;
 use firewall::FirewallServiceConfig;

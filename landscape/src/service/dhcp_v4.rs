@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use landscape_common::database::LandscapeDBTrait;
 use landscape_common::database::LandscapeServiceDBTrait;
-use landscape_common::dhcp::v4_server::ArpScanInfo;
-use landscape_common::dhcp::v4_server::ArpScanStatus;
-use landscape_common::dhcp::v4_server::DHCPv4OfferInfo;
+use landscape_common::dhcp::v4_server::status::ArpScanInfo;
+use landscape_common::dhcp::v4_server::status::ArpScanStatus;
+use landscape_common::dhcp::v4_server::status::DHCPv4OfferInfo;
 use landscape_common::route::LanRouteInfo;
 use landscape_common::route::LanRouteMode;
 use landscape_common::service::controller_service_v2::ControllerService;
@@ -15,7 +15,7 @@ use landscape_common::service::DefaultWatchServiceStatus;
 use landscape_common::store::storev2::LandscapeStore;
 use landscape_common::LAND_ARP_SCAN_INTERVAL;
 use landscape_common::{
-    config::dhcp_v4_server::DHCPv4ServiceConfig,
+    dhcp::v4_server::config::DHCPv4ServiceConfig,
     observer::IfaceObserverAction,
     service::service_manager_v2::{ServiceManager, ServiceStarterTrait},
 };

@@ -7,11 +7,11 @@ use axum::{
 };
 
 use landscape_common::{
-    config::dhcp_v4_server::DHCPv4ServiceConfig, dhcp::v4_server::ArpScanInfo,
+    dhcp::v4_server::config::DHCPv4ServiceConfig, dhcp::v4_server::status::ArpScanInfo,
     service::DefaultWatchServiceStatus,
 };
 use landscape_common::{
-    dhcp::v4_server::DHCPv4OfferInfo, service::controller_service_v2::ControllerService,
+    dhcp::v4_server::status::DHCPv4OfferInfo, service::controller_service_v2::ControllerService,
 };
 
 use crate::{error::LandscapeApiError, LandscapeApp};

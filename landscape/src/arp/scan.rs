@@ -1,7 +1,7 @@
 use std::{net::Ipv4Addr, time::Duration};
 
 use cidr::Ipv4Inet;
-use landscape_common::{dhcp::v4_server::ArpScanInfoItem, net::MacAddr};
+use landscape_common::{dhcp::v4_server::status::ArpScanInfoItem, net::MacAddr};
 use tokio_util::sync::CancellationToken;
 
 pub async fn scan_ip_info(
