@@ -8,6 +8,7 @@ use crate::api::LandscapeApiResp;
 use crate::error::LandscapeApiResult;
 use crate::LandscapeApp;
 
+pub mod dns;
 pub mod metric;
 pub mod ui;
 
@@ -22,6 +23,10 @@ pub async fn get_config_paths() -> Router<LandscapeApp> {
         .route("/config/metric", get(metric::get_metric_config_fast))
         .route("/config/edit/metric", get(metric::get_metric_config))
         .route("/config/edit/metric", post(metric::update_metric_config))
+        // DNS Config
+        .route("/config/dns", get(dns::get_dns_config_fast))
+        .route("/config/edit/dns", get(dns::get_dns_config))
+        .route("/config/edit/dns", post(dns::update_dns_config))
 }
 
 async fn export_init_config(State(state): State<LandscapeApp>) -> LandscapeApiResult<String> {

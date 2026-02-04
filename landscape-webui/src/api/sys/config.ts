@@ -1,9 +1,12 @@
 import axiosService from "@/api";
 import type {
+  GetDnsConfigResponse,
   GetMetricConfigResponse,
   GetUIConfigResponse,
+  LandscapeDnsConfig,
   LandscapeMetricConfig,
   LandscapeUIConfig,
+  UpdateDnsConfigRequest,
   UpdateMetricConfigRequest,
   UpdateUIConfigRequest,
 } from "landscape-types/common/config";
@@ -63,4 +66,20 @@ export async function update_metric_config(
   payload: UpdateMetricConfigRequest,
 ): Promise<void> {
   await axiosService.post(`sys_service/config/edit/metric`, payload);
+}
+
+export async function get_dns_config(): Promise<LandscapeDnsConfig> {
+  const response = await axiosService.get(`sys_service/config/dns`);
+  return response.data;
+}
+
+export async function get_dns_config_edit(): Promise<GetDnsConfigResponse> {
+  const response = await axiosService.get(`sys_service/config/edit/dns`);
+  return response.data;
+}
+
+export async function update_dns_config(
+  payload: UpdateDnsConfigRequest,
+): Promise<void> {
+  await axiosService.post(`sys_service/config/edit/dns`, payload);
 }

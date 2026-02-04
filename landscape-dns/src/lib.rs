@@ -33,8 +33,6 @@ pub mod listener;
 pub mod server;
 
 const DEFAULT_ENABLE_IP_VALIDATION: bool = false;
-pub const DEFAULT_DNS_CACHE_CAPACITY: u64 = 4096;
-pub const DEFAULT_DNS_CACHE_TTL: u64 = 24 * 60 * 60;
 
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
 static RESOLVER_CONF_LD_BACK: &'static str = "/etc/resolv.conf.ld_back";

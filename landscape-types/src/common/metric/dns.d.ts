@@ -35,6 +35,7 @@ export type DnsResultStatus =
   | "block"
   | "hit"
   | "nxdomain"
+  | "filter"
   | "normal"
   | "error";
 
@@ -53,6 +54,7 @@ export type DnsSummaryResponse = {
   total_v6: number;
   total_other: number;
   block_count: number;
+  filter_count: number;
   nxdomain_count: number;
   error_count: number;
   avg_duration_ms: number;

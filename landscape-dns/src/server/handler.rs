@@ -50,8 +50,8 @@ impl DnsRequestHandler {
             resolves.insert(rule.index, ResolutionRule::new(rule, flow_id));
         }
         let cache = Cache::builder()
-            .max_capacity(crate::DEFAULT_DNS_CACHE_CAPACITY)
-            .time_to_live(Duration::from_secs(crate::DEFAULT_DNS_CACHE_TTL))
+            .max_capacity(info.dns_config.cache_capacity as u64)
+            .time_to_live(Duration::from_secs(info.dns_config.cache_ttl as u64))
             .build();
 
         let redirect_solution =
@@ -73,8 +73,8 @@ impl DnsRequestHandler {
         }
 
         let new_cache: DNSCache = Cache::builder()
-            .max_capacity(crate::DEFAULT_DNS_CACHE_CAPACITY)
-            .time_to_live(Duration::from_secs(crate::DEFAULT_DNS_CACHE_TTL))
+            .max_capacity(info.dns_config.cache_capacity as u64)
+            .time_to_live(Duration::from_secs(info.dns_config.cache_ttl as u64))
             .build();
 
         // Migrate valid cache items to new cache and collect eBPF updates

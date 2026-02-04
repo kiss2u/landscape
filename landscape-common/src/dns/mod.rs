@@ -23,6 +23,7 @@ pub mod upstream;
 pub struct ChainDnsServerInitInfo {
     pub dns_rules: Vec<DNSRuntimeRule>,
     pub redirect_rules: Vec<DNSRedirectRuntimeRule>,
+    pub dns_config: crate::config::DnsRuntimeConfig,
 }
 
 #[derive(Default, Clone, Debug)]

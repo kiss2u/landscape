@@ -182,6 +182,17 @@ pub struct LandscapeMetricConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
 #[ts(export, export_to = "common/config.d.ts")]
+pub struct LandscapeDnsConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub cache_capacity: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub cache_ttl: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
+#[ts(export, export_to = "common/config.d.ts")]
 pub struct LandscapeUIConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -222,6 +233,20 @@ pub struct UpdateMetricConfigRequest {
     pub expected_hash: String,
 }
 
+#[derive(Serialize, TS, Debug, Clone)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct GetDnsConfigResponse {
+    pub dns: LandscapeDnsConfig,
+    pub hash: String,
+}
+
+#[derive(Deserialize, TS, Debug, Clone)]
+#[ts(export, export_to = "common/config.d.ts")]
+pub struct UpdateDnsConfigRequest {
+    pub new_dns: LandscapeDnsConfig,
+    pub expected_hash: String,
+}
+
 /// Read & Write <CONFIG_PATH>/landscape.toml
 #[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
 #[ts(export, export_to = "common/config.d.ts")]
@@ -236,6 +261,8 @@ pub struct LandscapeConfig {
     pub store: LandscapeStoreConfig,
     #[serde(default)]
     pub metric: LandscapeMetricConfig,
+    #[serde(default)]
+    pub dns: LandscapeDnsConfig,
     #[serde(default)]
     pub ui: LandscapeUIConfig,
 }
@@ -252,6 +279,7 @@ pub struct RuntimeConfig {
     pub web: WebRuntimeConfig,
     pub store: StoreRuntimeConfig,
     pub metric: MetricRuntimeConfig,
+    pub dns: DnsRuntimeConfig,
     pub ui: LandscapeUIConfig,
 }
 
@@ -348,6 +376,10 @@ impl RuntimeConfig {
             max_memory: config.metric.max_memory.unwrap_or(crate::DEFAULT_METRIC_MAX_MEMORY),
             max_threads: config.metric.max_threads.unwrap_or(crate::DEFAULT_METRIC_MAX_THREADS),
         };
+        let dns = DnsRuntimeConfig {
+            cache_capacity: config.dns.cache_capacity.unwrap_or(crate::DEFAULT_DNS_CACHE_CAPACITY),
+            cache_ttl: config.dns.cache_ttl.unwrap_or(crate::DEFAULT_DNS_CACHE_TTL),
+        };
 
         let runtime_config = RuntimeConfig {
             home_path,
@@ -356,6 +388,7 @@ impl RuntimeConfig {
             web,
             store,
             metric,
+            dns,
             ui: config.ui.clone(),
             file_config: config,
         };
@@ -466,6 +499,12 @@ pub struct MetricRuntimeConfig {
     pub max_threads: usize,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct DnsRuntimeConfig {
+    pub cache_capacity: u32,
+    pub cache_ttl: u32,
+}
+
 impl MetricRuntimeConfig {
     pub fn update_from_file_config(&mut self, config: &LandscapeMetricConfig) {
         if let Some(v) = config.retention_days {
@@ -482,6 +521,17 @@ impl MetricRuntimeConfig {
         }
         if let Some(v) = config.max_threads {
             self.max_threads = v;
+        }
+    }
+}
+
+impl DnsRuntimeConfig {
+    pub fn update_from_file_config(&mut self, config: &LandscapeDnsConfig) {
+        if let Some(v) = config.cache_capacity {
+            self.cache_capacity = v;
+        }
+        if let Some(v) = config.cache_ttl {
+            self.cache_ttl = v;
         }
     }
 }

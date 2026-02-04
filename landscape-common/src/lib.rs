@@ -74,6 +74,9 @@ pub const DEFAULT_METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
 pub const DEFAULT_METRIC_MAX_MEMORY: usize = 128;
 pub const DEFAULT_METRIC_MAX_THREADS: usize = 1;
 
+pub const DEFAULT_DNS_CACHE_CAPACITY: u32 = 4096;
+pub const DEFAULT_DNS_CACHE_TTL: u32 = 24 * 60 * 60;
+
 #[cfg(debug_assertions)]
 pub const DEFAULT_METRIC_CLEANUP_INTERVAL_SECS: u64 = 30 * 60;
 #[cfg(not(debug_assertions))]

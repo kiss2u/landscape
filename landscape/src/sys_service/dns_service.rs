@@ -25,6 +25,7 @@ pub struct LandscapeDnsService {
     dns_redirect_rule_service: DNSRedirectService,
     geo_site_service: GeoSiteService,
     dns_upstream_service: DnsUpstreamService,
+    dns_config: landscape_common::config::DnsRuntimeConfig,
 }
 
 impl LandscapeDnsService {
@@ -34,6 +35,7 @@ impl LandscapeDnsService {
         dns_redirect_rule_service: DNSRedirectService,
         geo_site_service: GeoSiteService,
         dns_upstream_service: DnsUpstreamService,
+        dns_config: landscape_common::config::DnsRuntimeConfig,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     ) -> Self {
         let dns_service = LandscapeDnsServer::new(53, msg_tx);
@@ -47,6 +49,7 @@ impl LandscapeDnsService {
             dns_redirect_rule_service,
             geo_site_service,
             dns_upstream_service,
+            dns_config,
         };
         dns_service.reflush_dns(None).await;
         let dns_service_clone = dns_service.clone();
@@ -113,10 +116,11 @@ impl LandscapeDnsService {
             tracing::info!("load rule: {:?}ms", time.elapsed().as_millis());
 
             // convert init
-            let dns_rules = self
+            let mut dns_rules = self
                 .geo_site_service
                 .convert_to_chain_init_config(flow_dns_rules, dns_redirect_rules, upstream_configs)
                 .await;
+            dns_rules.dns_config = self.dns_config.clone();
 
             tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
             self.dns_service.refresh_flow_server(flow_id, dns_rules).await;
@@ -136,7 +140,7 @@ impl LandscapeDnsService {
                 let dns_redirect_rules =
                     self.dns_redirect_rule_service.list_flow_configs(flow_id).await;
 
-                let dns_rules = self
+                let mut dns_rules = self
                     .geo_site_service
                     .convert_to_chain_init_config(
                         flow_dns_rules,
@@ -144,6 +148,7 @@ impl LandscapeDnsService {
                         upstream_configs,
                     )
                     .await;
+                dns_rules.dns_config = self.dns_config.clone();
 
                 self.dns_service.refresh_flow_server(flow_id, dns_rules).await;
             }

@@ -211,6 +211,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         dns_redirect_service.clone(),
         geo_site_service.clone(),
         dns_upstream_service.clone(),
+        config.dns.clone(),
         Some(metric_service.data.dns_metric.get_msg_channel()),
     )
     .await;
