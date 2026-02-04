@@ -105,7 +105,7 @@ static __always_inline int nat_metric_try_report_v6(struct nat_timer_key_v6 *tim
     event->dst_port = timer_value->trigger_port;
 
     event->l4_proto = timer_key->l4_protocol;
-    event->l3_proto = LANDSCAPE_IPV4_TYPE;
+    event->l3_proto = LANDSCAPE_IPV6_TYPE;
     event->flow_id = timer_value->flow_id;
     event->trace_id = 0;
     event->time = bpf_ktime_get_ns();
