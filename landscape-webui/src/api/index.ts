@@ -31,9 +31,10 @@ axiosService.interceptors.response.use(
       if (code === 401) {
         localStorage.removeItem(LANDSCAPE_TOKEN_KEY);
 
+        const currentPath = router.currentRoute.value.fullPath;
         router.push({
           path: "/login",
-          state: { redirect: router.currentRoute.value.fullPath },
+          state: currentPath === "/login" ? {} : { redirect: currentPath },
         });
       }
 

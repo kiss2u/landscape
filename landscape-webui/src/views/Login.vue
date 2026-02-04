@@ -23,7 +23,10 @@ async function login() {
     localStorage.setItem(LANDSCAPE_TOKEN_KEY, result.token);
   }
   uiStore.INSERT_USERNAME(login_info.value.username);
-  const redirect = (history.state?.redirect as string) || "/";
+  let redirect = (history.state?.redirect as string) || "/";
+  if (redirect === "/login") {
+    redirect = "/";
+  }
   router.push({
     path: redirect,
   });
