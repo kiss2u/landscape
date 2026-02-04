@@ -9,7 +9,7 @@ use std::{
 };
 
 // 最大垃圾空间阈值
-const JUNK_DATA_MAX_SIZE: u64 = 1024 * 8;
+const JUNK_DATA_MAX_SIZE: u64 = 1024 * 1024 * 8;
 
 pub trait LandscapeStoreTrait {
     type K;
