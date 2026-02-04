@@ -8,7 +8,6 @@ const show_create_dev = ref<boolean>(false);
 const ifaceNodeStore = useIfaceNodeStore();
 async function show_down_dev() {
   ifaceNodeStore.HIDE_DOWN(!ifaceNodeStore.hide_down_dev);
-  await ifaceNodeStore.UPDATE_INFO();
 }
 </script>
 

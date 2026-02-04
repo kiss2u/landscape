@@ -6,6 +6,11 @@ export const useFrontEndStore = defineStore(
   "front_end",
   () => {
     const presentation_mode = ref(false);
+    const username = ref<string>("");
+
+    async function INSERT_USERNAME(name: string) {
+      username.value = name;
+    }
 
     function MASK_INFO(
       value: string | undefined | null,
@@ -29,6 +34,8 @@ export const useFrontEndStore = defineStore(
 
     return {
       presentation_mode,
+      username,
+      INSERT_USERNAME,
       MASK_INFO,
       MASK_PORT,
     };

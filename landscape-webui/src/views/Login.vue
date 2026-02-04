@@ -7,13 +7,13 @@ import { useMessage } from "naive-ui";
 
 import CopyRight from "@/components/CopyRight.vue";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
-import { useUiStore } from "@/stores/ui_store";
+import { useFrontEndStore } from "@/stores/front_end_config";
 
 const login_info = ref<LoginInfo>({ username: "", password: "" });
 
 const router = useRouter();
 const route = useRoute();
-const uiStore = useUiStore();
+const frontEndStore = useFrontEndStore();
 const message = useMessage();
 
 async function login() {
@@ -22,7 +22,7 @@ async function login() {
   if (result.success) {
     localStorage.setItem(LANDSCAPE_TOKEN_KEY, result.token);
   }
-  uiStore.INSERT_USERNAME(login_info.value.username);
+  frontEndStore.INSERT_USERNAME(login_info.value.username);
   let redirect = (history.state?.redirect as string) || "/";
   if (redirect === "/login") {
     redirect = "/";

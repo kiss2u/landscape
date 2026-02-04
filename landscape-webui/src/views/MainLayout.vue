@@ -1,12 +1,24 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRouter } from "vue-router";
+import { Logout } from "@vicons/carbon";
+import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { usePtyStore } from "@/stores/pty";
 import IntervalFetch from "@/components/head/IntervalFetch.vue";
 import LanguageSetting from "@/components/head/LanguageSetting.vue";
 import GlobalTerminal from "@/components/GlobalTerminal.vue";
-import { usePtyStore } from "@/stores/pty";
 import LandscapeSiderBar from "@/views/LandscapeSiderBar.vue";
 
+const router = useRouter();
+const frontEndStore = useFrontEndStore();
 const ptyStore = usePtyStore();
+
+function logout() {
+  localStorage.removeItem(LANDSCAPE_TOKEN_KEY);
+  frontEndStore.INSERT_USERNAME("");
+  router.push("/login");
+}
 
 // Dynamic content style for Split Mode
 const DOCK_SAFE_MARGIN = 8; // Safe distance from dock edge
@@ -48,9 +60,22 @@ const contentStyle = computed(() => {
         >
           <n-flex style="flex: 1" justify="space-between" align="center">
             <n-flex>/</n-flex>
-            <n-flex>
-              <PresentationMode></PresentationMode>
+            <n-flex :size="[5, 0]">
               <LanguageSetting />
+              <PresentationMode></PresentationMode>
+              <n-flex align="center">
+                <n-button
+                  quaternary
+                  circle
+                  size="small"
+                  @click="logout"
+                  title="退出登录"
+                >
+                  <template #icon>
+                    <n-icon><Logout /></n-icon>
+                  </template>
+                </n-button>
+              </n-flex>
               <IntervalFetch />
             </n-flex>
           </n-flex>
