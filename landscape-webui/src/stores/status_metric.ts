@@ -6,12 +6,14 @@ import {
   get_connect_metric_info,
   get_src_ip_stats,
   get_dst_ip_stats,
+  get_connect_global_stats,
 } from "@/api/metric";
 import { ServiceStatus, ServiceStatusType } from "@/lib/services";
 import {
   ConnectKey,
   ConnectRealtimeStatus,
   IpRealtimeStat,
+  ConnectGlobalStats,
 } from "landscape-types/common/metric/connect";
 
 export const useMetricStore = defineStore("dns_metric", () => {
@@ -20,6 +22,7 @@ export const useMetricStore = defineStore("dns_metric", () => {
   const firewall_info = ref<ConnectRealtimeStatus[]>();
   const src_ip_stats = ref<IpRealtimeStat[]>([]);
   const dst_ip_stats = ref<IpRealtimeStat[]>([]);
+  const global_history_stats = ref<ConnectGlobalStats | null>(null);
 
   const is_down = computed(() => {
     return metric_status.value.t == ServiceStatusType.Stop;
@@ -39,6 +42,10 @@ export const useMetricStore = defineStore("dns_metric", () => {
     }
   }
 
+  async function UPDATE_GLOBAL_HISTORY_STATS() {
+    global_history_stats.value = await get_connect_global_stats();
+  }
+
   async function SET_ENABLE(value: boolean) {
     enable.value = value;
   }
@@ -50,6 +57,8 @@ export const useMetricStore = defineStore("dns_metric", () => {
     firewall_info,
     src_ip_stats,
     dst_ip_stats,
+    global_history_stats,
     UPDATE_INFO,
+    UPDATE_GLOBAL_HISTORY_STATS,
   };
 });

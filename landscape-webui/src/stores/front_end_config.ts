@@ -32,12 +32,24 @@ export const useFrontEndStore = defineStore(
       }
     }
 
+    const conn_sort_key = ref<"time" | "port" | "ingress" | "egress">("time");
+    const conn_sort_order = ref<"asc" | "desc">("desc");
+
+    const history_conn_sort_key = ref<
+      "time" | "port" | "ingress" | "egress" | "duration"
+    >("time");
+    const history_conn_sort_order = ref<"asc" | "desc">("desc");
+
     return {
       presentation_mode,
       username,
       INSERT_USERNAME,
       MASK_INFO,
       MASK_PORT,
+      conn_sort_key,
+      conn_sort_order,
+      history_conn_sort_key,
+      history_conn_sort_order,
     };
   },
   {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted } from "vue";
 import { useMetricStore } from "@/stores/status_metric";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { ConnectFilter } from "@/lib/metric.rs";
 import { formatRate, formatPackets } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
@@ -9,6 +10,7 @@ import FlowSelect from "@/components/flow/FlowSelect.vue";
 import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher.vue";
 
 const metricStore = useMetricStore();
+const frontEndStore = useFrontEndStore();
 const themeVars = useThemeVars();
 
 // 实时过滤器状态
@@ -31,19 +33,20 @@ const ipTypeOptions = [
 ];
 
 // 排序状态
-const sortKey = ref<"time" | "port" | "ingress" | "egress">("time");
-const sortOrder = ref<"asc" | "desc">("desc");
+const sortKey = computed(() => frontEndStore.conn_sort_key);
+const sortOrder = computed(() => frontEndStore.conn_sort_order);
 
 const resetLiveFilter = () => {
   Object.assign(liveFilter, new ConnectFilter());
 };
 
 const toggleSort = (key: "time" | "port" | "ingress" | "egress") => {
-  if (sortKey.value === key) {
-    sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
+  if (frontEndStore.conn_sort_key === key) {
+    frontEndStore.conn_sort_order =
+      frontEndStore.conn_sort_order === "asc" ? "desc" : "asc";
   } else {
-    sortKey.value = key;
-    sortOrder.value = "desc";
+    frontEndStore.conn_sort_key = key;
+    frontEndStore.conn_sort_order = "desc";
   }
 };
 

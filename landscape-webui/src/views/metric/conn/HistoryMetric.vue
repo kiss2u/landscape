@@ -4,6 +4,7 @@ import { ConnectFilter } from "@/lib/metric.rs";
 import { get_connect_history, get_connect_global_stats } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
+import { useMetricStore } from "@/stores/status_metric";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
@@ -16,6 +17,7 @@ import { Renew } from "@vicons/carbon";
 import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher.vue";
 
 const prefStore = usePreferenceStore();
+const metricStore = useMetricStore();
 
 const themeVars = useThemeVars();
 const frontEndStore = useFrontEndStore();
@@ -25,24 +27,18 @@ const historicalData = ref<any[]>([]);
 const timeRange = ref<number | string | null>(300); // 默认 5 分钟 (300秒)
 const queryLimit = ref<number | null>(100); // 默认限制 100 条
 const historyFilter = reactive(new ConnectFilter());
-const sortKey = ref<"time" | "port" | "ingress" | "egress" | "duration">(
-  "time",
-);
-const sortOrder = ref<"asc" | "desc">("desc");
+const sortKey = computed(() => frontEndStore.history_conn_sort_key);
+const sortOrder = computed(() => frontEndStore.history_conn_sort_order);
 
 // 全局历史统计
-const globalStats = ref<ConnectGlobalStats | null>(null);
+const globalStats = computed(() => metricStore.global_history_stats);
 const refreshingGlobalStats = ref(false);
 
 const refreshGlobalStats = async () => {
   if (refreshingGlobalStats.value) return;
   refreshingGlobalStats.value = true;
   try {
-    const [stats] = await Promise.all([
-      get_connect_global_stats(),
-      new Promise((resolve) => setTimeout(resolve, 500)),
-    ]);
-    globalStats.value = stats;
+    await metricStore.UPDATE_GLOBAL_HISTORY_STATS();
   } catch (e) {
     console.error(e);
   } finally {
@@ -137,11 +133,12 @@ const resetHistoryFilter = () => {
 const toggleSort = (
   key: "time" | "port" | "ingress" | "egress" | "duration",
 ) => {
-  if (sortKey.value === key) {
-    sortOrder.value = sortOrder.value === "asc" ? "desc" : "asc";
+  if (frontEndStore.history_conn_sort_key === key) {
+    frontEndStore.history_conn_sort_order =
+      frontEndStore.history_conn_sort_order === "asc" ? "desc" : "asc";
   } else {
-    sortKey.value = key;
-    sortOrder.value = "desc";
+    frontEndStore.history_conn_sort_key = key;
+    frontEndStore.history_conn_sort_order = "desc";
   }
 };
 
@@ -219,7 +216,6 @@ onMounted(() => {
   <n-flex vertical style="flex: 1; overflow: hidden">
     <!-- 历史全局统计面板 -->
     <n-card
-      v-if="globalStats"
       size="small"
       :bordered="false"
       style="margin-bottom: 12px; background-color: #f9f9f910"
@@ -227,7 +223,7 @@ onMounted(() => {
       <n-flex align="center" justify="space-between">
         <ConnectViewSwitcher />
 
-        <n-flex align="center" size="large">
+        <n-flex align="center" size="large" v-if="globalStats">
           <n-flex align="center" size="small">
             <span style="color: #888; font-size: 13px">历史连接总数:</span>
             <span style="font-weight: bold">{{
@@ -262,6 +258,7 @@ onMounted(() => {
             </template>
           </n-button>
         </n-flex>
+        <div v-else style="height: 34px"></div>
       </n-flex>
     </n-card>
 
