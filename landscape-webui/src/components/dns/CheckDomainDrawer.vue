@@ -13,10 +13,12 @@ const message = useMessage();
 
 interface Props {
   flow_id?: number;
+  initialDomain?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   flow_id: 0,
+  initialDomain: "",
 });
 
 const show = defineModel<boolean>("show", { required: true });
@@ -32,10 +34,10 @@ const result = ref<CheckChainDnsResult>({
   cache_records: null,
 });
 
-async function init_req() {
+async function init_req(isEnter = false) {
   req.value = {
     flow_id: props.flow_id,
-    domain: "",
+    domain: props.initialDomain || "",
     record_type: "A",
   };
   result.value = {
@@ -44,6 +46,9 @@ async function init_req() {
     records: null,
     cache_records: null,
   };
+  if (isEnter && req.value.domain) {
+    query();
+  }
 }
 const options = [
   {
@@ -90,8 +95,8 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
 
 <template>
   <n-drawer
-    @after-enter="init_req()"
-    @after-leave="init_req()"
+    @after-enter="init_req(true)"
+    @after-leave="init_req(false)"
     v-model:show="show"
     width="500px"
     placement="right"

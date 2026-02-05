@@ -16,6 +16,8 @@ import {
   NTabPane,
   NSelect,
   NInputNumber,
+  NFlex,
+  NEllipsis,
 } from "naive-ui";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import type { DataTableColumns } from "naive-ui";
@@ -24,14 +26,21 @@ import {
   TrashOutline,
   HelpCircleOutline,
   TimeOutline,
+  Search,
 } from "@vicons/ionicons5";
 import { useDebounceFn } from "@vueuse/core";
 import DNSDashboard from "./DNSDashboard.vue";
+import FlowExhibit from "@/components/flow/FlowExhibit.vue";
+import CheckDomainDrawer from "@/components/dns/CheckDomainDrawer.vue";
+import { SearchLocate } from "@vicons/carbon";
 import { usePreferenceStore } from "@/stores/preference";
 const prefStore = usePreferenceStore();
 
 const activeTab = ref("dashboard");
 const dashboardRef = ref<any>(null);
+const showCheckDomainDrawer = ref(false);
+const checkDomainName = ref("");
+const checkDomainFlowId = ref(0);
 const { t } = useI18n();
 const frontEndStore = useFrontEndStore();
 
@@ -79,7 +88,7 @@ const formatIp = (ip: string) => {
 };
 
 const queryTypeOptions = computed(() => [
-  { label: t("metric.all_types"), value: undefined },
+  { label: t("metric.dns.all_types"), value: undefined },
   { label: "A (IPv4)", value: "A" },
   { label: "AAAA (IPv6)", value: "AAAA" },
   { label: "CNAME", value: "CNAME" },
@@ -92,19 +101,19 @@ const queryTypeOptions = computed(() => [
 ]);
 
 const statusOptions = computed(() => [
-  { label: t("metric.all_status"), value: undefined },
-  { label: t("metric.status_hit"), value: "hit" },
-  { label: t("metric.status_normal"), value: "normal" },
-  { label: t("metric.status_block"), value: "block" },
-  { label: t("metric.status_local"), value: "local" },
-  { label: t("metric.status_nxdomain"), value: "nxdomain" },
-  { label: t("metric.status_filter"), value: "filter" },
-  { label: t("metric.status_error"), value: "error" },
+  { label: t("metric.dns.all_status"), value: undefined },
+  { label: t("metric.dns.status_hit"), value: "hit" },
+  { label: t("metric.dns.status_normal"), value: "normal" },
+  { label: t("metric.dns.status_block"), value: "block" },
+  { label: t("metric.dns.status_local"), value: "local" },
+  { label: t("metric.dns.status_nxdomain"), value: "nxdomain" },
+  { label: t("metric.dns.status_filter"), value: "filter" },
+  { label: t("metric.dns.status_error"), value: "error" },
 ]);
 
 const columns = computed<DataTableColumns<DnsMetric>>(() => [
   {
-    title: t("metric.col_time"),
+    title: t("metric.dns.col_time"),
     key: "report_time",
     width: 200,
     sorter: true,
@@ -123,7 +132,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     },
   },
   {
-    title: t("metric.col_domain"),
+    title: t("metric.dns.col_domain"),
     key: "domain",
     sorter: true,
     sortOrder:
@@ -132,12 +141,74 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
           ? "ascend"
           : "descend"
         : false,
-    ellipsis: {
-      tooltip: true,
+    render(row) {
+      return h(
+        NFlex,
+        { align: "center", size: "small", wrap: false },
+        {
+          default: () => [
+            h(
+              NEllipsis,
+              { tooltip: true, style: "flex: 1; min-width: 0" },
+              { default: () => row.domain },
+            ),
+            h(
+              NTooltip,
+              { trigger: "hover" },
+              {
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: "tiny",
+                      quaternary: true,
+                      circle: true,
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        searchParams.domain = row.domain;
+                        loadData(true);
+                      },
+                    },
+                    {
+                      icon: () => h(NIcon, null, { default: () => h(Search) }),
+                    },
+                  ),
+                default: () => t("metric.dns.tip.search_domain"),
+              },
+            ),
+            h(
+              NTooltip,
+              { trigger: "hover" },
+              {
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: "tiny",
+                      quaternary: true,
+                      circle: true,
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        checkDomainName.value = row.domain;
+                        checkDomainFlowId.value = row.flow_id || 0;
+                        showCheckDomainDrawer.value = true;
+                      },
+                    },
+                    {
+                      icon: () =>
+                        h(NIcon, null, { default: () => h(SearchLocate) }),
+                    },
+                  ),
+                default: () => t("metric.dns.tip.check_domain"),
+              },
+            ),
+          ],
+        },
+      );
     },
   },
   {
-    title: t("metric.col_type"),
+    title: t("metric.dns.col_type"),
     key: "query_type",
     width: 80,
     render(row) {
@@ -149,7 +220,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     },
   },
   {
-    title: t("metric.col_src_ip"),
+    title: t("metric.dns.col_src_ip"),
     key: "src_ip",
     width: 140,
     render(row) {
@@ -157,7 +228,27 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     },
   },
   {
-    title: t("metric.col_resp_code"),
+    title: t("metric.dns.col_flow"),
+    key: "flow_id",
+    width: 180,
+    render(row) {
+      if (!row.flow_id || row.flow_id === 0) {
+        return h(
+          NTag,
+          {
+            type: "info",
+            bordered: false,
+            size: "small",
+            style: { opacity: 0.6 },
+          },
+          { default: () => t("metric.dns.tip.default_flow") },
+        );
+      }
+      return h(FlowExhibit, { flow_id: row.flow_id });
+    },
+  },
+  {
+    title: t("metric.dns.col_resp_code"),
     key: "response_code",
     width: 150,
     render(row) {
@@ -175,18 +266,18 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     },
   },
   {
-    title: t("metric.col_status"),
+    title: t("metric.dns.col_status"),
     key: "status",
     width: 110,
     render(row) {
       const statusMap: Record<string, { type: any; label: string }> = {
-        local: { type: "success", label: t("metric.status_local") },
-        block: { type: "warning", label: t("metric.status_block") },
-        hit: { type: "info", label: t("metric.status_hit").split(" (")[0] },
-        nxdomain: { type: "default", label: t("metric.status_nxdomain") },
-        filter: { type: "warning", label: t("metric.status_filter") },
-        normal: { type: "default", label: t("metric.status_normal") },
-        error: { type: "error", label: t("metric.status_error") },
+        local: { type: "success", label: t("metric.dns.status_local") },
+        block: { type: "warning", label: t("metric.dns.status_block") },
+        hit: { type: "info", label: t("metric.dns.status_hit").split(" (")[0] },
+        nxdomain: { type: "default", label: t("metric.dns.status_nxdomain") },
+        filter: { type: "warning", label: t("metric.dns.status_filter") },
+        normal: { type: "default", label: t("metric.dns.status_normal") },
+        error: { type: "error", label: t("metric.dns.status_error") },
       };
       const s = statusMap[row.status] || { type: "default", label: row.status };
       return h(
@@ -202,7 +293,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
     },
   },
   {
-    title: t("metric.col_duration"),
+    title: t("metric.dns.col_duration"),
     key: "duration_ms",
     width: 120,
     sorter: true,
@@ -214,7 +305,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
         : false,
   },
   {
-    title: t("metric.col_answers"),
+    title: t("metric.dns.col_answers"),
     key: "answers",
     ellipsis: {
       tooltip: true,
@@ -384,7 +475,7 @@ onMounted(() => {
       "
     >
       <h3 style="margin: 0; font-weight: 500; font-size: 1.1rem">
-        {{ t("metric.title") }}
+        {{ t("metric.dns.title") }}
       </h3>
       <n-space :size="8">
         <n-tooltip trigger="hover">
@@ -400,7 +491,7 @@ onMounted(() => {
               <HelpCircleOutline />
             </n-icon>
           </template>
-          {{ t("metric.auto_search_tip") }}
+          {{ t("metric.dns.auto_search_tip") }}
         </n-tooltip>
         <n-button circle size="tiny" @click="loadData(true)" tertiary>
           <template #icon>
@@ -419,7 +510,7 @@ onMounted(() => {
       <n-input
         v-model:value="searchParams.domain"
         size="small"
-        :placeholder="t('metric.domain')"
+        :placeholder="t('metric.dns.domain')"
         clearable
         style="width: 200px"
         v-if="activeTab === 'history'"
@@ -427,7 +518,7 @@ onMounted(() => {
       <n-input
         v-model:value="searchParams.src_ip"
         size="small"
-        :placeholder="t('metric.ip')"
+        :placeholder="t('metric.dns.ip')"
         clearable
         style="width: 140px"
         v-if="activeTab === 'history'"
@@ -436,7 +527,7 @@ onMounted(() => {
         v-model:value="searchParams.query_type"
         size="small"
         :options="queryTypeOptions"
-        :placeholder="t('metric.type')"
+        :placeholder="t('metric.dns.type')"
         clearable
         style="width: 130px"
         v-if="activeTab === 'history'"
@@ -445,7 +536,7 @@ onMounted(() => {
         v-model:value="searchParams.status"
         size="small"
         :options="statusOptions"
-        :placeholder="t('metric.status')"
+        :placeholder="t('metric.dns.status')"
         clearable
         style="width: 130px"
         v-if="activeTab === 'history'"
@@ -453,7 +544,7 @@ onMounted(() => {
       <n-input-number
         v-model:value="searchParams.min_duration_ms"
         size="small"
-        :placeholder="t('metric.min_ms')"
+        :placeholder="t('metric.dns.min_ms')"
         clearable
         :min="0"
         :show-button="false"
@@ -463,7 +554,7 @@ onMounted(() => {
       <n-input-number
         v-model:value="searchParams.max_duration_ms"
         size="small"
-        :placeholder="t('metric.max_ms')"
+        :placeholder="t('metric.dns.max_ms')"
         clearable
         :min="0"
         :show-button="false"
@@ -476,7 +567,7 @@ onMounted(() => {
         type="datetimerange"
         clearable
         :shortcuts="shortcuts"
-        :placeholder="t('metric.time_range')"
+        :placeholder="t('metric.dns.time_range')"
         style="width: 320px"
         :time-picker-props="{ timeZone: prefStore.timezone }"
       />
@@ -492,24 +583,24 @@ onMounted(() => {
             <template #icon>
               <n-icon><TimeOutline /></n-icon>
             </template>
-            {{ t("metric.now") }}
+            {{ t("metric.dns.now") }}
           </n-button>
         </template>
-        {{ t("metric.sync_to_now_tip") }}
+        {{ t("metric.dns.sync_to_now_tip") }}
       </n-tooltip>
       <n-button @click="handleReset" size="small" secondary>
         <template #icon
           ><n-icon><TrashOutline /></n-icon
         ></template>
-        {{ t("metric.reset") }}
+        {{ t("metric.dns.reset") }}
       </n-button>
     </n-space>
 
     <n-tabs v-model:value="activeTab" type="line" animated>
-      <n-tab-pane name="dashboard" :tab="t('metric.dashboard')">
+      <n-tab-pane name="dashboard" :tab="t('metric.dns.dashboard')">
         <DNSDashboard ref="dashboardRef" :time-range="searchParams.timeRange" />
       </n-tab-pane>
-      <n-tab-pane name="history" :tab="t('metric.query_log')">
+      <n-tab-pane name="history" :tab="t('metric.dns.query_log')">
         <n-data-table
           remote
           :columns="columns"
@@ -524,6 +615,12 @@ onMounted(() => {
         />
       </n-tab-pane>
     </n-tabs>
+
+    <CheckDomainDrawer
+      v-model:show="showCheckDomainDrawer"
+      :initial-domain="checkDomainName"
+      :flow_id="checkDomainFlowId"
+    />
   </div>
 </template>
 

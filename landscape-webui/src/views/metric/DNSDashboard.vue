@@ -65,27 +65,27 @@ const calculatePercent = (count: number) => {
 
 const latencyStats = computed(() => [
   {
-    label: t("metric.dash.avg"),
+    label: t("metric.dns.dash.avg"),
     value: summary.value?.avg_duration_ms,
     color: themeVars.value.successColor,
   },
   {
-    label: t("metric.dash.p50"),
+    label: t("metric.dns.dash.p50"),
     value: summary.value?.p50_duration_ms,
     color: themeVars.value.infoColor,
   },
   {
-    label: t("metric.dash.p95"),
+    label: t("metric.dns.dash.p95"),
     value: summary.value?.p95_duration_ms,
     color: themeVars.value.warningColor,
   },
   {
-    label: t("metric.dash.p99"),
+    label: t("metric.dns.dash.p99"),
     value: summary.value?.p99_duration_ms,
     color: themeVars.value.errorColor,
   },
   {
-    label: t("metric.dash.max"),
+    label: t("metric.dns.dash.max"),
     value: summary.value?.max_duration_ms,
     color: themeVars.value.primaryColor,
   },
@@ -93,23 +93,23 @@ const latencyStats = computed(() => [
 
 const dashboardLists = computed(() => [
   {
-    title: t("metric.dash.most_queried_domains"),
+    title: t("metric.dns.dash.most_queried_domains"),
     data: summary.value?.top_domains,
     type: "domain",
   },
   {
-    title: t("metric.dash.active_clients"),
+    title: t("metric.dns.dash.active_clients"),
     data: summary.value?.top_clients,
     type: "client",
   },
   {
-    title: t("metric.dash.latency_hotspots"),
-    subtitle: t("metric.dash.latency_subtitle"),
+    title: t("metric.dns.dash.latency_hotspots"),
+    subtitle: t("metric.dns.dash.latency_subtitle"),
     data: summary.value?.slowest_domains,
     type: "latency",
   },
   {
-    title: t("metric.dash.top_blocked"),
+    title: t("metric.dns.dash.top_blocked"),
     data: summary.value?.top_blocked,
     type: "blocked",
   },
@@ -140,20 +140,20 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item span="0:5 640:1">
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
-            <n-statistic :label="t('metric.dash.total_queries')">
+            <n-statistic :label="t('metric.dns.dash.total_queries')">
               <n-number-animation :from="0" :to="summary?.total_queries || 0" />
             </n-statistic>
             <div class="hit-breakdown">
               <div class="breakdown-item">
-                <span class="label">{{ t("metric.dash.nxdomain") }}:</span>
+                <span class="label">{{ t("metric.dns.dash.nxdomain") }}:</span>
                 <span class="val">{{ summary?.nxdomain_count || 0 }}</span>
               </div>
               <div class="breakdown-item">
-                <span class="label">{{ t("metric.dash.filter") }}:</span>
+                <span class="label">{{ t("metric.dns.dash.filter") }}:</span>
                 <span class="val">{{ summary?.filter_count || 0 }}</span>
               </div>
               <div class="breakdown-item">
-                <span class="label">{{ t("metric.dash.errors") }}:</span>
+                <span class="label">{{ t("metric.dns.dash.errors") }}:</span>
                 <span
                   class="val"
                   :class="{ error: (summary?.error_count || 0) > 0 }"
@@ -169,7 +169,7 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item span="0:5 640:1">
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
-            <n-statistic :label="t('metric.dash.cache_hit_rate')">
+            <n-statistic :label="t('metric.dns.dash.cache_hit_rate')">
               <template
                 #suffix
                 v-if="
@@ -197,12 +197,12 @@ defineExpose({ refresh: loadSummary });
                 :precision="1"
               />
               <n-text v-else depth="3" style="font-size: 14px">{{
-                t("metric.dash.no_data")
+                t("metric.dns.dash.no_data")
               }}</n-text>
             </n-statistic>
             <div class="hit-breakdown">
               <div class="breakdown-item">
-                <span class="label">{{ t("metric.dash.v4") }}:</span>
+                <span class="label">{{ t("metric.dns.dash.v4") }}:</span>
                 <span
                   class="val"
                   v-if="
@@ -222,7 +222,7 @@ defineExpose({ refresh: loadSummary });
                 <span class="val none" v-else>-</span>
               </div>
               <div class="breakdown-item">
-                <span class="label">{{ t("metric.dash.v6") }}:</span>
+                <span class="label">{{ t("metric.dns.dash.v6") }}:</span>
                 <span
                   class="val"
                   v-if="
@@ -242,7 +242,7 @@ defineExpose({ refresh: loadSummary });
                 <span class="val none" v-else>-</span>
               </div>
               <div class="breakdown-item">
-                <span class="label">{{ t("metric.dash.other") }}:</span>
+                <span class="label">{{ t("metric.dns.dash.other") }}:</span>
                 <span
                   class="val"
                   v-if="
@@ -270,7 +270,7 @@ defineExpose({ refresh: loadSummary });
       <n-grid-item span="0:5 640:1">
         <n-card size="small" :bordered="false" class="metric-card">
           <div class="metric-content">
-            <n-statistic :label="t('metric.dash.block_rate')">
+            <n-statistic :label="t('metric.dns.dash.block_rate')">
               <template #suffix><span class="suffix">%</span></template>
               <n-number-animation
                 :from="0"
@@ -296,10 +296,10 @@ defineExpose({ refresh: loadSummary });
         <n-card size="small" :bordered="false" class="metric-card latency-card">
           <div class="latency-header">
             <span class="latency-title">{{
-              t("metric.dash.query_latency")
+              t("metric.dns.dash.query_latency")
             }}</span>
             <span class="latency-unit">{{
-              t("metric.dash.milliseconds")
+              t("metric.dns.dash.milliseconds")
             }}</span>
           </div>
           <div class="latency-grid">
@@ -341,7 +341,10 @@ defineExpose({ refresh: loadSummary });
           <div class="card-content-wrapper">
             <n-skeleton v-if="loading" text :repeat="12" />
             <div class="empty-wrapper" v-else-if="!list.data?.length">
-              <n-empty :description="t('metric.dash.no_data')" size="small" />
+              <n-empty
+                :description="t('metric.dns.dash.no_data')"
+                size="small"
+              />
             </div>
             <n-scrollbar v-else style="max-height: 520px" trigger="hover">
               <div class="scrollbar-content">
@@ -398,7 +401,9 @@ defineExpose({ refresh: loadSummary });
                         class="item-meta"
                       >
                         {{
-                          t("metric.dash.from_samples", { count: item.count })
+                          t("metric.dns.dash.from_samples", {
+                            count: item.count,
+                          })
                         }}
                       </n-text>
                     </n-flex>

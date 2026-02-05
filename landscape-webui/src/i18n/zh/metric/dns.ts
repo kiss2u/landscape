@@ -33,6 +33,7 @@ export default {
   col_resp_code: "响应码",
   col_status: "状态",
   col_duration: "耗时 (ms)",
+  col_flow: "Flow 信息",
   col_answers: "回答",
   // 仪表盘
   dash: {
@@ -59,5 +60,10 @@ export default {
     latency_subtitle: "平均延迟 (最少 3 个样本)",
     no_data: "无数据",
     from_samples: "来自 {count} 个样本",
+  },
+  tip: {
+    default_flow: "默认 Flow",
+    search_domain: "搜索此域名",
+    check_domain: "测试域名查询日志",
   },
 };

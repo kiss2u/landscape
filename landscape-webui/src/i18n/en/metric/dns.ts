@@ -33,6 +33,7 @@ export default {
   col_resp_code: "Resp Code",
   col_status: "Status",
   col_duration: "Duration (ms)",
+  col_flow: "Flow Info",
   col_answers: "Answers",
   // Dashboard
   dash: {
@@ -59,5 +60,10 @@ export default {
     latency_subtitle: "Avg latency (min 3 samples)",
     no_data: "No Data",
     from_samples: "From {count} samples",
+  },
+  tip: {
+    default_flow: "Default Flow",
+    search_domain: "Search this domain",
+    check_domain: "Test domain query result",
   },
 };

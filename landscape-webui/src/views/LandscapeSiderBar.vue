@@ -2,6 +2,7 @@
 import type { MenuOption } from "naive-ui";
 import type { Component } from "vue";
 import { computed, h, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { NIcon } from "naive-ui";
 
@@ -27,6 +28,7 @@ import { usePtyStore } from "@/stores/pty";
 const route = useRoute();
 const router = useRouter();
 const ptyStore = usePtyStore();
+const { t } = useI18n();
 
 const menu_active_key = ref<string>("");
 
@@ -60,126 +62,113 @@ function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) });
 }
 
-const menuOptions: MenuOption[] = [
+const menuOptions = computed<MenuOption[]>(() => [
   {
-    label: "系统基本信息",
+    label: t("routes.dashboard"),
     key: "",
     icon: renderIcon(CicsSystemGroup),
   },
   {
-    label: "服务状态",
+    label: t("routes.status"),
     key: "status",
     icon: renderIcon(Dashboard),
     children: [
       {
-        label: "DHCPv4 服务",
+        label: t("routes.dhcp-v4"),
         key: "dhcp-v4",
         disabled: false,
       },
       {
-        label: "IPv6-PD  服务",
+        label: t("routes.ipv6-pd"),
         key: "ipv6-pd",
       },
       {
-        label: "IPv6 RA 服务",
+        label: t("routes.ipv6-ra"),
         key: "ipv6-ra",
         disabled: false,
       },
     ],
   },
-  // {
-  //   label: "网络拓扑",
-  //   key: "topology",
-  //   icon: renderIcon(Network4),
-  // },
   {
-    label: "静态 NAT 管理",
+    label: t("routes.nat"),
     key: "nat",
     icon: renderIcon(ImportExportRound),
     disabled: false,
   },
   {
-    label: "防火墙",
+    label: t("routes.firewall"),
     key: "firewall",
     icon: renderIcon(Wall),
   },
   {
-    label: "DNS 相关",
+    label: t("routes.dns"),
     key: "dns",
     icon: renderIcon(ServerDns),
     children: [
       {
-        label: "重定向规则管理",
+        label: t("routes.dns-redirect"),
         key: "dns-redirect",
       },
       {
-        label: "上游 DNS 配置管理",
+        label: t("routes.dns-upstream"),
         key: "dns-upstream",
       },
     ],
   },
-  // {
-  //   label: "网络管理",
-  //   key: "net",
-  //   icon: renderIcon(NetworkPublic),
-  //   children: [
-  //
-  //   ],
-  // },
   {
-    label: "分流设置",
+    label: t("routes.flow"),
     key: "flow",
     icon: renderIcon(ModelBuilder),
   },
   {
-    label: "Docker",
+    label: t("routes.docker"),
     key: "docker",
     icon: renderIcon(Docker),
   },
   {
-    label: "指标监控",
+    label: t("routes.metric-group"),
     key: "metric-group",
     icon: renderIcon(ChartCombo),
     children: [
       {
-        label: "连接信息",
+        label: t("routes.connect-info"),
         key: "connect-info",
         children: [
           {
-            label: "活跃连接",
+            label: t("routes.connect-live"),
             key: "metric/conn/live",
           },
           {
-            label: "源IP统计",
+            label: t("routes.connect-src"),
             key: "metric/conn/src",
           },
           {
-            label: "目的IP统计",
+            label: t("routes.connect-dst"),
             key: "metric/conn/dst",
           },
           {
-            label: "历史查询",
+            label: t("routes.connect-history"),
             key: "metric/conn/history",
           },
         ],
       },
       {
-        label: "DNS 指标",
+        label: t("routes.dns-metric"),
         key: "metric/dns",
       },
     ],
   },
   {
-    label: "地理关系库管理",
+    label: t("routes.geo"),
     key: "geo",
     icon: renderIcon(BookGlobe20Regular),
     children: [
       {
-        label: "域名",
+        label: t("routes.geo-domain"),
         key: "geo-domain",
       },
       {
-        label: "IP",
+        label: t("routes.geo-ip"),
         key: "geo-ip",
       },
     ],
@@ -190,11 +179,11 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(Terminal),
   },
   {
-    label: "系统配置",
+    label: t("routes.config"),
     key: "config",
     icon: renderIcon(Settings),
   },
-];
+]);
 </script>
 <template>
   <n-layout-sider
