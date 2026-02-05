@@ -354,6 +354,36 @@ impl DuckMetricStore {
         }
     }
 
+    pub async fn history_src_ip_stats(
+        &self,
+        params: ConnectHistoryQueryParams,
+    ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
+        let (resp, rx) = oneshot::channel();
+        let q = connect::ConnectQuery::HistorySrcIpStats(params);
+        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
+            return Vec::new();
+        }
+        match rx.await {
+            Ok(connect::ConnectQueryResult::IpHistoryStats(h)) => h,
+            _ => Vec::new(),
+        }
+    }
+
+    pub async fn history_dst_ip_stats(
+        &self,
+        params: ConnectHistoryQueryParams,
+    ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
+        let (resp, rx) = oneshot::channel();
+        let q = connect::ConnectQuery::HistoryDstIpStats(params);
+        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
+            return Vec::new();
+        }
+        match rx.await {
+            Ok(connect::ConnectQueryResult::IpHistoryStats(h)) => h,
+            _ => Vec::new(),
+        }
+    }
+
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {
         let (resp, rx) = oneshot::channel();
         let q = connect::ConnectQuery::GlobalStats;

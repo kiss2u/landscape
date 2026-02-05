@@ -4,7 +4,7 @@ import {
   ConnectRealtimeStatus,
 } from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import { ChartLine, ArrowUp, ArrowDown } from "@vicons/carbon";
+import { ChartLine, ArrowUp, ArrowDown, Search } from "@vicons/carbon";
 import { mask_string } from "@/lib/common";
 import { formatRate, formatPackets } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
@@ -58,7 +58,7 @@ const lastActiveTime = (conn: ConnectRealtimeStatus) => {
   return conn.last_metric?.report_time || Date.now();
 };
 
-const emit = defineEmits(["show:chart"]);
+const emit = defineEmits(["show:chart", "search:tuple"]);
 </script>
 
 <template>
@@ -130,14 +130,35 @@ const emit = defineEmits(["show:chart"]);
           <n-flex
             align="center"
             style="width: 800px; font-variant-numeric: tabular-nums"
+            size="small"
           >
-            {{
-              `${frontEndStore.MASK_INFO(conn.src_ip)}:${frontEndStore.MASK_PORT(
-                conn.src_port,
-              )} => ${frontEndStore.MASK_INFO(
-                conn.dst_ip,
-              )}:${frontEndStore.MASK_PORT(conn.dst_port)}`
-            }}
+            <span>
+              {{
+                `${frontEndStore.MASK_INFO(
+                  conn.src_ip,
+                )}:${frontEndStore.MASK_PORT(
+                  conn.src_port,
+                )} => ${frontEndStore.MASK_INFO(
+                  conn.dst_ip,
+                )}:${frontEndStore.MASK_PORT(conn.dst_port)}`
+              }}
+            </span>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  @click.stop="emit('search:tuple', conn)"
+                  style="
+                    font-size: 16px;
+                    color: themeVars.infoColor;
+                    opacity: 0.7;
+                  "
+                >
+                  <n-icon><Search /></n-icon>
+                </n-button>
+              </template>
+              精准筛选此四元组
+            </n-tooltip>
           </n-flex>
 
           <!-- 速率展示 -->

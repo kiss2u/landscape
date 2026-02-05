@@ -25,6 +25,8 @@ pub async fn get_metric_service_paths() -> Router<LandscapeApp> {
         .route("/connects/global_stats", get(get_connect_global_stats))
         .route("/connects/src_ip_stats", get(get_src_ip_stats))
         .route("/connects/dst_ip_stats", get(get_dst_ip_stats))
+        .route("/connects/history/src_ip_stats", get(get_history_src_ip_stats))
+        .route("/connects/history/dst_ip_stats", get(get_history_dst_ip_stats))
         .route("/dns/history", get(get_dns_history))
         .route("/dns/summary", get(get_dns_summary))
 }
@@ -96,5 +98,21 @@ pub async fn get_dst_ip_stats(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<Vec<IpRealtimeStat>> {
     let data = state.metric_service.data.connect_metric.get_dst_ip_stats().await;
+    LandscapeApiResp::success(data)
+}
+
+pub async fn get_history_src_ip_stats(
+    State(state): State<LandscapeApp>,
+    Query(params): Query<ConnectHistoryQueryParams>,
+) -> LandscapeApiResult<Vec<landscape_common::metric::connect::IpHistoryStat>> {
+    let data = state.metric_service.data.connect_metric.history_src_ip_stats(params).await;
+    LandscapeApiResp::success(data)
+}
+
+pub async fn get_history_dst_ip_stats(
+    State(state): State<LandscapeApp>,
+    Query(params): Query<ConnectHistoryQueryParams>,
+) -> LandscapeApiResult<Vec<landscape_common::metric::connect::IpHistoryStat>> {
+    let data = state.metric_service.data.connect_metric.history_dst_ip_stats(params).await;
     LandscapeApiResp::success(data)
 }

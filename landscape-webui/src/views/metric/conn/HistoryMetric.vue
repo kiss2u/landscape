@@ -142,6 +142,13 @@ const toggleSort = (
   }
 };
 
+const handleSearchTuple = (history: any) => {
+  historyFilter.src_ip = history.src_ip;
+  historyFilter.dst_ip = history.dst_ip;
+  historyFilter.port_start = history.src_port;
+  historyFilter.port_end = history.dst_port;
+};
+
 // 4. 计算属性 (Computed)
 const filteredHistory = computed(() => {
   return historicalData.value || [];
@@ -469,6 +476,7 @@ onMounted(() => {
           :history="item"
           :index="index"
           @show:chart="showChartDrawer"
+          @search:tuple="handleSearchTuple"
         />
       </template>
     </n-virtual-list>

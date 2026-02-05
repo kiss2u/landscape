@@ -22,12 +22,14 @@ const viewMode = computed({
       v-model:value="viewMode"
       type="segment"
       size="small"
-      style="min-width: 340px"
+      style="min-width: 600px"
     >
       <n-tab name="live">活跃连接</n-tab>
-      <n-tab name="src">源IP统计</n-tab>
-      <n-tab name="dst">目的IP统计</n-tab>
-      <n-tab name="history">历史查询</n-tab>
+      <n-tab name="src">源IP实时</n-tab>
+      <n-tab name="dst">目的IP实时</n-tab>
+      <n-tab name="history">连接历史</n-tab>
+      <n-tab name="history-src">源IP历史</n-tab>
+      <n-tab name="history-dst">目的IP历史</n-tab>
     </n-tabs>
 
     <n-tag

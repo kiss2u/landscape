@@ -1,30 +1,33 @@
 <script setup lang="ts">
-import { ref, computed, h } from "vue";
-import { formatRate, formatPackets } from "@/lib/util";
+import { h, computed } from "vue";
+import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars, NTooltip, NIcon, NButton } from "naive-ui";
 import { Search } from "@vicons/carbon";
-import type { IpRealtimeStat } from "landscape-types/common/metric/connect";
+import type {
+  IpHistoryStat,
+  ConnectSortKey,
+} from "landscape-types/common/metric/connect";
+
 import FlowExhibit from "@/components/flow/FlowExhibit.vue";
 
 const props = defineProps<{
-  stats: any[]; // 更通用的类型，支持带 flow_id
+  stats: IpHistoryStat[];
   title: string;
   ipLabel: string;
+  sortKey: string;
+  sortOrder: "asc" | "desc";
 }>();
 
-const emit = defineEmits(["search:ip"]);
+const emit = defineEmits(["update:sort", "search:ip"]);
 
 const themeVars = useThemeVars();
 
-const sortKey = ref<string>("egress_bps");
-const sortOrder = ref<"asc" | "desc">("desc");
-
-const columns = [
+// 使用 computed 确保当 props.sortKey 或 props.sortOrder 改变时，列定义会更新
+const columns = computed(() => [
   {
     title: props.ipLabel,
     key: "ip",
-    sorter: "default",
-    render: (row: any) => {
+    render: (row: IpHistoryStat) => {
       return h(
         "div",
         { style: { display: "flex", alignItems: "center", gap: "12px" } },
@@ -46,6 +49,7 @@ const columns = [
                       display: "flex",
                       transition: "opacity 0.2s",
                     },
+                    // 鼠标悬浮时提高不透明度
                     onMouseenter: (e: MouseEvent) => {
                       (e.currentTarget as HTMLElement).style.opacity = "1";
                     },
@@ -58,7 +62,7 @@ const columns = [
                     icon: () => h(NIcon, { component: Search }),
                   },
                 ),
-              default: () => "搜索此 IP",
+              default: () => "将此 IP 填入搜索框",
             },
           ),
         ],
@@ -68,8 +72,7 @@ const columns = [
   {
     title: "所属 Flow",
     key: "flow_id",
-    render: (row: any) => {
-      if (row.flow_id === undefined) return "-";
+    render: (row: IpHistoryStat) => {
       if (row.flow_id === 0) {
         return h(
           "n-tag",
@@ -88,75 +91,79 @@ const columns = [
     },
   },
   {
-    title: "活跃连接",
-    key: "active_conns",
-    sorter: (a: any, b: any) => a.stats.active_conns - b.stats.active_conns,
-    render: (row: any) => row.stats.active_conns,
+    title: "累计连接",
+    key: "time",
+    sorter: true,
+    sortOrder:
+      props.sortKey === "time"
+        ? props.sortOrder === "asc"
+          ? "ascend"
+          : "descend"
+        : false,
+    render: (row: IpHistoryStat) => row.connect_count,
   },
   {
-    title: "上传流速",
-    key: "egress_bps",
-    sorter: (a: any, b: any) => a.stats.egress_bps - b.stats.egress_bps,
-    render: (row: any) => {
+    title: "累计上传",
+    key: "egress",
+    sorter: true,
+    sortOrder:
+      props.sortKey === "egress"
+        ? props.sortOrder === "asc"
+          ? "ascend"
+          : "descend"
+        : false,
+    render: (row: IpHistoryStat) => {
       return h(
         "span",
         {
           style: { color: themeVars.value.infoColor, fontWeight: "bold" },
         },
-        formatRate(row.stats.egress_bps),
+        formatSize(row.total_egress_bytes),
       );
     },
   },
   {
-    title: "下载流速",
-    key: "ingress_bps",
-    sorter: (a: any, b: any) => a.stats.ingress_bps - b.stats.ingress_bps,
-    render: (row: any) => {
+    title: "累计下载",
+    key: "ingress",
+    sorter: true,
+    sortOrder:
+      props.sortKey === "ingress"
+        ? props.sortOrder === "asc"
+          ? "ascend"
+          : "descend"
+        : false,
+    render: (row: IpHistoryStat) => {
       return h(
         "span",
         {
           style: { color: themeVars.value.successColor, fontWeight: "bold" },
         },
-        formatRate(row.stats.ingress_bps),
+        formatSize(row.total_ingress_bytes),
       );
     },
   },
   {
-    title: "上传 PPS",
-    key: "egress_pps",
-    sorter: (a: any, b: any) => a.stats.egress_pps - b.stats.egress_pps,
-    render: (row: any) => formatPackets(row.stats.egress_pps),
+    title: "上传数据包",
+    key: "total_egress_pkts",
+    render: (row: IpHistoryStat) => formatCount(row.total_egress_pkts),
   },
   {
-    title: "下载 PPS",
-    key: "ingress_pps",
-    sorter: (a: any, b: any) => a.stats.ingress_pps - b.stats.ingress_pps,
-    render: (row: any) => formatPackets(row.stats.ingress_pps),
+    title: "下载数据包",
+    key: "total_ingress_pkts",
+    render: (row: IpHistoryStat) => formatCount(row.total_ingress_pkts),
   },
-];
+]);
 
 const handleSort = (sorter: any) => {
-  if (sorter) {
-    sortKey.value = sorter.columnKey;
-    sortOrder.value = sorter.order === "ascend" ? "asc" : "desc";
+  if (sorter && sorter.order) {
+    const key = sorter.columnKey as ConnectSortKey;
+    const order = sorter.order === "ascend" ? "asc" : "desc";
+    emit("update:sort", { key, order });
+  } else {
+    // 如果点击取消排序，我们默认回到按上传流量倒序
+    emit("update:sort", { key: "egress", order: "desc" });
   }
 };
-
-const processedData = computed(() => {
-  const data = [...props.stats];
-  return data.sort((a: any, b: any) => {
-    let vA, vB;
-    if (sortKey.value === "ip") {
-      vA = a.ip;
-      vB = b.ip;
-    } else {
-      vA = a.stats[sortKey.value];
-      vB = b.stats[sortKey.value];
-    }
-    const result = vA > vB ? 1 : vA < vB ? -1 : 0;
-    return sortOrder.value === "asc" ? result : -result;
-  });
-});
 </script>
 
 <template>
@@ -170,7 +177,7 @@ const processedData = computed(() => {
       remote
       size="small"
       :columns="columns"
-      :data="processedData"
+      :data="stats"
       :pagination="false"
       :max-height="'calc(100vh - 350px)'"
       @update:sorter="handleSort"

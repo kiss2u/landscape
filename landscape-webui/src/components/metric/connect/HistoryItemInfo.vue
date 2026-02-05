@@ -4,7 +4,7 @@ import {
   ConnectHistoryStatus,
 } from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import { ChartLine, ArrowUp, ArrowDown, Time } from "@vicons/carbon";
+import { ChartLine, ArrowUp, ArrowDown, Time, Search } from "@vicons/carbon";
 import { mask_string } from "@/lib/common";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
@@ -54,7 +54,7 @@ function formatDuration(start: number, end: number): string {
   return `${days}天 ${hours % 24}小时`;
 }
 
-const emit = defineEmits(["show:chart"]);
+const emit = defineEmits(["show:chart", "search:tuple"]);
 </script>
 
 <template>
@@ -117,16 +117,35 @@ const emit = defineEmits(["show:chart"]);
           <n-flex
             align="center"
             style="width: 800px; font-variant-numeric: tabular-nums"
+            size="small"
           >
-            {{
-              `${frontEndStore.MASK_INFO(
-                history.src_ip,
-              )}:${frontEndStore.MASK_PORT(
-                history.src_port,
-              )} => ${frontEndStore.MASK_INFO(
-                history.dst_ip,
-              )}:${frontEndStore.MASK_PORT(history.dst_port)}`
-            }}
+            <span>
+              {{
+                `${frontEndStore.MASK_INFO(
+                  history.src_ip,
+                )}:${frontEndStore.MASK_PORT(
+                  history.src_port,
+                )} => ${frontEndStore.MASK_INFO(
+                  history.dst_ip,
+                )}:${frontEndStore.MASK_PORT(history.dst_port)}`
+              }}
+            </span>
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  @click.stop="emit('search:tuple', history)"
+                  style="
+                    font-size: 16px;
+                    color: themeVars.infoColor;
+                    opacity: 0.7;
+                  "
+                >
+                  <n-icon><Search /></n-icon>
+                </n-button>
+              </template>
+              精准筛选此四元组
+            </n-tooltip>
           </n-flex>
 
           <!-- 累计总量展示 -->

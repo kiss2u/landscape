@@ -167,6 +167,20 @@ impl ConnectMetricManager {
         self.metric_store.history_summaries_complex(params).await
     }
 
+    pub async fn history_src_ip_stats(
+        &self,
+        params: ConnectHistoryQueryParams,
+    ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
+        self.metric_store.history_src_ip_stats(params).await
+    }
+
+    pub async fn history_dst_ip_stats(
+        &self,
+        params: ConnectHistoryQueryParams,
+    ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
+        self.metric_store.history_dst_ip_stats(params).await
+    }
+
     async fn handle_metric_message(
         metric: ConnectMetric,
         metric_store: &DuckMetricStore,

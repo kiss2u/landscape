@@ -255,6 +255,22 @@ pub struct IpRealtimeStat {
 
 #[derive(Debug, Serialize, Deserialize, Clone, TS)]
 #[ts(export, export_to = "common/metric/connect.d.ts")]
+pub struct IpHistoryStat {
+    pub ip: IpAddr,
+    pub flow_id: u8,
+    #[ts(type = "number")]
+    pub total_ingress_bytes: u64,
+    #[ts(type = "number")]
+    pub total_egress_bytes: u64,
+    #[ts(type = "number")]
+    pub total_ingress_pkts: u64,
+    #[ts(type = "number")]
+    pub total_egress_pkts: u64,
+    pub connect_count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, TS)]
+#[ts(export, export_to = "common/metric/connect.d.ts")]
 pub struct MetricChartRequest {
     pub key: ConnectKey,
     #[ts(optional)]

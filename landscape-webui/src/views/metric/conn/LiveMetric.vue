@@ -49,7 +49,12 @@ const toggleSort = (key: "time" | "port" | "ingress" | "egress") => {
     frontEndStore.conn_sort_order = "desc";
   }
 };
-
+const handleSearchTuple = (conn: any) => {
+  liveFilter.src_ip = conn.src_ip;
+  liveFilter.dst_ip = conn.dst_ip;
+  liveFilter.port_start = conn.src_port;
+  liveFilter.port_end = conn.dst_port;
+};
 // 系统全局汇总
 const systemStats = computed(() => {
   const stats = {
@@ -332,6 +337,7 @@ onMounted(async () => {
     <ConnectVirtualList
       v-if="filteredConnectMetrics"
       :connect_metrics="filteredConnectMetrics"
+      @search:tuple="handleSearchTuple"
     />
   </n-flex>
 </template>

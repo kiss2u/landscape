@@ -105,6 +105,16 @@ export type IpAggregatedStats = {
   active_conns: number;
 };
 
+export type IpHistoryStat = {
+  ip: string;
+  flow_id: number;
+  total_ingress_bytes: number;
+  total_egress_bytes: number;
+  total_ingress_pkts: number;
+  total_egress_pkts: number;
+  connect_count: number;
+};
+
 export type IpRealtimeStat = { ip: string; stats: IpAggregatedStats };
 
 export type MetricChartRequest = {

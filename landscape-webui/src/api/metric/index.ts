@@ -8,6 +8,7 @@ import {
   ConnectGlobalStats,
   ConnectHistoryQueryParams,
   IpRealtimeStat,
+  IpHistoryStat,
   MetricResolution,
 } from "landscape-types/common/metric/connect";
 
@@ -54,6 +55,24 @@ export async function get_connect_metric_info(
   let data = await axiosService.post("metric/connects/chart", {
     key,
     resolution,
+  });
+  return data.data;
+}
+
+export async function get_history_src_ip_stats(
+  params?: ConnectHistoryQueryParams,
+): Promise<IpHistoryStat[]> {
+  let data = await axiosService.get("metric/connects/history/src_ip_stats", {
+    params,
+  });
+  return data.data;
+}
+
+export async function get_history_dst_ip_stats(
+  params?: ConnectHistoryQueryParams,
+): Promise<IpHistoryStat[]> {
+  let data = await axiosService.get("metric/connects/history/dst_ip_stats", {
+    params,
   });
   return data.data;
 }

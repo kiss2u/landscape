@@ -10,6 +10,8 @@ pub enum ConnectQuery {
     ActiveKeys,
     HistorySummaries(ConnectHistoryQueryParams),
     GlobalStats,
+    HistorySrcIpStats(ConnectHistoryQueryParams),
+    HistoryDstIpStats(ConnectHistoryQueryParams),
 }
 
 pub enum ConnectQueryResult {
@@ -17,6 +19,7 @@ pub enum ConnectQueryResult {
     Keys(Vec<ConnectKey>),
     HistoryStatuses(Vec<ConnectHistoryStatus>),
     Stats(ConnectGlobalStats),
+    IpHistoryStats(Vec<landscape_common::metric::connect::IpHistoryStat>),
 }
 
 pub fn handle_query(conn: &Connection, query: ConnectQuery) -> ConnectQueryResult {
@@ -29,6 +32,12 @@ pub fn handle_query(conn: &Connection, query: ConnectQuery) -> ConnectQueryResul
             ConnectQueryResult::HistoryStatuses(query_historical_summaries_complex(conn, params))
         }
         ConnectQuery::GlobalStats => ConnectQueryResult::Stats(query_global_stats(conn)),
+        ConnectQuery::HistorySrcIpStats(params) => {
+            ConnectQueryResult::IpHistoryStats(query_connection_ip_history(conn, params, true))
+        }
+        ConnectQuery::HistoryDstIpStats(params) => {
+            ConnectQueryResult::IpHistoryStats(query_connection_ip_history(conn, params, false))
+        }
     }
 }
 
@@ -469,4 +478,100 @@ pub fn collect_and_cleanup_old_metrics(
     );
 
     Box::new(metrics)
+}
+
+pub fn query_connection_ip_history(
+    conn: &Connection,
+    params: ConnectHistoryQueryParams,
+    is_src: bool,
+) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
+    let mut where_clauses = Vec::new();
+    if let Some(start) = params.start_time {
+        where_clauses.push(format!("last_report_time >= {}", start));
+    }
+    if let Some(end) = params.end_time {
+        where_clauses.push(format!("last_report_time <= {}", end));
+    }
+    if let Some(p) = params.flow_id {
+        where_clauses.push(format!("flow_id = {}", p));
+    }
+    if let Some(ip) = params.src_ip {
+        if !ip.is_empty() {
+            where_clauses.push(format!("src_ip LIKE '%{}%'", ip));
+        }
+    }
+    if let Some(ip) = params.dst_ip {
+        if !ip.is_empty() {
+            where_clauses.push(format!("dst_ip LIKE '%{}%'", ip));
+        }
+    }
+
+    let where_stmt = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    let group_col = if is_src { "src_ip" } else { "dst_ip" };
+
+    let sort_col = match params.sort_key.unwrap_or_default() {
+        ConnectSortKey::Ingress => "SUM(total_ingress_bytes)",
+        ConnectSortKey::Egress => "SUM(total_egress_bytes)",
+        ConnectSortKey::Time => "COUNT(*)",
+        _ => "SUM(total_egress_bytes)",
+    };
+    let sort_order_str = match params.sort_order.unwrap_or_default() {
+        SortOrder::Asc => "ASC",
+        SortOrder::Desc => "DESC",
+    };
+
+    let limit_clause =
+        if let Some(l) = params.limit { format!("LIMIT {}", l) } else { "LIMIT 50".to_string() };
+
+    let stmt = format!(
+        "
+        SELECT 
+            {}, 
+            flow_id,
+            SUM(total_ingress_bytes), 
+            SUM(total_egress_bytes), 
+            SUM(total_ingress_pkts), 
+            SUM(total_egress_pkts), 
+            COUNT(*)
+        FROM conn_summaries
+        {}
+        GROUP BY {}, flow_id
+        ORDER BY {} {}
+        {}
+    ",
+        group_col, where_stmt, group_col, sort_col, sort_order_str, limit_clause
+    );
+
+    let mut stmt = match conn.prepare(&stmt) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to prepare IP history SQL: {}, error: {}", stmt, e);
+            return Vec::new();
+        }
+    };
+
+    let rows = stmt.query_map([], |row| {
+        Ok(landscape_common::metric::connect::IpHistoryStat {
+            ip: row.get::<_, String>(0)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
+            flow_id: row.get::<_, i64>(1)? as u8,
+            total_ingress_bytes: row.get::<_, Option<i64>>(2)?.unwrap_or(0) as u64,
+            total_egress_bytes: row.get::<_, Option<i64>>(3)?.unwrap_or(0) as u64,
+            total_ingress_pkts: row.get::<_, Option<i64>>(4)?.unwrap_or(0) as u64,
+            total_egress_pkts: row.get::<_, Option<i64>>(5)?.unwrap_or(0) as u64,
+            connect_count: row.get::<_, i64>(6)? as u32,
+        })
+    });
+
+    match rows {
+        Ok(r) => r.filter_map(Result::ok).collect(),
+        Err(e) => {
+            tracing::error!("Failed to execute IP history query: {}", e);
+            Vec::new()
+        }
+    }
 }
