@@ -21,7 +21,7 @@ async function show_chart_drawer(conn: ConnectRealtimeStatus) {
   show_chart_title.value = `${frontEndStore.MASK_INFO(conn.src_ip)}:${frontEndStore.MASK_PORT(conn.src_port)} => ${frontEndStore.MASK_INFO(conn.dst_ip)}:${frontEndStore.MASK_PORT(conn.dst_port)}`;
   show_chart.value = true;
 }
-const emit = defineEmits(["search:tuple"]);
+const emit = defineEmits(["search:tuple", "search:src", "search:dst"]);
 </script>
 
 <template>
@@ -30,6 +30,8 @@ const emit = defineEmits(["search:tuple"]);
       <ConnectItemInfo
         @show:chart="show_chart_drawer"
         @search:tuple="emit('search:tuple', $event)"
+        @search:src="emit('search:src', $event)"
+        @search:dst="emit('search:dst', $event)"
         :conn="item"
         :index="index"
       />

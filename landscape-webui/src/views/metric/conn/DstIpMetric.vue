@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRoute } from "vue-router";
 import { useMetricStore } from "@/stores/status_metric";
 import { formatRate } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
@@ -9,6 +10,7 @@ import FlowSelect from "@/components/flow/FlowSelect.vue";
 
 const metricStore = useMetricStore();
 const themeVars = useThemeVars();
+const route = useRoute();
 
 const ipFilter = ref("");
 const flowFilter = ref<number | null>(null);
@@ -77,6 +79,10 @@ const systemStats = computed(() => {
 });
 
 onMounted(async () => {
+  if (route.query.ip) ipFilter.value = route.query.ip as string;
+  if (route.query.flow_id)
+    flowFilter.value = parseInt(route.query.flow_id as string);
+
   metricStore.SET_ENABLE(true);
   await metricStore.UPDATE_INFO();
 
@@ -99,19 +105,25 @@ onMounted(async () => {
 
         <n-flex align="center" size="large">
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总活跃连接:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_active_conns") }}:</span
+            >
             <span style="font-weight: bold">{{ systemStats.count }}</span>
           </n-flex>
           <n-divider vertical />
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总上行:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_egress") }}:</span
+            >
             <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
               formatRate(systemStats.egressBps)
             }}</span>
           </n-flex>
           <n-divider vertical />
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总下行:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_ingress") }}:</span
+            >
             <span
               :style="{ fontWeight: 'bold', color: themeVars.successColor }"
               >{{ formatRate(systemStats.ingressBps) }}</span
@@ -130,20 +142,20 @@ onMounted(async () => {
     >
       <n-input
         v-model:value="ipFilter"
-        placeholder="搜索目的 IP"
+        :placeholder="$t('metric.connect.filter.search_dst')"
         clearable
         style="width: 200px"
       />
       <FlowSelect v-model="flowFilter" width="150px" />
-      <n-button @click="metricStore.UPDATE_INFO()" :loading="false"
-        >刷新采样</n-button
-      >
+      <n-button @click="metricStore.UPDATE_INFO()" :loading="false">{{
+        $t("metric.connect.stats.refresh_sample")
+      }}</n-button>
     </n-flex>
 
     <IpStatsList
       :stats="stats"
-      title="目的 IP 实时统计"
-      ip-label="目的 IP 地址"
+      :title="$t('metric.connect.stats.live_dst')"
+      :ip-label="$t('metric.connect.col.dst_ip')"
       @search:ip="(ip) => (ipFilter = ip)"
     />
   </n-flex>

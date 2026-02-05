@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute } from "vue-router";
 import { useMetricStore } from "@/stores/status_metric";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { ConnectFilter } from "@/lib/metric.rs";
@@ -12,25 +14,27 @@ import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher
 const metricStore = useMetricStore();
 const frontEndStore = useFrontEndStore();
 const themeVars = useThemeVars();
+const route = useRoute();
+const { t } = useI18n();
 
 // 实时过滤器状态
 const liveFilter = reactive(new ConnectFilter());
 
 // 协议类型选项
-const protocolOptions = [
-  { label: "全部", value: null },
+const protocolOptions = computed(() => [
+  { label: t("metric.connect.all_types"), value: null },
   { label: "TCP", value: 6 },
   { label: "UDP", value: 17 },
   { label: "ICMP", value: 1 },
   { label: "ICMPv6", value: 58 },
-];
+]);
 
 // IP 类型选项
-const ipTypeOptions = [
-  { label: "全部", value: null },
+const ipTypeOptions = computed(() => [
+  { label: t("metric.connect.all_types"), value: null },
   { label: "IPv4", value: 0 },
   { label: "IPv6", value: 1 },
-];
+]);
 
 // 排序状态
 const sortKey = computed(() => frontEndStore.conn_sort_key);
@@ -140,6 +144,16 @@ const totalStats = computed(() => {
 });
 
 onMounted(async () => {
+  // 从路由参数初始化过滤器
+  if (route.query.src_ip) liveFilter.src_ip = route.query.src_ip as string;
+  if (route.query.dst_ip) liveFilter.dst_ip = route.query.dst_ip as string;
+  if (route.query.port_start)
+    liveFilter.port_start = parseInt(route.query.port_start as string);
+  if (route.query.port_end)
+    liveFilter.port_end = parseInt(route.query.port_end as string);
+  if (route.query.flow_id)
+    liveFilter.flow_id = parseInt(route.query.flow_id as string);
+
   metricStore.SET_ENABLE(true);
   await metricStore.UPDATE_INFO();
 
@@ -162,19 +176,25 @@ onMounted(async () => {
 
         <n-flex align="center" size="large">
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总活跃连接:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_active_conns") }}:</span
+            >
             <span style="font-weight: bold">{{ systemStats.count }}</span>
           </n-flex>
           <n-divider vertical />
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总上行:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_egress") }}:</span
+            >
             <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
               formatRate(systemStats.egressBps)
             }}</span>
           </n-flex>
           <n-divider vertical />
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总下行:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_ingress") }}:</span
+            >
             <span
               :style="{ fontWeight: 'bold', color: themeVars.successColor }"
               >{{ formatRate(systemStats.ingressBps) }}</span
@@ -188,41 +208,41 @@ onMounted(async () => {
     <n-flex align="center" :wrap="true" style="margin-bottom: 12px">
       <n-input
         v-model:value="liveFilter.src_ip"
-        placeholder="源IP"
+        :placeholder="$t('metric.connect.filter.src_ip')"
         clearable
         style="width: 170px"
       />
       <n-input
         v-model:value="liveFilter.dst_ip"
-        placeholder="目标IP"
+        :placeholder="$t('metric.connect.filter.dst_ip')"
         clearable
         style="width: 170px"
       />
       <n-input-group style="width: 220px">
         <n-input-number
           v-model:value="liveFilter.port_start"
-          placeholder="源端口"
+          :placeholder="$t('metric.connect.filter.port_start')"
           :show-button="false"
           clearable
         />
         <n-input-group-label>=></n-input-group-label>
         <n-input-number
           v-model:value="liveFilter.port_end"
-          placeholder="目的"
+          :placeholder="$t('metric.connect.filter.port_end')"
           :show-button="false"
           clearable
         />
       </n-input-group>
       <n-select
         v-model:value="liveFilter.l4_proto"
-        placeholder="传输协议"
+        :placeholder="$t('metric.connect.filter.proto')"
         :options="protocolOptions"
         clearable
         style="width: 130px"
       />
       <n-select
         v-model:value="liveFilter.l3_proto"
-        placeholder="IP类型"
+        :placeholder="$t('metric.connect.filter.l3_proto')"
         :options="ipTypeOptions"
         clearable
         style="width: 110px"
@@ -230,10 +250,12 @@ onMounted(async () => {
       <FlowSelect v-model="liveFilter.flow_id" width="120px" />
 
       <n-button-group>
-        <n-button @click="metricStore.UPDATE_INFO()" type="primary"
-          >刷新采样</n-button
-        >
-        <n-button @click="resetLiveFilter">重置</n-button>
+        <n-button @click="metricStore.UPDATE_INFO()" type="primary">{{
+          $t("metric.connect.stats.refresh_sample")
+        }}</n-button>
+        <n-button @click="resetLiveFilter">{{
+          $t("metric.connect.reset")
+        }}</n-button>
       </n-button-group>
       <n-divider vertical />
 
@@ -242,27 +264,28 @@ onMounted(async () => {
           :type="sortKey === 'time' ? 'primary' : 'default'"
           @click="toggleSort('time')"
         >
-          活跃时间
+          {{ $t("metric.connect.filter.time") }}
           {{ sortKey === "time" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
           :type="sortKey === 'port' ? 'primary' : 'default'"
           @click="toggleSort('port')"
         >
-          端口 {{ sortKey === "port" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
+          {{ $t("metric.connect.filter.port") }}
+          {{ sortKey === "port" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
           :type="sortKey === 'egress' ? 'primary' : 'default'"
           @click="toggleSort('egress')"
         >
-          上传流速
+          {{ $t("metric.connect.stats.filter_egress") }}
           {{ sortKey === "egress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
           :type="sortKey === 'ingress' ? 'primary' : 'default'"
           @click="toggleSort('ingress')"
         >
-          下载流速
+          {{ $t("metric.connect.stats.filter_ingress") }}
           {{ sortKey === "ingress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
       </n-button-group>
@@ -275,7 +298,10 @@ onMounted(async () => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="过滤活跃连接" :value="totalStats.count" />
+          <n-statistic
+            :label="$t('metric.connect.stats.filter_total')"
+            :value="totalStats.count"
+          />
         </n-card>
       </n-gi>
       <n-gi>
@@ -284,7 +310,7 @@ onMounted(async () => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="实时总上行">
+          <n-statistic :label="$t('metric.connect.stats.total_egress')">
             <span :style="{ color: themeVars.infoColor, fontWeight: 'bold' }">
               {{ formatRate(totalStats.egressBps) }}
             </span>
@@ -297,7 +323,7 @@ onMounted(async () => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="实时总下行">
+          <n-statistic :label="$t('metric.connect.stats.total_ingress')">
             <span
               :style="{ color: themeVars.successColor, fontWeight: 'bold' }"
             >
@@ -312,7 +338,7 @@ onMounted(async () => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="入站流量 PPS">
+          <n-statistic :label="$t('metric.connect.stats.filter_ingress_pkts')">
             <span style="color: #888">
               {{ formatPackets(totalStats.ingressPps) }}
             </span>
@@ -325,7 +351,7 @@ onMounted(async () => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="出站流量 PPS">
+          <n-statistic :label="$t('metric.connect.stats.filter_egress_pkts')">
             <span style="color: #888">
               {{ formatPackets(totalStats.egressPps) }}
             </span>
@@ -338,6 +364,8 @@ onMounted(async () => {
       v-if="filteredConnectMetrics"
       :connect_metrics="filteredConnectMetrics"
       @search:tuple="handleSearchTuple"
+      @search:src="(ip) => (liveFilter.src_ip = ip)"
+      @search:dst="(ip) => (liveFilter.dst_ip = ip)"
     />
   </n-flex>
 </template>

@@ -4,13 +4,15 @@ import {
   ConnectRealtimeStatus,
 } from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import { ChartLine, ArrowUp, ArrowDown, Search } from "@vicons/carbon";
+import { useRouter } from "vue-router";
+import { ChartLine, ArrowUp, ArrowDown, Search, Catalog } from "@vicons/carbon";
 import { mask_string } from "@/lib/common";
 import { formatRate, formatPackets } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 
 const frontEndStore = useFrontEndStore();
 const themeVars = useThemeVars();
+const router = useRouter();
 import { usePreferenceStore } from "@/stores/preference";
 const prefStore = usePreferenceStore();
 
@@ -58,7 +60,25 @@ const lastActiveTime = (conn: ConnectRealtimeStatus) => {
   return conn.last_metric?.report_time || Date.now();
 };
 
-const emit = defineEmits(["show:chart", "search:tuple"]);
+const goToHistory = (conn: ConnectRealtimeStatus) => {
+  router.push({
+    path: "/metric/conn/history",
+    query: {
+      src_ip: conn.src_ip,
+      dst_ip: conn.dst_ip,
+      port_start: conn.src_port,
+      port_end: conn.dst_port,
+      flow_id: conn.flow_id,
+    },
+  });
+};
+
+const emit = defineEmits([
+  "show:chart",
+  "search:tuple",
+  "search:src",
+  "search:dst",
+]);
 </script>
 
 <template>
@@ -82,7 +102,9 @@ const emit = defineEmits(["show:chart", "search:tuple"]);
               <template #trigger>
                 <div style="cursor: help">
                   <n-flex align="center" :wrap="false" size="small">
-                    <span style="color: #888; font-size: 12px">活跃于</span>
+                    <span style="color: #888; font-size: 12px">{{
+                      $t("metric.connect.filter.now")
+                    }}</span>
                     <n-time
                       :time="lastActiveTime(conn)"
                       format="HH:mm:ss"
@@ -100,7 +122,7 @@ const emit = defineEmits(["show:chart", "search:tuple"]);
                   </n-flex>
                 </div>
               </template>
-              创建于:
+              {{ $t("metric.connect.filter.create_time") }}:
               <n-time
                 :time="conn.key.create_time"
                 format="yyyy-MM-dd HH:mm:ss"
@@ -157,7 +179,24 @@ const emit = defineEmits(["show:chart", "search:tuple"]);
                   <n-icon><Search /></n-icon>
                 </n-button>
               </template>
-              精准筛选此四元组
+              {{ $t("metric.connect.tip.precise_filter") }}
+            </n-tooltip>
+
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  @click.stop="goToHistory(conn)"
+                  style="
+                    font-size: 16px;
+                    color: themeVars.warningColor;
+                    opacity: 0.7;
+                  "
+                >
+                  <n-icon><Catalog /></n-icon>
+                </n-button>
+              </template>
+              {{ $t("metric.connect.tip.view_history") }}
             </n-tooltip>
           </n-flex>
 

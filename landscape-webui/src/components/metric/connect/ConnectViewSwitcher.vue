@@ -24,12 +24,16 @@ const viewMode = computed({
       size="small"
       style="min-width: 600px"
     >
-      <n-tab name="live">活跃连接</n-tab>
-      <n-tab name="src">源IP实时</n-tab>
-      <n-tab name="dst">目的IP实时</n-tab>
-      <n-tab name="history">连接历史</n-tab>
-      <n-tab name="history-src">源IP历史</n-tab>
-      <n-tab name="history-dst">目的IP历史</n-tab>
+      <n-tab name="live">{{ $t("metric.connect.switcher.live") }}</n-tab>
+      <n-tab name="src">{{ $t("metric.connect.switcher.src") }}</n-tab>
+      <n-tab name="dst">{{ $t("metric.connect.switcher.dst") }}</n-tab>
+      <n-tab name="history">{{ $t("metric.connect.switcher.history") }}</n-tab>
+      <n-tab name="history-src">{{
+        $t("metric.connect.switcher.history_src")
+      }}</n-tab>
+      <n-tab name="history-dst">{{
+        $t("metric.connect.switcher.history_dst")
+      }}</n-tab>
     </n-tabs>
 
     <n-tag
@@ -42,7 +46,7 @@ const viewMode = computed({
       <template #icon>
         <div class="pulse-dot"></div>
       </template>
-      5s 采样
+      {{ $t("metric.connect.stats.five_sec_sample") }}
     </n-tag>
   </n-flex>
 </template>

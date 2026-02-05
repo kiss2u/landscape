@@ -4,13 +4,15 @@ import {
   ConnectHistoryStatus,
 } from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import { ChartLine, ArrowUp, ArrowDown, Time, Search } from "@vicons/carbon";
+import { useRouter } from "vue-router";
+import { ChartLine, ArrowUp, ArrowDown, Search, Flash } from "@vicons/carbon";
 import { mask_string } from "@/lib/common";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 
 const frontEndStore = useFrontEndStore();
 const themeVars = useThemeVars();
+const router = useRouter();
 import { usePreferenceStore } from "@/stores/preference";
 const prefStore = usePreferenceStore();
 
@@ -54,7 +56,25 @@ function formatDuration(start: number, end: number): string {
   return `${days}天 ${hours % 24}小时`;
 }
 
-const emit = defineEmits(["show:chart", "search:tuple"]);
+const goToLive = (history: ConnectHistoryStatus) => {
+  router.push({
+    path: "/metric/conn/live",
+    query: {
+      src_ip: history.src_ip,
+      dst_ip: history.dst_ip,
+      port_start: history.src_port.toString(),
+      port_end: history.dst_port.toString(),
+      flow_id: history.flow_id.toString(),
+    },
+  });
+};
+
+const emit = defineEmits([
+  "show:chart",
+  "search:tuple",
+  "search:src",
+  "search:dst",
+]);
 </script>
 
 <template>
@@ -84,7 +104,7 @@ const emit = defineEmits(["show:chart", "search:tuple"]);
                 <n-tooltip trigger="hover">
                   <template #trigger>
                     <span style="cursor: help; border-bottom: 1px dashed #888">
-                      持续
+                      {{ $t("metric.connect.filter.duration") }}
                       {{
                         formatDuration(
                           history.key.create_time,
@@ -93,7 +113,7 @@ const emit = defineEmits(["show:chart", "search:tuple"]);
                       }}
                     </span>
                   </template>
-                  创建于
+                  {{ $t("metric.connect.filter.create_time") }}:
                   <n-time
                     :time="history.key.create_time"
                     format="yyyy-MM-dd HH:mm:ss"
@@ -144,7 +164,24 @@ const emit = defineEmits(["show:chart", "search:tuple"]);
                   <n-icon><Search /></n-icon>
                 </n-button>
               </template>
-              精准筛选此四元组
+              {{ $t("metric.connect.tip.precise_filter") }}
+            </n-tooltip>
+
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <n-button
+                  text
+                  @click.stop="goToLive(history)"
+                  style="
+                    font-size: 16px;
+                    color: themeVars.successColor;
+                    opacity: 0.7;
+                  "
+                >
+                  <n-icon><Flash /></n-icon>
+                </n-button>
+              </template>
+              {{ $t("metric.connect.tip.view_live") }}
             </n-tooltip>
           </n-flex>
 

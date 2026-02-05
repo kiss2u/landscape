@@ -10,6 +10,8 @@ import type {
 
 import FlowExhibit from "@/components/flow/FlowExhibit.vue";
 
+import { useI18n } from "vue-i18n";
+
 const props = defineProps<{
   stats: IpHistoryStat[];
   title: string;
@@ -18,6 +20,7 @@ const props = defineProps<{
   sortOrder: "asc" | "desc";
 }>();
 
+const { t } = useI18n();
 const emit = defineEmits(["update:sort", "search:ip"]);
 
 const themeVars = useThemeVars();
@@ -62,7 +65,7 @@ const columns = computed(() => [
                     icon: () => h(NIcon, { component: Search }),
                   },
                 ),
-              default: () => "将此 IP 填入搜索框",
+              default: () => t("metric.connect.tip.search_ip"),
             },
           ),
         ],
@@ -70,7 +73,7 @@ const columns = computed(() => [
     },
   },
   {
-    title: "所属 Flow",
+    title: t("metric.connect.col.flow"),
     key: "flow_id",
     render: (row: IpHistoryStat) => {
       if (row.flow_id === 0) {
@@ -82,7 +85,7 @@ const columns = computed(() => [
             size: "small",
             style: { opacity: 0.6 },
           },
-          { default: () => "默认Flow" },
+          { default: () => t("metric.connect.tip.default_flow") },
         );
       }
       return h(FlowExhibit, {
@@ -91,7 +94,7 @@ const columns = computed(() => [
     },
   },
   {
-    title: "累计连接",
+    title: t("metric.connect.col.total_conns"),
     key: "time",
     sorter: true,
     sortOrder:
@@ -103,7 +106,7 @@ const columns = computed(() => [
     render: (row: IpHistoryStat) => row.connect_count,
   },
   {
-    title: "累计上传",
+    title: t("metric.connect.col.total_egress"),
     key: "egress",
     sorter: true,
     sortOrder:
@@ -123,7 +126,7 @@ const columns = computed(() => [
     },
   },
   {
-    title: "累计下载",
+    title: t("metric.connect.col.total_ingress"),
     key: "ingress",
     sorter: true,
     sortOrder:
@@ -143,12 +146,12 @@ const columns = computed(() => [
     },
   },
   {
-    title: "上传数据包",
+    title: t("metric.connect.col.egress_pkts"),
     key: "total_egress_pkts",
     render: (row: IpHistoryStat) => formatCount(row.total_egress_pkts),
   },
   {
-    title: "下载数据包",
+    title: t("metric.connect.col.ingress_pkts"),
     key: "total_ingress_pkts",
     render: (row: IpHistoryStat) => formatCount(row.total_ingress_pkts),
   },
@@ -170,7 +173,9 @@ const handleSort = (sorter: any) => {
   <n-flex vertical style="flex: 1; overflow: hidden">
     <n-flex align="center" justify="space-between" style="margin-bottom: 12px">
       <n-h3 style="margin: 0">{{ title }}</n-h3>
-      <n-text depth="3"> 共计 {{ stats.length }} 个节点 </n-text>
+      <n-text depth="3">
+        {{ $t("metric.connect.stats.total_nodes", { count: stats.length }) }}
+      </n-text>
     </n-flex>
 
     <n-data-table

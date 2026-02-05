@@ -6,12 +6,15 @@ import { Search } from "@vicons/carbon";
 import type { IpRealtimeStat } from "landscape-types/common/metric/connect";
 import FlowExhibit from "@/components/flow/FlowExhibit.vue";
 
+import { useI18n } from "vue-i18n";
+
 const props = defineProps<{
   stats: any[]; // 更通用的类型，支持带 flow_id
   title: string;
   ipLabel: string;
 }>();
 
+const { t } = useI18n();
 const emit = defineEmits(["search:ip"]);
 
 const themeVars = useThemeVars();
@@ -19,7 +22,7 @@ const themeVars = useThemeVars();
 const sortKey = ref<string>("egress_bps");
 const sortOrder = ref<"asc" | "desc">("desc");
 
-const columns = [
+const columns = computed(() => [
   {
     title: props.ipLabel,
     key: "ip",
@@ -58,7 +61,7 @@ const columns = [
                     icon: () => h(NIcon, { component: Search }),
                   },
                 ),
-              default: () => "搜索此 IP",
+              default: () => t("metric.connect.tip.search_ip"),
             },
           ),
         ],
@@ -66,7 +69,7 @@ const columns = [
     },
   },
   {
-    title: "所属 Flow",
+    title: t("metric.connect.col.flow"),
     key: "flow_id",
     render: (row: any) => {
       if (row.flow_id === undefined) return "-";
@@ -79,7 +82,7 @@ const columns = [
             size: "small",
             style: { opacity: 0.6 },
           },
-          { default: () => "默认Flow" },
+          { default: () => t("metric.connect.tip.default_flow") },
         );
       }
       return h(FlowExhibit, {
@@ -88,13 +91,13 @@ const columns = [
     },
   },
   {
-    title: "活跃连接",
+    title: t("metric.connect.col.active_conns"),
     key: "active_conns",
     sorter: (a: any, b: any) => a.stats.active_conns - b.stats.active_conns,
     render: (row: any) => row.stats.active_conns,
   },
   {
-    title: "上传流速",
+    title: t("metric.connect.col.egress_rate"),
     key: "egress_bps",
     sorter: (a: any, b: any) => a.stats.egress_bps - b.stats.egress_bps,
     render: (row: any) => {
@@ -108,7 +111,7 @@ const columns = [
     },
   },
   {
-    title: "下载流速",
+    title: t("metric.connect.col.ingress_rate"),
     key: "ingress_bps",
     sorter: (a: any, b: any) => a.stats.ingress_bps - b.stats.ingress_bps,
     render: (row: any) => {
@@ -122,18 +125,18 @@ const columns = [
     },
   },
   {
-    title: "上传 PPS",
+    title: t("metric.connect.col.egress_pps"),
     key: "egress_pps",
     sorter: (a: any, b: any) => a.stats.egress_pps - b.stats.egress_pps,
     render: (row: any) => formatPackets(row.stats.egress_pps),
   },
   {
-    title: "下载 PPS",
+    title: t("metric.connect.col.ingress_pps"),
     key: "ingress_pps",
     sorter: (a: any, b: any) => a.stats.ingress_pps - b.stats.ingress_pps,
     render: (row: any) => formatPackets(row.stats.ingress_pps),
   },
-];
+]);
 
 const handleSort = (sorter: any) => {
   if (sorter) {
@@ -163,7 +166,9 @@ const processedData = computed(() => {
   <n-flex vertical style="flex: 1; overflow: hidden">
     <n-flex align="center" justify="space-between" style="margin-bottom: 12px">
       <n-h3 style="margin: 0">{{ title }}</n-h3>
-      <n-text depth="3"> 共计 {{ stats.length }} 个节点 </n-text>
+      <n-text depth="3">
+        {{ $t("metric.connect.stats.total_nodes", { count: stats.length }) }}
+      </n-text>
     </n-flex>
 
     <n-data-table

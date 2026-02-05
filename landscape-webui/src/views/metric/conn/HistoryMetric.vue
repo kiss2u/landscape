@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRoute } from "vue-router";
 import { ConnectFilter } from "@/lib/metric.rs";
 import { get_connect_history, get_connect_global_stats } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
@@ -18,6 +20,8 @@ import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher
 
 const prefStore = usePreferenceStore();
 const metricStore = useMetricStore();
+const route = useRoute();
+const { t } = useI18n();
 
 const themeVars = useThemeVars();
 const frontEndStore = useFrontEndStore();
@@ -63,15 +67,15 @@ const showChartDrawer = (history: any) => {
 };
 
 // 2. 声明常量选项 (Options)
-const protocolOptions = [
-  { label: "全部", value: null },
+const protocolOptions = computed(() => [
+  { label: t("metric.connect.all_types"), value: null },
   { label: "TCP", value: 6 },
   { label: "UDP", value: 17 },
   { label: "ICMP", value: 1 },
   { label: "ICMPv6", value: 58 },
-];
+]);
 
-const timeRangeOptions = [
+const timeRangeOptions = computed(() => [
   { label: "近 5 分钟", value: 300 },
   { label: "近 15 分钟", value: 900 },
   { label: "近 1 小时", value: 3600 },
@@ -79,16 +83,16 @@ const timeRangeOptions = [
   { label: "近 24 小时", value: 86400 },
   { label: "近 3 天", value: 259200 },
   { label: "自定义时间段", value: "custom" },
-  { label: "不限时间", value: null },
-];
+  { label: t("metric.connect.filter.all_status"), value: null },
+]);
 
-const limitOptions = [
+const limitOptions = computed(() => [
   { label: "限制 100 条", value: 100 },
   { label: "限制 500 条", value: 500 },
   { label: "限制 1000 条", value: 1000 },
   { label: "限制 5000 条", value: 5000 },
   { label: "不限制数量", value: null },
-];
+]);
 
 // 3. 声明数据获取逻辑 (Actions)
 const fetchHistory = async () => {
@@ -214,6 +218,16 @@ watch(
 );
 
 onMounted(() => {
+  // 从路由参数初始化过滤器
+  if (route.query.src_ip) historyFilter.src_ip = route.query.src_ip as string;
+  if (route.query.dst_ip) historyFilter.dst_ip = route.query.dst_ip as string;
+  if (route.query.port_start)
+    historyFilter.port_start = parseInt(route.query.port_start as string);
+  if (route.query.port_end)
+    historyFilter.port_end = parseInt(route.query.port_end as string);
+  if (route.query.flow_id)
+    historyFilter.flow_id = parseInt(route.query.flow_id as string);
+
   refreshGlobalStats();
   fetchHistory();
 });
@@ -278,14 +292,14 @@ onMounted(() => {
     >
       <n-input
         v-model:value="historyFilter.src_ip"
-        placeholder="源IP"
+        :placeholder="$t('metric.connect.filter.src_ip')"
         clearable
         :disabled="loading"
         style="width: 150px"
       />
       <n-input
         v-model:value="historyFilter.dst_ip"
-        placeholder="目标IP"
+        :placeholder="$t('metric.connect.filter.dst_ip')"
         clearable
         :disabled="loading"
         style="width: 150px"
@@ -293,7 +307,7 @@ onMounted(() => {
       <n-input-group style="width: 220px">
         <n-input-number
           v-model:value="historyFilter.port_start"
-          placeholder="源端口"
+          :placeholder="$t('metric.connect.filter.port_start')"
           :show-button="false"
           :disabled="loading"
           clearable
@@ -301,7 +315,7 @@ onMounted(() => {
         <n-input-group-label>=></n-input-group-label>
         <n-input-number
           v-model:value="historyFilter.port_end"
-          placeholder="目的"
+          :placeholder="$t('metric.connect.filter.port_end')"
           :show-button="false"
           :disabled="loading"
           clearable
@@ -309,7 +323,7 @@ onMounted(() => {
       </n-input-group>
       <n-select
         v-model:value="historyFilter.l4_proto"
-        placeholder="传输协议"
+        :placeholder="$t('metric.connect.filter.proto')"
         :options="protocolOptions"
         :disabled="loading"
         clearable
@@ -351,12 +365,12 @@ onMounted(() => {
       />
 
       <n-button-group>
-        <n-button @click="fetchHistory" type="primary" :loading="loading"
-          >查询</n-button
-        >
-        <n-button @click="resetHistoryFilter" :disabled="loading"
-          >重置</n-button
-        >
+        <n-button @click="fetchHistory" type="primary" :loading="loading">{{
+          $t("metric.connect.stats.query")
+        }}</n-button>
+        <n-button @click="resetHistoryFilter" :disabled="loading">{{
+          $t("metric.connect.stats.reset")
+        }}</n-button>
       </n-button-group>
 
       <n-divider vertical />
@@ -367,7 +381,7 @@ onMounted(() => {
           :disabled="loading"
           @click="toggleSort('time')"
         >
-          创建时间
+          {{ $t("metric.connect.filter.time") }}
           {{ sortKey === "time" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
@@ -375,14 +389,15 @@ onMounted(() => {
           :disabled="loading"
           @click="toggleSort('port')"
         >
-          端口 {{ sortKey === "port" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
+          {{ $t("metric.connect.filter.port") }}
+          {{ sortKey === "port" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
           :type="sortKey === 'egress' ? 'primary' : 'default'"
           :disabled="loading"
           @click="toggleSort('egress')"
         >
-          上传量排序
+          {{ $t("metric.connect.col.total_egress") }}
           {{ sortKey === "egress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
@@ -390,7 +405,7 @@ onMounted(() => {
           :disabled="loading"
           @click="toggleSort('ingress')"
         >
-          下载量排序
+          {{ $t("metric.connect.col.total_ingress") }}
           {{ sortKey === "ingress" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
         <n-button
@@ -398,7 +413,7 @@ onMounted(() => {
           :disabled="loading"
           @click="toggleSort('duration')"
         >
-          存活时间
+          {{ $t("metric.connect.filter.duration") }}
           {{ sortKey === "duration" ? (sortOrder === "asc" ? "↑" : "↓") : "" }}
         </n-button>
       </n-button-group>
@@ -411,7 +426,10 @@ onMounted(() => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="过滤结果总数" :value="historyTotalStats.count" />
+          <n-statistic
+            :label="$t('metric.connect.stats.filter_total')"
+            :value="historyTotalStats.count"
+          />
         </n-card>
       </n-gi>
       <n-gi>
@@ -420,7 +438,7 @@ onMounted(() => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="过滤结果总上行">
+          <n-statistic :label="$t('metric.connect.stats.total_egress')">
             <span :style="{ color: themeVars.infoColor, fontWeight: 'bold' }">
               {{ formatSize(historyTotalStats.totalEgressBytes) }}
             </span>
@@ -433,7 +451,7 @@ onMounted(() => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="过滤结果总下行">
+          <n-statistic :label="$t('metric.connect.stats.total_ingress')">
             <span
               :style="{ color: themeVars.successColor, fontWeight: 'bold' }"
             >
@@ -448,7 +466,7 @@ onMounted(() => {
           :bordered="false"
           style="background-color: #f9f9f910; height: 100%"
         >
-          <n-statistic label="过滤结果总入站">
+          <n-statistic :label="$t('metric.connect.stats.filter_ingress_pkts')">
             <span style="color: #888">
               {{ formatCount(historyTotalStats.totalIngressPkts) }} pkt
             </span>
@@ -461,7 +479,7 @@ onMounted(() => {
           :bordered="false"
           style="background-color: #f9f9f910"
         >
-          <n-statistic label="过滤结果总出站">
+          <n-statistic :label="$t('metric.connect.stats.filter_egress_pkts')">
             <span style="color: #888">
               {{ formatCount(historyTotalStats.totalEgressPkts) }} pkt
             </span>
@@ -477,6 +495,8 @@ onMounted(() => {
           :index="index"
           @show:chart="showChartDrawer"
           @search:tuple="handleSearchTuple"
+          @search:src="(ip) => (historyFilter.src_ip = ip)"
+          @search:dst="(ip) => (historyFilter.dst_ip = ip)"
         />
       </template>
     </n-virtual-list>

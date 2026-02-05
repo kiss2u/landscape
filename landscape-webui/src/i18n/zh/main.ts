@@ -1,4 +1,5 @@
-import metric from "./metric/dns";
+import dns from "./metric/dns";
+import connect from "./metric/connect";
 import sysinfo from "./sysinfo";
 import config from "./config";
 import error from "./error";
@@ -6,7 +7,10 @@ import error from "./error";
 export default {
   docker_divider: "Docker 容器",
   topology_divider: "网络拓扑",
-  metric,
+  metric: {
+    dns,
+    connect,
+  },
   sysinfo,
   config,
   error,
@@ -27,6 +31,8 @@ export default {
     "connect-history": "历史查询",
     "connect-src": "源 IP 统计",
     "connect-dst": "目的 IP 统计",
+    "connect-history-src": "源 IP 历史",
+    "connect-history-dst": "目的 IP 历史",
     "dns-metric": "DNS 指标",
     "ipv6-pd": "IPv6 PD",
     "dhcp-v4": "DHCPv4 服务",

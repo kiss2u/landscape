@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useMetricStore } from "@/stores/status_metric";
 import { get_history_dst_ip_stats } from "@/api/metric";
 import { formatSize } from "@/lib/util";
@@ -18,6 +20,8 @@ import { usePreferenceStore } from "@/stores/preference";
 const metricStore = useMetricStore();
 const themeVars = useThemeVars();
 const prefStore = usePreferenceStore();
+const route = useRoute();
+const { t } = useI18n();
 
 const stats = ref<IpHistoryStat[]>([]);
 const loading = ref(false);
@@ -35,7 +39,7 @@ const sortOrder = ref<SortOrder>("desc");
 
 const globalStats = computed(() => metricStore.global_history_stats);
 
-const timeRangeOptions = [
+const timeRangeOptions = computed(() => [
   { label: "近 5 分钟", value: 300 },
   { label: "近 15 分钟", value: 900 },
   { label: "近 1 小时", value: 3600 },
@@ -43,15 +47,15 @@ const timeRangeOptions = [
   { label: "近 24 小时", value: 86400 },
   { label: "近 3 天", value: 259200 },
   { label: "自定义时间段", value: "custom" },
-  { label: "不限时间", value: null },
-];
+  { label: t("metric.connect.filter.all_status"), value: null },
+]);
 
-const limitOptions = [
+const limitOptions = computed(() => [
   { label: "限制 100 条", value: 100 },
   { label: "限制 500 条", value: 500 },
   { label: "限制 1000 条", value: 1000 },
   { label: "不限制数量", value: null },
-];
+]);
 
 const fetchStats = async () => {
   loading.value = true;
@@ -117,6 +121,10 @@ watch(ipSearch, () => {
 });
 
 onMounted(() => {
+  if (route.query.ip) ipSearch.value = route.query.ip as string;
+  if (route.query.flow_id)
+    flowId.value = parseInt(route.query.flow_id as string);
+
   fetchStats();
   if (!metricStore.global_history_stats) {
     metricStore.UPDATE_GLOBAL_HISTORY_STATS();
@@ -137,21 +145,27 @@ onMounted(() => {
 
         <n-flex align="center" size="large" v-if="globalStats">
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">历史连接总数:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_history_conns") }}:</span
+            >
             <span style="font-weight: bold">{{
               globalStats.total_connect_count
             }}</span>
           </n-flex>
           <n-divider vertical />
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总上传:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_history_egress") }}:</span
+            >
             <span :style="{ fontWeight: 'bold', color: themeVars.infoColor }">{{
               formatSize(globalStats.total_egress_bytes)
             }}</span>
           </n-flex>
           <n-divider vertical />
           <n-flex align="center" size="small">
-            <span style="color: #888; font-size: 13px">总下载:</span>
+            <span style="color: #888; font-size: 13px"
+              >{{ $t("metric.connect.stats.total_history_ingress") }}:</span
+            >
             <span
               :style="{ fontWeight: 'bold', color: themeVars.successColor }"
               >{{ formatSize(globalStats.total_ingress_bytes) }}</span
@@ -170,7 +184,7 @@ onMounted(() => {
     >
       <n-input
         v-model:value="ipSearch"
-        placeholder="搜索目的 IP"
+        :placeholder="$t('metric.connect.filter.search_dst')"
         clearable
         style="width: 180px"
         :disabled="loading"
@@ -200,16 +214,16 @@ onMounted(() => {
         :disabled="loading"
         style="width: 150px"
       />
-      <n-button @click="fetchStats" type="primary" :loading="loading"
-        >刷新查询</n-button
-      >
+      <n-button @click="fetchStats" type="primary" :loading="loading">{{
+        $t("metric.connect.stats.query")
+      }}</n-button>
     </n-flex>
 
     <n-spin :show="loading">
       <HistoryIpStatsList
         :stats="stats"
-        title="目的 IP 历史汇总"
-        ip-label="目的 IP 地址"
+        :title="$t('metric.connect.stats.history_dst')"
+        :ip-label="$t('metric.connect.col.dst_ip')"
         :sort-key="sortKey"
         :sort-order="sortOrder"
         @update:sort="handleSortChange"
