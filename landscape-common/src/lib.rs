@@ -66,7 +66,7 @@ pub const LANDSCAPE_LOG_DIR_NAME: &str = "logs";
 pub const LANDSCAPE_WEBROOT_DIR_NAME: &str = "static";
 // --- Metric Settings ---
 pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
-pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 2;
+pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 3;
 
 // Metric Retention Defaults (Days)
 pub const DEFAULT_CONN_METRIC_RETENTION_DAYS: u64 = 7;
@@ -78,7 +78,7 @@ pub const DEFAULT_DNS_METRIC_RETENTION_DAYS: u64 = 7;
 pub const DEFAULT_METRIC_BATCH_SIZE: usize = 2000;
 pub const DEFAULT_METRIC_FLUSH_INTERVAL_SECS: u64 = 5;
 pub const DEFAULT_METRIC_MAX_MEMORY: usize = 128;
-pub const DEFAULT_METRIC_MAX_THREADS: usize = 1;
+pub const DEFAULT_METRIC_MAX_THREADS: usize = 4;
 
 // --- DNS Settings ---
 pub const DEFAULT_DNS_CACHE_CAPACITY: u32 = 4096;

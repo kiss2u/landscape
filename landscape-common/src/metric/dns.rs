@@ -77,7 +77,7 @@ pub struct DnsHistoryResponse {
     pub total: usize,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, Default)]
 #[ts(export, export_to = "common/metric/dns.d.ts")]
 pub struct DnsSummaryResponse {
     pub total_queries: usize,

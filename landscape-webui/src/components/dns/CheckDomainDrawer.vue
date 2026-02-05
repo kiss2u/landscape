@@ -14,11 +14,13 @@ const message = useMessage();
 interface Props {
   flow_id?: number;
   initialDomain?: string;
+  initialType?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   flow_id: 0,
   initialDomain: "",
+  initialType: "A",
 });
 
 const show = defineModel<boolean>("show", { required: true });
@@ -38,7 +40,7 @@ async function init_req(isEnter = false) {
   req.value = {
     flow_id: props.flow_id,
     domain: props.initialDomain || "",
-    record_type: "A",
+    record_type: (props.initialType as any) || "A",
   };
   result.value = {
     redirect_id: null,

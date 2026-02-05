@@ -1,4 +1,4 @@
-use duckdb::{params, Connection};
+use duckdb::{params, DuckdbConnectionManager};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
     MetricResolution,
@@ -6,6 +6,7 @@ use landscape_common::metric::connect::{
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse,
 };
+use r2d2::{self, PooledConnection};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
@@ -46,16 +47,6 @@ pub enum DBMessage {
         cutoff_dns: u64,
         resp: oneshot::Sender<Box<Vec<ConnectMetric>>>,
     },
-
-    // Sub-Query Enums
-    DnsQuery {
-        query: dns::DnsQuery,
-        resp: oneshot::Sender<dns::DnsQueryResult>,
-    },
-    ConnectQuery {
-        query: connect::ConnectQuery,
-        resp: oneshot::Sender<connect::ConnectQueryResult>,
-    },
 }
 
 #[derive(Clone)]
@@ -63,32 +54,26 @@ pub struct DuckMetricStore {
     tx: mpsc::Sender<DBMessage>,
     pub db_path: PathBuf,
     pub config: MetricRuntimeConfig,
+    pub pool: r2d2::Pool<DuckdbConnectionManager>,
 }
 
 pub fn start_db_thread(
     mut rx: mpsc::Receiver<DBMessage>,
-    db_path: PathBuf,
     metric_config: MetricRuntimeConfig,
+    conn_conn: PooledConnection<DuckdbConnectionManager>,
+    conn_dns: PooledConnection<DuckdbConnectionManager>,
 ) {
-    let config = duckdb::Config::default()
-        .threads(metric_config.max_threads as i64)
-        .unwrap()
-        .max_memory(&format!("{}MB", metric_config.max_memory))
-        .unwrap();
-
-    let conn = Connection::open_with_flags(&db_path, config).unwrap();
-
     // 初始化表
-    connect::create_summaries_table(&conn);
-    connect::create_metrics_table(&conn).unwrap();
-    dns::create_dns_table(&conn).unwrap();
+    connect::create_summaries_table(&conn_conn);
+    connect::create_metrics_table(&conn_conn).unwrap();
+    dns::create_dns_table(&conn_dns).unwrap();
 
     // 状态管理
-    let mut metrics_appender = conn.appender("conn_metrics").unwrap();
-    let mut dns_appender = conn.appender("dns_metrics").unwrap();
-    let mut summary_stmt = conn.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
-    let mut metrics_1h_stmt = conn.prepare(connect::METRICS_1H_INSERT_SQL).unwrap();
-    let mut metrics_1d_stmt = conn.prepare(connect::METRICS_1D_INSERT_SQL).unwrap();
+    let mut metrics_appender = conn_conn.appender("conn_metrics").unwrap();
+    let mut dns_appender = conn_dns.appender("dns_metrics").unwrap();
+    let mut summary_stmt = conn_conn.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
+    let mut metrics_1h_stmt = conn_conn.prepare(connect::METRICS_1H_INSERT_SQL).unwrap();
+    let mut metrics_1d_stmt = conn_conn.prepare(connect::METRICS_1D_INSERT_SQL).unwrap();
 
     let mut batch_count = 0;
     let flush_interval =
@@ -98,8 +83,7 @@ pub fn start_db_thread(
     let cleanup_interval =
         std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS);
 
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-
+    let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
     rt.block_on(async {
         loop {
             let now = std::time::Instant::now();
@@ -179,16 +163,6 @@ pub fn start_db_thread(
                             batch_count += 1;
                         }
 
-                        // --- 抽象后的查询操作 ---
-                        DBMessage::DnsQuery { query, resp } => {
-                            let result = dns::handle_query(&conn, query);
-                            let _ = resp.send(result);
-                        }
-                        DBMessage::ConnectQuery { query, resp } => {
-                            let result = connect::handle_query(&conn, query);
-                            let _ = resp.send(result);
-                        }
-
                         // --- 管理类操作 ---
                         DBMessage::CollectAndCleanupOldMetrics {
                             cutoff_raw,
@@ -202,10 +176,10 @@ pub fn start_db_thread(
                             batch_count = 0;
                             last_flush = std::time::Instant::now();
                             let result = connect::collect_and_cleanup_old_metrics(
-                                &conn, cutoff_raw, cutoff_1h, cutoff_1d,
+                                &conn_conn, cutoff_raw, cutoff_1h, cutoff_1d,
                             );
 
-                            dns::cleanup_old_dns_metrics(&conn, cutoff_dns);
+                            dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
                             let _ = resp.send(result);
                         }
                     }
@@ -248,9 +222,9 @@ pub fn start_db_thread(
                 last_cleanup = std::time::Instant::now();
 
                 let _ = connect::collect_and_cleanup_old_metrics(
-                    &conn, cutoff_raw, cutoff_1h, cutoff_1d,
+                    &conn_conn, cutoff_raw, cutoff_1h, cutoff_1d,
                 );
-                dns::cleanup_old_dns_metrics(&conn, cutoff_dns);
+                dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
                 tracing::info!(
                     "Auto cleanup metrics, raw: {}, 1h: {}, 1d: {}, dns: {}",
                     cutoff_raw,
@@ -273,15 +247,34 @@ impl DuckMetricStore {
                 std::fs::create_dir_all(parent).expect("Failed to create base directory");
             }
         }
-
         let (tx, rx) = mpsc::channel::<DBMessage>(1024);
-        let db_path_clone = db_path.clone();
         let config_clone = config.clone();
+
+        let db_config = duckdb::Config::default()
+            .threads(config.max_threads as i64)
+            .unwrap()
+            .max_memory(&format!("{}MB", config.max_memory))
+            .unwrap();
+
+        let manager = DuckdbConnectionManager::file_with_flags(&db_path, db_config).unwrap();
+        let pool = r2d2::Pool::builder()
+            .max_size((config.max_threads as u32).max(4)) // Ensure at least 4 connections
+            .build(manager)
+            .expect("Failed to create connection pool");
+
+        let conn_conn = pool.get().expect("Failed to get CONN writer connection from pool");
+        let conn_dns = pool.get().expect("Failed to get DNS writer connection from pool");
+
         thread::spawn(move || {
-            start_db_thread(rx, db_path_clone, config_clone);
+            start_db_thread(rx, config_clone, conn_conn, conn_dns);
         });
 
-        DuckMetricStore { tx, db_path, config }
+        DuckMetricStore { tx, db_path, config, pool }
+    }
+
+    /// Internal helper to get a read connection
+    fn get_read_conn(&self) -> r2d2::PooledConnection<DuckdbConnectionManager> {
+        self.pool.get().expect("Failed to get read connection from pool")
     }
 
     pub async fn insert_metric(&self, metric: ConnectMetric) {
@@ -293,27 +286,23 @@ impl DuckMetricStore {
         key: ConnectKey,
         resolution: MetricResolution,
     ) -> Vec<ConnectMetric> {
-        let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::ByKey(key, resolution);
-        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
-            return Vec::new();
-        }
-        match rx.await {
-            Ok(connect::ConnectQueryResult::Metrics(m)) => m,
-            _ => Vec::new(),
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            connect::query_metric_by_key(&conn, &key, resolution)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn current_active_connect_keys(&self) -> Vec<ConnectKey> {
-        let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::ActiveKeys;
-        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
-            return Vec::new();
-        }
-        match rx.await {
-            Ok(connect::ConnectQueryResult::Keys(k)) => k,
-            _ => Vec::new(),
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            connect::current_active_connect_keys(&conn)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn collect_and_cleanup_old_metrics(
@@ -343,57 +332,49 @@ impl DuckMetricStore {
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
-        let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::HistorySummaries(params);
-        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
-            return Vec::new();
-        }
-        match rx.await {
-            Ok(connect::ConnectQueryResult::HistoryStatuses(h)) => h,
-            _ => Vec::new(),
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            connect::query_historical_summaries_complex(&conn, params)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn history_src_ip_stats(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
-        let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::HistorySrcIpStats(params);
-        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
-            return Vec::new();
-        }
-        match rx.await {
-            Ok(connect::ConnectQueryResult::IpHistoryStats(h)) => h,
-            _ => Vec::new(),
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            connect::query_connection_ip_history(&conn, params, true)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn history_dst_ip_stats(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
-        let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::HistoryDstIpStats(params);
-        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
-            return Vec::new();
-        }
-        match rx.await {
-            Ok(connect::ConnectQueryResult::IpHistoryStats(h)) => h,
-            _ => Vec::new(),
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            connect::query_connection_ip_history(&conn, params, false)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        let (resp, rx) = oneshot::channel();
-        let q = connect::ConnectQuery::GlobalStats;
-        if self.tx.send(DBMessage::ConnectQuery { query: q, resp }).await.is_err() {
-            return ConnectGlobalStats::default();
-        }
-        match rx.await {
-            Ok(connect::ConnectQueryResult::Stats(s)) => s,
-            _ => ConnectGlobalStats::default(),
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            connect::query_global_stats(&conn)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn insert_dns_metric(&self, mut metric: DnsMetric) {
@@ -404,72 +385,22 @@ impl DuckMetricStore {
     }
 
     pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {
-        let (resp, rx) = oneshot::channel();
-        let q = dns::DnsQuery::History(params);
-        if self.tx.send(DBMessage::DnsQuery { query: q, resp }).await.is_err() {
-            return DnsHistoryResponse { items: Vec::new(), total: 0 };
-        }
-        match rx.await {
-            Ok(dns::DnsQueryResult::History(result)) => result,
-            _ => DnsHistoryResponse { items: Vec::new(), total: 0 },
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            dns::query_dns_history(&conn, params)
+        })
+        .await
+        .unwrap_or(DnsHistoryResponse { items: Vec::new(), total: 0 })
     }
 
     pub async fn get_dns_summary(&self, params: DnsHistoryQueryParams) -> DnsSummaryResponse {
-        let (resp, rx) = oneshot::channel();
-        let q = dns::DnsQuery::Summary(params);
-        if self.tx.send(DBMessage::DnsQuery { query: q, resp }).await.is_err() {
-            return DnsSummaryResponse {
-                total_queries: 0,
-                total_effective_queries: 0,
-                cache_hit_count: 0,
-                hit_count_v4: 0,
-                hit_count_v6: 0,
-                hit_count_other: 0,
-                total_v4: 0,
-                total_v6: 0,
-                total_other: 0,
-                block_count: 0,
-                filter_count: 0,
-                nxdomain_count: 0,
-                error_count: 0,
-                avg_duration_ms: 0.0,
-                p50_duration_ms: 0.0,
-                p95_duration_ms: 0.0,
-                p99_duration_ms: 0.0,
-                max_duration_ms: 0.0,
-                top_clients: vec![],
-                top_domains: vec![],
-                top_blocked: vec![],
-                slowest_domains: vec![],
-            };
-        }
-        match rx.await {
-            Ok(dns::DnsQueryResult::Summary(result)) => result,
-            _ => DnsSummaryResponse {
-                total_queries: 0,
-                total_effective_queries: 0,
-                cache_hit_count: 0,
-                hit_count_v4: 0,
-                hit_count_v6: 0,
-                hit_count_other: 0,
-                total_v4: 0,
-                total_v6: 0,
-                total_other: 0,
-                block_count: 0,
-                filter_count: 0,
-                nxdomain_count: 0,
-                error_count: 0,
-                avg_duration_ms: 0.0,
-                p50_duration_ms: 0.0,
-                p95_duration_ms: 0.0,
-                p99_duration_ms: 0.0,
-                max_duration_ms: 0.0,
-                top_clients: vec![],
-                top_domains: vec![],
-                top_blocked: vec![],
-                slowest_domains: vec![],
-            },
-        }
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            dns::query_dns_summary(&conn, params)
+        })
+        .await
+        .unwrap_or_else(|_| DnsSummaryResponse::default())
     }
 }

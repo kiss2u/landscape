@@ -17,7 +17,7 @@ import {
 } from "landscape-types/common/metric/connect";
 
 export const useMetricStore = defineStore("dns_metric", () => {
-  const enable = ref(false);
+  const activeModes = ref(new Set<"live" | "src" | "dst">());
   const metric_status = ref<ServiceStatus>({ t: ServiceStatusType.Stop });
   const firewall_info = ref<ConnectRealtimeStatus[]>();
   const src_ip_stats = ref<IpRealtimeStat[]>([]);
@@ -28,17 +28,38 @@ export const useMetricStore = defineStore("dns_metric", () => {
     return metric_status.value.t == ServiceStatusType.Stop;
   });
 
+  const is_enabled = computed(() => activeModes.value.size > 0);
+
   async function UPDATE_INFO() {
-    if (enable.value) {
+    if (is_enabled.value) {
       metric_status.value = await get_metric_status();
-      const [firewall, src_ips, dst_ips] = await Promise.all([
-        get_connects_info(),
-        get_src_ip_stats(),
-        get_dst_ip_stats(),
-      ]);
-      firewall_info.value = firewall;
-      src_ip_stats.value = src_ips;
-      dst_ip_stats.value = dst_ips;
+
+      const promises: Promise<any>[] = [];
+      const modes = Array.from(activeModes.value);
+
+      // Always fetch connects if 'live' is active, OR if src/dst is active (for filtration/aggregation)
+      // But SrcIpMetric/DstIpMetric only need firewall_info if they have filters.
+      // For simplicity, if ANY mode is active, we might need basic info.
+      // However, we can be more precise:
+      if (activeModes.value.has("live") || activeModes.value.size > 0) {
+        promises.push(
+          get_connects_info().then((res) => (firewall_info.value = res)),
+        );
+      }
+
+      if (activeModes.value.has("src")) {
+        promises.push(
+          get_src_ip_stats().then((res) => (src_ip_stats.value = res)),
+        );
+      }
+
+      if (activeModes.value.has("dst")) {
+        promises.push(
+          get_dst_ip_stats().then((res) => (dst_ip_stats.value = res)),
+        );
+      }
+
+      await Promise.all(promises);
     }
   }
 
@@ -46,8 +67,12 @@ export const useMetricStore = defineStore("dns_metric", () => {
     global_history_stats.value = await get_connect_global_stats();
   }
 
-  async function SET_ENABLE(value: boolean) {
-    enable.value = value;
+  async function SET_ENABLE(mode: "live" | "src" | "dst", value: boolean) {
+    if (value) {
+      activeModes.value.add(mode);
+    } else {
+      activeModes.value.delete(mode);
+    }
   }
 
   return {

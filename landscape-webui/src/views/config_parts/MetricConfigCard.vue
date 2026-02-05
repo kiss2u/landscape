@@ -131,7 +131,7 @@ async function handleSaveMetric() {
           v-model:value="metricStore.maxThreads"
           :min="1"
           :max="16"
-          placeholder="1"
+          placeholder="4"
           style="width: 200px"
         />
         <template #feedback> {{ t("config.max_threads_desc") }} </template>

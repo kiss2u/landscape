@@ -29,7 +29,7 @@ const title = computed(() => {
 // 当抽屉打开时，如果是实时模式，关闭全局指标轮询以减少压力（可选）
 watch(show, (val) => {
   if (props.type === "live") {
-    metricStore.SET_ENABLE(!val);
+    metricStore.SET_ENABLE("live", !val);
   }
 });
 </script>

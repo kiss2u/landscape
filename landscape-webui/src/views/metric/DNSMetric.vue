@@ -41,6 +41,7 @@ const dashboardRef = ref<any>(null);
 const showCheckDomainDrawer = ref(false);
 const checkDomainName = ref("");
 const checkDomainFlowId = ref(0);
+const checkDomainType = ref("A");
 const { t } = useI18n();
 const frontEndStore = useFrontEndStore();
 
@@ -191,6 +192,7 @@ const columns = computed<DataTableColumns<DnsMetric>>(() => [
                         e.stopPropagation();
                         checkDomainName.value = row.domain;
                         checkDomainFlowId.value = row.flow_id || 0;
+                        checkDomainType.value = row.query_type || "A";
                         showCheckDomainDrawer.value = true;
                       },
                     },
@@ -396,7 +398,13 @@ watch(
 
 watch(
   () => searchParams.timeRange,
-  () => loadData(true),
+  () => {
+    // 仅在历史记录模式下触发 loadData
+    // 仪表盘模式下，DNSDashboard 组件内部会自行执行其 timeRange 的监听逻辑
+    if (activeTab.value === "history") {
+      loadData(true);
+    }
+  },
 );
 
 const handleSorterChange = (sorter: any) => {
@@ -432,7 +440,9 @@ const syncToNow = () => {
   } else {
     searchParams.timeRange = [Date.now() - DEFAULT_TIME_WINDOW, Date.now()];
   }
-  loadData(true);
+  // 不再手动调用 loadData(true)
+  // 1. 对于历史模式，上面的 searchParams.timeRange 变化会触发 watch
+  // 2. 对于仪表盘模式，子组件的 props.timeRange 变化会触发其内部加载
 };
 
 watch(
@@ -460,7 +470,12 @@ const handleReset = () => {
 };
 
 onMounted(() => {
-  loadData();
+  // 初始加载时，如果是仪表盘模式，由于它是首个展示的 Tab 且 Prop 已初始化，
+  // DNSDashboard 的 immediate watch 会负责首次加载。
+  // 我们只在初始是历史记录页面时才手动加载。
+  if (activeTab.value === "history") {
+    loadData();
+  }
 });
 </script>
 
@@ -620,6 +635,7 @@ onMounted(() => {
       v-model:show="showCheckDomainDrawer"
       :initial-domain="checkDomainName"
       :flow_id="checkDomainFlowId"
+      :initial-type="checkDomainType"
     />
   </div>
 </template>

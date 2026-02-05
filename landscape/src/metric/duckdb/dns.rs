@@ -5,23 +5,6 @@ use landscape_common::metric::dns::{
     DnsSummaryResponse,
 };
 
-pub enum DnsQuery {
-    History(DnsHistoryQueryParams),
-    Summary(DnsHistoryQueryParams),
-}
-
-pub enum DnsQueryResult {
-    History(DnsHistoryResponse),
-    Summary(DnsSummaryResponse),
-}
-
-pub fn handle_query(conn: &Connection, query: DnsQuery) -> DnsQueryResult {
-    match query {
-        DnsQuery::History(params) => DnsQueryResult::History(query_dns_history(conn, params)),
-        DnsQuery::Summary(params) => DnsQueryResult::Summary(query_dns_summary(conn, params)),
-    }
-}
-
 pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
     conn.execute_batch(
         "
@@ -37,6 +20,9 @@ pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
             status TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_dns_report_time ON dns_metrics (report_time);
+        CREATE INDEX IF NOT EXISTS idx_dns_domain ON dns_metrics (domain);
+        CREATE INDEX IF NOT EXISTS idx_dns_src_ip ON dns_metrics (src_ip);
+        CREATE INDEX IF NOT EXISTS idx_dns_status ON dns_metrics (status);
         ",
     )
 }

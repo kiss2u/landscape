@@ -5,42 +5,6 @@ use landscape_common::metric::connect::{
     ConnectSortKey, MetricResolution, SortOrder,
 };
 
-pub enum ConnectQuery {
-    ByKey(ConnectKey, MetricResolution),
-    ActiveKeys,
-    HistorySummaries(ConnectHistoryQueryParams),
-    GlobalStats,
-    HistorySrcIpStats(ConnectHistoryQueryParams),
-    HistoryDstIpStats(ConnectHistoryQueryParams),
-}
-
-pub enum ConnectQueryResult {
-    Metrics(Vec<ConnectMetric>),
-    Keys(Vec<ConnectKey>),
-    HistoryStatuses(Vec<ConnectHistoryStatus>),
-    Stats(ConnectGlobalStats),
-    IpHistoryStats(Vec<landscape_common::metric::connect::IpHistoryStat>),
-}
-
-pub fn handle_query(conn: &Connection, query: ConnectQuery) -> ConnectQueryResult {
-    match query {
-        ConnectQuery::ByKey(ref key, resolution) => {
-            ConnectQueryResult::Metrics(query_metric_by_key(conn, key, resolution))
-        }
-        ConnectQuery::ActiveKeys => ConnectQueryResult::Keys(current_active_connect_keys(conn)),
-        ConnectQuery::HistorySummaries(params) => {
-            ConnectQueryResult::HistoryStatuses(query_historical_summaries_complex(conn, params))
-        }
-        ConnectQuery::GlobalStats => ConnectQueryResult::Stats(query_global_stats(conn)),
-        ConnectQuery::HistorySrcIpStats(params) => {
-            ConnectQueryResult::IpHistoryStats(query_connection_ip_history(conn, params, true))
-        }
-        ConnectQuery::HistoryDstIpStats(params) => {
-            ConnectQueryResult::IpHistoryStats(query_connection_ip_history(conn, params, false))
-        }
-    }
-}
-
 pub const SUMMARY_INSERT_SQL: &str = "
     INSERT OR REPLACE INTO conn_summaries (
         create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,

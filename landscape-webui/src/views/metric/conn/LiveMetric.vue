@@ -154,11 +154,11 @@ onMounted(async () => {
   if (route.query.flow_id)
     liveFilter.flow_id = parseInt(route.query.flow_id as string);
 
-  metricStore.SET_ENABLE(true);
+  metricStore.SET_ENABLE("live", true);
   await metricStore.UPDATE_INFO();
 
   onUnmounted(() => {
-    metricStore.SET_ENABLE(false);
+    metricStore.SET_ENABLE("live", false);
   });
 });
 </script>

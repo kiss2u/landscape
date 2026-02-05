@@ -83,11 +83,11 @@ onMounted(async () => {
   if (route.query.flow_id)
     flowFilter.value = parseInt(route.query.flow_id as string);
 
-  metricStore.SET_ENABLE(true);
+  metricStore.SET_ENABLE("dst", true);
   await metricStore.UPDATE_INFO();
 
   onUnmounted(() => {
-    metricStore.SET_ENABLE(false);
+    metricStore.SET_ENABLE("dst", false);
   });
 });
 </script>

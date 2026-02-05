@@ -47,8 +47,7 @@ const loadSummary = async () => {
   }
 };
 
-onMounted(loadSummary);
-watch(() => props.timeRange, loadSummary);
+watch(() => props.timeRange, loadSummary, { immediate: true });
 
 const calculatePercentFromValues = (
   hit: number | undefined,
