@@ -5,7 +5,7 @@ import { useHistoryRouteStore } from "@/stores/history_route";
 
 import { useI18n } from "vue-i18n";
 import { useThemeVars } from "naive-ui";
-import { Logout, Pin, PinFilled } from "@vicons/carbon";
+import { Logout, Pin, PinFilled, Terminal } from "@vicons/carbon";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { usePtyStore } from "@/stores/pty";
@@ -142,6 +142,19 @@ const contentStyle = computed(() => {
             <n-flex :size="[5, 0]">
               <LanguageSetting />
               <PresentationMode></PresentationMode>
+              <n-flex align="center">
+                <n-button
+                  quaternary
+                  circle
+                  size="small"
+                  @click="ptyStore.toggleOpen"
+                  title="WebShell"
+                >
+                  <template #icon>
+                    <n-icon><Terminal /></n-icon>
+                  </template>
+                </n-button>
+              </n-flex>
               <n-flex align="center">
                 <n-button
                   quaternary

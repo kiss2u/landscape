@@ -7,6 +7,10 @@ import type { IpRealtimeStat } from "landscape-types/common/metric/connect";
 import FlowExhibit from "@/components/flow/FlowExhibit.vue";
 
 import { useI18n } from "vue-i18n";
+import { useFrontEndStore } from "@/stores/front_end_config";
+import { mask_string } from "@/lib/common";
+
+const frontEndStore = useFrontEndStore();
 
 const props = defineProps<{
   stats: any[]; // 更通用的类型，支持带 flow_id
@@ -32,7 +36,11 @@ const columns = computed(() => [
         "div",
         { style: { display: "flex", alignItems: "center", gap: "12px" } },
         [
-          h("span", { style: { fontWeight: "500" } }, row.ip),
+          h(
+            "span",
+            { style: { fontWeight: "500" } },
+            frontEndStore.presentation_mode ? mask_string(row.ip) : row.ip,
+          ),
           h(
             NTooltip,
             { trigger: "hover", placement: "right" },

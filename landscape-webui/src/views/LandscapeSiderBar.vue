@@ -15,7 +15,6 @@ import {
   ServerDns,
   NetworkPublic,
   Dashboard,
-  Terminal,
 } from "@vicons/carbon";
 import { ImportExportRound } from "@vicons/material";
 import { Wall } from "@vicons/tabler";
@@ -44,15 +43,6 @@ watch(
 const collapsed = ref(true);
 
 function click_menu(key: string) {
-  // Special handler for WebShell
-  if (key === "web-pty") {
-    ptyStore.toggleOpen();
-    // Reset selection to current route so WebShell doesn't look "selected" as a page
-    menu_active_key.value =
-      route.name && typeof route.name === "string" ? route.name : "";
-    return;
-  }
-
   router.push({
     path: `/${key}`,
   });
@@ -172,11 +162,6 @@ const menuOptions = computed<MenuOption[]>(() => [
         key: "geo-ip",
       },
     ],
-  },
-  {
-    label: "WebShell",
-    key: "web-pty",
-    icon: renderIcon(Terminal),
   },
   {
     label: t("routes.config"),
