@@ -17,6 +17,7 @@ use crate::metric::duckdb::DuckMetricStore;
 const MAX_REPORT_INTERVAL_MS: u64 = 5000;
 const HOUR_RESOLUTION_THRESHOLD_MS: u64 = 30 * 24 * 3600 * 1000;
 const DAY_RESOLUTION_THRESHOLD_MS: u64 = 180 * 24 * 3600 * 1000;
+const STALE_TIMEOUT_MS: u64 = 60000;
 
 #[derive(Clone)]
 pub struct ConnectMetricManager {
@@ -44,130 +45,29 @@ impl ConnectMetricManager {
         let dst_ip_stats_clone = dst_ip_stats.clone();
 
         tokio::spawn(async move {
-            while let Some(msg) = message_rx.recv().await {
-                match msg {
-                    ConnectMessage::Metric(metric) => {
-                        metric_store_clone.insert_metric(metric.clone()).await;
-
-                        let mut realtime_set = realtime_metrics_clone.write().await;
-                        let mut src_agg = src_ip_stats_clone.write().await;
-                        let mut dst_agg = dst_ip_stats_clone.write().await;
-
-                        match metric.status {
-                            ConnectStatusType::Disabled => {
-                                // 连接结束：从汇总表中扣除该连接的所有贡献
-                                if let Some(conn) = realtime_set.remove(&metric.key) {
-                                    Self::apply_ip_diff(&mut src_agg, conn.src_ip, &conn, false);
-                                    Self::apply_ip_diff(&mut dst_agg, conn.dst_ip, &conn, false);
-                                }
-                            }
-                            ConnectStatusType::Active => {
-                                let key = metric.key.clone();
-
-                                // 1. 获取（或初始化）连接状态
-                                let conn_status =
-                                    realtime_set.entry(key.clone()).or_insert_with(|| {
-                                        // 如果是新连接，初始化汇总表的计数
-                                        src_agg.entry(metric.src_ip).or_default().active_conns += 1;
-                                        dst_agg.entry(metric.dst_ip).or_default().active_conns += 1;
-
-                                        ConnectRealtimeStatus {
-                                            key,
-                                            src_ip: metric.src_ip,
-                                            dst_ip: metric.dst_ip,
-                                            src_port: metric.src_port,
-                                            dst_port: metric.dst_port,
-                                            l4_proto: metric.l4_proto,
-                                            l3_proto: metric.l3_proto,
-                                            flow_id: metric.flow_id,
-                                            trace_id: metric.trace_id,
-                                            ingress_bps: 0,
-                                            egress_bps: 0,
-                                            ingress_pps: 0,
-                                            egress_pps: 0,
-                                            last_metric: None,
-                                        }
-                                    });
-
-                                // 2. 读取旧速率
-                                let old_ingress_bps = conn_status.ingress_bps;
-                                let old_egress_bps = conn_status.egress_bps;
-                                let old_ingress_pps = conn_status.ingress_pps;
-                                let old_egress_pps = conn_status.egress_pps;
-
-                                // 3. 计算并应用新速率
-                                if let Some(old_metric) = &conn_status.last_metric {
-                                    let delta_ms =
-                                        metric.report_time.saturating_sub(old_metric.report_time);
-                                    if delta_ms > 0 {
-                                        // 关键优化：限制最大时间间隔，防止长时间空闲后首条数据的速率失真
-                                        let effective_delta_ms =
-                                            delta_ms.min(MAX_REPORT_INTERVAL_MS);
-
-                                        conn_status.ingress_bps = (metric
-                                            .ingress_bytes
-                                            .saturating_sub(old_metric.ingress_bytes)
-                                            * 8000)
-                                            / effective_delta_ms;
-                                        conn_status.egress_bps = (metric
-                                            .egress_bytes
-                                            .saturating_sub(old_metric.egress_bytes)
-                                            * 8000)
-                                            / effective_delta_ms;
-                                        conn_status.ingress_pps = (metric
-                                            .ingress_packets
-                                            .saturating_sub(old_metric.ingress_packets)
-                                            * 1000)
-                                            / effective_delta_ms;
-                                        conn_status.egress_pps = (metric
-                                            .egress_packets
-                                            .saturating_sub(old_metric.egress_packets)
-                                            * 1000)
-                                            / effective_delta_ms;
-                                    }
-                                }
-                                conn_status.last_metric = Some(metric);
-
-                                // 4. 应用差值到源和目的 IP 汇总表
-                                // 公式：总带宽 = 总带宽 - 旧速率 + 新速率
-                                let s = src_agg.entry(conn_status.src_ip).or_default();
-                                s.ingress_bps = s
-                                    .ingress_bps
-                                    .saturating_sub(old_ingress_bps)
-                                    .saturating_add(conn_status.ingress_bps);
-                                s.egress_bps = s
-                                    .egress_bps
-                                    .saturating_sub(old_egress_bps)
-                                    .saturating_add(conn_status.egress_bps);
-                                s.ingress_pps = s
-                                    .ingress_pps
-                                    .saturating_sub(old_ingress_pps)
-                                    .saturating_add(conn_status.ingress_pps);
-                                s.egress_pps = s
-                                    .egress_pps
-                                    .saturating_sub(old_egress_pps)
-                                    .saturating_add(conn_status.egress_pps);
-
-                                let d = dst_agg.entry(conn_status.dst_ip).or_default();
-                                d.ingress_bps = d
-                                    .ingress_bps
-                                    .saturating_sub(old_ingress_bps)
-                                    .saturating_add(conn_status.ingress_bps);
-                                d.egress_bps = d
-                                    .egress_bps
-                                    .saturating_sub(old_egress_bps)
-                                    .saturating_add(conn_status.egress_bps);
-                                d.ingress_pps = d
-                                    .ingress_pps
-                                    .saturating_sub(old_ingress_pps)
-                                    .saturating_add(conn_status.ingress_pps);
-                                d.egress_pps = d
-                                    .egress_pps
-                                    .saturating_sub(old_egress_pps)
-                                    .saturating_add(conn_status.egress_pps);
-                            }
-                            _ => {}
-                        }
+            let mut cleanup_interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+            loop {
+                tokio::select! {
+                    msg = message_rx.recv() => {
+                        let msg = match msg {
+                            Some(m) => m,
+                            None => break,
+                        };
+                        let ConnectMessage::Metric(metric) = msg;
+                        Self::handle_metric_message(
+                            metric,
+                            &metric_store_clone,
+                            &realtime_metrics_clone,
+                            &src_ip_stats_clone,
+                            &dst_ip_stats_clone
+                        ).await;
+                    }
+                    _ = cleanup_interval.tick() => {
+                        Self::cleanup_stale_connections(
+                            &realtime_metrics_clone,
+                            &src_ip_stats_clone,
+                            &dst_ip_stats_clone
+                        ).await;
                     }
                 }
             }
@@ -175,7 +75,7 @@ impl ConnectMetricManager {
 
         let global_stats = Arc::new(RwLock::new(ConnectGlobalStats::default()));
 
-        // 定时汇总全量统计 (每 24 小时)
+        // Regularly aggregate global statistics (every 24 hours)
         {
             let metric_store_clone = metric_store.clone();
             let global_stats_clone = global_stats.clone();
@@ -198,32 +98,6 @@ impl ConnectMetricManager {
             msg_channel,
             metric_store,
             global_stats,
-        }
-    }
-
-    /// 辅助方法：完整应用或扣除一个连接的速率
-    fn apply_ip_diff(
-        agg_map: &mut HashMap<IpAddr, IpAggregatedStats>,
-        ip: IpAddr,
-        conn: &ConnectRealtimeStatus,
-        add: bool,
-    ) {
-        let entry = agg_map.entry(ip).or_default();
-        if add {
-            entry.ingress_bps = entry.ingress_bps.saturating_add(conn.ingress_bps);
-            entry.egress_bps = entry.egress_bps.saturating_add(conn.egress_bps);
-            entry.ingress_pps = entry.ingress_pps.saturating_add(conn.ingress_pps);
-            entry.egress_pps = entry.egress_pps.saturating_add(conn.egress_pps);
-            entry.active_conns += 1;
-        } else {
-            entry.ingress_bps = entry.ingress_bps.saturating_sub(conn.ingress_bps);
-            entry.egress_bps = entry.egress_bps.saturating_sub(conn.egress_bps);
-            entry.ingress_pps = entry.ingress_pps.saturating_sub(conn.ingress_pps);
-            entry.egress_pps = entry.egress_pps.saturating_sub(conn.egress_pps);
-            entry.active_conns = entry.active_conns.saturating_sub(1);
-            if entry.active_conns == 0 {
-                agg_map.remove(&ip);
-            }
         }
     }
 
@@ -291,5 +165,204 @@ impl ConnectMetricManager {
         params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
         self.metric_store.history_summaries_complex(params).await
+    }
+
+    async fn handle_metric_message(
+        metric: ConnectMetric,
+        metric_store: &DuckMetricStore,
+        realtime_metrics: &RwLock<HashMap<ConnectKey, ConnectRealtimeStatus>>,
+        src_ip_stats: &RwLock<HashMap<IpAddr, IpAggregatedStats>>,
+        dst_ip_stats: &RwLock<HashMap<IpAddr, IpAggregatedStats>>,
+    ) {
+        metric_store.insert_metric(metric.clone()).await;
+
+        let mut realtime_set = realtime_metrics.write().await;
+        let mut src_agg = src_ip_stats.write().await;
+        let mut dst_agg = dst_ip_stats.write().await;
+
+        match metric.status {
+            ConnectStatusType::Disabled => {
+                if let Some(conn) = realtime_set.remove(&metric.key) {
+                    let old_rates =
+                        (conn.ingress_bps, conn.egress_bps, conn.ingress_pps, conn.egress_pps);
+                    Self::apply_ip_diff(
+                        &mut src_agg,
+                        conn.src_ip,
+                        Some(old_rates),
+                        None,
+                        false,
+                        true,
+                    );
+                    Self::apply_ip_diff(
+                        &mut dst_agg,
+                        conn.dst_ip,
+                        Some(old_rates),
+                        None,
+                        false,
+                        true,
+                    );
+                }
+            }
+            ConnectStatusType::Active => {
+                let key = metric.key.clone();
+                let src_ip = metric.src_ip;
+                let dst_ip = metric.dst_ip;
+
+                // 1. Get (or create new connection)
+                let mut is_new = false;
+                let conn_status = realtime_set.entry(key.clone()).or_insert_with(|| {
+                    is_new = true;
+                    ConnectRealtimeStatus {
+                        key,
+                        src_ip,
+                        dst_ip,
+                        src_port: metric.src_port,
+                        dst_port: metric.dst_port,
+                        l4_proto: metric.l4_proto,
+                        l3_proto: metric.l3_proto,
+                        flow_id: metric.flow_id,
+                        trace_id: metric.trace_id,
+                        ingress_bps: 0,
+                        egress_bps: 0,
+                        ingress_pps: 0,
+                        egress_pps: 0,
+                        last_metric: None,
+                    }
+                });
+
+                // 2. Prepare old rate snapshot for "subtract old"
+                let old_rates = (
+                    conn_status.ingress_bps,
+                    conn_status.egress_bps,
+                    conn_status.ingress_pps,
+                    conn_status.egress_pps,
+                );
+
+                // 3. Calculate new rate (handle counter reset)
+                if let Some(old_metric) = &conn_status.last_metric {
+                    let delta_ms = metric.report_time.saturating_sub(old_metric.report_time);
+                    if delta_ms > 0 {
+                        let effective_delta_ms = delta_ms.min(MAX_REPORT_INTERVAL_MS);
+
+                        let d_i_bytes = if metric.ingress_bytes >= old_metric.ingress_bytes {
+                            metric.ingress_bytes - old_metric.ingress_bytes
+                        } else {
+                            metric.ingress_bytes
+                        };
+                        let d_e_bytes = if metric.egress_bytes >= old_metric.egress_bytes {
+                            metric.egress_bytes - old_metric.egress_bytes
+                        } else {
+                            metric.egress_bytes
+                        };
+                        let d_i_pkts = if metric.ingress_packets >= old_metric.ingress_packets {
+                            metric.ingress_packets - old_metric.ingress_packets
+                        } else {
+                            metric.ingress_packets
+                        };
+                        let d_e_pkts = if metric.egress_packets >= old_metric.egress_packets {
+                            metric.egress_packets - old_metric.egress_packets
+                        } else {
+                            metric.egress_packets
+                        };
+
+                        conn_status.ingress_bps = (d_i_bytes * 8000) / effective_delta_ms;
+                        conn_status.egress_bps = (d_e_bytes * 8000) / effective_delta_ms;
+                        conn_status.ingress_pps = (d_i_pkts * 1000) / effective_delta_ms;
+                        conn_status.egress_pps = (d_e_pkts * 1000) / effective_delta_ms;
+                    }
+                }
+                conn_status.last_metric = Some(metric);
+
+                // 4. Apply delta update (subtract old, add new)
+                let old_rates_opt = if is_new { None } else { Some(old_rates) };
+                Self::apply_ip_diff(
+                    &mut src_agg,
+                    conn_status.src_ip,
+                    old_rates_opt,
+                    Some(conn_status),
+                    is_new,
+                    false,
+                );
+                Self::apply_ip_diff(
+                    &mut dst_agg,
+                    conn_status.dst_ip,
+                    old_rates_opt,
+                    Some(conn_status),
+                    is_new,
+                    false,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    /// Core helper method: Unified handling of IP aggregated statistics: add(+), subtract(-), or replace(Update)
+    /// old_rates: (bps_i, bps_e, pps_i, pps_e)
+    fn apply_ip_diff(
+        agg_map: &mut HashMap<IpAddr, IpAggregatedStats>,
+        ip: IpAddr,
+        old_rates: Option<(u64, u64, u64, u64)>,
+        new_status: Option<&ConnectRealtimeStatus>,
+        is_add: bool,    // Whether it's a new connection joining
+        is_remove: bool, // Whether the connection is completely removed
+    ) {
+        let entry = agg_map.entry(ip).or_default();
+
+        // 1. Subtract old contribution (if any)
+        if let Some((bps_i, bps_e, pps_i, pps_e)) = old_rates {
+            entry.ingress_bps = entry.ingress_bps.saturating_sub(bps_i);
+            entry.egress_bps = entry.egress_bps.saturating_sub(bps_e);
+            entry.ingress_pps = entry.ingress_pps.saturating_sub(pps_i);
+            entry.egress_pps = entry.egress_pps.saturating_sub(pps_e);
+        }
+
+        // 2. Add new contribution (if any)
+        if let Some(new) = new_status {
+            entry.ingress_bps = entry.ingress_bps.saturating_add(new.ingress_bps);
+            entry.egress_bps = entry.egress_bps.saturating_add(new.egress_bps);
+            entry.ingress_pps = entry.ingress_pps.saturating_add(new.ingress_pps);
+            entry.egress_pps = entry.egress_pps.saturating_add(new.egress_pps);
+        }
+
+        // 3. Update connection counter
+        if is_add {
+            entry.active_conns += 1;
+        }
+        if is_remove {
+            entry.active_conns = entry.active_conns.saturating_sub(1);
+            if entry.active_conns == 0 {
+                agg_map.remove(&ip);
+            }
+        }
+    }
+
+    async fn cleanup_stale_connections(
+        realtime_metrics: &RwLock<HashMap<ConnectKey, ConnectRealtimeStatus>>,
+        src_ip_stats: &RwLock<HashMap<IpAddr, IpAggregatedStats>>,
+        dst_ip_stats: &RwLock<HashMap<IpAddr, IpAggregatedStats>>,
+    ) {
+        let now = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+        let mut realtime_set = realtime_metrics.write().await;
+        let mut src_agg = src_ip_stats.write().await;
+        let mut dst_agg = dst_ip_stats.write().await;
+
+        realtime_set.retain(|key, conn| {
+            let last_report =
+                conn.last_metric.as_ref().map(|m| m.report_time).unwrap_or(key.create_time);
+            if now.saturating_sub(last_report) > STALE_TIMEOUT_MS {
+                let old_rates =
+                    (conn.ingress_bps, conn.egress_bps, conn.ingress_pps, conn.egress_pps);
+                Self::apply_ip_diff(&mut src_agg, conn.src_ip, Some(old_rates), None, false, true);
+                Self::apply_ip_diff(&mut dst_agg, conn.dst_ip, Some(old_rates), None, false, true);
+                tracing::debug!(
+                    "Cleaned up stale connection: {:?} (last report: {})",
+                    key,
+                    last_report
+                );
+                false
+            } else {
+                true
+            }
+        });
     }
 }
