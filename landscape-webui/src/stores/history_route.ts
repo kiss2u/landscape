@@ -17,32 +17,38 @@ export const useHistoryRouteStore = defineStore("history_route", {
       if (!route.path) return;
       if (route.path === "/login") return;
 
-      const index = this.visitedRoutes.findIndex((r) => r.path === route.path);
-      if (index !== -1) {
-        // Update existing route metadata and name (important for i18n updates)
-        const existing = this.visitedRoutes[index];
-        existing.name = (route.name as string) || "Home";
-        existing.meta = route.meta;
-      } else {
-        // Limit check
-        if (this.visitedRoutes.length >= 10) {
-          // Find first unpinned route to remove
-          const unpinnedIndex = this.visitedRoutes.findIndex((r) => !r.pinned);
-          if (unpinnedIndex !== -1) {
-            this.visitedRoutes.splice(unpinnedIndex, 1);
-          } else {
-            // All are pinned, do not add new route (or replace last one? user said "don't increase")
-            // If all 10 are pinned, we can't add a new one.
-            return;
-          }
-        }
+      const existingIndex = this.visitedRoutes.findIndex(
+        (r) => r.path === route.path,
+      );
+      const isExistingPinned =
+        existingIndex !== -1 && this.visitedRoutes[existingIndex].pinned;
 
-        this.visitedRoutes.push({
-          name: (route.name as string) || "Home",
-          path: route.path,
-          meta: route.meta,
-          pinned: false,
-        });
+      const pinned = this.visitedRoutes.filter((r) => r.pinned);
+      const unpinned = this.visitedRoutes.filter((r) => !r.pinned);
+
+      if (isExistingPinned) {
+        // Visiting a pinned route: keep all pinned and the last unpinned visit
+        const recent =
+          unpinned.length > 0 ? [unpinned[unpinned.length - 1]] : [];
+        this.visitedRoutes = [...pinned, ...recent];
+
+        // Update metadata for the current pinned route
+        const current = this.visitedRoutes.find((r) => r.path === route.path);
+        if (current) {
+          current.name = (route.name as string) || "Home";
+          current.meta = route.meta;
+        }
+      } else {
+        // Visiting an unpinned route (new or existing): replace all unpinned ones with this one
+        this.visitedRoutes = [
+          ...pinned,
+          {
+            name: (route.name as string) || "Home",
+            path: route.path,
+            meta: route.meta,
+            pinned: false,
+          },
+        ];
       }
     },
     removeRoute(path: string) {
