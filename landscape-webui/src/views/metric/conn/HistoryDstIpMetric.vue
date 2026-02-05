@@ -6,7 +6,7 @@ import { useMetricStore } from "@/stores/status_metric";
 import { get_history_dst_ip_stats } from "@/api/metric";
 import { formatSize } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
-import HistoryIpStatsList from "@/components/metric/connect/HistoryIpStatsList.vue";
+import HistoryIpStatsList from "@/components/metric/connect/history/HistoryIpStatsList.vue";
 import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
 import {

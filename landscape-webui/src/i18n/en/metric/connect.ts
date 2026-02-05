@@ -77,4 +77,18 @@ export default {
     view_live: "View live status of this connection",
     default_flow: "Default Flow",
   },
+  chart: {
+    ingress_total: "Ingress Total",
+    egress_total: "Egress Total",
+    ingress_rate: "Ingress Rate",
+    egress_rate: "Egress Rate",
+    ingress_packets_total: "Ingress Packets",
+    egress_packets_total: "Egress Packets",
+    ingress_packets_rate: "Ingress PPS",
+    egress_packets_rate: "Egress PPS",
+    bytes_axis_total: "Total Bytes",
+    bytes_axis_rate: "Rate",
+    packets_axis_total: "Total Packets",
+    packets_axis_rate: "PPS",
+  },
 };

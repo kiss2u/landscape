@@ -7,7 +7,7 @@ import { useFrontEndStore } from "@/stores/front_end_config";
 import { ConnectFilter } from "@/lib/metric.rs";
 import { formatRate, formatPackets } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
-import ConnectVirtualList from "@/components/metric/connect/ConnectVirtualList.vue";
+import ConnectVirtualList from "@/components/metric/connect/live/ConnectVirtualList.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
 import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher.vue";
 

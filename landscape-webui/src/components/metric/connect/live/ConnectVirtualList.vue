@@ -5,6 +5,8 @@ import {
   ConnectRealtimeStatus,
 } from "landscape-types/common/metric/connect";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import ConnectItemInfo from "./ConnectItemInfo.vue";
+import ConnectChartDrawer from "../ConnectChartDrawer.vue";
 
 const frontEndStore = useFrontEndStore();
 

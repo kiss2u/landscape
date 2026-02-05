@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { useMetricStore } from "@/stores/status_metric";
 import { formatRate } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
-import IpStatsList from "@/components/metric/connect/IpStatsList.vue";
+import IpStatsList from "@/components/metric/connect/live/IpStatsList.vue";
 import ConnectViewSwitcher from "@/components/metric/connect/ConnectViewSwitcher.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
 

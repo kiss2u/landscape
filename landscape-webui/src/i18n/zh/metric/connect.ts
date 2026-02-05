@@ -77,4 +77,18 @@ export default {
     view_live: "查看此连接的实时活跃状态",
     default_flow: "默认 Flow",
   },
+  chart: {
+    ingress_total: "入站总量 (Ingress)",
+    egress_total: "出站总量 (Egress)",
+    ingress_rate: "入站速度 (Ingress)",
+    egress_rate: "出站速度 (Egress)",
+    ingress_packets_total: "入站封包 (Ingress)",
+    egress_packets_total: "出站封包 (Egress)",
+    ingress_packets_rate: "入站 PPS (Ingress)",
+    egress_packets_rate: "出站 PPS (Egress)",
+    bytes_axis_total: "数据总量",
+    bytes_axis_rate: "数据速度",
+    packets_axis_total: "封包总量",
+    packets_axis_rate: "封包速度 (PPS)",
+  },
 };

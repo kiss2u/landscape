@@ -8,7 +8,8 @@ import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 import { useMetricStore } from "@/stores/status_metric";
 import { useFrontEndStore } from "@/stores/front_end_config";
-import HistoryItemInfo from "@/components/metric/connect/HistoryItemInfo.vue";
+import HistoryItemInfo from "@/components/metric/connect/history/HistoryItemInfo.vue";
+import ConnectChartDrawer from "@/components/metric/connect/ConnectChartDrawer.vue";
 import FlowSelect from "@/components/flow/FlowSelect.vue";
 import {
   ConnectKey,

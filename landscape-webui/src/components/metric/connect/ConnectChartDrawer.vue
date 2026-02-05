@@ -3,8 +3,8 @@ import { useMetricStore } from "@/stores/status_metric";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { ConnectKey } from "landscape-types/common/metric/connect";
 import { computed, watch } from "vue";
-import LiveConnectChart from "./LiveConnectChart.vue";
-import HistoryConnectChart from "./HistoryConnectChart.vue";
+import LiveConnectChart from "./live/LiveConnectChart.vue";
+import HistoryConnectChart from "./history/HistoryConnectChart.vue";
 
 const metricStore = useMetricStore();
 const frontEndStore = useFrontEndStore();
