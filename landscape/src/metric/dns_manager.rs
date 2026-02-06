@@ -1,7 +1,8 @@
 pub use crate::metric::duckdb::DuckMetricStore;
 use landscape_common::event::DnsMetricMessage;
 use landscape_common::metric::dns::{
-    DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse,
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
+    DnsSummaryQueryParams, DnsSummaryResponse,
 };
 use tokio::sync::mpsc;
 
@@ -41,7 +42,14 @@ impl DnsMetricManager {
         self.metric_store.query_dns_history(params).await
     }
 
-    pub async fn get_dns_summary(&self, params: DnsHistoryQueryParams) -> DnsSummaryResponse {
+    pub async fn get_dns_summary(&self, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
         self.metric_store.get_dns_summary(params).await
+    }
+
+    pub async fn get_dns_lightweight_summary(
+        &self,
+        params: DnsSummaryQueryParams,
+    ) -> DnsLightweightSummaryResponse {
+        self.metric_store.get_dns_lightweight_summary(params).await
     }
 }

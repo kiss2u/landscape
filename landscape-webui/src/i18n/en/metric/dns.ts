@@ -16,6 +16,7 @@ export default {
   reset: "Reset",
   // Query Types
   all_types: "All Types",
+  all_flows: "All Flows",
   // Status
   all_status: "All Status",
   status_hit: "Hit (Cache)",
@@ -38,7 +39,7 @@ export default {
   // Dashboard
   dash: {
     total_queries: "Total Queries",
-    cache_hit_rate: "Cache Hit (Effective)",
+    cache_hit_rate: "Cache Hit Rate",
     block_rate: "Block Rate",
     query_latency: "Query Latency",
     nxdomain: "NXDomain",
@@ -60,6 +61,10 @@ export default {
     latency_subtitle: "Avg latency (min 3 samples)",
     no_data: "No Data",
     from_samples: "From {count} samples",
+    rules: "Domain Rules",
+    ip_rules: "IP Rules",
+    refresh: "Refresh Metrics",
+    recent_5m: "(5 mins)",
   },
   tip: {
     default_flow: "Default Flow",

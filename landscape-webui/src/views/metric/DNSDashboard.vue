@@ -23,6 +23,7 @@ import {
 
 const props = defineProps<{
   timeRange: [number, number] | null;
+  flowId?: number | null;
 }>();
 
 const summary = ref<DnsSummaryResponse | null>(null);
@@ -34,12 +35,15 @@ const frontEndStore = useFrontEndStore();
 const loadSummary = async () => {
   loading.value = true;
   try {
-    const params: any = {};
-    if (props.timeRange) {
-      params.start_time = props.timeRange[0];
-      params.end_time = props.timeRange[1];
-    }
-    summary.value = await get_dns_summary(params);
+    const now = Date.now();
+    const startTime = props.timeRange?.[0] || now - 24 * 60 * 60 * 1000;
+    const endTime = props.timeRange?.[1] || now;
+
+    summary.value = await get_dns_summary({
+      start_time: startTime,
+      end_time: endTime,
+      flow_id: props.flowId || undefined,
+    });
   } catch (e) {
     console.error(e);
   } finally {
@@ -47,7 +51,7 @@ const loadSummary = async () => {
   }
 };
 
-watch(() => props.timeRange, loadSummary, { immediate: true });
+watch(() => [props.timeRange, props.flowId], loadSummary, { immediate: true });
 
 const calculatePercentFromValues = (
   hit: number | undefined,

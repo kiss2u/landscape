@@ -34,6 +34,8 @@ import FlowExhibit from "@/components/flow/FlowExhibit.vue";
 import CheckDomainDrawer from "@/components/dns/CheckDomainDrawer.vue";
 import { SearchLocate } from "@vicons/carbon";
 import { usePreferenceStore } from "@/stores/preference";
+import { get_flow_rules } from "@/api/flow";
+import { FlowConfig } from "landscape-types/common/flow";
 const prefStore = usePreferenceStore();
 
 const activeTab = ref("dashboard");
@@ -55,8 +57,10 @@ const searchParams = reactive({
   src_ip: "",
   query_type: null as string | null,
   status: null as string | null,
+  status: null as string | null,
   min_duration_ms: null as number | null,
   max_duration_ms: null as number | null,
+  flow_id: null as number | null,
   timeRange: [Date.now() - DEFAULT_TIME_WINDOW, Date.now()] as
     | [number, number]
     | null,
@@ -111,6 +115,22 @@ const statusOptions = computed(() => [
   { label: t("metric.dns.status_filter"), value: "filter" },
   { label: t("metric.dns.status_error"), value: "error" },
 ]);
+
+const flows = ref<FlowConfig[]>([]);
+const flowOptions = computed(() => {
+  const opts = flows.value.map((f) => ({
+    label: f.remark ? `${f.flow_id} - ${f.remark}` : `Flow ${f.flow_id}`,
+    value: f.flow_id,
+  }));
+  return [
+    { label: t("metric.dns.all_flows") || "All Flows", value: null },
+    ...opts,
+  ];
+});
+
+const loadFlows = async () => {
+  flows.value = await get_flow_rules();
+};
 
 const columns = computed<DataTableColumns<DnsMetric>>(() => [
   {
@@ -361,14 +381,14 @@ const loadData = async (resetPage = false) => {
     ) {
       params.max_duration_ms = searchParams.max_duration_ms;
     }
-
-    if (
-      Array.isArray(searchParams.timeRange) &&
-      searchParams.timeRange.length === 2
-    ) {
-      params.start_time = searchParams.timeRange[0];
-      params.end_time = searchParams.timeRange[1];
+    if (searchParams.flow_id !== null && searchParams.flow_id !== undefined) {
+      params.flow_id = searchParams.flow_id;
     }
+
+    const now = Date.now();
+    params.start_time =
+      searchParams.timeRange?.[0] || now - DEFAULT_TIME_WINDOW;
+    params.end_time = searchParams.timeRange?.[1] || now;
 
     const res = await get_dns_history(params);
     data.value = res.items;
@@ -462,7 +482,9 @@ const handleReset = () => {
   searchParams.query_type = null;
   searchParams.status = null;
   searchParams.min_duration_ms = null;
+  searchParams.min_duration_ms = null;
   searchParams.max_duration_ms = null;
+  searchParams.flow_id = null;
   searchParams.timeRange = [Date.now() - DEFAULT_TIME_WINDOW, Date.now()];
   searchParams.sort_key = "time";
   searchParams.sort_order = "desc";
@@ -470,6 +492,7 @@ const handleReset = () => {
 };
 
 onMounted(() => {
+  loadFlows();
   // 初始加载时，如果是仪表盘模式，由于它是首个展示的 Tab 且 Prop 已初始化，
   // DNSDashboard 的 immediate watch 会负责首次加载。
   // 我们只在初始是历史记录页面时才手动加载。
@@ -516,104 +539,153 @@ onMounted(() => {
       </n-space>
     </div>
 
-    <n-space
-      style="margin-bottom: 10px"
-      align="center"
-      :size="[8, 8]"
-      :wrap="false"
-    >
-      <n-input
-        v-model:value="searchParams.domain"
-        size="small"
-        :placeholder="t('metric.dns.domain')"
-        clearable
-        style="width: 200px"
-        v-if="activeTab === 'history'"
-      />
-      <n-input
-        v-model:value="searchParams.src_ip"
-        size="small"
-        :placeholder="t('metric.dns.ip')"
-        clearable
-        style="width: 140px"
-        v-if="activeTab === 'history'"
-      />
-      <n-select
-        v-model:value="searchParams.query_type"
-        size="small"
-        :options="queryTypeOptions"
-        :placeholder="t('metric.dns.type')"
-        clearable
-        style="width: 130px"
-        v-if="activeTab === 'history'"
-      />
-      <n-select
-        v-model:value="searchParams.status"
-        size="small"
-        :options="statusOptions"
-        :placeholder="t('metric.dns.status')"
-        clearable
-        style="width: 130px"
-        v-if="activeTab === 'history'"
-      />
-      <n-input-number
-        v-model:value="searchParams.min_duration_ms"
-        size="small"
-        :placeholder="t('metric.dns.min_ms')"
-        clearable
-        :min="0"
-        :show-button="false"
-        style="width: 100px"
-        v-if="activeTab === 'history'"
-      />
-      <n-input-number
-        v-model:value="searchParams.max_duration_ms"
-        size="small"
-        :placeholder="t('metric.dns.max_ms')"
-        clearable
-        :min="0"
-        :show-button="false"
-        style="width: 100px"
-        v-if="activeTab === 'history'"
-      />
-      <n-date-picker
-        v-model:value="searchParams.timeRange"
-        size="small"
-        type="datetimerange"
-        clearable
-        :shortcuts="shortcuts"
-        :placeholder="t('metric.dns.time_range')"
-        style="width: 320px"
-        :time-picker-props="{ timeZone: prefStore.timezone }"
-      />
-      <n-tooltip trigger="hover">
-        <template #trigger>
-          <n-button
-            strong
-            secondary
-            size="small"
-            @click="syncToNow"
-            type="info"
-          >
-            <template #icon>
-              <n-icon><TimeOutline /></n-icon>
-            </template>
-            {{ t("metric.dns.now") }}
-          </n-button>
-        </template>
-        {{ t("metric.dns.sync_to_now_tip") }}
-      </n-tooltip>
-      <n-button @click="handleReset" size="small" secondary>
-        <template #icon
-          ><n-icon><TrashOutline /></n-icon
-        ></template>
-        {{ t("metric.dns.reset") }}
-      </n-button>
-    </n-space>
+    <div v-if="activeTab === 'dashboard'" style="margin-bottom: 10px">
+      <n-space align="center" :size="[8, 8]" :wrap="false">
+        <n-select
+          v-model:value="searchParams.flow_id"
+          size="small"
+          :options="flowOptions"
+          :placeholder="t('metric.dns.all_flows')"
+          clearable
+          style="width: 160px"
+        />
+        <n-date-picker
+          v-model:value="searchParams.timeRange"
+          size="small"
+          type="datetimerange"
+          clearable
+          :shortcuts="shortcuts"
+          :placeholder="t('metric.dns.time_range')"
+          style="width: 320px"
+          :time-picker-props="{ timeZone: prefStore.timezone }"
+        />
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button
+              strong
+              secondary
+              size="small"
+              @click="syncToNow"
+              type="info"
+            >
+              <template #icon>
+                <n-icon><TimeOutline /></n-icon>
+              </template>
+              {{ t("metric.dns.now") }}
+            </n-button>
+          </template>
+          {{ t("metric.dns.sync_to_now_tip") }}
+        </n-tooltip>
+        <n-button @click="handleReset" size="small" secondary>
+          <template #icon
+            ><n-icon><TrashOutline /></n-icon
+          ></template>
+          {{ t("metric.dns.reset") }}
+        </n-button>
+      </n-space>
+    </div>
+
+    <div v-if="activeTab === 'history'" style="margin-bottom: 10px">
+      <n-space align="center" :size="[8, 8]" :wrap="false">
+        <n-input
+          v-model:value="searchParams.domain"
+          size="small"
+          :placeholder="t('metric.dns.domain')"
+          clearable
+          style="width: 200px"
+        />
+        <n-select
+          v-model:value="searchParams.flow_id"
+          size="small"
+          :options="flowOptions"
+          :placeholder="t('metric.dns.all_flows')"
+          clearable
+          style="width: 120px"
+        />
+        <n-input
+          v-model:value="searchParams.src_ip"
+          size="small"
+          :placeholder="t('metric.dns.ip')"
+          clearable
+          style="width: 140px"
+        />
+        <n-select
+          v-model:value="searchParams.query_type"
+          size="small"
+          :options="queryTypeOptions"
+          :placeholder="t('metric.dns.type')"
+          clearable
+          style="width: 130px"
+        />
+        <n-select
+          v-model:value="searchParams.status"
+          size="small"
+          :options="statusOptions"
+          :placeholder="t('metric.dns.status')"
+          clearable
+          style="width: 130px"
+        />
+        <n-input-number
+          v-model:value="searchParams.min_duration_ms"
+          size="small"
+          :placeholder="t('metric.dns.min_ms')"
+          clearable
+          :min="0"
+          :show-button="false"
+          style="width: 80px"
+        />
+        <n-input-number
+          v-model:value="searchParams.max_duration_ms"
+          size="small"
+          :placeholder="t('metric.dns.max_ms')"
+          clearable
+          :min="0"
+          :show-button="false"
+          style="width: 80px"
+        />
+        <n-date-picker
+          v-model:value="searchParams.timeRange"
+          size="small"
+          type="datetimerange"
+          clearable
+          :shortcuts="shortcuts"
+          :placeholder="t('metric.dns.time_range')"
+          style="width: 320px"
+          :time-picker-props="{ timeZone: prefStore.timezone }"
+        />
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button
+              strong
+              secondary
+              size="small"
+              @click="syncToNow"
+              type="info"
+            >
+              <template #icon>
+                <n-icon><TimeOutline /></n-icon>
+              </template>
+              {{ t("metric.dns.now") }}
+            </n-button>
+          </template>
+          {{ t("metric.dns.sync_to_now_tip") }}
+        </n-tooltip>
+        <n-button @click="handleReset" size="small" secondary>
+          <template #icon
+            ><n-icon><TrashOutline /></n-icon
+          ></template>
+          {{ t("metric.dns.reset") }}
+        </n-button>
+      </n-space>
+    </div>
 
     <n-tabs v-model:value="activeTab" type="line" animated>
       <n-tab-pane name="dashboard" :tab="t('metric.dns.dashboard')">
-        <DNSDashboard ref="dashboardRef" :time-range="searchParams.timeRange" />
+        <DNSDashboard
+          ref="dashboardRef"
+          :time-range="searchParams.timeRange"
+          :flow-id="searchParams.flow_id"
+        />
       </n-tab-pane>
       <n-tab-pane name="history" :tab="t('metric.dns.query_log')">
         <n-data-table

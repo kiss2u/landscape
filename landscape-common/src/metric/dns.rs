@@ -44,9 +44,9 @@ pub enum DnsSortKey {
 #[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
 #[ts(export, export_to = "common/metric/dns.d.ts")]
 pub struct DnsHistoryQueryParams {
-    #[ts(optional)]
+    #[ts(optional, type = "number")]
     pub start_time: Option<u64>,
-    #[ts(optional)]
+    #[ts(optional, type = "number")]
     pub end_time: Option<u64>,
     #[ts(optional)]
     pub limit: Option<usize>,
@@ -68,6 +68,19 @@ pub struct DnsHistoryQueryParams {
     pub sort_key: Option<DnsSortKey>,
     #[ts(optional)]
     pub sort_order: Option<crate::metric::connect::SortOrder>,
+    #[ts(optional, type = "number")]
+    pub flow_id: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default, TS)]
+#[ts(export, export_to = "common/metric/dns.d.ts")]
+pub struct DnsSummaryQueryParams {
+    #[ts(type = "number")]
+    pub start_time: u64,
+    #[ts(type = "number")]
+    pub end_time: u64,
+    #[ts(optional, type = "number")]
+    pub flow_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
@@ -102,6 +115,29 @@ pub struct DnsSummaryResponse {
     pub top_domains: Vec<DnsStatEntry>,
     pub top_blocked: Vec<DnsStatEntry>,
     pub slowest_domains: Vec<DnsStatEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS, Default)]
+#[ts(export, export_to = "common/metric/dns.d.ts")]
+pub struct DnsLightweightSummaryResponse {
+    pub total_queries: usize,
+    pub total_effective_queries: usize,
+    pub cache_hit_count: usize,
+    pub hit_count_v4: usize,
+    pub hit_count_v6: usize,
+    pub hit_count_other: usize,
+    pub total_v4: usize,
+    pub total_v6: usize,
+    pub total_other: usize,
+    pub block_count: usize,
+    pub filter_count: usize,
+    pub nxdomain_count: usize,
+    pub error_count: usize,
+    pub avg_duration_ms: f64,
+    pub p50_duration_ms: f64,
+    pub p95_duration_ms: f64,
+    pub p99_duration_ms: f64,
+    pub max_duration_ms: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]

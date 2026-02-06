@@ -4,7 +4,8 @@ use landscape_common::metric::connect::{
     MetricResolution,
 };
 use landscape_common::metric::dns::{
-    DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSummaryResponse,
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
+    DnsSummaryQueryParams, DnsSummaryResponse,
 };
 use r2d2::{self, PooledConnection};
 use std::net::IpAddr;
@@ -394,7 +395,7 @@ impl DuckMetricStore {
         .unwrap_or(DnsHistoryResponse { items: Vec::new(), total: 0 })
     }
 
-    pub async fn get_dns_summary(&self, params: DnsHistoryQueryParams) -> DnsSummaryResponse {
+    pub async fn get_dns_summary(&self, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
             let conn = store.get_read_conn();
@@ -402,5 +403,18 @@ impl DuckMetricStore {
         })
         .await
         .unwrap_or_else(|_| DnsSummaryResponse::default())
+    }
+
+    pub async fn get_dns_lightweight_summary(
+        &self,
+        params: DnsSummaryQueryParams,
+    ) -> DnsLightweightSummaryResponse {
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = store.get_read_conn();
+            dns::query_dns_lightweight_summary(&conn, params)
+        })
+        .await
+        .unwrap_or_else(|_| DnsLightweightSummaryResponse::default())
     }
 }

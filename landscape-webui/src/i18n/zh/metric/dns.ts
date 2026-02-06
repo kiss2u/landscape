@@ -16,6 +16,7 @@ export default {
   reset: "重置",
   // 查询类型
   all_types: "所有类型",
+  all_flows: "所有 Flow",
   // 状态
   all_status: "所有状态",
   status_hit: "命中 (缓存)",
@@ -38,7 +39,7 @@ export default {
   // 仪表盘
   dash: {
     total_queries: "总查询量",
-    cache_hit_rate: "缓存命中率 (有效)",
+    cache_hit_rate: "缓存命中率",
     block_rate: "拦截率",
     query_latency: "查询延迟",
     nxdomain: "域名不存在",
@@ -60,6 +61,10 @@ export default {
     latency_subtitle: "平均延迟 (最少 3 个样本)",
     no_data: "无数据",
     from_samples: "来自 {count} 个样本",
+    rules: "域名规则",
+    ip_rules: "IP 规则",
+    refresh: "刷新指标",
+    recent_5m: "(近5分钟)",
   },
   tip: {
     default_flow: "默认 Flow",

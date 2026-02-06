@@ -1,8 +1,8 @@
 use duckdb::Connection;
 use landscape_common::metric::connect::SortOrder;
 use landscape_common::metric::dns::{
-    DnsHistoryQueryParams, DnsHistoryResponse, DnsMetric, DnsSortKey, DnsStatEntry,
-    DnsSummaryResponse,
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
+    DnsSortKey, DnsStatEntry, DnsSummaryQueryParams, DnsSummaryResponse,
 };
 
 pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
@@ -57,6 +57,10 @@ pub fn query_dns_history(
             where_clauses.push(format!("src_ip LIKE ?"));
             sql_params.push(Box::new(format!("%{}%", ip)));
         }
+    }
+    if let Some(flow_id) = params.flow_id {
+        where_clauses.push(format!("flow_id = ?"));
+        sql_params.push(Box::new(flow_id as i64));
     }
     if let Some(qtype) = params.query_type {
         if !qtype.is_empty() {
@@ -170,17 +174,21 @@ pub fn cleanup_old_dns_metrics(conn: &Connection, cutoff: u64) {
         .execute("DELETE FROM dns_metrics WHERE report_time < ?1", duckdb::params![cutoff as i64]);
 }
 
-pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> DnsSummaryResponse {
+pub fn query_dns_summary(conn: &Connection, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
     let mut where_clauses = Vec::new();
     let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
 
-    if let Some(start) = params.start_time {
+    {
         where_clauses.push(format!("report_time >= ?"));
-        sql_params.push(Box::new(start as i64));
+        sql_params.push(Box::new(params.start_time as i64));
     }
-    if let Some(end) = params.end_time {
+    {
         where_clauses.push(format!("report_time <= ?"));
-        sql_params.push(Box::new(end as i64));
+        sql_params.push(Box::new(params.end_time as i64));
+    }
+    if let Some(flow_id) = params.flow_id {
+        where_clauses.push(format!("flow_id = ?"));
+        sql_params.push(Box::new(flow_id as i64));
     }
 
     let where_stmt = if where_clauses.is_empty() {
@@ -364,5 +372,122 @@ pub fn query_dns_summary(conn: &Connection, params: DnsHistoryQueryParams) -> Dn
         top_domains,
         top_blocked,
         slowest_domains,
+    }
+}
+
+pub fn query_dns_lightweight_summary(
+    conn: &Connection,
+    params: DnsSummaryQueryParams,
+) -> DnsLightweightSummaryResponse {
+    let mut where_clauses = Vec::new();
+    let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+
+    where_clauses.push(format!("report_time >= ?"));
+    sql_params.push(Box::new(params.start_time as i64));
+
+    where_clauses.push(format!("report_time <= ?"));
+    sql_params.push(Box::new(params.end_time as i64));
+
+    if let Some(flow_id) = params.flow_id {
+        where_clauses.push(format!("flow_id = ?"));
+        sql_params.push(Box::new(flow_id as i64));
+    }
+
+    let where_stmt = format!("WHERE {}", where_clauses.join(" AND "));
+
+    let param_refs: Vec<&dyn duckdb::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+
+    // 1. 基本统计
+    let stats_sql = format!(
+        "SELECT 
+            COUNT(*),
+            COUNT(CASE WHEN status = '\"hit\"' THEN 1 END),
+            COUNT(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
+            
+            COUNT(CASE WHEN query_type = 'A' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
+            COUNT(CASE WHEN query_type = 'A' AND status = '\"hit\"' THEN 1 END),
+            
+            COUNT(CASE WHEN query_type = 'AAAA' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
+            COUNT(CASE WHEN query_type = 'AAAA' AND status = '\"hit\"' THEN 1 END),
+            
+            COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
+            COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status = '\"hit\"' THEN 1 END),
+            
+            COUNT(CASE WHEN status = '\"block\"' THEN 1 END),
+            COUNT(CASE WHEN status = '\"filter\"' THEN 1 END),
+            COUNT(CASE WHEN status = '\"nxdomain\"' THEN 1 END),
+            COUNT(CASE WHEN status = '\"error\"' THEN 1 END),
+            AVG(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
+            MAX(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END)
+        FROM dns_metrics {}",
+        where_stmt
+    );
+
+    let (
+        total_queries,
+        cache_hit_count,
+        total_effective_queries,
+        total_v4,
+        hit_count_v4,
+        total_v6,
+        hit_count_v6,
+        total_other,
+        hit_count_other,
+        block_count,
+        filter_count,
+        nxdomain_count,
+        error_count,
+        avg_duration_ms,
+        p50_duration_ms,
+        p95_duration_ms,
+        p99_duration_ms,
+        max_duration_ms,
+    ) = conn
+        .query_row(&stats_sql, &param_refs[..], |row| {
+            Ok((
+                row.get::<_, i64>(0)? as usize,
+                row.get::<_, i64>(1)? as usize,
+                row.get::<_, i64>(2)? as usize,
+                row.get::<_, i64>(3)? as usize,
+                row.get::<_, i64>(4)? as usize,
+                row.get::<_, i64>(5)? as usize,
+                row.get::<_, i64>(6)? as usize,
+                row.get::<_, i64>(7)? as usize,
+                row.get::<_, i64>(8)? as usize,
+                row.get::<_, i64>(9)? as usize,
+                row.get::<_, i64>(10)? as usize,
+                row.get::<_, i64>(11)? as usize,
+                row.get::<_, i64>(12)? as usize,
+                row.get::<_, Option<f64>>(13)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(14)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(15)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(16)?.unwrap_or(0.0),
+                row.get::<_, Option<f64>>(17)?.unwrap_or(0.0),
+            ))
+        })
+        .unwrap_or((0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0));
+
+    DnsLightweightSummaryResponse {
+        total_queries,
+        total_effective_queries,
+        cache_hit_count,
+        hit_count_v4,
+        hit_count_v6,
+        hit_count_other,
+        total_v4,
+        total_v6,
+        total_other,
+        block_count,
+        filter_count,
+        nxdomain_count,
+        error_count,
+        avg_duration_ms,
+        p50_duration_ms,
+        p95_duration_ms,
+        p99_duration_ms,
+        max_duration_ms,
     }
 }

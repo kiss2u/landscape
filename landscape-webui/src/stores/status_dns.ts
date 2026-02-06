@@ -10,12 +10,17 @@ export const useDnsStore = defineStore("dns_status", () => {
     return dns_status.value.t == ServiceStatusType.Stop;
   });
 
+  const is_running = computed(() => {
+    return dns_status.value.t == ServiceStatusType.Running;
+  });
+
   async function UPDATE_INFO() {
     dns_status.value = await get_dns_status();
   }
 
   return {
     is_down,
+    is_running,
     dns_status,
     UPDATE_INFO,
   };

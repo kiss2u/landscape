@@ -8,7 +8,8 @@ use landscape_common::metric::connect::{
     ConnectRealtimeStatus, IpRealtimeStat, MetricChartRequest,
 };
 use landscape_common::metric::dns::{
-    DnsHistoryQueryParams, DnsHistoryResponse, DnsSummaryResponse,
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse,
+    DnsSummaryQueryParams, DnsSummaryResponse,
 };
 use serde_json::Value;
 
@@ -29,6 +30,7 @@ pub async fn get_metric_service_paths() -> Router<LandscapeApp> {
         .route("/connects/history/dst_ip_stats", get(get_history_dst_ip_stats))
         .route("/dns/history", get(get_dns_history))
         .route("/dns/summary", get(get_dns_summary))
+        .route("/dns/summary/lightweight", get(get_dns_lightweight_summary))
 }
 
 pub async fn get_metric_status(State(state): State<LandscapeApp>) -> LandscapeApiResult<Value> {
@@ -82,9 +84,17 @@ pub async fn get_dns_history(
 
 pub async fn get_dns_summary(
     State(state): State<LandscapeApp>,
-    Query(params): Query<DnsHistoryQueryParams>,
+    Query(params): Query<DnsSummaryQueryParams>,
 ) -> LandscapeApiResult<DnsSummaryResponse> {
     let data = state.metric_service.data.dns_metric.get_dns_summary(params).await;
+    LandscapeApiResp::success(data)
+}
+
+pub async fn get_dns_lightweight_summary(
+    State(state): State<LandscapeApp>,
+    Query(params): Query<DnsSummaryQueryParams>,
+) -> LandscapeApiResult<DnsLightweightSummaryResponse> {
+    let data = state.metric_service.data.dns_metric.get_dns_lightweight_summary(params).await;
     LandscapeApiResp::success(data)
 }
 pub async fn get_src_ip_stats(
