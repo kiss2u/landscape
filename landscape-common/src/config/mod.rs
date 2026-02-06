@@ -197,6 +197,9 @@ pub struct LandscapeDnsConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub cache_ttl: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub negative_cache_ttl: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, TS)]
@@ -399,6 +402,10 @@ impl RuntimeConfig {
         let dns = DnsRuntimeConfig {
             cache_capacity: config.dns.cache_capacity.unwrap_or(crate::DEFAULT_DNS_CACHE_CAPACITY),
             cache_ttl: config.dns.cache_ttl.unwrap_or(crate::DEFAULT_DNS_CACHE_TTL),
+            negative_cache_ttl: config
+                .dns
+                .negative_cache_ttl
+                .unwrap_or(crate::DEFAULT_DNS_NEGATIVE_CACHE_TTL),
         };
 
         let runtime_config = RuntimeConfig {
@@ -532,6 +539,7 @@ pub struct MetricRuntimeConfig {
 pub struct DnsRuntimeConfig {
     pub cache_capacity: u32,
     pub cache_ttl: u32,
+    pub negative_cache_ttl: u32,
 }
 
 impl MetricRuntimeConfig {
@@ -570,6 +578,9 @@ impl DnsRuntimeConfig {
         }
         if let Some(v) = config.cache_ttl {
             self.cache_ttl = v;
+        }
+        if let Some(v) = config.negative_cache_ttl {
+            self.negative_cache_ttl = v;
         }
     }
 }

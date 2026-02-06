@@ -19,6 +19,9 @@ export default {
   cache_capacity_desc: "Maximum records allowed in DNS cache",
   cache_ttl: "Cache TTL (s)",
   cache_ttl_desc: "Maximum retention time for DNS cache records",
+  cache_negative_ttl: "Negative Cache TTL (s)",
+  cache_negative_ttl_desc:
+    "Retention time for negative (NXDOMAIN/NODATA) DNS records",
 
   conn_retention_days: "Conn Retention (Raw)",
   conn_retention_days_desc:

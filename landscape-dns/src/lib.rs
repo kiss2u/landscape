@@ -1,4 +1,7 @@
-use hickory_proto::rr::{Record, RecordType};
+use hickory_proto::{
+    op::ResponseCode,
+    rr::{Record, RecordType},
+};
 use landscape_common::config::dns::LandscapeDnsRecordType;
 use landscape_common::{
     config::dns::FilterResult,
@@ -74,11 +77,13 @@ pub fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
 
 #[derive(Clone, Debug)]
 pub struct CacheDNSItem {
-    rdatas: Vec<Record>,
-    insert_time: Instant,
-    mark: DnsRuntimeMarkInfo,
-    filter: FilterResult,
-    min_ttl: u32,
+    pub rdatas: Vec<Record>,
+    pub response_code: ResponseCode,
+    pub insert_time: Instant,
+
+    pub min_ttl: u32,
+    pub mark: DnsRuntimeMarkInfo,
+    pub filter: FilterResult,
 }
 
 impl CacheDNSItem {
@@ -115,5 +120,4 @@ impl CacheDNSItem {
     }
 }
 
-// 移除 Clone trait，moka Cache 内部有 Arc
-pub type DNSCache = Cache<(String, RecordType), std::sync::Arc<Vec<CacheDNSItem>>>;
+pub type DNSCache = Cache<(String, RecordType), std::sync::Arc<CacheDNSItem>>;

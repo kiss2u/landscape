@@ -37,6 +37,7 @@ pub struct DnsRequestHandler {
     pub cache: Arc<ArcSwap<DNSCache>>,
     pub flow_id: u32,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+    pub negative_cache_ttl: u32,
 }
 
 impl DnsRequestHandler {
@@ -64,6 +65,7 @@ impl DnsRequestHandler {
             flow_id,
             redirect_solution: Arc::new(ArcSwap::from_pointee(redirect_solution)),
             msg_tx,
+            negative_cache_ttl: dns_config.negative_cache_ttl,
         }
     }
 
@@ -99,6 +101,7 @@ impl DnsRequestHandler {
         let redirect_solution: Vec<_> =
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
         self.redirect_solution.store(Arc::new(redirect_solution));
+        self.negative_cache_ttl = dns_config.negative_cache_ttl;
 
         landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
     }
@@ -116,30 +119,27 @@ impl DnsRequestHandler {
             'resolver: for (_index, resolver) in resolves.iter() {
                 if resolver.is_match(&domain) {
                     let new_mark = resolver.mark().clone();
-                    let mut cache_items = vec![];
+                    let cache_item = value;
 
-                    for cache_item in value.iter() {
-                        let _already_mapped = cache_item.mark.mark.need_insert_in_ebpf_map();
-                        let will_map = new_mark.mark.need_insert_in_ebpf_map();
+                    let _already_mapped = cache_item.mark.mark.need_insert_in_ebpf_map();
+                    let will_map = new_mark.mark.need_insert_in_ebpf_map();
 
-                        if will_map {
-                            update_dns_mark_list
-                                .extend(cache_item.get_update_rules_with_mark(&new_mark));
-                        }
-
-                        let mut new_record = cache_item.clone();
-                        new_record.mark = new_mark.clone();
-                        new_record.filter = resolver.filter_mode();
-                        new_record.min_ttl =
-                            if new_record.min_ttl < 5 { new_record.min_ttl } else { 5 };
-                        cache_items.push(new_record);
+                    if will_map {
+                        update_dns_mark_list
+                            .extend(cache_item.get_update_rules_with_mark(&new_mark));
                     }
 
-                    if !cache_items.is_empty() {
-                        new_cache
-                            .insert((domain.clone(), req_type.clone()), Arc::new(cache_items))
-                            .await;
-                    }
+                    let new_item = CacheDNSItem {
+                        rdatas: cache_item.rdatas.clone(),
+                        response_code: cache_item.response_code,
+                        mark: new_mark.clone(),
+                        insert_time: cache_item.insert_time,
+                        min_ttl: if cache_item.min_ttl < 5 { cache_item.min_ttl } else { 5 },
+                        filter: resolver.filter_mode(),
+                    };
+
+                    new_cache.insert((domain.clone(), req_type.clone()), Arc::new(new_item)).await;
+
                     break 'resolver;
                 }
             }
@@ -189,7 +189,7 @@ impl DnsRequestHandler {
             }
         }
 
-        if let Some((records, _)) = self.lookup_cache(domain, query_type).await {
+        if let Some((records, _, _)) = self.lookup_cache(domain, query_type).await {
             result.cache_records = Some(crate::to_common_records(records));
         }
 
@@ -202,38 +202,38 @@ impl DnsRequestHandler {
         &self,
         domain: &str,
         query_type: RecordType,
-    ) -> Option<(Vec<Record>, FilterResult)> {
+    ) -> Option<(Vec<Record>, FilterResult, ResponseCode)> {
         let cache = self.cache.load();
-        if let Some(records) = cache.get(&(domain.to_string(), query_type)).await {
-            let mut is_expire = false;
-            let mut valid_records: Vec<Record> = vec![];
-            let mut ret_fiter = FilterResult::Unfilter;
-            'a_record: for CacheDNSItem { rdatas, insert_time, filter, min_ttl, .. } in
-                records.iter()
-            {
-                ret_fiter = filter.clone();
-                let insert_time_elapsed = insert_time.elapsed().as_secs() as u32;
-                let min_ttl = *min_ttl;
-                if insert_time_elapsed > min_ttl {
-                    is_expire = true;
-                    break 'a_record;
-                }
-                valid_records.extend(rdatas.iter().cloned().map(|mut d| {
-                    d.set_ttl(min_ttl - insert_time_elapsed);
-                    d
-                }));
-            }
+        if let Some(cache_item) = cache.get(&(domain.to_string(), query_type)).await {
+            let CacheDNSItem {
+                rdatas,
+                response_code,
+                insert_time,
+                min_ttl,
+                filter,
+                ..
+            } = &*cache_item;
 
-            if is_expire {
+            // 1. 检查过期
+            let insert_time_elapsed = insert_time.elapsed().as_secs() as u32;
+            if insert_time_elapsed > *min_ttl {
                 // 如果发现过期，主动移除缓存（Lazy expiration）
                 cache.invalidate(&(domain.to_string(), query_type)).await;
                 return None;
             }
 
-            // 如果有有效的记录，返回它们
-            if !valid_records.is_empty() {
-                return Some((valid_records, ret_fiter));
-            }
+            // 2. 构造有效记录 (TTL 递减)
+            // 如果 rdatas 为空（否定缓存），这里 valid_records 也会保持为空
+            let valid_records = rdatas
+                .iter()
+                .cloned()
+                .map(|mut d| {
+                    d.set_ttl(*min_ttl - insert_time_elapsed);
+                    d
+                })
+                .collect();
+
+            return Some((valid_records, filter.clone(), *response_code));
         }
         None
     }
@@ -243,25 +243,28 @@ impl DnsRequestHandler {
         domain: &str,
         query_type: RecordType,
         rdata_ttl_vec: Vec<Record>,
+        response_code: ResponseCode,
         mark: &DnsRuntimeMarkInfo,
         filter: FilterResult,
     ) {
-        let min_ttl = rdata_ttl_vec.iter().map(|r| r.ttl()).min().unwrap_or(0);
+        let min_ttl =
+            rdata_ttl_vec.iter().map(|r| r.ttl()).min().unwrap_or(self.negative_cache_ttl);
+
         if min_ttl == 0 {
             return;
         }
         let cache_item = CacheDNSItem {
             rdatas: rdata_ttl_vec,
-            insert_time: Instant::now(),
+            response_code,
             mark: mark.clone(),
-            filter,
+            insert_time: Instant::now(),
             min_ttl,
+            filter,
         };
         let update_dns_mark_list = cache_item.get_update_rules();
 
         let cache = self.cache.load();
-        // 使用 Vec 包装并放入 Arc
-        cache.insert((domain.to_string(), query_type), Arc::new(vec![cache_item])).await;
+        cache.insert((domain.to_string(), query_type), Arc::new(cache_item)).await;
 
         // 将 mark 写入 mark ebpf map
         if mark.mark.need_insert_in_ebpf_map() {
@@ -360,8 +363,10 @@ impl RequestHandler for DnsRequestHandler {
             status = redirect_status;
         }
         // 2. Cache
-        else if let Some((cached_records, filter)) = self.lookup_cache(&domain, query_type).await
+        else if let Some((cached_records, filter, code)) =
+            self.lookup_cache(&domain, query_type).await
         {
+            header.set_response_code(code);
             if is_type_filtered(query_type, &filter) {
                 status = DnsResultStatus::Filter;
             } else {
@@ -386,16 +391,16 @@ impl RequestHandler for DnsRequestHandler {
 
                     match resolver.lookup(&domain, query_type).await {
                         Ok(rdata_vec) => {
-                            if !rdata_vec.is_empty() {
-                                self.insert(
-                                    &domain,
-                                    query_type,
-                                    rdata_vec.clone(),
-                                    resolver.mark(),
-                                    filter.clone(),
-                                )
-                                .await;
-                            }
+                            self.insert(
+                                &domain,
+                                query_type,
+                                rdata_vec.clone(),
+                                ResponseCode::NoError,
+                                resolver.mark(),
+                                filter.clone(),
+                            )
+                            .await;
+
                             records = filter_result(rdata_vec, &filter);
                             status = DnsResultStatus::Normal;
                         }
@@ -406,6 +411,18 @@ impl RequestHandler for DnsRequestHandler {
                                 ResponseCode::NoError => DnsResultStatus::Normal,
                                 _ => DnsResultStatus::Error,
                             };
+
+                            if code == ResponseCode::NXDomain || code == ResponseCode::NoError {
+                                self.insert(
+                                    &domain,
+                                    query_type,
+                                    vec![],
+                                    code,
+                                    resolver.mark(),
+                                    filter.clone(),
+                                )
+                                .await;
+                            }
                             self.send_metric(
                                 domain.clone(),
                                 query_type,

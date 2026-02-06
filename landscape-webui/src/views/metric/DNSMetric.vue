@@ -57,7 +57,6 @@ const searchParams = reactive({
   src_ip: "",
   query_type: null as string | null,
   status: null as string | null,
-  status: null as string | null,
   min_duration_ms: null as number | null,
   max_duration_ms: null as number | null,
   flow_id: null as number | null,
@@ -123,7 +122,7 @@ const flowOptions = computed(() => {
     value: f.flow_id,
   }));
   return [
-    { label: t("metric.dns.all_flows") || "All Flows", value: null },
+    { label: t("metric.dns.all_flows") || "All Flows", value: null as any },
     ...opts,
   ];
 });
@@ -481,7 +480,6 @@ const handleReset = () => {
   searchParams.src_ip = "";
   searchParams.query_type = null;
   searchParams.status = null;
-  searchParams.min_duration_ms = null;
   searchParams.min_duration_ms = null;
   searchParams.max_duration_ms = null;
   searchParams.flow_id = null;

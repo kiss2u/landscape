@@ -19,6 +19,8 @@ export default {
   cache_capacity_desc: "DNS 缓存允许保存的最大记录数",
   cache_ttl: "缓存 TTL (秒)",
   cache_ttl_desc: "DNS 缓存记录的最长保存时间",
+  cache_negative_ttl: "否定缓存 TTL (秒)",
+  cache_negative_ttl_desc: "DNS 否定缓存（NXDOMAIN/NODATA）记录的保存时间",
 
   conn_retention_days: "连接数据保存 (秒级)",
   conn_retention_days_desc: "连接活跃指标（5秒间隔）的保存期限（天）",

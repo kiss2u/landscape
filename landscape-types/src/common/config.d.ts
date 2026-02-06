@@ -39,6 +39,7 @@ export type LandscapeConfig = {
 export type LandscapeDnsConfig = {
   cache_capacity?: number;
   cache_ttl?: number;
+  negative_cache_ttl?: number;
 };
 
 export type LandscapeLogConfig = {

@@ -49,6 +49,18 @@ async function handleSaveDns() {
         />
         <template #feedback> {{ t("config.cache_ttl_desc") }} </template>
       </n-form-item>
+      <n-form-item :label="t('config.cache_negative_ttl')">
+        <n-input-number
+          v-model:value="dnsStore.cacheNegativeTtl"
+          :min="5"
+          :max="3600"
+          placeholder="60"
+          style="width: 200px"
+        />
+        <template #feedback>
+          {{ t("config.cache_negative_ttl_desc") }}
+        </template>
+      </n-form-item>
     </n-form>
   </n-card>
 </template>

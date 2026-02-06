@@ -83,6 +83,7 @@ pub const DEFAULT_METRIC_MAX_THREADS: usize = 4;
 // --- DNS Settings ---
 pub const DEFAULT_DNS_CACHE_CAPACITY: u32 = 4096;
 pub const DEFAULT_DNS_CACHE_TTL: u32 = 24 * 60 * 60;
+pub const DEFAULT_DNS_NEGATIVE_CACHE_TTL: u32 = 120;
 
 #[cfg(debug_assertions)]
 pub const DEFAULT_METRIC_CLEANUP_INTERVAL_SECS: u64 = 30 * 60;
