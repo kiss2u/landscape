@@ -292,6 +292,7 @@ pub struct RuntimeConfig {
     pub metric: MetricRuntimeConfig,
     pub dns: DnsRuntimeConfig,
     pub ui: LandscapeUIConfig,
+    pub auto: bool,
 }
 
 fn default_home_path() -> PathBuf {
@@ -418,6 +419,7 @@ impl RuntimeConfig {
             dns,
             ui: config.ui.clone(),
             file_config: config,
+            auto: args.auto,
         };
 
         runtime_config
