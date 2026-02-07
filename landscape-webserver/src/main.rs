@@ -232,6 +232,33 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         LandscapeConfigService::new(config.clone(), db_store_provider.clone()).await;
 
     let route_service = IpRouteService::new(route_service_rx, db_store_provider.flow_rule_store());
+    let ebpf_service = LandscapeEbpfService::new();
+
+    let static_nat_mapping_config_service =
+        StaticNatMappingService::new(db_store_provider.clone()).await;
+
+    let route_lan_service = RouteLanServiceManagerService::new(
+        db_store_provider.clone(),
+        route_service.clone(),
+        dev_obs.resubscribe(),
+    )
+    .await;
+    let route_wan_service =
+        RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let mss_clamp_service =
+        MssClampServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let firewall_service =
+        FirewallServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let nat_service =
+        NatServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
+
+    let wifi_service = WifiServiceManagerService::new(db_store_provider.clone()).await;
+
+    let iface_config_service = IfaceManagerService::new(db_store_provider.clone()).await;
+
     let dhcp_v4_server_service = DHCPv4ServerManagerService::new(
         route_service.clone(),
         db_store_provider.clone(),
@@ -245,15 +272,6 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         dev_obs.resubscribe(),
     )
     .await;
-
-    let route_lan_service = RouteLanServiceManagerService::new(
-        db_store_provider.clone(),
-        route_service.clone(),
-        dev_obs.resubscribe(),
-    )
-    .await;
-    let route_wan_service =
-        RouteWanServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
 
     let docker_service = LandscapeDockerService::new(home_path.clone(), route_service.clone());
 
@@ -277,23 +295,6 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     )
     .await;
 
-    let static_nat_mapping_config_service =
-        StaticNatMappingService::new(db_store_provider.clone()).await;
-
-    let iface_config_service = IfaceManagerService::new(db_store_provider.clone()).await;
-
-    let mss_clamp_service =
-        MssClampServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
-
-    let firewall_service =
-        FirewallServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
-
-    let wifi_service = WifiServiceManagerService::new(db_store_provider.clone()).await;
-
-    let nat_service =
-        NatServiceManagerService::new(db_store_provider.clone(), dev_obs.resubscribe()).await;
-
-    let ebpf_service = LandscapeEbpfService::new();
     docker_service.start_to_listen_event().await;
 
     metric_service.start_service().await;

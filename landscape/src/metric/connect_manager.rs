@@ -14,7 +14,6 @@ use landscape_common::metric::connect::{
 
 use crate::metric::duckdb::DuckMetricStore;
 
-const MAX_REPORT_INTERVAL_MS: u64 = 5000;
 const HOUR_RESOLUTION_THRESHOLD_MS: u64 = 30 * 24 * 3600 * 1000;
 const DAY_RESOLUTION_THRESHOLD_MS: u64 = 180 * 24 * 3600 * 1000;
 const STALE_TIMEOUT_MS: u64 = 60000;
@@ -256,8 +255,6 @@ impl ConnectMetricManager {
                 if let Some(old_metric) = &conn_status.last_metric {
                     let delta_ms = metric.report_time.saturating_sub(old_metric.report_time);
                     if delta_ms > 0 {
-                        let effective_delta_ms = delta_ms.min(MAX_REPORT_INTERVAL_MS);
-
                         let d_i_bytes = if metric.ingress_bytes >= old_metric.ingress_bytes {
                             metric.ingress_bytes - old_metric.ingress_bytes
                         } else {
@@ -279,10 +276,10 @@ impl ConnectMetricManager {
                             metric.egress_packets
                         };
 
-                        conn_status.ingress_bps = (d_i_bytes * 8000) / effective_delta_ms;
-                        conn_status.egress_bps = (d_e_bytes * 8000) / effective_delta_ms;
-                        conn_status.ingress_pps = (d_i_pkts * 1000) / effective_delta_ms;
-                        conn_status.egress_pps = (d_e_pkts * 1000) / effective_delta_ms;
+                        conn_status.ingress_bps = (d_i_bytes * 8000) / delta_ms;
+                        conn_status.egress_bps = (d_e_bytes * 8000) / delta_ms;
+                        conn_status.ingress_pps = (d_i_pkts * 1000) / delta_ms;
+                        conn_status.egress_pps = (d_e_pkts * 1000) / delta_ms;
                     }
                 }
                 conn_status.last_metric = Some(metric);
