@@ -317,13 +317,15 @@ impl DnsRequestHandler {
     ) -> ResponseInfo {
         let mut header = Header::response_from_request(request.header());
         header.set_response_code(code);
+        header.set_recursion_available(true);
+        header.set_authoritative(true);
         let response =
             MessageResponseBuilder::from_message_request(request).build_no_records(header);
         match response_handle.send_response(response).await {
             Ok(info) => info,
             Err(e) => {
                 tracing::error!("Error response failed: {}", e);
-                serve_failed()
+                serve_failed(request.header())
             }
         }
     }
@@ -473,15 +475,17 @@ impl RequestHandler for DnsRequestHandler {
             Ok(info) => info,
             Err(e) => {
                 tracing::error!("Response failed: {}", e);
-                serve_failed()
+                serve_failed(request.header())
             }
         }
     }
 }
 
-fn serve_failed() -> ResponseInfo {
-    let mut header = Header::new();
+fn serve_failed(req_header: &Header) -> ResponseInfo {
+    let mut header = Header::response_from_request(req_header);
     header.set_response_code(ResponseCode::ServFail);
+    header.set_recursion_available(true);
+    header.set_authoritative(true);
     header.into()
 }
 
@@ -506,5 +510,63 @@ fn is_type_filtered(query_type: RecordType, filter: &FilterResult) -> bool {
         (RecordType::A, FilterResult::OnlyIPv6) => true,
         (RecordType::AAAA, FilterResult::OnlyIPv4) => true,
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hickory_proto::op::{Header, ResponseCode};
+    use hickory_proto::rr::rdata::{A, AAAA};
+    use hickory_proto::rr::{RData, Record, RecordType};
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_serve_failed_flags() {
+        let mut req_header = Header::new();
+        req_header.set_id(0x1234);
+        req_header.set_recursion_desired(true);
+
+        let res_info = serve_failed(&req_header);
+
+        // ResponseInfo derefs to Header in the version of hickory-server used
+        assert_eq!(res_info.id(), 0x1234);
+        assert_eq!(res_info.response_code(), ResponseCode::ServFail);
+        assert!(res_info.recursion_available(), "RA flag must be true");
+        assert!(res_info.authoritative(), "AA flag must be true");
+    }
+
+    #[test]
+    fn test_is_type_filtered() {
+        assert!(is_type_filtered(RecordType::A, &FilterResult::OnlyIPv6));
+        assert!(!is_type_filtered(RecordType::AAAA, &FilterResult::OnlyIPv6));
+        assert!(is_type_filtered(RecordType::AAAA, &FilterResult::OnlyIPv4));
+        assert!(!is_type_filtered(RecordType::A, &FilterResult::OnlyIPv4));
+        assert!(!is_type_filtered(RecordType::A, &FilterResult::Unfilter));
+    }
+
+    #[test]
+    fn test_filter_result() {
+        let name = hickory_resolver::Name::from_str("test.com.").unwrap();
+        let records = vec![
+            Record::from_rdata(name.clone(), 60, RData::A(A(Ipv4Addr::new(1, 1, 1, 1)))),
+            Record::from_rdata(
+                name.clone(),
+                60,
+                RData::AAAA(AAAA(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))),
+            ),
+        ];
+
+        let filtered_v4 = filter_result(records.clone(), &FilterResult::OnlyIPv4);
+        assert_eq!(filtered_v4.len(), 1);
+        assert_eq!(filtered_v4[0].record_type(), RecordType::A);
+
+        let filtered_v6 = filter_result(records.clone(), &FilterResult::OnlyIPv6);
+        assert_eq!(filtered_v6.len(), 1);
+        assert_eq!(filtered_v6[0].record_type(), RecordType::AAAA);
+
+        let filtered_none = filter_result(records.clone(), &FilterResult::Unfilter);
+        assert_eq!(filtered_none.len(), 2);
     }
 }
