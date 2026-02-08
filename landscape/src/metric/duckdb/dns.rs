@@ -224,11 +224,11 @@ pub fn query_dns_summary(conn: &Connection, params: DnsSummaryQueryParams) -> Dn
             COUNT(CASE WHEN status = '\"filter\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"nxdomain\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"error\"' THEN 1 END),
-            AVG(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            MAX(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END)
+            AVG(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            MAX(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END)
         FROM dns_metrics {}",
         where_stmt
     );
@@ -417,11 +417,11 @@ pub fn query_dns_lightweight_summary(
             COUNT(CASE WHEN status = '\"filter\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"nxdomain\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"error\"' THEN 1 END),
-            AVG(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END),
-            MAX(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN duration_ms END)
+            AVG(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            percentile_cont(0.99) WITHIN GROUP (ORDER BY CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END),
+            MAX(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"', '\"local\"', '\"hit\"') THEN duration_ms END)
         FROM dns_metrics {}",
         where_stmt
     );
