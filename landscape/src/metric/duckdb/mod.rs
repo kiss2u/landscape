@@ -64,11 +64,6 @@ pub fn start_db_thread(
     conn_conn: PooledConnection<DuckdbConnectionManager>,
     conn_dns: PooledConnection<DuckdbConnectionManager>,
 ) {
-    // 初始化表
-    connect::create_summaries_table(&conn_conn);
-    connect::create_metrics_table(&conn_conn).unwrap();
-    dns::create_dns_table(&conn_dns).unwrap();
-
     // 状态管理
     let mut metrics_appender = conn_conn.appender("conn_metrics").unwrap();
     let mut dns_appender = conn_dns.appender("dns_metrics").unwrap();
@@ -265,6 +260,11 @@ impl DuckMetricStore {
 
         let conn_conn = pool.get().expect("Failed to get CONN writer connection from pool");
         let conn_dns = pool.get().expect("Failed to get DNS writer connection from pool");
+
+        // Ensure tables are created before returning to avoid race conditions
+        connect::create_summaries_table(&conn_conn);
+        connect::create_metrics_table(&conn_conn).expect("Failed to create connect metrics tables");
+        dns::create_dns_table(&conn_dns).expect("Failed to create DNS metrics tables");
 
         thread::spawn(move || {
             start_db_thread(rx, config_clone, conn_conn, conn_dns);
