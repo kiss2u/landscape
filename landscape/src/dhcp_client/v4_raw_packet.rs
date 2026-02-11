@@ -167,13 +167,20 @@ impl RawPacketSocket {
         server_port: u16,
     ) -> std::io::Result<Self> {
         let protocol = (ETH_P_IP as u16).to_be() as i32;
-        let socket = Socket::new(Domain::PACKET, Type::RAW, Some(Protocol::from(protocol)))?;
+        let socket = Socket::new(Domain::PACKET, Type::RAW, Some(Protocol::from(protocol)))
+            .map_err(|e| {
+                tracing::error!("Failed to create RAW socket: {:?}", e);
+                e
+            })?;
 
-        socket.set_reuse_address(true)?;
-        socket.set_reuse_port(true)?;
-        socket.set_broadcast(true)?;
-        socket.bind_device(Some(iface_name.as_bytes()))?;
-        socket.set_nonblocking(true)?;
+        socket.bind_device(Some(iface_name.as_bytes())).map_err(|e| {
+            tracing::error!("Failed to bind to device {}: {:?}", iface_name, e);
+            e
+        })?;
+        socket.set_nonblocking(true).map_err(|e| {
+            tracing::error!("Failed to set nonblocking: {:?}", e);
+            e
+        })?;
 
         let mut addr: libc::sockaddr_ll = unsafe { std::mem::zeroed() };
         addr.sll_family = AF_PACKET as u16;
@@ -189,13 +196,25 @@ impl RawPacketSocket {
             socket2::SockAddr::new(storage, std::mem::size_of::<libc::sockaddr_ll>() as u32)
         };
 
-        socket.bind(&sockaddr)?;
+        socket.bind(&sockaddr).map_err(|e| {
+            tracing::error!("Failed to bind sockaddr for ifindex {}: {:?}", ifindex, e);
+            e
+        })?;
 
         // 注入 BPF 过滤器：只允许 UDP 且目的端口为 client_port 的包进入。
-        attach_dhcp_filter(&socket, client_port)?;
+        attach_dhcp_filter(&socket, client_port).map_err(|e| {
+            tracing::error!("Failed to attach DHCP filter: {:?}", e);
+            e
+        })?;
 
         Ok(Self {
-            io: RawPacketIo { inner: AsyncFd::new(socket)?, ifindex },
+            io: RawPacketIo {
+                inner: AsyncFd::new(socket).map_err(|e| {
+                    tracing::error!("Failed to create AsyncFd: {:?}", e);
+                    e
+                })?,
+                ifindex,
+            },
             mac,
             client_port,
             server_port,
@@ -339,27 +358,46 @@ impl AdaptiveDhcpV4Socket {
             if self.raw.is_none() {
                 tracing::info!("AdaptiveSocket: Switching to RAW mode (Broadcast/Init)");
                 self.udp = None;
-                let raw = RawPacketSocket::new(
+                match RawPacketSocket::new(
                     &self.iface_name,
                     self.ifindex,
                     self.mac_addr,
                     self.client_port,
                     self.server_port,
-                )?;
-                self.raw = Some((raw.clone(), raw.into_framed()));
+                ) {
+                    Ok(raw) => {
+                        self.raw = Some((raw.clone(), raw.into_framed()));
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to initialize RAW socket: {:?}", e);
+                        return Err(e);
+                    }
+                }
             }
         } else {
             if self.udp.is_none() {
                 tracing::info!("AdaptiveSocket: Switching to UDP mode (Unicast/Bound)");
                 self.raw = None;
                 let socket = (|| -> std::io::Result<UdpSocket> {
-                    let s = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+                    let s = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).map_err(
+                        |e| {
+                            tracing::error!("Failed to create UDP socket: {:?}", e);
+                            e
+                        },
+                    )?;
                     s.set_reuse_address(true)?;
                     s.set_reuse_port(true)?;
                     s.set_nonblocking(true)?;
                     s.set_broadcast(true)?;
                     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.client_port);
-                    s.bind(&addr.into())?;
+                    s.bind(&addr.into()).map_err(|e| {
+                        tracing::error!(
+                            "Failed to bind UDP socket to port {}: {:?}",
+                            self.client_port,
+                            e
+                        );
+                        e
+                    })?;
                     UdpSocket::from_std(s.into())
                 })()?;
                 self.udp = Some(socket);
