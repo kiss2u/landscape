@@ -100,7 +100,7 @@ impl IfaceManagerService {
         info
     }
 
-    /// 读取所有的配置  
+    /// 读取所有的配置
     /// 返回已配置的网卡列表和未配置的网卡列表
     pub async fn read_ifaces(&self) -> IfacesInfo {
         let all_config = self.list().await;

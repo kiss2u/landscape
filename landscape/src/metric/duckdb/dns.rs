@@ -136,7 +136,7 @@ pub fn query_dns_history(
 
     let query_stmt_str = format!(
         "
-        SELECT 
+        SELECT
             flow_id, domain, query_type, response_code, report_time, duration_ms, src_ip, answers, status
         FROM dns_metrics
         {}
@@ -218,24 +218,24 @@ pub fn query_dns_summary(conn: &Connection, params: DnsSummaryQueryParams) -> Dn
     // 1. 基本统计
     //有效查询定义：非拦截且非错误的查询
     let stats_sql = format!(
-        "SELECT 
+        "SELECT
             COUNT(*),
             COUNT(CASE WHEN status = '\"hit\"' THEN 1 END),
             -- 有效查询总数 (排除 block, filter 和 error)
             COUNT(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
-            
+
             -- V4 统计
             COUNT(CASE WHEN query_type = 'A' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type = 'A' AND status = '\"hit\"' THEN 1 END),
-            
+
             -- V6 统计
             COUNT(CASE WHEN query_type = 'AAAA' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type = 'AAAA' AND status = '\"hit\"' THEN 1 END),
-            
+
             -- 其他统计
             COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status = '\"hit\"' THEN 1 END),
-            
+
             COUNT(CASE WHEN status = '\"block\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"filter\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"nxdomain\"' THEN 1 END),
@@ -443,20 +443,20 @@ pub fn query_dns_lightweight_summary(
 
     // 1. 基本统计
     let stats_sql = format!(
-        "SELECT 
+        "SELECT
             COUNT(*),
             COUNT(CASE WHEN status = '\"hit\"' THEN 1 END),
             COUNT(CASE WHEN status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
-            
+
             COUNT(CASE WHEN query_type = 'A' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type = 'A' AND status = '\"hit\"' THEN 1 END),
-            
+
             COUNT(CASE WHEN query_type = 'AAAA' AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type = 'AAAA' AND status = '\"hit\"' THEN 1 END),
-            
+
             COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status NOT IN ('\"block\"', '\"filter\"', '\"error\"') THEN 1 END),
             COUNT(CASE WHEN query_type NOT IN ('A', 'AAAA') AND status = '\"hit\"' THEN 1 END),
-            
+
             COUNT(CASE WHEN status = '\"block\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"filter\"' THEN 1 END),
             COUNT(CASE WHEN status = '\"nxdomain\"' THEN 1 END),

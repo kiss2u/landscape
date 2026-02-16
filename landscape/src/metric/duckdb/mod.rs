@@ -13,18 +13,6 @@ use std::path::PathBuf;
 use std::thread;
 use tokio::sync::{mpsc, oneshot};
 
-#[derive(Debug)]
-struct AttachCustomizer {
-    db_path: PathBuf,
-}
-
-impl r2d2::CustomizeConnection<duckdb::Connection, duckdb::Error> for AttachCustomizer {
-    fn on_acquire(&self, conn: &mut duckdb::Connection) -> Result<(), duckdb::Error> {
-        let sql = format!("ATTACH IF NOT EXISTS '{}' AS history", self.db_path.display());
-        conn.execute_batch(&sql)
-    }
-}
-
 fn clean_ip_string(ip: &IpAddr) -> String {
     match ip {
         IpAddr::V6(v6) => {
@@ -72,18 +60,18 @@ pub struct DuckMetricStore {
     pub live_db_path: PathBuf,
     pub config: MetricRuntimeConfig,
     pub live_pool: r2d2::Pool<DuckdbConnectionManager>,
+    pub disk_pool: r2d2::Pool<DuckdbConnectionManager>,
 }
 
 pub fn start_db_thread(
     mut rx: mpsc::Receiver<DBMessage>,
     metric_config: MetricRuntimeConfig,
-    db_path: PathBuf,
-    conn_conn: PooledConnection<DuckdbConnectionManager>,
+    disk_pool: r2d2::Pool<DuckdbConnectionManager>,
     conn_dns: PooledConnection<DuckdbConnectionManager>,
     conn_live: PooledConnection<DuckdbConnectionManager>,
 ) {
     let mut metrics_appender = conn_live.appender("conn_metrics").unwrap();
-    let mut dns_appender = conn_dns.appender("dns_metrics").unwrap();
+    let mut dns_appender = conn_dns.appender("dns_metrics").unwrap(); // DNS writes to disk directly
     let mut summary_stmt = conn_live.prepare(connect::SUMMARY_INSERT_SQL).unwrap();
     let mut live_stmt = conn_live.prepare(connect::LIVE_METRIC_INSERT_SQL).unwrap();
 
@@ -102,9 +90,16 @@ pub fn start_db_thread(
                 _ = flush_interval.tick() => {
                     let _ = metrics_appender.flush();
                     let _ = dns_appender.flush();
-                    if let Err(e) = connect::perform_batch_rollup(&conn_live, &db_path) {
-                        tracing::error!("Failed to perform periodic batch rollup: {}", e);
+
+                    // Get disk connection for rollup
+                    if let Ok(conn_disk) = disk_pool.get() {
+                        if let Err(e) = connect::perform_batch_rollup(&conn_live, &conn_disk) {
+                            tracing::error!("Failed to perform periodic batch rollup: {}", e);
+                        }
+                    } else {
+                        tracing::error!("Failed to get disk connection for rollup");
                     }
+
                     batch_count = 0;
                 }
                 _ = cleanup_interval.tick() => {
@@ -118,11 +113,17 @@ pub fn start_db_thread(
                     let cutoff_dns = now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
 
                     // Perform deletion on disk and memory
-                    let _ = connect::collect_and_cleanup_old_metrics(
-                        &conn_live, cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d, &db_path,
-                    );
+                    if let Ok(conn_disk) = disk_pool.get() {
+                        let _ = connect::collect_and_cleanup_old_metrics(
+                            &conn_live, &conn_disk, cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d,
+                        );
+                    }
+
                     dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
-                    let _ = connect::aggregate_global_stats(&conn_conn);
+
+                    if let Ok(conn_disk) = disk_pool.get() {
+                        let _ = connect::aggregate_global_stats(&conn_disk);
+                    }
 
                     // Cleanup stale live sessions
                     let cutoff_live = now_ms.saturating_sub(STALE_TIMEOUT_MS);
@@ -130,6 +131,14 @@ pub fn start_db_thread(
                         "DELETE FROM conn_realtime WHERE last_report_time < ?1",
                         params![cutoff_live as i64],
                     );
+
+                    // Optional CHECKPOINT for disk database (as a safety measure)
+                    // This ensures data is persisted even if auto-checkpoint hasn't triggered
+                    if let Ok(conn_disk) = disk_pool.get() {
+                        if let Err(e) = conn_disk.execute_batch("CHECKPOINT;") {
+                            tracing::warn!("Failed to checkpoint disk database during cleanup: {}", e);
+                        }
+                    }
 
                     tracing::info!(
                         "Auto cleanup metrics, raw: {}, 1m: {}, 1h: {}, 1d: {}, dns: {}",
@@ -166,7 +175,7 @@ pub fn start_db_thread(
                                                 tracing::error!("Failed to update live metric: {}", e);
                                             }
 
-                                            // Update memory summary 
+                                            // Update memory summary
                                             if let Err(e) = connect::update_summary_by_metric(&mut summary_stmt, &metric) {
                                                 tracing::error!("Failed to update memory summary: {}", e);
                                             }
@@ -196,11 +205,21 @@ pub fn start_db_thread(
                                         } => {
                                             let _ = metrics_appender.flush();
                                             let _ = dns_appender.flush();
-                                            let _ = connect::perform_batch_rollup(&conn_live, &db_path);
+
+                                            // Get disk connection for rollup
+                                            if let Ok(conn_disk) = disk_pool.get() {
+                                                let _ = connect::perform_batch_rollup(&conn_live, &conn_disk);
+                                            }
+
                                             batch_count = 0;
-                                            let result = connect::collect_and_cleanup_old_metrics(
-                                                &conn_live, cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d, &db_path,
-                                            );
+
+                                            let result = if let Ok(conn_disk) = disk_pool.get() {
+                                                connect::collect_and_cleanup_old_metrics(
+                                                    &conn_live, &conn_disk, cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d,
+                                                )
+                                            } else {
+                                                Box::new(Vec::new())
+                                            };
 
                                             dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
                                             let _ = resp.send(result);
@@ -210,9 +229,16 @@ pub fn start_db_thread(
                                     if batch_count >= metric_config.batch_size {
                                         let _ = metrics_appender.flush();
                                         let _ = dns_appender.flush();
-                                        if let Err(e) = connect::perform_batch_rollup(&conn_live, &db_path) {
-                                            tracing::error!("Failed to perform batch rollup: {}", e);
+
+                                        // Get disk connection for rollup
+                                        if let Ok(conn_disk) = disk_pool.get() {
+                                            if let Err(e) = connect::perform_batch_rollup(&conn_live, &conn_disk) {
+                                                tracing::error!("Failed to perform batch rollup: {}", e);
+                                            }
+                                        } else {
+                                            tracing::error!("Failed to get disk connection for batch rollup");
                                         }
+
                                         batch_count = 0;
                                     }
                                 }
@@ -249,6 +275,7 @@ impl DuckMetricStore {
         let (tx, rx) = mpsc::channel::<DBMessage>(1024);
         let config_clone = config.clone();
 
+        // Create independent live pool (memory database)
         let live_manager = DuckdbConnectionManager::file_with_flags(
             &live_db_path,
             duckdb::Config::default()
@@ -262,57 +289,75 @@ impl DuckMetricStore {
         let live_pool = r2d2::Pool::builder()
             .max_size((config.max_threads as u32).max(8))
             .max_lifetime(Some(std::time::Duration::from_secs(60)))
-            .connection_customizer(Box::new(AttachCustomizer { db_path: db_path.clone() }))
             .build(live_manager)
-            .expect("Failed to create unified live connection pool");
+            .expect("Failed to create live connection pool");
 
-        let conn_live = live_pool.get().expect("Failed to get LIVE writer connection from pool");
+        // Create independent disk pool (disk database)
+        let disk_manager = DuckdbConnectionManager::file_with_flags(
+            &db_path,
+            duckdb::Config::default()
+                .threads(config.max_threads as i64)
+                .unwrap()
+                .max_memory(&format!("{}MB", config.max_memory))
+                .unwrap(),
+        )
+        .unwrap();
 
-        // Ensure tables are created in memory database (main)
+        let disk_pool = r2d2::Pool::builder()
+            .max_size(8) // Disk pool for queries and sync
+            .max_lifetime(Some(std::time::Duration::from_secs(120)))
+            .build(disk_manager)
+            .expect("Failed to create disk connection pool");
+
+        // Initialize tables in memory database
+        let conn_live = live_pool.get().expect("Failed to get live connection");
         connect::create_summaries_table(&conn_live, "");
         connect::create_metrics_table(&conn_live, "")
             .expect("Failed to create connect metrics tables in memory");
-        dns::create_dns_table(&conn_live, "")
-            .expect("Failed to create DNS metrics tables in memory");
-
-        // Ensure tables are created in history database (disk)
-        connect::create_summaries_table(&conn_live, "history");
-        connect::create_metrics_table(&conn_live, "history")
-            .expect("Failed to create connect metrics tables on disk");
-        dns::create_dns_table(&conn_live, "history")
-            .expect("Failed to create DNS metrics tables on disk");
-
-        // Attach memory database for live metrics (only once)
         connect::create_live_tables(&conn_live).expect("Failed to create live tables");
 
-        // Performance optimizations: decrease checkpoint frequency
+        // Performance optimizations for memory database
         let _ = conn_live.execute("PRAGMA wal_autocheckpoint='256MB'", []);
 
-        // Initial aggregation
-        let _ = connect::aggregate_global_stats(&conn_live);
+        // Initialize tables in disk database
+        let conn_disk = disk_pool.get().expect("Failed to get disk connection");
+        connect::create_summaries_table(&conn_disk, "");
+        connect::create_metrics_table(&conn_disk, "")
+            .expect("Failed to create connect metrics tables on disk");
+        dns::create_dns_table(&conn_disk, "").expect("Failed to create DNS metrics tables on disk");
 
-        let thread_db_path = db_path.clone();
-        let conn_conn = live_pool.get().expect("Failed to get CONN writer connection from pool");
-        let conn_dns = live_pool.get().expect("Failed to get DNS writer connection from pool");
-        let conn_live_thread =
-            live_pool.get().expect("Failed to get LIVE writer connection from pool");
+        // Performance optimizations for disk database
+        let _ = conn_disk.execute("PRAGMA wal_autocheckpoint='256MB'", []);
+
+        // Initial aggregation
+        let _ = connect::aggregate_global_stats(&conn_disk);
+
+        let thread_disk_pool = disk_pool.clone();
+        let conn_dns = disk_pool.get().expect("Failed to get DNS writer connection from disk pool");
+        let conn_live_thread = live_pool.get().expect("Failed to get LIVE writer connection");
+
         thread::spawn(move || {
-            start_db_thread(
-                rx,
-                config_clone,
-                thread_db_path,
-                conn_conn,
-                conn_dns,
-                conn_live_thread,
-            );
+            start_db_thread(rx, config_clone, thread_disk_pool, conn_dns, conn_live_thread);
         });
 
-        DuckMetricStore { tx, db_path, live_db_path, config, live_pool }
+        DuckMetricStore {
+            tx,
+            db_path,
+            live_db_path,
+            config,
+            live_pool,
+            disk_pool,
+        }
     }
 
     /// Get a unified connection from the live pool
     fn get_live_conn(&self) -> r2d2::PooledConnection<DuckdbConnectionManager> {
         self.live_pool.get().expect("Failed to get unified connection from pool")
+    }
+
+    /// Get a connection from the disk pool
+    fn get_disk_conn(&self) -> r2d2::PooledConnection<DuckdbConnectionManager> {
+        self.disk_pool.get().expect("Failed to get disk connection from pool")
     }
 
     pub async fn insert_metric(&self, metric: ConnectMetric) {
@@ -324,25 +369,25 @@ impl DuckMetricStore {
     ) -> Vec<landscape_common::metric::connect::ConnectRealtimeStatus> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
+            // Query conn_realtime from memory database for real-time connection info with rates
             let conn = store.get_live_conn();
             let mut stmt = conn
                 .prepare(
                     "
-                SELECT 
-                    create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, 
+                SELECT
+                    create_time, cpu_id, src_ip, dst_ip, src_port, dst_port,
                     l4_proto, l3_proto, flow_id, trace_id,
-                    ingress_bytes, egress_bytes, ingress_packets, egress_packets,
                     ingress_bps, egress_bps, ingress_pps, egress_pps,
-                    status, last_report_time, create_time_ms
+                    last_report_time, status, create_time_ms
                 FROM conn_realtime
-                ORDER BY create_time
+                ORDER BY last_report_time DESC
             ",
                 )
                 .unwrap();
 
             let rows = stmt
                 .query_map([], |row| {
-                    let create_time_ms: u64 = row.get::<_, i64>(20)? as u64;
+                    let create_time_ms: u64 = row.get::<_, i64>(16)? as u64;
                     Ok(landscape_common::metric::connect::ConnectRealtimeStatus {
                         key: ConnectKey {
                             create_time: row.get::<_, i64>(0)? as u64,
@@ -362,12 +407,12 @@ impl DuckMetricStore {
                         l3_proto: row.get::<_, i64>(7)? as u8,
                         flow_id: row.get::<_, i64>(8)? as u8,
                         trace_id: row.get::<_, i64>(9)? as u8,
-                        ingress_bps: row.get::<_, i64>(14)? as u64,
-                        egress_bps: row.get::<_, i64>(15)? as u64,
-                        ingress_pps: row.get::<_, i64>(16)? as u64,
-                        egress_pps: row.get::<_, i64>(17)? as u64,
-                        last_report_time: row.get::<_, i64>(19)? as u64,
-                        status: row.get::<_, u8>(18)?.into(),
+                        ingress_bps: row.get::<_, i64>(10)? as u64,
+                        egress_bps: row.get::<_, i64>(11)? as u64,
+                        ingress_pps: row.get::<_, i64>(12)? as u64,
+                        egress_pps: row.get::<_, i64>(13)? as u64,
+                        last_report_time: row.get::<_, i64>(14)? as u64,
+                        status: row.get::<_, u8>(15)?.into(),
                         create_time_ms,
                     })
                 })
@@ -385,14 +430,15 @@ impl DuckMetricStore {
     ) -> Vec<landscape_common::metric::connect::IpRealtimeStat> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
+            // Query conn_realtime from memory database for real-time rate stats
             let conn = store.get_live_conn();
             let group_col = if is_src { "src_ip" } else { "dst_ip" };
             let sql = format!(
                 "
-                SELECT 
-                    {}, 
-                    SUM(ingress_bps), SUM(egress_bps), 
-                    SUM(ingress_pps), SUM(egress_pps), 
+                SELECT
+                    {},
+                    SUM(ingress_bps), SUM(egress_bps),
+                    SUM(ingress_pps), SUM(egress_pps),
                     COUNT(*)
                 FROM conn_realtime
                 GROUP BY {}
@@ -400,7 +446,14 @@ impl DuckMetricStore {
                 group_col, group_col
             );
 
-            let mut stmt = conn.prepare(&sql).unwrap();
+            let mut stmt = match conn.prepare(&sql) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!("Failed to prepare realtime IP stats query: {}", e);
+                    return Vec::new();
+                }
+            };
+
             let rows = stmt
                 .query_map([], |row| {
                     Ok(landscape_common::metric::connect::IpRealtimeStat {
@@ -414,7 +467,10 @@ impl DuckMetricStore {
                         },
                     })
                 })
-                .unwrap();
+                .unwrap_or_else(|e| {
+                    tracing::error!("Failed to execute realtime IP stats query: {}", e);
+                    panic!("Query failed");
+                });
 
             rows.filter_map(Result::ok).collect()
         })
@@ -429,7 +485,13 @@ impl DuckMetricStore {
     ) -> Vec<ConnectMetricPoint> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || -> Vec<ConnectMetricPoint> {
-            let conn = store.get_live_conn();
+            // Choose connection based on resolution:
+            // - Second-level: use live_conn (memory database, hot data)
+            // - Minute/Hour/Day: use disk_conn (disk database, cold data)
+            let conn = match resolution {
+                MetricResolution::Second => store.get_live_conn(),
+                _ => store.get_disk_conn(),
+            };
             connect::query_metric_by_key(&conn, &key, resolution, Some(&store.db_path))
         })
         .await
@@ -439,7 +501,7 @@ impl DuckMetricStore {
     pub async fn current_active_connect_keys(&self) -> Vec<ConnectKey> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || -> Vec<ConnectKey> {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             connect::current_active_connect_keys(&conn)
         })
         .await
@@ -477,7 +539,7 @@ impl DuckMetricStore {
     ) -> Vec<ConnectHistoryStatus> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             connect::query_historical_summaries_complex(&conn, params, Some(&store.db_path))
         })
         .await
@@ -490,7 +552,7 @@ impl DuckMetricStore {
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             connect::query_connection_ip_history(&conn, params, true, Some(&store.db_path))
         })
         .await
@@ -503,7 +565,7 @@ impl DuckMetricStore {
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             connect::query_connection_ip_history(&conn, params, false, Some(&store.db_path))
         })
         .await
@@ -513,7 +575,7 @@ impl DuckMetricStore {
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             connect::query_global_stats(&conn)
         })
         .await
@@ -530,7 +592,7 @@ impl DuckMetricStore {
     pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             dns::query_dns_history(&conn, params)
         })
         .await
@@ -540,7 +602,7 @@ impl DuckMetricStore {
     pub async fn get_dns_summary(&self, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             dns::query_dns_summary(&conn, params)
         })
         .await
@@ -553,7 +615,7 @@ impl DuckMetricStore {
     ) -> DnsLightweightSummaryResponse {
         let store = self.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = store.get_live_conn();
+            let conn = store.get_disk_conn();
             dns::query_dns_lightweight_summary(&conn, params)
         })
         .await

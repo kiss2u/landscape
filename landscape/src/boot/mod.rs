@@ -21,10 +21,10 @@ After deletion, it will be initialized according to the configuration in landsca
 If landscape_init.toml does not exist, all existing configurations will be cleared.
 "#;
 
-/// 返回是否进行初始化操作  
-/// Some: 需要清空并初始化  
-/// None: 无需进行初始化  
-/// Err: 出现错误退出  
+/// 返回是否进行初始化操作
+/// Some: 需要清空并初始化
+/// None: 无需进行初始化
+/// Err: 出现错误退出
 pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> {
     let lock_path = home_path.as_ref().join(INIT_LOCK_FILE_NAME);
 

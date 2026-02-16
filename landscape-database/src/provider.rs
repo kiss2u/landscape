@@ -37,7 +37,7 @@ pub async fn db_action(config: &StoreRuntimeConfig, rollback: &bool, steps: &u32
     }
 }
 
-/// 存储提供者  
+/// 存储提供者
 /// 后续有需要再进行抽象
 #[derive(Clone)]
 pub struct LandscapeDBServiceProvider {

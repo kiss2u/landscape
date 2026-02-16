@@ -15,21 +15,21 @@ pub const SUMMARY_INSERT_SQL: &str = "
 
 pub const METRICS_1M_INSERT_SQL: &str = "
     INSERT OR REPLACE INTO conn_metrics_1m (
-        create_time, cpu_id, report_time, 
+        create_time, cpu_id, report_time,
         ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 ";
 
 pub const METRICS_1H_INSERT_SQL: &str = "
     INSERT OR REPLACE INTO conn_metrics_1h (
-        create_time, cpu_id, report_time, 
+        create_time, cpu_id, report_time,
         ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 ";
 
 pub const METRICS_1D_INSERT_SQL: &str = "
     INSERT OR REPLACE INTO conn_metrics_1d (
-        create_time, cpu_id, report_time, 
+        create_time, cpu_id, report_time,
         ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 ";
@@ -41,25 +41,25 @@ pub const LIVE_METRIC_INSERT_SQL: &str = "
         last_report_time, status, create_time_ms
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
     ON CONFLICT (create_time, cpu_id) DO UPDATE SET
-        ingress_bps = CASE 
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0 
+        ingress_bps = CASE
+            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
             THEN (EXCLUDED.ingress_bytes - ingress_bytes) * 8000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE ingress_bps 
+            ELSE ingress_bps
         END,
-        egress_bps = CASE 
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0 
+        egress_bps = CASE
+            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
             THEN (EXCLUDED.egress_bytes - egress_bytes) * 8000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE egress_bps 
+            ELSE egress_bps
         END,
-        ingress_pps = CASE 
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0 
+        ingress_pps = CASE
+            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
             THEN (EXCLUDED.ingress_packets - ingress_packets) * 1000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE ingress_pps 
+            ELSE ingress_pps
         END,
-        egress_pps = CASE 
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0 
+        egress_pps = CASE
+            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
             THEN (EXCLUDED.egress_packets - egress_packets) * 1000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE egress_pps 
+            ELSE egress_pps
         END,
         ingress_bytes = EXCLUDED.ingress_bytes,
         egress_bytes = EXCLUDED.egress_bytes,
@@ -287,15 +287,15 @@ pub fn query_metric_by_key(
     _history_db_path: Option<&PathBuf>,
 ) -> Vec<ConnectMetricPoint> {
     let table = match resolution {
-        MetricResolution::Second => "conn_metrics",
-        MetricResolution::Minute => "history.conn_metrics_1m",
-        MetricResolution::Hour => "history.conn_metrics_1h",
-        MetricResolution::Day => "history.conn_metrics_1d",
+        MetricResolution::Second => "conn_metrics", // Raw metrics from disk
+        MetricResolution::Minute => "conn_metrics_1m", // 1-minute aggregation
+        MetricResolution::Hour => "conn_metrics_1h", // 1-hour aggregation
+        MetricResolution::Day => "conn_metrics_1d", // 1-day aggregation
     };
 
     let stmt_str = format!(
         "
-        SELECT 
+        SELECT
             report_time,
             ingress_bytes,
             ingress_packets,
@@ -344,15 +344,12 @@ pub fn query_metric_by_key(
 pub fn query_historical_summaries_complex(
     conn: &Connection,
     params: ConnectHistoryQueryParams,
-    history_db_path: Option<&PathBuf>,
+    _history_db_path: Option<&PathBuf>,
 ) -> Vec<ConnectHistoryStatus> {
     let now = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
 
-    let table_name = if history_db_path.is_some() {
-        "history.conn_summaries".to_string()
-    } else {
-        "conn_summaries".to_string()
-    };
+    // Always use conn_summaries (no history prefix needed with new architecture)
+    let table_name = "conn_summaries";
 
     if let Some(start) = params.start_time {
         tracing::debug!(
@@ -424,7 +421,7 @@ pub fn query_historical_summaries_complex(
         if let Some(l) = params.limit { format!("LIMIT {}", l) } else { String::new() };
 
     let stmt_str = format!("
-        SELECT 
+        SELECT
             create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,
             total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, last_report_time, status, create_time_ms
         FROM {}
@@ -509,11 +506,11 @@ pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
 
 pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
     let stmt = "
-        SELECT 
-            total_ingress_bytes, 
-            total_egress_bytes, 
-            total_ingress_pkts, 
-            total_egress_pkts, 
+        SELECT
+            total_ingress_bytes,
+            total_egress_bytes,
+            total_ingress_pkts,
+            total_egress_pkts,
             total_connect_count,
             last_calculate_time
         FROM global_stats
@@ -546,8 +543,8 @@ pub fn aggregate_global_stats(conn: &Connection) -> duckdb::Result<()> {
     conn.execute_batch(
         "
         DELETE FROM global_stats;
-        INSERT INTO global_stats 
-        SELECT 
+        INSERT INTO global_stats
+        SELECT
             SUM(max_ingress_bytes),
             SUM(max_egress_bytes),
             SUM(max_ingress_pkts),
@@ -555,7 +552,7 @@ pub fn aggregate_global_stats(conn: &Connection) -> duckdb::Result<()> {
             COUNT(*),
             EXTRACT(EPOCH FROM now()) * 1000
         FROM (
-            SELECT 
+            SELECT
                 MAX(ingress_bytes) as max_ingress_bytes,
                 MAX(egress_bytes) as max_egress_bytes,
                 MAX(ingress_packets) as max_ingress_pkts,
@@ -567,104 +564,234 @@ pub fn aggregate_global_stats(conn: &Connection) -> duckdb::Result<()> {
     )
 }
 
-pub fn perform_batch_rollup(conn: &Connection, _history_db_path: &PathBuf) -> duckdb::Result<()> {
-    let sql_1m = "
-        INSERT OR REPLACE INTO history.conn_metrics_1m (
-            create_time, cpu_id, report_time, 
-            ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
-        )
-        SELECT 
-            create_time, cpu_id, (report_time // 60000) * 60000 as rt, 
-            MAX(ingress_bytes), MAX(ingress_packets), MAX(egress_bytes), MAX(egress_packets), MAX(status), MAX(create_time_ms)
-        FROM conn_metrics 
-        GROUP BY 1, 2, 3;";
+pub fn perform_batch_rollup(conn_mem: &Connection, conn_disk: &Connection) -> duckdb::Result<()> {
+    // Aggregate metrics in memory and sync to disk using INSERT OR REPLACE
+    // Only sync aggregated data (1m/1h/1d), not raw conn_metrics (to reduce disk I/O)
 
-    let sql_1h = "
-        INSERT OR REPLACE INTO history.conn_metrics_1h (
-            create_time, cpu_id, report_time, 
-            ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
-        )
-        SELECT 
-            create_time, cpu_id, (report_time // 3600000) * 3600000 as rt, 
-            MAX(ingress_bytes), MAX(ingress_packets), MAX(egress_bytes), MAX(egress_packets), MAX(status), MAX(create_time_ms)
-        FROM conn_metrics 
-        GROUP BY 1, 2, 3;";
+    // 1m aggregation
+    let sql_1m_query = "
+        SELECT
+            create_time, cpu_id, (report_time // 60000) * 60000 as report_time,
+            MAX(ingress_bytes) as ingress_bytes, MAX(ingress_packets) as ingress_packets,
+            MAX(egress_bytes) as egress_bytes, MAX(egress_packets) as egress_packets,
+            MAX(status) as status, MAX(create_time_ms) as create_time_ms
+        FROM conn_metrics
+        GROUP BY 1, 2, 3";
 
-    let sql_1d = "
-        INSERT OR REPLACE INTO history.conn_metrics_1d (
-            create_time, cpu_id, report_time, 
-            ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
-        )
-        SELECT 
-            create_time, cpu_id, (report_time // 86400000) * 86400000 as rt, 
-            MAX(ingress_bytes), MAX(ingress_packets), MAX(egress_bytes), MAX(egress_packets), MAX(status), MAX(create_time_ms)
-        FROM conn_metrics 
-        GROUP BY 1, 2, 3;";
+    let mut stmt_1m = conn_mem.prepare(sql_1m_query)?;
+    let rows_1m: Vec<_> = stmt_1m
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?, // create_time
+                row.get::<_, i32>(1)?, // cpu_id
+                row.get::<_, i64>(2)?, // report_time
+                row.get::<_, i64>(3)?, // ingress_bytes
+                row.get::<_, i64>(4)?, // ingress_packets
+                row.get::<_, i64>(5)?, // egress_bytes
+                row.get::<_, i64>(6)?, // egress_packets
+                row.get::<_, i32>(7)?, // status
+                row.get::<_, i64>(8)?, // create_time_ms
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let sql_summary = "
-        INSERT INTO history.conn_summaries (
-            create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, 
-            l4_proto, l3_proto, flow_id, trace_id,
-            last_report_time, total_ingress_bytes, total_egress_bytes, 
-            total_ingress_pkts, total_egress_pkts, status, create_time_ms
-        )
-        SELECT 
-            s.create_time, s.cpu_id, s.src_ip, s.dst_ip, s.src_port, s.dst_port, 
-            s.l4_proto, s.l3_proto, s.flow_id, s.trace_id,
-            MAX(m.report_time) as last_report_time,
-            MAX(m.ingress_bytes) as total_ingress_bytes,
-            MAX(m.egress_bytes) as total_egress_bytes,
-            MAX(m.ingress_packets) as total_ingress_pkts,
-            MAX(m.egress_packets) as total_egress_pkts,
-            MAX(m.status) as status,
-            LEAST(s.create_time_ms, MAX(m.report_time)) as create_time_ms
-        FROM main.conn_summaries s
-        JOIN history.conn_metrics_1m m ON s.create_time = m.create_time AND s.cpu_id = m.cpu_id
-        GROUP BY s.create_time, s.cpu_id, s.src_ip, s.dst_ip, s.src_port, s.dst_port, s.l4_proto, s.l3_proto, s.flow_id, s.trace_id, s.create_time_ms
-        ON CONFLICT (create_time, cpu_id) DO UPDATE SET
-            last_report_time = GREATEST(history.conn_summaries.last_report_time, EXCLUDED.last_report_time),
-            total_ingress_bytes = GREATEST(history.conn_summaries.total_ingress_bytes, EXCLUDED.total_ingress_bytes),
-            total_egress_bytes = GREATEST(history.conn_summaries.total_egress_bytes, EXCLUDED.total_egress_bytes),
-            total_ingress_pkts = GREATEST(history.conn_summaries.total_ingress_pkts, EXCLUDED.total_ingress_pkts),
-            total_egress_pkts = GREATEST(history.conn_summaries.total_egress_pkts, EXCLUDED.total_egress_pkts),
-            create_time_ms = LEAST(history.conn_summaries.create_time_ms, EXCLUDED.create_time_ms),
-            status = EXCLUDED.status;
-    ";
-
-    let r_1m = conn.execute(sql_1m, [])?;
-    let r_1h = conn.execute(sql_1h, [])?;
-    let r_1d = conn.execute(sql_1d, [])?;
-    let r_summary = conn.execute(sql_summary, [])?;
-
-    // 显式刷新磁盘库，确保数据对其他连接（如查询连接）立即可见
-    if let Err(e) = conn.execute_batch("CHECKPOINT history;") {
-        tracing::error!("Failed to checkpoint history database: {}", e);
+    let mut count_1m = 0;
+    let sql_1m_insert = "INSERT OR REPLACE INTO conn_metrics_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    for row in rows_1m {
+        conn_disk.execute(
+            sql_1m_insert,
+            params![row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8],
+        )?;
+        count_1m += 1;
     }
 
-    tracing::info!("Batch rollup: 1m:{} 1h:{} 1d:{} sum:{}", r_1m, r_1h, r_1d, r_summary);
+    // 1h aggregation
+    let sql_1h_query = "
+        SELECT
+            create_time, cpu_id, (report_time // 3600000) * 3600000 as report_time,
+            MAX(ingress_bytes) as ingress_bytes, MAX(ingress_packets) as ingress_packets,
+            MAX(egress_bytes) as egress_bytes, MAX(egress_packets) as egress_packets,
+            MAX(status) as status, MAX(create_time_ms) as create_time_ms
+        FROM conn_metrics
+        GROUP BY 1, 2, 3";
 
+    let mut stmt_1h = conn_mem.prepare(sql_1h_query)?;
+    let rows_1h: Vec<_> = stmt_1h
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i32>(7)?,
+                row.get::<_, i64>(8)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut count_1h = 0;
+    let sql_1h_insert = "INSERT OR REPLACE INTO conn_metrics_1h VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    for row in rows_1h {
+        conn_disk.execute(
+            sql_1h_insert,
+            params![row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8],
+        )?;
+        count_1h += 1;
+    }
+
+    // 1d aggregation
+    let sql_1d_query = "
+        SELECT
+            create_time, cpu_id, (report_time // 86400000) * 86400000 as report_time,
+            MAX(ingress_bytes) as ingress_bytes, MAX(ingress_packets) as ingress_packets,
+            MAX(egress_bytes) as egress_bytes, MAX(egress_packets) as egress_packets,
+            MAX(status) as status, MAX(create_time_ms) as create_time_ms
+        FROM conn_metrics
+        GROUP BY 1, 2, 3";
+
+    let mut stmt_1d = conn_mem.prepare(sql_1d_query)?;
+    let rows_1d: Vec<_> = stmt_1d
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i32>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i32>(7)?,
+                row.get::<_, i64>(8)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut count_1d = 0;
+    let sql_1d_insert = "INSERT OR REPLACE INTO conn_metrics_1d VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    for row in rows_1d {
+        conn_disk.execute(
+            sql_1d_insert,
+            params![row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8],
+        )?;
+        count_1d += 1;
+    }
+
+    // Step 2: Sync summaries from memory to disk
+    let sql_summaries_query = "SELECT create_time, cpu_id, src_ip, dst_ip, src_port, dst_port,
+        l4_proto, l3_proto, flow_id, trace_id, create_time_ms FROM conn_summaries";
+
+    let mut stmt_summaries = conn_mem.prepare(sql_summaries_query)?;
+    let mut rows_summaries = stmt_summaries.query([])?;
+
+    // Prepare statement to query disk metrics for each summary
+    let sql_metrics_lookup = "SELECT MAX(report_time) as last_report_time,
+        MAX(ingress_bytes) as total_ingress_bytes, MAX(egress_bytes) as total_egress_bytes,
+        MAX(ingress_packets) as total_ingress_pkts, MAX(egress_packets) as total_egress_pkts,
+        MAX(status) as status
+        FROM conn_metrics_1m WHERE create_time = ?1 AND cpu_id = ?2";
+
+    let mut stmt_metrics = conn_disk.prepare(sql_metrics_lookup)?;
+
+    // Use INSERT ... ON CONFLICT to update summaries
+    let sql_summary_upsert = "INSERT INTO conn_summaries (
+        create_time, cpu_id, src_ip, dst_ip, src_port, dst_port,
+        l4_proto, l3_proto, flow_id, trace_id,
+        last_report_time, total_ingress_bytes, total_egress_bytes,
+        total_ingress_pkts, total_egress_pkts, status, create_time_ms
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+    ON CONFLICT (create_time, cpu_id) DO UPDATE SET
+        last_report_time = GREATEST(conn_summaries.last_report_time, EXCLUDED.last_report_time),
+        total_ingress_bytes = GREATEST(conn_summaries.total_ingress_bytes, EXCLUDED.total_ingress_bytes),
+        total_egress_bytes = GREATEST(conn_summaries.total_egress_bytes, EXCLUDED.total_egress_bytes),
+        total_ingress_pkts = GREATEST(conn_summaries.total_ingress_pkts, EXCLUDED.total_ingress_pkts),
+        total_egress_pkts = GREATEST(conn_summaries.total_egress_pkts, EXCLUDED.total_egress_pkts),
+        create_time_ms = LEAST(conn_summaries.create_time_ms, EXCLUDED.create_time_ms),
+        status = EXCLUDED.status";
+
+    let mut stmt_upsert = conn_disk.prepare(sql_summary_upsert)?;
+    let mut summary_count = 0;
+
+    while let Some(row) = rows_summaries.next()? {
+        let create_time: i64 = row.get(0)?;
+        let cpu_id: i32 = row.get(1)?;
+        let src_ip: String = row.get(2)?;
+        let dst_ip: String = row.get(3)?;
+        let src_port: i32 = row.get(4)?;
+        let dst_port: i32 = row.get(5)?;
+        let l4_proto: i32 = row.get(6)?;
+        let l3_proto: i32 = row.get(7)?;
+        let flow_id: i64 = row.get(8)?;
+        let trace_id: i64 = row.get(9)?;
+        let create_time_ms: i64 = row.get(10)?;
+
+        // Look up metrics from disk
+        let mut metrics_rows = stmt_metrics.query(params![create_time, cpu_id])?;
+        if let Some(metrics_row) = metrics_rows.next()? {
+            let last_report_time: i64 = metrics_row.get(0).unwrap_or(0);
+            let total_ingress_bytes: i64 = metrics_row.get(1).unwrap_or(0);
+            let total_egress_bytes: i64 = metrics_row.get(2).unwrap_or(0);
+            let total_ingress_pkts: i64 = metrics_row.get(3).unwrap_or(0);
+            let total_egress_pkts: i64 = metrics_row.get(4).unwrap_or(0);
+            let status: i32 = metrics_row.get(5).unwrap_or(0);
+
+            stmt_upsert.execute(params![
+                create_time,
+                cpu_id,
+                src_ip,
+                dst_ip,
+                src_port,
+                dst_port,
+                l4_proto,
+                l3_proto,
+                flow_id,
+                trace_id,
+                last_report_time,
+                total_ingress_bytes,
+                total_egress_bytes,
+                total_ingress_pkts,
+                total_egress_pkts,
+                status,
+                create_time_ms
+            ])?;
+            summary_count += 1;
+        }
+    }
+
+    tracing::info!(
+        "Batch rollup: 1m:{} 1h:{} 1d:{} sum:{}",
+        count_1m,
+        count_1h,
+        count_1d,
+        summary_count
+    );
+
+    // No CHECKPOINT here - rely on auto-checkpoint mechanism
     Ok(())
 }
 
 pub fn collect_and_cleanup_old_metrics(
-    conn: &Connection,
+    conn_mem: &Connection,
+    conn_disk: &Connection,
     cutoff_raw: u64,
     cutoff_1m: u64,
     cutoff_1h: u64,
     cutoff_1d: u64,
-    _history_db_path: &PathBuf,
 ) -> Box<Vec<ConnectMetric>> {
-    // Fetch expired metric records
+    // Fetch expired metric records from memory (for return value)
+    // Join with memory summaries to get full metric info
     let stmt = "
-        SELECT 
+        SELECT
             s.create_time, s.cpu_id, s.src_ip, s.dst_ip, s.src_port, s.dst_port, s.l4_proto, s.l3_proto, s.flow_id, s.trace_id,
             m.report_time, m.ingress_bytes, m.ingress_packets, m.egress_bytes, m.egress_packets, m.status, s.create_time_ms
         FROM conn_metrics m
-        JOIN history.conn_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
+        JOIN conn_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
         WHERE m.report_time < ?1
     ";
 
-    let mut stmt = match conn.prepare(stmt) {
+    let mut stmt = match conn_mem.prepare(stmt) {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("Failed to prepare cleanup SELECT SQL: {}, error: {}", stmt, e);
@@ -706,36 +833,23 @@ pub fn collect_and_cleanup_old_metrics(
         }
     };
 
-    // Delete expired metric records
-    let deleted_metrics = conn
+    // Delete expired metric records from memory
+    let deleted_metrics = conn_mem
         .execute("DELETE FROM conn_metrics WHERE report_time < ?1", params![cutoff_raw as i64])
         .unwrap_or_else(|e| {
-            tracing::error!("Failed to delete expired raw metrics: {}", e);
+            tracing::error!("Failed to delete expired raw metrics from memory: {}", e);
             0
         });
 
-    let _ = conn
+    // Delete expired memory summaries (more aggressively, same as raw metrics)
+    let deleted_memory_summaries = conn_mem
         .execute(
-            "DELETE FROM history.conn_metrics_1m WHERE report_time < ?1",
-            params![cutoff_1m as i64],
+            "DELETE FROM conn_summaries WHERE last_report_time < ?1",
+            params![cutoff_raw as i64],
         )
-        .map_err(|e| tracing::error!("Failed to delete expired 1m metrics: {}", e));
+        .unwrap_or(0);
 
-    let _ = conn
-        .execute(
-            "DELETE FROM history.conn_metrics_1h WHERE report_time < ?1",
-            params![cutoff_1h as i64],
-        )
-        .map_err(|e| tracing::error!("Failed to delete expired 1h metrics: {}", e));
-
-    let _ = conn
-        .execute(
-            "DELETE FROM history.conn_metrics_1d WHERE report_time < ?1",
-            params![cutoff_1d as i64],
-        )
-        .map_err(|e| tracing::error!("Failed to delete expired 1d metrics: {}", e));
-
-    let size = match conn.prepare("SELECT COUNT(*) FROM conn_metrics") {
+    let size = match conn_mem.prepare("SELECT COUNT(*) FROM conn_metrics") {
         Ok(mut stmt) => stmt.query_row([], |row| row.get::<_, usize>(0)).unwrap_or(0),
         Err(e) => {
             tracing::error!("Failed to prepare count query: {}", e);
@@ -744,31 +858,33 @@ pub fn collect_and_cleanup_old_metrics(
     };
 
     tracing::info!(
-        "Cleanup complete: deleted {} metric records from memory, remaining in memory: {}",
+        "Cleanup memory complete: deleted {} metric records, {} summaries, remaining: {}",
         deleted_metrics,
+        deleted_memory_summaries,
         size
     );
 
-    let deleted_history_summaries = conn
+    // Delete expired metric records from disk
+    let _ = conn_disk
+        .execute("DELETE FROM conn_metrics_1m WHERE report_time < ?1", params![cutoff_1m as i64])
+        .map_err(|e| tracing::error!("Failed to delete expired 1m metrics: {}", e));
+
+    let _ = conn_disk
+        .execute("DELETE FROM conn_metrics_1h WHERE report_time < ?1", params![cutoff_1h as i64])
+        .map_err(|e| tracing::error!("Failed to delete expired 1h metrics: {}", e));
+
+    let _ = conn_disk
+        .execute("DELETE FROM conn_metrics_1d WHERE report_time < ?1", params![cutoff_1d as i64])
+        .map_err(|e| tracing::error!("Failed to delete expired 1d metrics: {}", e));
+
+    let deleted_disk_summaries = conn_disk
         .execute(
-            "DELETE FROM history.conn_summaries WHERE last_report_time < ?1",
+            "DELETE FROM conn_summaries WHERE last_report_time < ?1",
             params![cutoff_1d as i64],
         )
         .unwrap_or(0);
 
-    // Also cleanup memory summaries (more aggressively, e.g., same as raw metrics)
-    let deleted_memory_summaries = conn
-        .execute(
-            "DELETE FROM conn_summaries WHERE last_report_time < ?1",
-            params![cutoff_raw as i64],
-        )
-        .unwrap_or(0);
-
-    tracing::info!(
-        "Cleanup summaries complete: deleted {} history disk records, deleted {} memory cache records",
-        deleted_history_summaries,
-        deleted_memory_summaries
-    );
+    tracing::info!("Cleanup disk complete: deleted {} summaries", deleted_disk_summaries);
 
     Box::new(metrics)
 }
@@ -812,15 +928,15 @@ pub fn query_connection_ip_history(
 
     let stmt_str = format!(
         "
-        SELECT 
-            {}, 
-            SUM(total_ingress_bytes), SUM(total_egress_bytes), 
-            SUM(total_ingress_pkts), SUM(total_egress_pkts), 
+        SELECT
+            {},
+            SUM(total_ingress_bytes), SUM(total_egress_bytes),
+            SUM(total_ingress_pkts), SUM(total_egress_pkts),
             COUNT(*)
         FROM {}
         {}
         GROUP BY 1
-        ORDER BY 2 DESC 
+        ORDER BY 2 DESC
         LIMIT 10
     ",
         col, table_name, where_stmt
