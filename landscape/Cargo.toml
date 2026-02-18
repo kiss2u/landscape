@@ -73,6 +73,7 @@ duckdb = { workspace = true }
 r2d2 = { workspace = true }
 
 etherparse = { workspace = true }
+dashmap = "6.1.0"
 
 [dependencies.pnet]
 workspace = true
