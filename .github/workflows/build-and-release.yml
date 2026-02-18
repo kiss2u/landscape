@@ -106,7 +106,7 @@ jobs:
             --install /usr/bin/${TOOLCHAIN_TRIPLET}-cpp ${TOOLCHAIN_TRIPLET}-cpp /usr/bin/${TOOLCHAIN_TRIPLET}-cpp-13 100
 
           cd /tmp
-          wget -q https://zlib.net/zlib-${zlib_version}.tar.gz
+          wget -q https://github.com/madler/zlib/releases/download/v${zlib_version}/zlib-${zlib_version}.tar.gz
           wget -q https://sourceware.org/elfutils/ftp/${elfutils_version}/elfutils-${elfutils_version}.tar.bz2
           tar xf zlib-${zlib_version}.tar.gz
           tar xf elfutils-${elfutils_version}.tar.bz2
