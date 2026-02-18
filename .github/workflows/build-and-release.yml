@@ -76,20 +76,22 @@ jobs:
             echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           fi
 
-      - name: Setup cross-tools
+      - name: Cache cross-libraries
+        id: cache-cross-libs
         if: ${{ !(matrix.settings.architecture == 'x86_64' || matrix.settings.architecture == 'aarch64') }}
+        uses: actions/cache@v4
+        with:
+          path: /usr/${{ matrix.settings.architecture }}-linux-gnu
+          key: cross-libs-${{ matrix.settings.target }}-${{ env.zlib_version }}-${{ env.elfutils_version }}
+
+      - name: Setup cross-tools
+        if: ${{ !(matrix.settings.architecture == 'x86_64' || matrix.settings.architecture == 'aarch64') && steps.cache-cross-libs.outputs.cache-hit != 'true' }}
         run: |
           ARCH=${{ matrix.settings.architecture }}
           case "$ARCH" in
-            armv7l)
-              TOOLCHAIN_TRIPLET="arm-linux-gnueabihf"
-              ;;
-            ppc64le)
-              TOOLCHAIN_TRIPLET="powerpc64le-linux-gnu"
-              ;;
-            *)
-              TOOLCHAIN_TRIPLET="${ARCH}-linux-gnu"
-              ;;
+            armv7l) TOOLCHAIN_TRIPLET="arm-linux-gnueabihf" ;;
+            ppc64le) TOOLCHAIN_TRIPLET="powerpc64le-linux-gnu" ;;
+            *) TOOLCHAIN_TRIPLET="${ARCH}-linux-gnu" ;;
           esac
 
           sudo apt-get update
@@ -100,10 +102,8 @@ jobs:
             --slave /usr/bin/${TOOLCHAIN_TRIPLET}-gcc-nm ${TOOLCHAIN_TRIPLET}-gcc-nm /usr/bin/${TOOLCHAIN_TRIPLET}-gcc-nm-13 \
             --slave /usr/bin/${TOOLCHAIN_TRIPLET}-gcc-ranlib ${TOOLCHAIN_TRIPLET}-gcc-ranlib /usr/bin/${TOOLCHAIN_TRIPLET}-gcc-ranlib-13 \
             --slave /usr/bin/${TOOLCHAIN_TRIPLET}-gcov ${TOOLCHAIN_TRIPLET}-gcov /usr/bin/${TOOLCHAIN_TRIPLET}-gcov-13
-          sudo update-alternatives \
-            --install /usr/bin/${TOOLCHAIN_TRIPLET}-g++ ${TOOLCHAIN_TRIPLET}-g++ /usr/bin/${TOOLCHAIN_TRIPLET}-g++-13 100
-          sudo update-alternatives \
-            --install /usr/bin/${TOOLCHAIN_TRIPLET}-cpp ${TOOLCHAIN_TRIPLET}-cpp /usr/bin/${TOOLCHAIN_TRIPLET}-cpp-13 100
+          sudo update-alternatives --install /usr/bin/${TOOLCHAIN_TRIPLET}-g++ ${TOOLCHAIN_TRIPLET}-g++ /usr/bin/${TOOLCHAIN_TRIPLET}-g++-13 100
+          sudo update-alternatives --install /usr/bin/${TOOLCHAIN_TRIPLET}-cpp ${TOOLCHAIN_TRIPLET}-cpp /usr/bin/${TOOLCHAIN_TRIPLET}-cpp-13 100
 
           cd /tmp
           wget -q https://github.com/madler/zlib/releases/download/v${zlib_version}/zlib-${zlib_version}.tar.gz
@@ -114,18 +114,32 @@ jobs:
           export CC=${TOOLCHAIN_TRIPLET}-gcc
           export CXX=${TOOLCHAIN_TRIPLET}-g++
           export PREFIX=/usr/${TOOLCHAIN_TRIPLET}
-          export LIBRARY_PATH=$PREFIX/lib
-          export LD_LIBRARY_PATH=$PREFIX/lib
-
+          
+          # Build Zlib
           cd /tmp/zlib-${zlib_version}
           CHOST=${TOOLCHAIN_TRIPLET} ./configure --prefix=${PREFIX}
           make -j$(nproc)
           sudo make install
 
+          # Build Elfutils
           cd /tmp/elfutils-${elfutils_version}
-          ./configure --host=${TOOLCHAIN_TRIPLET} --prefix=${PREFIX} --with-zlib=${PREFIX} --disable-libdebuginfod --disable-debuginfod CFLAGS="-I${PREFIX}/include" LDFLAGS="-L${PREFIX}/lib -Wl,-rpath,$PREFIX/lib" LIBS="-lz"
+          ./configure --host=${TOOLCHAIN_TRIPLET} --prefix=${PREFIX} --with-zlib=${PREFIX} --disable-libdebuginfod --disable-debuginfod \
+            CFLAGS="-I${PREFIX}/include" LDFLAGS="-L${PREFIX}/lib -Wl,-rpath,${PREFIX}/lib" LIBS="-lz"
           make -j$(nproc)
           sudo make install
+
+      - name: Install cross-compilers (if cache hit)
+        if: ${{ !(matrix.settings.architecture == 'x86_64' || matrix.settings.architecture == 'aarch64') && steps.cache-cross-libs.outputs.cache-hit == 'true' }}
+        run: |
+          ARCH=${{ matrix.settings.architecture }}
+          TOOLCHAIN_TRIPLET="${ARCH}-linux-gnu"
+          [ "$ARCH" = "armv7l" ] && TOOLCHAIN_TRIPLET="arm-linux-gnueabihf"
+          
+          sudo apt-get update
+          sudo apt-get install -y g++-13-${TOOLCHAIN_TRIPLET} gcc-13-${TOOLCHAIN_TRIPLET}
+          sudo update-alternatives --install /usr/bin/${TOOLCHAIN_TRIPLET}-gcc ${TOOLCHAIN_TRIPLET}-gcc /usr/bin/${TOOLCHAIN_TRIPLET}-gcc-13 100
+          sudo update-alternatives --install /usr/bin/${TOOLCHAIN_TRIPLET}-g++ ${TOOLCHAIN_TRIPLET}-g++ /usr/bin/${TOOLCHAIN_TRIPLET}-g++-13 100
+
 
       - name: Setup rust
         uses: dtolnay/rust-toolchain@stable
