@@ -1,7 +1,5 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use landscape_common::config::MetricRuntimeConfig;
 use tokio::sync::{mpsc, RwLock};
 
 use landscape_common::event::ConnectMessage;
@@ -51,11 +49,6 @@ impl ConnectMetricManager {
         }
 
         ConnectMetricManager { msg_channel, metric_store, global_stats }
-    }
-
-    pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Self {
-        let metric_store = DuckMetricStore::new(base_path, config).await;
-        Self::with_store(metric_store)
     }
 
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {

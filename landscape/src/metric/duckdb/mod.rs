@@ -36,7 +36,7 @@ use landscape_common::config::MetricRuntimeConfig;
 
 const A_MIN: u64 = 60 * 1000;
 const MS_PER_MINUTE: u64 = A_MIN;
-const MS_PER_DAY: u64 = 24 * 3600 * 1000;
+const MS_PER_DAY: u64 = 24 * 60 * A_MIN;
 const STALE_TIMEOUT_MS: u64 = 5 * A_MIN;
 
 /// Database operation messages
@@ -86,7 +86,7 @@ pub fn start_db_thread(
         std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
     let cleanup_interval_duration =
         std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS);
-    let summary_sync_duration = std::time::Duration::from_secs(30);
+    let summary_sync_duration = std::time::Duration::from_secs(60);
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
     rt.block_on(async move {
@@ -156,11 +156,9 @@ pub fn start_db_thread(
                                 tracing::error!("Failed to start sync summary transaction on disk writer: {}", e);
                             }
                         }
-                        // 3. Perform in-database rollup
-                        let _ = connect::perform_inner_db_rollup(&conn_sync);
                     }
 
-                    // 5. Cleanup stale live sessions
+                    // 3. Cleanup stale live sessions
                     realtime_cache.retain(|_, v| {
                         let is_disabled = v.status.status == ConnectStatusType::Disabled;
                         let is_stale = v.status.last_report_time < cutoff_live;
@@ -196,6 +194,8 @@ pub fn start_db_thread(
 
                     dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
                     if let Ok(conn_disk) = disk_pool.get() {
+                        // Rollup raw metrics into 1m/1h/1d buckets
+                        let _ = connect::perform_inner_db_rollup(&conn_disk);
                         // Use a fresh connection for maintenance instead of conn_disk_writer
                         if let Ok(conn_maint) = disk_pool.get() {
                             let _ = connect::collect_and_cleanup_old_metrics(
@@ -482,16 +482,6 @@ impl DuckMetricStore {
         tokio::task::spawn_blocking(move || -> Vec<ConnectMetricPoint> {
             let conn = store.get_disk_conn();
             connect::query_metric_by_key(&conn, &key, resolution, Some(&store.db_path))
-        })
-        .await
-        .unwrap_or_default()
-    }
-
-    pub async fn current_active_connect_keys(&self) -> Vec<ConnectKey> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || -> Vec<ConnectKey> {
-            let conn = store.get_disk_conn();
-            connect::current_active_connect_keys(&conn)
         })
         .await
         .unwrap_or_default()

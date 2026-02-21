@@ -1,4 +1,3 @@
-use duckdb::Statement;
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
@@ -19,119 +18,6 @@ pub const SUMMARY_INSERT_SQL: &str = "
         total_egress_pkts = GREATEST(conn_summaries.total_egress_pkts, EXCLUDED.total_egress_pkts),
         status = CASE WHEN EXCLUDED.last_report_time >= conn_summaries.last_report_time THEN EXCLUDED.status ELSE conn_summaries.status END
 ";
-
-pub const METRICS_1M_INSERT_SQL: &str = "
-    INSERT OR REPLACE INTO conn_metrics_1m (
-        create_time, cpu_id, report_time,
-        ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-";
-
-pub const METRICS_1H_INSERT_SQL: &str = "
-    INSERT OR REPLACE INTO conn_metrics_1h (
-        create_time, cpu_id, report_time,
-        ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-";
-
-pub const METRICS_1D_INSERT_SQL: &str = "
-    INSERT OR REPLACE INTO conn_metrics_1d (
-        create_time, cpu_id, report_time,
-        ingress_bytes, ingress_packets, egress_bytes, egress_packets, status, create_time_ms
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-";
-
-pub const LIVE_METRIC_INSERT_SQL: &str = "
-    INSERT INTO conn_realtime (
-        create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,
-        ingress_bytes, egress_bytes, ingress_packets, egress_packets, ingress_bps, egress_bps, ingress_pps, egress_pps,
-        last_report_time, status, create_time_ms
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
-    ON CONFLICT (create_time, cpu_id) DO UPDATE SET
-        ingress_bps = CASE
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
-            THEN (EXCLUDED.ingress_bytes - ingress_bytes) * 8000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE ingress_bps
-        END,
-        egress_bps = CASE
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
-            THEN (EXCLUDED.egress_bytes - egress_bytes) * 8000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE egress_bps
-        END,
-        ingress_pps = CASE
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
-            THEN (EXCLUDED.ingress_packets - ingress_packets) * 1000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE ingress_pps
-        END,
-        egress_pps = CASE
-            WHEN (EXCLUDED.last_report_time - last_report_time) > 0
-            THEN (EXCLUDED.egress_packets - egress_packets) * 1000 / (EXCLUDED.last_report_time - last_report_time)
-            ELSE egress_pps
-        END,
-        ingress_bytes = EXCLUDED.ingress_bytes,
-        egress_bytes = EXCLUDED.egress_bytes,
-        ingress_packets = EXCLUDED.ingress_packets,
-        egress_packets = EXCLUDED.egress_packets,
-        last_report_time = EXCLUDED.last_report_time,
-        status = EXCLUDED.status
-";
-
-pub fn update_summary_by_metric(
-    stmt: &mut Statement,
-    metric: &ConnectMetric,
-) -> duckdb::Result<usize> {
-    let key = &metric.key;
-    let event_type_val: u8 = metric.status.clone().into();
-
-    stmt.execute(params![
-        key.create_time as i64,
-        key.cpu_id as i64,
-        metric.src_ip.to_string(),
-        metric.dst_ip.to_string(),
-        metric.src_port as i64,
-        metric.dst_port as i64,
-        metric.l4_proto as i64,
-        metric.l3_proto as i64,
-        metric.flow_id as i64,
-        metric.trace_id as i64,
-        metric.report_time as i64,
-        metric.ingress_bytes as i64,
-        metric.egress_bytes as i64,
-        metric.ingress_packets as i64,
-        metric.egress_packets as i64,
-        event_type_val as i64,
-        metric.create_time_ms as i64,
-    ])
-}
-
-pub fn update_live_metric(stmt: &mut Statement, metric: &ConnectMetric) -> duckdb::Result<usize> {
-    let key = &metric.key;
-    let event_type_val: u8 = metric.status.clone().into();
-
-    stmt.execute(params![
-        key.create_time as i64,
-        key.cpu_id as i64,
-        metric.src_ip.to_string(),
-        metric.dst_ip.to_string(),
-        metric.src_port as i64,
-        metric.dst_port as i64,
-        metric.l4_proto as i64,
-        metric.l3_proto as i64,
-        metric.flow_id as i64,
-        metric.trace_id as i64,
-        metric.ingress_bytes as i64,
-        metric.egress_bytes as i64,
-        metric.ingress_packets as i64,
-        metric.egress_packets as i64,
-        0i64,
-        0i64,
-        0i64,
-        0i64,
-        metric.report_time as i64,
-        event_type_val as i64,
-        metric.create_time_ms as i64,
-    ])
-}
 
 pub fn create_summaries_table(conn: &Connection, schema: &str) {
     let prefix = if schema.is_empty() { "".to_string() } else { format!("{}.", schema) };
@@ -230,31 +116,6 @@ pub fn create_metrics_table(conn: &Connection, schema: &str) -> duckdb::Result<(
 pub fn create_live_tables(conn: &Connection) -> duckdb::Result<()> {
     conn.execute_batch(
         "
-        CREATE TABLE IF NOT EXISTS conn_realtime (
-            create_time UBIGINT,
-            cpu_id INTEGER,
-            src_ip VARCHAR,
-            dst_ip VARCHAR,
-            src_port INTEGER,
-            dst_port INTEGER,
-            l4_proto INTEGER,
-            l3_proto INTEGER,
-            flow_id INTEGER,
-            trace_id INTEGER,
-            ingress_bytes UBIGINT,
-            egress_bytes UBIGINT,
-            ingress_packets UBIGINT,
-            egress_packets UBIGINT,
-            ingress_bps UBIGINT,
-            egress_bps UBIGINT,
-            ingress_pps UBIGINT,
-            egress_pps UBIGINT,
-            last_report_time UBIGINT,
-            status INTEGER,
-            create_time_ms UBIGINT,
-            PRIMARY KEY (create_time, cpu_id)
-        );
-
         CREATE TABLE IF NOT EXISTS conn_metrics (
             create_time UBIGINT,
             cpu_id INTEGER,
@@ -266,29 +127,7 @@ pub fn create_live_tables(conn: &Connection) -> duckdb::Result<()> {
             status INTEGER,
             create_time_ms UBIGINT
         );
-
-        CREATE TABLE IF NOT EXISTS conn_summaries (
-            create_time UBIGINT,
-            cpu_id INTEGER,
-            src_ip VARCHAR,
-            dst_ip VARCHAR,
-            src_port INTEGER,
-            dst_port INTEGER,
-            l4_proto INTEGER,
-            l3_proto INTEGER,
-            flow_id INTEGER,
-            trace_id INTEGER,
-            last_report_time UBIGINT,
-            total_ingress_bytes UBIGINT,
-            total_egress_bytes UBIGINT,
-            total_ingress_pkts UBIGINT,
-            total_egress_pkts UBIGINT,
-            status INTEGER,
-            create_time_ms UBIGINT,
-            PRIMARY KEY (create_time, cpu_id)
-        );
         CREATE INDEX IF NOT EXISTS idx_conn_metrics_time ON conn_metrics (report_time);
-        CREATE INDEX IF NOT EXISTS idx_conn_summaries_time ON conn_summaries (last_report_time);
         ",
     )
 }
@@ -374,6 +213,8 @@ pub fn query_historical_summaries_complex(
     }
 
     let mut where_clauses = Vec::new();
+    let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
+
     if let Some(start) = params.start_time {
         where_clauses.push(format!("last_report_time >= {}", start));
     }
@@ -382,12 +223,14 @@ pub fn query_historical_summaries_complex(
     }
     if let Some(ip) = params.src_ip {
         if !ip.is_empty() {
-            where_clauses.push(format!("src_ip LIKE '%{}%'", ip));
+            where_clauses.push("src_ip LIKE ?".to_string());
+            sql_params.push(Box::new(format!("%{}%", ip)));
         }
     }
     if let Some(ip) = params.dst_ip {
         if !ip.is_empty() {
-            where_clauses.push(format!("dst_ip LIKE '%{}%'", ip));
+            where_clauses.push("dst_ip LIKE ?".to_string());
+            sql_params.push(Box::new(format!("%{}%", ip)));
         }
     }
     if let Some(p) = params.port_start {
@@ -405,7 +248,6 @@ pub fn query_historical_summaries_complex(
     if let Some(p) = params.flow_id {
         where_clauses.push(format!("flow_id = {}", p));
     }
-
     if let Some(s) = params.status {
         where_clauses.push(format!("status = {}", s));
     }
@@ -451,7 +293,8 @@ pub fn query_historical_summaries_complex(
         }
     };
 
-    let rows = stmt.query_map([], |row| {
+    let param_refs: Vec<&dyn duckdb::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt.query_map(&param_refs[..], |row| {
         let create_time_ms: u64 = row.get::<_, i64>(16)? as u64;
         let key = ConnectKey {
             create_time: row.get::<_, i64>(0)? as u64,
@@ -481,37 +324,6 @@ pub fn query_historical_summaries_complex(
         Ok(r) => r.filter_map(Result::ok).collect(),
         Err(e) => {
             tracing::error!("Failed to execute query: {}", e);
-            Vec::new()
-        }
-    }
-}
-
-pub fn current_active_connect_keys(conn: &Connection) -> Vec<ConnectKey> {
-    let stmt = "
-        SELECT create_time, cpu_id
-        FROM conn_summaries
-        WHERE status = 1
-    ";
-
-    let mut stmt = match conn.prepare(stmt) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("Failed to prepare SQL for active connects: {}", e);
-            return Vec::new();
-        }
-    };
-
-    let rows = stmt.query_map([], |row| {
-        Ok(ConnectKey {
-            create_time: row.get::<_, i64>(0)? as u64,
-            cpu_id: row.get::<_, i64>(1)? as u32,
-        })
-    });
-
-    match rows {
-        Ok(r) => r.filter_map(Result::ok).collect(),
-        Err(e) => {
-            tracing::error!("Failed to execute active connects query: {}", e);
             Vec::new()
         }
     }
@@ -766,6 +578,7 @@ pub fn query_connection_ip_history(
     let table_name = "conn_summaries";
 
     let mut where_clauses = Vec::new();
+    let mut sql_params: Vec<Box<dyn duckdb::ToSql>> = Vec::new();
     let col = if is_src { "src_ip" } else { "dst_ip" };
     if let Some(start) = params.start_time {
         where_clauses.push(format!("last_report_time >= {}", start));
@@ -778,12 +591,14 @@ pub fn query_connection_ip_history(
     }
     if let Some(ip) = params.src_ip {
         if !ip.is_empty() {
-            where_clauses.push(format!("src_ip LIKE '%{}%'", ip));
+            where_clauses.push("src_ip LIKE ?".to_string());
+            sql_params.push(Box::new(format!("%{}%", ip)));
         }
     }
     if let Some(ip) = params.dst_ip {
         if !ip.is_empty() {
-            where_clauses.push(format!("dst_ip LIKE '%{}%'", ip));
+            where_clauses.push("dst_ip LIKE ?".to_string());
+            sql_params.push(Box::new(format!("%{}%", ip)));
         }
     }
 
@@ -828,7 +643,8 @@ pub fn query_connection_ip_history(
         }
     };
 
-    let rows = stmt.query_map([], |row| {
+    let param_refs: Vec<&dyn duckdb::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt.query_map(&param_refs[..], |row| {
         Ok(landscape_common::metric::connect::IpHistoryStat {
             ip: row.get::<_, String>(0)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
             flow_id: 0,
