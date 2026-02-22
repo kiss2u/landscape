@@ -4,9 +4,7 @@ import { useI18n } from "vue-i18n";
 import {
   useThemeVars,
   NGrid,
-  NGridItem,
   NStatistic,
-  NProgress,
   NText,
   NNumberAnimation,
   NIcon,
@@ -103,7 +101,7 @@ defineExpose({ refresh: loadSummary });
   <n-card
     :loading="loading"
     class="dns-status-card"
-    content-style="display: flex; flex-direction: column; height: 100%; padding-top: 6px;"
+    content-style="display: flex; flex-direction: column; height: 100%; padding-top: 26px;"
   >
     <template #header>
       <n-flex align="center" :size="4">
@@ -147,12 +145,18 @@ defineExpose({ refresh: loadSummary });
         <!-- Total Queries -->
         <n-gi>
           <n-statistic :label="t('metric.dns.dash.total_queries')">
-            <n-number-animation :from="0" :to="summary?.total_queries || 0" />
+            <n-tooltip trigger="hover">
+              <template #trigger>
+                <span
+                  ><n-number-animation
+                    :from="0"
+                    :to="summary?.total_queries || 0"
+                /></span>
+              </template>
+              NX: {{ summary?.nxdomain_count || 0 }} / Err:
+              {{ summary?.error_count || 0 }}
+            </n-tooltip>
           </n-statistic>
-          <n-flex :size="4" class="mini-breakdown">
-            <n-text depth="3">NX: {{ summary?.nxdomain_count || 0 }}</n-text>
-            <n-text depth="3">Err: {{ summary?.error_count || 0 }}</n-text>
-          </n-flex>
         </n-gi>
 
         <!-- Cache Hit Rate -->
@@ -181,50 +185,48 @@ defineExpose({ refresh: loadSummary });
               "
               >%</template
             >
-            <n-number-animation
+            <n-tooltip
               v-if="
                 calculatePercentFromValues(
                   summary?.cache_hit_count,
                   summary?.total_effective_queries,
                 ) !== null
               "
-              :from="0"
-              :to="
-                calculatePercentFromValues(
-                  summary?.cache_hit_count,
-                  summary?.total_effective_queries,
-                ) || 0
-              "
-              :precision="1"
-            />
-            <n-text v-else depth="3" class="no-data-text">{{
-              t("metric.dns.dash.no_data")
-            }}</n-text>
-          </n-statistic>
-          <n-flex
-            :size="4"
-            class="mini-breakdown"
-            v-if="summary?.total_v4 || summary?.total_v6"
-          >
-            <n-text depth="3"
-              >v4:
+              trigger="hover"
+              :disabled="!summary?.total_v4 && !summary?.total_v6"
+            >
+              <template #trigger>
+                <span>
+                  <n-number-animation
+                    :from="0"
+                    :to="
+                      calculatePercentFromValues(
+                        summary?.cache_hit_count,
+                        summary?.total_effective_queries,
+                      ) || 0
+                    "
+                    :precision="1"
+                  />
+                </span>
+              </template>
+              v4:
               {{
                 calculatePercentFromValues(
                   summary?.hit_count_v4,
                   summary?.total_v4,
                 ) ?? "-"
-              }}%</n-text
-            >
-            <n-text depth="3"
-              >v6:
+              }}% / v6:
               {{
                 calculatePercentFromValues(
                   summary?.hit_count_v6,
                   summary?.total_v6,
                 ) ?? "-"
-              }}%</n-text
-            >
-          </n-flex>
+              }}%
+            </n-tooltip>
+            <n-text v-else depth="3" class="no-data-text">{{
+              t("metric.dns.dash.no_data")
+            }}</n-text>
+          </n-statistic>
         </n-gi>
 
         <!-- Block Rate -->
@@ -237,14 +239,6 @@ defineExpose({ refresh: loadSummary });
               :precision="1"
             />
           </n-statistic>
-          <n-progress
-            type="line"
-            :percentage="calculatePercent(summary?.block_count || 0)"
-            :show-indicator="false"
-            size="tiny"
-            status="warning"
-            style="width: 100%; margin-top: 4px"
-          />
         </n-gi>
       </n-grid>
 
@@ -300,10 +294,6 @@ defineExpose({ refresh: loadSummary });
 </template>
 
 <style scoped>
-.mini-breakdown {
-  margin-top: -2px;
-}
-
 .no-data-text {
   font-size: 11px;
 }
