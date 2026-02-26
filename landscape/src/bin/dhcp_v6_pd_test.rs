@@ -22,6 +22,7 @@ use landscape_common::{
     service::{ServiceStatus, WatchService},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
+use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 #[derive(Parser, Debug, Clone)]
@@ -116,6 +117,8 @@ async fn main() {
                     ip_route_service,
                     prefix_map_clone,
                     assigned_ips,
+                    None,
+                    HashMap::new(),
                 )
                 .await
                 .unwrap();

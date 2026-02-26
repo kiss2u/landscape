@@ -1,7 +1,11 @@
 <script lang="ts" setup>
-import { get_icmpra_assigned_ips } from "@/api/service_icmpv6ra";
-import type { IPv6NAInfo } from "@/api/service_icmpv6ra";
-import { computed, onMounted, ref } from "vue";
+import {
+  get_icmpra_assigned_ips,
+  get_all_dhcpv6_assigned,
+} from "@/api/service_icmpv6ra";
+import type { IPv6NAInfo, DHCPv6OfferInfo } from "@/api/service_icmpv6ra";
+import { onMounted, ref } from "vue";
+import DHCPv6AssignedTable from "@/components/dhcp_v6/DHCPv6AssignedTable.vue";
 
 onMounted(async () => {
   await get_info();
@@ -9,6 +13,8 @@ onMounted(async () => {
 
 const loading = ref(false);
 const infos = ref<{ label: string; value: IPv6NAInfo | null }[]>([]);
+const dhcpv6_infos = ref<{ label: string; value: DHCPv6OfferInfo }[]>([]);
+
 async function get_info() {
   try {
     loading.value = true;
@@ -22,6 +28,17 @@ async function get_info() {
     }
     result.sort((a, b) => a.label.localeCompare(b.label));
     infos.value = result;
+
+    // DHCPv6 assigned
+    let dhcpv6_data = await get_all_dhcpv6_assigned();
+    const dhcpv6_result = [];
+    for (const [label, value] of dhcpv6_data) {
+      if (value) {
+        dhcpv6_result.push({ label, value });
+      }
+    }
+    dhcpv6_result.sort((a, b) => a.label.localeCompare(b.label));
+    dhcpv6_infos.value = dhcpv6_result;
   } finally {
     loading.value = false;
   }
@@ -46,7 +63,18 @@ async function get_info() {
       />
     </n-flex>
     <n-empty style="flex: 1" v-else></n-empty>
-  </n-flex>
 
-  <!-- {{ infos }} -->
+    <!-- DHCPv6 Assigned -->
+    <template v-if="dhcpv6_infos.length > 0">
+      <n-divider title-placement="left"> DHCPv6 分配信息 </n-divider>
+      <n-flex>
+        <DHCPv6AssignedTable
+          v-for="(data, index) in dhcpv6_infos"
+          :key="'dhcpv6-' + index"
+          :iface_name="data.label"
+          :info="data.value"
+        />
+      </n-flex>
+    </template>
+  </n-flex>
 </template>

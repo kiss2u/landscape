@@ -1,13 +1,18 @@
 import { ServiceStatus } from "@/lib/services";
-import type { IPV6RAServiceConfig } from "@landscape-router/types/api/schemas";
+import type {
+  IPV6RAServiceConfig,
+  IPv6NAInfo,
+  DHCPv6OfferInfo,
+} from "@landscape-router/types/api/schemas";
 import {
   getAllIcmpv6raStatus,
   getIfaceIcmpv6Config,
   handleIfaceIcmpv6,
   deleteAndStopIfaceIcmpv6,
   getAllIcmpv6raAssignedIps,
+  getAllDhcpv6Assigned,
+  getDhcpv6AssignedByIfaceName,
 } from "@landscape-router/types/api/icmpv6-ra/icmpv6-ra";
-import type { IPv6NAInfo } from "@landscape-router/types/api/schemas";
 
 // IPv6NAInfo is now directly imported from generated types
 
@@ -49,4 +54,22 @@ export async function get_icmpra_assigned_ips(): Promise<
   return map;
 }
 
-export type { IPv6NAInfo };
+export async function get_all_dhcpv6_assigned(): Promise<
+  Map<string, DHCPv6OfferInfo | null>
+> {
+  const data = await getAllDhcpv6Assigned();
+  const map = new Map<string, DHCPv6OfferInfo | null>();
+  for (const [key, value] of Object.entries(data)) {
+    map.set(key, value as DHCPv6OfferInfo);
+  }
+  return map;
+}
+
+export async function get_dhcpv6_assigned_by_iface(
+  iface_name: string,
+): Promise<DHCPv6OfferInfo | null> {
+  const data = await getDhcpv6AssignedByIfaceName(iface_name);
+  return (data as DHCPv6OfferInfo) ?? null;
+}
+
+export type { IPv6NAInfo, DHCPv6OfferInfo };

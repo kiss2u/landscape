@@ -4,6 +4,7 @@ use std::net::Ipv6Addr;
 use std::sync::Arc;
 
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
+use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::ipv6_pd::IAPrefixMap;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::observer::IfaceObserverAction;
@@ -14,6 +15,7 @@ use landscape_common::service::manager::ServiceManager;
 use landscape_common::service::manager::ServiceStarterTrait;
 use landscape_common::store::storev2::LandscapeStore;
 use landscape_common::{config::ra::IPV6RAServiceConfig, service::WatchService};
+use landscape_database::enrolled_device::repository::EnrolledDeviceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::ra::repository::IPV6RAServiceRepository;
 use tokio::sync::broadcast;
@@ -28,14 +30,22 @@ pub struct IPV6RAService {
     route_service: IpRouteService,
     prefix_map: IAPrefixMap,
     iface_lease_map: Arc<RwLock<HashMap<String, Arc<RwLock<IPv6NAInfo>>>>>,
+    iface_dhcpv6_map: Arc<RwLock<HashMap<String, Arc<RwLock<DHCPv6OfferInfo>>>>>,
+    enrolled_device_store: EnrolledDeviceRepository,
 }
 
 impl IPV6RAService {
-    pub fn new(route_service: IpRouteService, prefix_map: IAPrefixMap) -> Self {
+    pub fn new(
+        route_service: IpRouteService,
+        prefix_map: IAPrefixMap,
+        enrolled_device_store: EnrolledDeviceRepository,
+    ) -> Self {
         Self {
             route_service,
             prefix_map,
             iface_lease_map: Arc::new(RwLock::new(HashMap::new())),
+            iface_dhcpv6_map: Arc::new(RwLock::new(HashMap::new())),
+            enrolled_device_store,
         }
     }
 }
@@ -60,6 +70,46 @@ impl ServiceStarterTrait for IPV6RAService {
                         .clone()
                 };
 
+                // DHCPv6 setup
+                let dhcpv6_config = config.config.dhcpv6.clone();
+                let dhcpv6_assigned = if dhcpv6_config.as_ref().map_or(false, |c| c.enable) {
+                    let assigned = {
+                        let mut write = self.iface_dhcpv6_map.write().await;
+                        write
+                            .entry(store_key.clone())
+                            .or_insert_with(|| Arc::new(RwLock::new(DHCPv6OfferInfo::default())))
+                            .clone()
+                    };
+                    Some(assigned)
+                } else {
+                    None
+                };
+
+                // Load static IPv6 bindings from enrolled devices
+                let static_bindings = if dhcpv6_config.as_ref().map_or(false, |c| c.enable) {
+                    match self
+                        .enrolled_device_store
+                        .find_dhcpv6_bindings(config.iface_name.clone())
+                        .await
+                    {
+                        Ok(devices) => {
+                            let mut bindings = HashMap::new();
+                            for dev in devices {
+                                if let Some(ipv6) = dev.ipv6 {
+                                    bindings.insert(dev.mac, ipv6);
+                                }
+                            }
+                            bindings
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to load DHCPv6 bindings: {e:?}");
+                            HashMap::new()
+                        }
+                    }
+                } else {
+                    HashMap::new()
+                };
+
                 if let Some(mac) = iface.mac {
                     let lan_info = LanRouteInfo {
                         ifindex: iface.index,
@@ -79,6 +129,8 @@ impl ServiceStarterTrait for IPV6RAService {
                             route_service,
                             prefix_map,
                             assigned_ips,
+                            dhcpv6_assigned,
+                            static_bindings,
                         )
                         .await;
                     });
@@ -120,7 +172,8 @@ impl IPV6RAManagerService {
         prefix_map: IAPrefixMap,
     ) -> Self {
         let store = store_service.ra_service_store();
-        let server_starter = IPV6RAService::new(route_service, prefix_map);
+        let enrolled_device_store = store_service.enrolled_device_store();
+        let server_starter = IPV6RAService::new(route_service, prefix_map, enrolled_device_store);
         let service =
             ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 
@@ -171,6 +224,40 @@ impl IPV6RAManagerService {
 
         for (iface_name, assigned_ips) in map {
             if let Ok(read) = assigned_ips.try_read() {
+                result.insert(iface_name, read.clone());
+            }
+        }
+
+        result
+    }
+
+    pub async fn get_dhcpv6_assigned_by_iface_name(
+        &self,
+        iface_name: String,
+    ) -> Option<DHCPv6OfferInfo> {
+        let info = {
+            let read_lock = self.server_starter.iface_dhcpv6_map.read().await;
+            read_lock.get(&iface_name).map(Clone::clone)
+        };
+
+        let Some(offer_info) = info else {
+            return None;
+        };
+
+        let data = offer_info.read().await.clone();
+        Some(data)
+    }
+
+    pub async fn get_dhcpv6_assigned(&self) -> HashMap<String, DHCPv6OfferInfo> {
+        let mut result = HashMap::new();
+
+        let map = {
+            let read_lock = self.server_starter.iface_dhcpv6_map.read().await;
+            read_lock.clone()
+        };
+
+        for (iface_name, assigned_info) in map {
+            if let Ok(read) = assigned_info.try_read() {
                 result.insert(iface_name, read.clone());
             }
         }

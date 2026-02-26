@@ -4,6 +4,7 @@ use std::net::Ipv6Addr;
 use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
+use crate::dhcp::v6_server::config::DHCPv6ServerConfig;
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -82,6 +83,10 @@ pub struct IPV6RAConfig {
     pub ra_flag: RouterFlags,
     /// Ip Source
     pub source: Vec<IPV6RaConfigSource>,
+    /// DHCPv6 server config (nested within RA)
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub dhcpv6: Option<DHCPv6ServerConfig>,
 }
 
 impl IPV6RAConfig {
@@ -125,6 +130,11 @@ impl IPV6RAConfig {
                     }
                 }
             }
+        }
+
+        // Validate DHCPv6 config if present
+        if let Some(dhcpv6) = &self.dhcpv6 {
+            dhcpv6.validate()?;
         }
 
         Ok(())
@@ -185,6 +195,7 @@ impl IPV6RAConfig {
             source,
             ra_flag: ra_flag_default(),
             ad_interval: 300,
+            dhcpv6: None,
         }
     }
 }

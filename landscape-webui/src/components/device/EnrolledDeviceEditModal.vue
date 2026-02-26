@@ -126,7 +126,17 @@ const rules = {
   },
   mac: macRule,
   ipv4: ipRule,
-  // ipv6: ipRule, // DHCPv6 尚未实现
+  ipv6: {
+    trigger: ["input", "blur"],
+    validator(_: unknown, value: string) {
+      if (!value) return true;
+      // Basic IPv6 suffix validation (e.g., ::100, ::1)
+      const ipv6Regex = /^::[\da-fA-F]{1,4}(::?[\da-fA-F]{1,4})*$/;
+      if (!ipv6Regex.test(value))
+        return new Error("请输入有效的 IPv6 后缀 (如 ::100)");
+      return true;
+    },
+  },
 };
 
 async function saveRule() {
@@ -221,14 +231,12 @@ async function saveRule() {
           />
         </n-form-item-gi>
 
-        <!-- DHCPv6 尚未实现，暂时隐藏 IPv6 映射
         <n-form-item-gi :label="t('enrolled_device.ipv6')" path="ipv6">
           <n-input
             v-model:value="rule.ipv6"
             :placeholder="t('enrolled_device.ipv6_placeholder')"
           />
         </n-form-item-gi>
-        -->
 
         <n-form-item-gi :span="2" :label="t('enrolled_device.tag')" path="tag">
           <n-dynamic-tags v-model:value="rule.tag" />

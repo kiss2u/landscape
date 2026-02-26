@@ -14,6 +14,8 @@ import type {
   IPv6RaStaticConfig,
 } from "@landscape-router/types/api/schemas";
 import { indexMap } from "seemly";
+import DHCPv6ConfigSection from "@/components/dhcp_v6/DHCPv6ConfigSection.vue";
+import DHCPv6ServerCard from "@/components/dhcp_v6/DHCPv6ServerCard.vue";
 
 let ipv6PDStore = useIPv6PDStore();
 const message = useMessage();
@@ -38,6 +40,33 @@ async function on_modal_enter() {
     if (config) {
       service_config.value = config;
     } else {
+      service_config.value = {
+        iface_name: iface_info.iface_name,
+        enable: true,
+        config: {
+          ad_interval: 300,
+          ra_flag: {
+            managed_address_config: true,
+            other_config: true,
+            home_agent: false,
+            prf: 0,
+            nd_proxy: false,
+            reserved: 0,
+          },
+          source: [],
+          dhcpv6: {
+            enable: false,
+            dns_servers: [],
+          },
+        },
+      };
+    }
+    // Always ensure dhcpv6 config is initialized
+    if (!service_config.value.config.dhcpv6) {
+      service_config.value.config.dhcpv6 = {
+        enable: false,
+        dns_servers: [],
+      };
     }
   } catch (e) {
     service_config.value = {
@@ -54,6 +83,10 @@ async function on_modal_enter() {
           reserved: 0,
         },
         source: [],
+        dhcpv6: {
+          enable: false,
+          dns_servers: [],
+        },
       },
     };
   }
@@ -153,7 +186,7 @@ function validate(source: IPV6RaConfigSource[]): boolean {
     @after-enter="on_modal_enter"
   >
     <n-card
-      style="width: 600px"
+      style="width: 1200px"
       title="ICMPv6 RA 配置"
       :bordered="false"
       size="small"
@@ -169,110 +202,115 @@ function validate(source: IPV6RaConfigSource[]): boolean {
         :model="service_config"
         :rules="formRules"
       >
-        <n-grid :x-gap="12" :y-gap="8" cols="4" item-responsive>
-          <n-form-item-gi span="2 m:2 l:2" label="是否启用">
-            <n-switch v-model:value="service_config.enable">
-              <template #checked> 启用 </template>
-              <template #unchecked> 禁用 </template>
-            </n-switch>
-          </n-form-item-gi>
-
-          <n-form-item-gi span="2 m:2 l:2">
-            <template #label>
-              <Notice>
-                路由通告时间间隔
-                <template #msg>
-                  在没有任何操作或者前缀更新动作的情况下 <br />
-                  服务器多久发送一次 RA 通告<br />
-                  默认配置是 300s
-                </template>
-              </Notice>
-            </template>
-            <n-input-number
-              style="flex: 1"
-              v-model:value="service_config.config.ad_interval"
-              clearable
-            />
-          </n-form-item-gi>
-
-          <n-form-item-gi span="4 m:4 l:4" label="">
-            <template #label>
-              <n-flex align="center">
-                <n-flex>前缀配置</n-flex>
-                <n-flex>
-                  <!-- 不确定为什么点击 label 会触发第一个按钮, 所以放置一个不可见的按钮 -->
-                  <button
-                    style="
-                      width: 0;
-                      height: 0;
-                      overflow: hidden;
-                      opacity: 0;
-                      position: absolute;
-                    "
-                  ></button>
-
-                  <n-button
-                    :focusable="false"
-                    size="tiny"
-                    @click="show_source_edit = true"
-                  >
-                    增加
-                  </n-button>
-                  <ICMPRaSourceEdit
-                    @commit="add_source"
-                    v-model:show="show_source_edit"
-                  ></ICMPRaSourceEdit>
-                </n-flex>
-              </n-flex>
-            </template>
-            <n-scrollbar style="max-height: 160px">
-              <n-flex>
-                <ICMPRaSourceExhibit
-                  v-for="(each, index) in service_config.config.source"
-                  :source="each"
-                  @commit="(e: any) => replace_source(e, index)"
-                  @delete="delete_source(index)"
-                >
-                </ICMPRaSourceExhibit>
-              </n-flex>
-            </n-scrollbar>
-            <!-- {{ service_config.config.source }} -->
-          </n-form-item-gi>
-
-          <!-- flag 部分 -->
-          <!-- <n-form-item-gi span="2 m:2" label="使用 DHCPv6 获取 IPv6 地址">
-            <n-switch
-              v-model:value="
-                service_config.config.ra_flag.managed_address_config
+        <!-- 区块 A：前缀配置（全宽顶部） -->
+        <n-card
+          style="width: 100%; margin-bottom: 12px"
+          size="small"
+          title="前缀配置"
+          :bordered="false"
+        >
+          <template #header-extra>
+            <button
+              style="
+                width: 0;
+                height: 0;
+                overflow: hidden;
+                opacity: 0;
+                position: absolute;
               "
-            />
-          </n-form-item-gi>
-          <n-form-item-gi span="2 m:2" label="使用 DHCPv6 获取 其他信息">
-            <n-switch
-              v-model:value="service_config.config.ra_flag.other_config"
-            />
-          </n-form-item-gi>
-          <n-form-item-gi span="2 m:2" label="移动 IPv6 归属代理">
-            <n-switch
-              v-model:value="service_config.config.ra_flag.home_agent"
-            />
-          </n-form-item-gi>
-
-          <n-form-item-gi span="2 m:2" label="邻居发现代理">
-            <n-switch v-model:value="service_config.config.ra_flag.nd_proxy" />
-          </n-form-item-gi> -->
-
-          <n-form-item-gi span="4 m:4" label="默认路由优先级">
-            <n-radio-group
-              v-model:value="service_config.config.ra_flag.prf"
-              name="ra_flag"
+            ></button>
+            <n-button
+              :focusable="false"
+              size="tiny"
+              @click="show_source_edit = true"
             >
-              <n-radio-button :value="3" label="低" />
-              <n-radio-button :value="0" label="中 (默认)" />
-              <n-radio-button :value="1" label="高" />
-            </n-radio-group>
-          </n-form-item-gi>
-        </n-grid>
+              增加
+            </n-button>
+            <ICMPRaSourceEdit
+              @commit="add_source"
+              v-model:show="show_source_edit"
+            ></ICMPRaSourceEdit>
+          </template>
+
+          <n-scrollbar style="max-height: 300px">
+            <n-flex v-if="service_config.config.source.length > 0">
+              <ICMPRaSourceExhibit
+                v-for="(each, index) in service_config.config.source"
+                :source="each"
+                @commit="(e: any) => replace_source(e, index)"
+                @delete="delete_source(index)"
+              >
+              </ICMPRaSourceExhibit>
+            </n-flex>
+            <n-empty v-else description="暂无前缀配置" />
+          </n-scrollbar>
+        </n-card>
+
+        <!-- 区块 B：两列布局（RA 配置、DHCPv6 服务器） -->
+        <n-flex :gap="12" align="stretch">
+          <!-- 左列：RA 配置 -->
+          <n-card
+            style="flex: 1; min-width: 0"
+            size="small"
+            title="RA 配置"
+            :bordered="false"
+          >
+            <n-grid :x-gap="12" :y-gap="8" cols="2" item-responsive>
+              <n-form-item-gi span="2" label="是否启用">
+                <n-switch v-model:value="service_config.enable">
+                  <template #checked> 启用 </template>
+                  <template #unchecked> 禁用 </template>
+                </n-switch>
+              </n-form-item-gi>
+
+              <n-form-item-gi span="2">
+                <template #label>
+                  <Notice>
+                    路由通告时间间隔
+                    <template #msg>
+                      在没有任何操作或者前缀更新动作的情况下 <br />
+                      服务器多久发送一次 RA 通告<br />
+                      默认配置是 300s
+                    </template>
+                  </Notice>
+                </template>
+                <n-input-number
+                  style="flex: 1"
+                  v-model:value="service_config.config.ad_interval"
+                  clearable
+                />
+              </n-form-item-gi>
+
+              <!-- flag 部分 -->
+              <n-form-item-gi span="2" label="使用 DHCPv6 获取 IPv6 地址 (M)">
+                <n-switch
+                  v-model:value="
+                    service_config.config.ra_flag.managed_address_config
+                  "
+                />
+              </n-form-item-gi>
+              <n-form-item-gi span="2" label="使用 DHCPv6 获取其他信息 (O)">
+                <n-switch
+                  v-model:value="service_config.config.ra_flag.other_config"
+                />
+              </n-form-item-gi>
+
+              <n-form-item-gi span="2" label="默认路由优先级">
+                <n-radio-group
+                  v-model:value="service_config.config.ra_flag.prf"
+                  name="ra_flag"
+                >
+                  <n-radio-button :value="3" label="低" />
+                  <n-radio-button :value="0" label="中 (默认)" />
+                  <n-radio-button :value="1" label="高" />
+                </n-radio-group>
+              </n-form-item-gi>
+            </n-grid>
+          </n-card>
+
+          <!-- DHCPv6 服务器配置 -->
+          <DHCPv6ServerCard v-model:service-config="service_config" />
+        </n-flex>
       </n-form>
       <template #footer>
         <n-flex justify="end">

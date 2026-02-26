@@ -1,6 +1,6 @@
 use landscape_common::{enrolled_device::EnrolledDevice, error::LdError};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use crate::DBId;
 
@@ -21,6 +21,14 @@ impl EnrolledDeviceRepository {
         let ip_u32 = u32::from(ipv4);
         let model =
             EnrolledDeviceEntity::find().filter(Column::Ipv4Int.eq(ip_u32)).one(self.db()).await?;
+        Ok(model.map(|m| m.into()))
+    }
+
+    pub async fn find_by_ipv6(&self, ipv6: Ipv6Addr) -> Result<Option<EnrolledDevice>, LdError> {
+        use crate::repository::Repository;
+        let ipv6_str = ipv6.to_string();
+        let model =
+            EnrolledDeviceEntity::find().filter(Column::Ipv6.eq(ipv6_str)).one(self.db()).await?;
         Ok(model.map(|m| m.into()))
     }
 
@@ -66,6 +74,28 @@ impl EnrolledDeviceRepository {
                     )
                     .add(Column::Ipv4Int.gte(network_start))
                     .add(Column::Ipv4Int.lte(network_end)),
+            )
+            .all(self.db())
+            .await?;
+
+        Ok(models.into_iter().map(|m| m.into()).collect())
+    }
+
+    /// Find devices with IPv6 bindings for a given interface (for DHCPv6 static assignment)
+    pub async fn find_dhcpv6_bindings(
+        &self,
+        iface_name: String,
+    ) -> Result<Vec<EnrolledDevice>, LdError> {
+        use crate::repository::Repository;
+        let models = EnrolledDeviceEntity::find()
+            .filter(
+                sea_orm::Condition::all()
+                    .add(
+                        sea_orm::Condition::any()
+                            .add(Column::IfaceName.eq(iface_name))
+                            .add(Column::IfaceName.is_null()),
+                    )
+                    .add(Column::Ipv6.is_not_null()),
             )
             .all(self.db())
             .await?;

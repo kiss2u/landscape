@@ -24,8 +24,8 @@ export default {
   ipv4_invalid: "请输入有效的 IP 地址",
   ipv4_out_of_range: "IP 地址不在网卡 {iface} 的 DHCP 网段范围内",
 
-  ipv6: "IPv6 映射",
-  ipv6_placeholder: "可选: IPv6 地址",
+  ipv6: "IPv6 后缀",
+  ipv6_placeholder: "可选: ::100",
 
   tag: "标签",
   remark: "备注",

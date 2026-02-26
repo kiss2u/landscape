@@ -16,6 +16,7 @@ use landscape_common::{
     route::{LanRouteInfo, LanRouteMode},
     service::{ServiceStatus, WatchService},
 };
+use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::Level;
 
@@ -88,6 +89,8 @@ async fn main() {
                     ip_route,
                     prefix_map,
                     assigned_ips,
+                    None,
+                    HashMap::new(),
                 )
                 .await
                 .unwrap();

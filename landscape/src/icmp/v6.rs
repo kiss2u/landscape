@@ -1,6 +1,7 @@
 use arc_swap::ArcSwap;
 use dhcproto::{Decodable, Decoder, Encodable, Encoder};
 use landscape_common::config::ra::{IPV6RAConfig, IPV6RaConfigSource, IPv6RaPdConfig, RouterFlags};
+use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::error::LdResult;
 use landscape_common::ipv6_pd::{IAPrefixMap, LDIAPrefix};
 use landscape_common::lan_services::ipv6_ra::{IPv6NAInfo, IPv6NAInfoItem};
@@ -11,6 +12,7 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
+use crate::dhcp_server::v6;
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
 use crate::iface::ip::addresses_by_iface_name;
 use crate::route::IpRouteService;
@@ -65,7 +67,9 @@ impl RaIPRuntimeSource {
     lan_info,
     route_service,
     prefix_map,
-    assigned_ips
+    assigned_ips,
+    dhcpv6_assigned,
+    dhcpv6_static_bindings,
 ))]
 pub async fn icmp_ra_server(
     config: IPV6RAConfig,
@@ -78,8 +82,10 @@ pub async fn icmp_ra_server(
     route_service: IpRouteService,
     prefix_map: IAPrefixMap,
     assigned_ips: Arc<RwLock<IPv6NAInfo>>,
+    dhcpv6_assigned: Option<Arc<RwLock<DHCPv6OfferInfo>>>,
+    dhcpv6_static_bindings: HashMap<MacAddr, Ipv6Addr>,
 ) -> LdResult<()> {
-    let IPV6RAConfig { ad_interval, ra_flag, source } = config;
+    let IPV6RAConfig { ad_interval, ra_flag, source, dhcpv6 } = config;
 
     let mut ctx = RaIPRuntimeSource::new();
     {
@@ -301,6 +307,56 @@ pub async fn icmp_ra_server(
                     );
                 });
             }
+        }
+    }
+
+    // Spawn DHCPv6 server if configured
+    tracing::info!(
+        "DHCPv6 Config present: dhcpv6={}, dhcpv6_assigned={}",
+        dhcpv6.is_some(),
+        dhcpv6_assigned.is_some()
+    );
+    if let (Some(dhcpv6_config), Some(dhcpv6_assigned_info)) = (dhcpv6, dhcpv6_assigned) {
+        tracing::info!("Starting DHCPv6 server - enable: {}", dhcpv6_config.enable);
+        if dhcpv6_config.enable {
+            tracing::info!("DHCPv6 server condition met, spawning...");
+            let dhcpv6_iface = iface_name.clone();
+            let dhcpv6_mac = mac_addr.clone();
+            let dhcpv6_status = service_status.clone();
+
+            // Collect PD runtime sources for DHCPv6 to share
+            let dhcpv6_pd_sources: Vec<Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>> =
+                ctx.pd_info.values().cloned().collect();
+
+            // Collect static infos for DHCPv6
+            let dhcpv6_static_infos: Vec<ICMPv6ConfigInfo> = ctx
+                .static_info
+                .iter()
+                .map(|info| ICMPv6ConfigInfo {
+                    rt_prefix: info.rt_prefix,
+                    rt_prefix_len: info.rt_prefix_len,
+                    sub_router: info.sub_router,
+                    sub_prefix: info.sub_prefix,
+                    sub_prefix_len: info.sub_prefix_len,
+                    ra_preferred_lifetime: info.ra_preferred_lifetime,
+                    ra_valid_lifetime: info.ra_valid_lifetime,
+                })
+                .collect();
+
+            tokio::spawn(async move {
+                v6::dhcp_v6_server(
+                    link_ifindex,
+                    dhcpv6_iface,
+                    dhcpv6_mac,
+                    dhcpv6_config,
+                    dhcpv6_pd_sources,
+                    dhcpv6_static_infos,
+                    dhcpv6_status,
+                    dhcpv6_assigned_info,
+                    dhcpv6_static_bindings,
+                )
+                .await;
+            });
         }
     }
 

@@ -32,7 +32,7 @@ impl EnrolledDeviceService {
     }
 
     pub async fn push(&self, data: EnrolledDevice) -> Result<(), String> {
-        // 校验 IP 是否属于指定网卡的 DHCP 范围内
+        // Validate IPv4 is within the specified interface's DHCP range
         if let (Some(iface), Some(ipv4)) = (&data.iface_name, &data.ipv4) {
             let ip_u32 = u32::from(*ipv4);
             let is_valid = self
@@ -42,23 +42,58 @@ impl EnrolledDeviceService {
                 .map_err(|e| e.to_string())?;
 
             if !is_valid {
-                return Err(format!("IP 地址 {} 不在网卡 {} 的 DHCP 服务网段范围内", ipv4, iface));
+                return Err(format!(
+                    "IPv4 address {} is not within the DHCP range of interface {}",
+                    ipv4, iface
+                ));
             }
         }
 
         if let Some(existing) = self.store.find_by_mac(data.mac.to_string()).await? {
             if existing.id != data.id {
-                return Err(format!("MAC 地址 {} 已存在绑定记录", data.mac));
+                return Err(format!("MAC address {} already has an existing binding", data.mac));
             }
         }
 
-        // 校验 IPv4 是否已被其他 MAC 占用
+        // Validate IPv4 is not already assigned to another MAC
         if let Some(ipv4) = &data.ipv4 {
+            // Check if IPv4 is the reserved unspecified address (0.0.0.0)
+            if ipv4.is_unspecified() {
+                return Err(
+                    "IPv4 address 0.0.0.0 is reserved and cannot be used for static binding"
+                        .to_string(),
+                );
+            }
+
             if let Some(existing) =
                 self.store.find_by_ipv4(*ipv4).await.map_err(|e| e.to_string())?
             {
                 if existing.id != data.id {
-                    return Err(format!("IP 地址 {} 已被 MAC {} 占用", ipv4, existing.mac));
+                    return Err(format!(
+                        "IPv4 address {} is already assigned to MAC {}",
+                        ipv4, existing.mac
+                    ));
+                }
+            }
+        }
+
+        // Validate IPv6 is not already assigned to another MAC
+        if let Some(ipv6) = &data.ipv6 {
+            // Check if IPv6 is the reserved unspecified address (::)
+            if ipv6.is_unspecified() {
+                return Err(
+                    "IPv6 address :: is reserved and cannot be used for static binding".to_string()
+                );
+            }
+
+            if let Some(existing) =
+                self.store.find_by_ipv6(*ipv6).await.map_err(|e| e.to_string())?
+            {
+                if existing.id != data.id {
+                    return Err(format!(
+                        "IPv6 address {} is already assigned to MAC {}",
+                        ipv6, existing.mac
+                    ));
                 }
             }
         }

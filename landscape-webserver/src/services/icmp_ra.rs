@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ra::IPV6RAServiceConfig;
+use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::{ServiceStatus, WatchService};
@@ -22,6 +23,8 @@ pub fn get_iface_icmpv6ra_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_iface_icmpv6_config, delete_and_stop_iface_icmpv6))
         .routes(routes!(get_assigned_ips_by_iface_name))
         .routes(routes!(get_all_iface_assigned_ips))
+        .routes(routes!(get_dhcpv6_assigned_by_iface_name))
+        .routes(routes!(get_all_dhcpv6_assigned))
 }
 
 #[utoipa::path(
@@ -117,4 +120,34 @@ async fn delete_and_stop_iface_icmpv6(
     Path(iface_name): Path<String>,
 ) -> LandscapeApiResult<Option<WatchService>> {
     LandscapeApiResp::success(state.ipv6_ra_service.delete_and_stop_iface_service(iface_name).await)
+}
+
+#[utoipa::path(
+    get,
+    path = "/icmpv6ra/{iface_name}/dhcpv6_assigned",
+    tag = "ICMPv6 RA",
+    operation_id = "get_dhcpv6_assigned_by_iface_name",
+    params(("iface_name" = String, Path, description = "Interface name")),
+    responses((status = 200, body = CommonApiResp<Option<DHCPv6OfferInfo>>))
+)]
+async fn get_dhcpv6_assigned_by_iface_name(
+    State(state): State<LandscapeApp>,
+    Path(iface_name): Path<String>,
+) -> LandscapeApiResult<Option<DHCPv6OfferInfo>> {
+    LandscapeApiResp::success(
+        state.ipv6_ra_service.get_dhcpv6_assigned_by_iface_name(iface_name).await,
+    )
+}
+
+#[utoipa::path(
+    get,
+    path = "/icmpv6ra/dhcpv6_assigned",
+    tag = "ICMPv6 RA",
+    operation_id = "get_all_dhcpv6_assigned",
+    responses((status = 200, body = CommonApiResp<HashMap<String, DHCPv6OfferInfo>>))
+)]
+async fn get_all_dhcpv6_assigned(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<HashMap<String, DHCPv6OfferInfo>> {
+    LandscapeApiResp::success(state.ipv6_ra_service.get_dhcpv6_assigned().await)
 }
