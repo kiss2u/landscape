@@ -142,6 +142,7 @@ function replace_default(config: DefaultDnsConfig) {
     id: rule.value.id,
     remark: rule.value?.remark ?? "",
     ...DEFAULT_CONFIGS[config],
+    update_at: rule.value.update_at,
   };
 }
 
