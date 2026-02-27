@@ -29,9 +29,9 @@ use landscape::{
     route::IpRouteService,
     service::{
         dhcp_v4::DHCPv4ServerManagerService, ipconfig::IfaceIpServiceManagerService,
-        ipv6pd::DHCPv6ClientManagerService, mss_clamp::MssClampServiceManagerService,
-        nat_service::NatServiceManagerService, pppd_service::PPPDServiceConfigManagerService,
-        ra::IPV6RAManagerService, route_lan::RouteLanServiceManagerService,
+        ipv6pd::DHCPv6ClientManagerService, lan_ipv6::LanIPv6ManagerService,
+        mss_clamp::MssClampServiceManagerService, nat_service::NatServiceManagerService,
+        pppd_service::PPPDServiceConfigManagerService, route_lan::RouteLanServiceManagerService,
         route_wan::RouteWanServiceManagerService,
     },
     sys_service::{
@@ -118,7 +118,7 @@ pub struct LandscapeApp {
 
     /// ipv6
     ipv6_pd_service: DHCPv6ClientManagerService,
-    ipv6_ra_service: IPV6RAManagerService,
+    lan_ipv6_service: LanIPv6ManagerService,
 
     // Static NAT Mapping
     static_nat_mapping_config_service: StaticNatMappingService,
@@ -207,7 +207,7 @@ impl LandscapeApp {
         self.ipv6_pd_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.route_wan_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.dhcp_v4_server_service.delete_and_stop_iface_service(iface_name.to_string()).await;
-        self.ipv6_ra_service.delete_and_stop_iface_service(iface_name.to_string()).await;
+        self.lan_ipv6_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.route_lan_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.pppd_service.stop_pppds_by_attach_iface_name(iface_name.to_string()).await;
     }
@@ -224,7 +224,7 @@ impl LandscapeApp {
             self.route_wan_service.get_service().stop_all(),
             self.route_lan_service.get_service().stop_all(),
             self.ipv6_pd_service.get_service().stop_all(),
-            self.ipv6_ra_service.get_service().stop_all(),
+            self.lan_ipv6_service.get_service().stop_all(),
             self.pppd_service.get_service().stop_all(),
             self.wifi_service.get_service().stop_all(),
         );
@@ -237,7 +237,7 @@ impl LandscapeApp {
         //         self.route_lan_service.get_service().stop_all(),
         //         self.dhcp_v4_server_service.get_service().stop_all(),
         //         self.ipv6_pd_service.get_service().stop_all(),
-        //         self.ipv6_ra_service.get_service().stop_all(),
+        //         self.lan_ipv6_service.get_service().stop_all(),
         //         self.wan_ip_service.get_service().stop_all(),
         //         self.pppd_service.get_service().stop_all(),
         //         self.wifi_service.get_service().stop_all(),
@@ -389,7 +389,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         prefix_map.clone(),
     )
     .await;
-    let ipv6_ra_service = IPV6RAManagerService::new(
+    let lan_ipv6_service = LanIPv6ManagerService::new(
         db_store_provider.clone(),
         dev_obs.resubscribe(),
         route_service.clone(),
@@ -425,7 +425,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
 
         // IPV6
         ipv6_pd_service,
-        ipv6_ra_service,
+        lan_ipv6_service,
         static_nat_mapping_config_service,
         dns_redirect_service,
         dns_upstream_service,

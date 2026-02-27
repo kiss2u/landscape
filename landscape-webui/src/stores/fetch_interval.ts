@@ -8,7 +8,7 @@ import { useNATConfigStore } from "@/stores/status_nats";
 import { useDockerStore } from "./status_docker";
 import { useDnsStore } from "./status_dns";
 import { useIPv6PDStore } from "./status_ipv6pd";
-import { useICMPv6RAStore } from "./status_icmpv6ra";
+import { useLanIPv6Store } from "./status_lan_ipv6";
 import { useFirewallConfigStore } from "./status_firewall";
 import { useWifiConfigStore } from "./status_wifi";
 import { useDHCPv4ConfigStore } from "./status_dhcp_v4";
@@ -29,7 +29,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
   const dockerStore = useDockerStore();
   const dnsStore = useDnsStore();
   const ipv6PDStore = useIPv6PDStore();
-  const icmpv6raStore = useICMPv6RAStore();
+  const lanIpv6Store = useLanIPv6Store();
   const firewallConfigStore = useFirewallConfigStore();
   const wifiConfigStore = useWifiConfigStore();
   const dhcpv4ConfigStore = useDHCPv4ConfigStore();
@@ -56,7 +56,7 @@ export const useFetchIntervalStore = defineStore("fetch_interval", () => {
       await ipConfigStore.UPDATE_INFO();
       await natConfigStore.UPDATE_INFO();
       await ipv6PDStore.UPDATE_INFO();
-      await icmpv6raStore.UPDATE_INFO();
+      await lanIpv6Store.UPDATE_INFO();
       await firewallConfigStore.UPDATE_INFO();
       await wifiConfigStore.UPDATE_INFO();
       await dhcpv4ConfigStore.UPDATE_INFO();

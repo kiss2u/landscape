@@ -3,10 +3,10 @@ import { ZoneType } from "@/lib/service_ipconfig";
 import { Ad } from "@vicons/tabler";
 
 import StatusBtn from "@/components/status_btn/StatusBtn.vue";
-import { useICMPv6RAStore } from "@/stores/status_icmpv6ra";
+import { useLanIPv6Store } from "@/stores/status_lan_ipv6";
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 
-const icmpv6PDStore = useICMPv6RAStore();
+const icmpv6PDStore = useLanIPv6Store();
 
 const iface_info = defineProps<{
   iface_name: string;

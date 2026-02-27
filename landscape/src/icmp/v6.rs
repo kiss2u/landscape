@@ -311,11 +311,9 @@ async fn build_and_send_ra(
     runtime: &IPv6PrefixRuntime,
     ra_flag: RouterFlags,
 ) {
-    let mut is_empty = true;
     let mut opts = IcmpV6Options::new();
     opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
     for static_prefix in runtime.static_info.iter() {
-        is_empty = false;
         opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
             static_prefix.sub_prefix_len,
             600,
@@ -335,7 +333,6 @@ async fn build_and_send_ra(
         let Some(pd_prefix) = pd_prefix.as_ref() else {
             continue;
         };
-        is_empty = false;
         opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
             pd_prefix.sub_prefix_len,
             600,
@@ -354,9 +351,6 @@ async fn build_and_send_ra(
 
     let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(ra_flag.into(), opts));
 
-    if !is_empty {
-        send_data(&msg, send_socket, target_addr).await;
-    } else {
-        tracing::error!("current config_info is None, can not handle message");
-    }
+    // Always send RA — in Stateful mode RA has no prefix info but still needs M=1 flag
+    send_data(&msg, send_socket, target_addr).await;
 }

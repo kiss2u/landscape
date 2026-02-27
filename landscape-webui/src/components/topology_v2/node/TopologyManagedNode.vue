@@ -49,7 +49,7 @@ const ifaceNodeStore = useIfaceNodeStore();
 const iface_dhcp_v4_service_edit_show = ref(false);
 const iface_wifi_edit_show = ref(false);
 const iface_firewall_edit_show = ref(false);
-const iface_icmpv6ra_edit_show = ref(false);
+const iface_lan_ipv6_edit_show = ref(false);
 const iface_ipv6pd_edit_show = ref(false);
 const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
@@ -348,8 +348,8 @@ function has_source_hook() {
       />
       <!-- ICMPv6 RA -->
       <ICMPv6RAStatusBtn
-        v-if="show_switch.icmpv6ra"
-        @click="iface_icmpv6ra_edit_show = true"
+        v-if="show_switch.lan_ipv6"
+        @click="iface_lan_ipv6_edit_show = true"
         :iface_name="config.name"
         :zone="config.zone_type"
       />
@@ -405,7 +405,7 @@ function has_source_hook() {
     @refresh="refresh"
   />
   <ICMPRaEditModal
-    v-model:show="iface_icmpv6ra_edit_show"
+    v-model:show="iface_lan_ipv6_edit_show"
     :zone="config.zone_type"
     :iface_name="config.name"
     :mac="status.mac ?? null"

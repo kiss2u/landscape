@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import type { IPV6RAServiceConfig } from "@landscape-router/types/api/schemas";
+import { useI18n } from "vue-i18n";
+import type {
+  LanIPv6ServiceConfig,
+  IPV6RAServiceConfig,
+} from "@landscape-router/types/api/schemas";
 
-const config = defineModel<IPV6RAServiceConfig>("service-config", {
-  required: true,
-});
+const { t } = useI18n({ useScope: "global" });
+
+const config = defineModel<LanIPv6ServiceConfig | IPV6RAServiceConfig>(
+  "service-config",
+  {
+    required: true,
+  },
+);
 
 function initialize_dhcpv6_if_needed() {
   if (!config.value?.config?.dhcpv6) {
     if (config.value?.config) {
       config.value.config.dhcpv6 = {
         enable: false,
-        dns_servers: [],
       };
     }
   }
@@ -22,7 +30,6 @@ function initialize_ia_na(enable: boolean) {
   if (!config.value.config.dhcpv6) {
     config.value.config.dhcpv6 = {
       enable: false,
-      dns_servers: [],
     };
   }
 
@@ -30,8 +37,8 @@ function initialize_ia_na(enable: boolean) {
     config.value.config.dhcpv6.ia_na = {
       max_prefix_len: 64,
       pool_start: 256,
-      preferred_lifetime: 3600,
-      valid_lifetime: 7200,
+      preferred_lifetime: 300,
+      valid_lifetime: 600,
     };
   } else {
     config.value.config.dhcpv6.ia_na = undefined;
@@ -44,7 +51,6 @@ function initialize_ia_pd(enable: boolean) {
   if (!config.value.config.dhcpv6) {
     config.value.config.dhcpv6 = {
       enable: false,
-      dns_servers: [],
     };
   }
 
@@ -53,8 +59,8 @@ function initialize_ia_pd(enable: boolean) {
       max_source_prefix_len: 56,
       delegate_prefix_len: 64,
       pool_start_index: 1,
-      preferred_lifetime: 3600,
-      valid_lifetime: 7200,
+      preferred_lifetime: 300,
+      valid_lifetime: 600,
     };
   } else {
     config.value.config.dhcpv6.ia_pd = undefined;
@@ -73,8 +79,8 @@ function update_ia_na_field(field: string, value: number | null) {
     dhcpv6.ia_na = {
       max_prefix_len: 64,
       pool_start: 256,
-      preferred_lifetime: 3600,
-      valid_lifetime: 7200,
+      preferred_lifetime: 300,
+      valid_lifetime: 600,
     };
   }
 
@@ -96,8 +102,8 @@ function update_ia_pd_field(field: string, value: number | null) {
       max_source_prefix_len: 56,
       delegate_prefix_len: 64,
       pool_start_index: 1,
-      preferred_lifetime: 3600,
-      valid_lifetime: 7200,
+      preferred_lifetime: 300,
+      valid_lifetime: 600,
     };
   }
 
@@ -111,7 +117,7 @@ function update_ia_pd_field(field: string, value: number | null) {
   <n-card style="flex: 3; min-width: 0" size="small" :bordered="false">
     <template #header>
       <div style="display: flex; align-items: center; gap: 12px; flex: 1">
-        <span>DHCPv6 服务器</span>
+        <span>{{ t("lan_ipv6.dhcpv6_server") }}</span>
         <n-switch
           style="margin-left: auto"
           :value="!!config?.config.dhcpv6?.enable"
@@ -124,21 +130,20 @@ function update_ia_pd_field(field: string, value: number | null) {
             }
           "
         >
-          <template #checked> 启用 </template>
-          <template #unchecked> 禁用 </template>
+          <template #checked> {{ t("lan_ipv6.enabled") }} </template>
+          <template #unchecked> {{ t("lan_ipv6.disabled") }} </template>
         </n-switch>
       </div>
     </template>
 
-    <!-- 内部改为两列 flex -->
     <n-flex :gap="12" align="start">
-      <!-- 左列：IA_NA -->
+      <!-- Left: IA_NA -->
       <div style="flex: 1; min-width: 0">
-        <n-divider title-placement="left" style="margin: 0 0 8px"
-          >IA_NA (地址分配)</n-divider
-        >
+        <n-divider title-placement="left" style="margin: 0 0 8px">
+          {{ t("lan_ipv6.ia_na") }}
+        </n-divider>
         <n-grid :x-gap="12" :y-gap="8" cols="2" item-responsive>
-          <n-form-item-gi span="2" label="启用 IA_NA">
+          <n-form-item-gi span="2" :label="t('lan_ipv6.enable_ia_na')">
             <n-switch
               :value="!!config?.config.dhcpv6?.ia_na"
               @update:value="initialize_ia_na"
@@ -147,15 +152,12 @@ function update_ia_pd_field(field: string, value: number | null) {
           <template v-if="config?.config.dhcpv6?.ia_na">
             <n-form-item-gi span="2">
               <template #label>
-                <span style="display: flex; align-items: center; gap: 4px">
-                  过滤前缀长度
-                  <n-tooltip placement="top">
-                    <template #trigger>
-                      <span style="cursor: help; font-weight: bold">?</span>
-                    </template>
-                    限制分配给客户端的最大前缀长度
-                  </n-tooltip>
-                </span>
+                <Notice>
+                  {{ t("lan_ipv6.ia_na_max_prefix_len") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_na_max_prefix_len_desc") }}
+                  </template>
+                </Notice>
               </template>
               <n-input-number
                 style="flex: 1"
@@ -168,7 +170,15 @@ function update_ia_pd_field(field: string, value: number | null) {
                 :max="127"
               />
             </n-form-item-gi>
-            <n-form-item-gi span="2" label="地址池起始">
+            <n-form-item-gi span="2">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_na_pool_start") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_na_pool_start_desc") }}
+                  </template>
+                </Notice>
+              </template>
               <n-input-number
                 style="flex: 1"
                 :value="config?.config.dhcpv6?.ia_na?.pool_start ?? 256"
@@ -178,12 +188,18 @@ function update_ia_pd_field(field: string, value: number | null) {
                 :min="1"
               />
             </n-form-item-gi>
-            <n-form-item-gi span="1" label="首选生存期">
+            <n-form-item-gi span="1">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_na_preferred_lifetime") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_na_preferred_lifetime_desc") }}
+                  </template>
+                </Notice>
+              </template>
               <n-input-number
                 style="flex: 1"
-                :value="
-                  config?.config.dhcpv6?.ia_na?.preferred_lifetime ?? 3600
-                "
+                :value="config?.config.dhcpv6?.ia_na?.preferred_lifetime ?? 300"
                 @update:value="
                   (val: number | null) =>
                     update_ia_na_field('preferred_lifetime', val)
@@ -191,10 +207,18 @@ function update_ia_pd_field(field: string, value: number | null) {
                 :min="1"
               />
             </n-form-item-gi>
-            <n-form-item-gi span="1" label="有效生存期">
+            <n-form-item-gi span="1">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_na_valid_lifetime") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_na_valid_lifetime_desc") }}
+                  </template>
+                </Notice>
+              </template>
               <n-input-number
                 style="flex: 1"
-                :value="config?.config.dhcpv6?.ia_na?.valid_lifetime ?? 7200"
+                :value="config?.config.dhcpv6?.ia_na?.valid_lifetime ?? 600"
                 @update:value="
                   (val: number | null) =>
                     update_ia_na_field('valid_lifetime', val)
@@ -206,13 +230,13 @@ function update_ia_pd_field(field: string, value: number | null) {
         </n-grid>
       </div>
 
-      <!-- 右列：IA_PD -->
+      <!-- Right: IA_PD -->
       <div style="flex: 1; min-width: 0">
-        <n-divider title-placement="left" style="margin: 0 0 8px"
-          >IA_PD (前缀委派)</n-divider
-        >
+        <n-divider title-placement="left" style="margin: 0 0 8px">
+          {{ t("lan_ipv6.ia_pd") }}
+        </n-divider>
         <n-grid :x-gap="12" :y-gap="8" cols="2" item-responsive>
-          <n-form-item-gi span="2" label="启用 IA_PD">
+          <n-form-item-gi span="2" :label="t('lan_ipv6.enable_ia_pd')">
             <n-switch
               :value="!!config?.config.dhcpv6?.ia_pd"
               @update:value="initialize_ia_pd"
@@ -221,15 +245,12 @@ function update_ia_pd_field(field: string, value: number | null) {
           <template v-if="config?.config.dhcpv6?.ia_pd">
             <n-form-item-gi span="2">
               <template #label>
-                <span style="display: flex; align-items: center; gap: 4px">
-                  过滤源前缀长度
-                  <n-tooltip placement="top">
-                    <template #trigger>
-                      <span style="cursor: help; font-weight: bold">?</span>
-                    </template>
-                    限制委派给客户端的最大源前缀长度
-                  </n-tooltip>
-                </span>
+                <Notice>
+                  {{ t("lan_ipv6.ia_pd_max_source_prefix_len") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_pd_max_source_prefix_len_desc") }}
+                  </template>
+                </Notice>
               </template>
               <n-input-number
                 style="flex: 1"
@@ -244,7 +265,15 @@ function update_ia_pd_field(field: string, value: number | null) {
                 :max="126"
               />
             </n-form-item-gi>
-            <n-form-item-gi span="2" label="委派前缀长度">
+            <n-form-item-gi span="2">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_pd_delegate_prefix_len") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_pd_delegate_prefix_len_desc") }}
+                  </template>
+                </Notice>
+              </template>
               <n-input-number
                 style="flex: 1"
                 :value="config?.config.dhcpv6?.ia_pd?.delegate_prefix_len ?? 64"
@@ -259,7 +288,15 @@ function update_ia_pd_field(field: string, value: number | null) {
                 :max="128"
               />
             </n-form-item-gi>
-            <n-form-item-gi span="1" label="子前缀池起始">
+            <n-form-item-gi span="1">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_pd_pool_start_index") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_pd_pool_start_index_desc") }}
+                  </template>
+                </Notice>
+              </template>
               <n-input-number
                 style="flex: 1"
                 :value="config?.config.dhcpv6?.ia_pd?.pool_start_index ?? 1"
@@ -270,12 +307,18 @@ function update_ia_pd_field(field: string, value: number | null) {
                 :min="0"
               />
             </n-form-item-gi>
-            <n-form-item-gi span="1" label="首选生存期">
+            <n-form-item-gi span="1">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_pd_preferred_lifetime") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_pd_preferred_lifetime_desc") }}
+                  </template>
+                </Notice>
+              </template>
               <n-input-number
                 style="flex: 1"
-                :value="
-                  config?.config.dhcpv6?.ia_pd?.preferred_lifetime ?? 3600
-                "
+                :value="config?.config.dhcpv6?.ia_pd?.preferred_lifetime ?? 300"
                 @update:value="
                   (val: number | null) =>
                     update_ia_pd_field('preferred_lifetime', val)

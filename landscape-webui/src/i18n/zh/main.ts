@@ -5,6 +5,7 @@ import config from "./config";
 import error from "./error";
 import errors from "./errors";
 import enrolled_device from "./enrolled_device";
+import lan_ipv6 from "./lan_ipv6";
 
 export default {
   docker_divider: "Docker 容器",
@@ -18,6 +19,7 @@ export default {
   error,
   errors,
   enrolled_device,
+  lan_ipv6,
   common: {
     private_mode: "隐私模式",
   },

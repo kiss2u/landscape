@@ -156,6 +156,7 @@ pub enum ServiceKind {
     RouteWan,
     DhcpV4,
     Icmpv6Ra,
+    LanIpv6,
     RouteLan,
     WiFi,
 }
@@ -172,6 +173,7 @@ impl std::fmt::Display for ServiceKind {
             Self::RouteWan => write!(f, "Route WAN"),
             Self::DhcpV4 => write!(f, "DHCPv4"),
             Self::Icmpv6Ra => write!(f, "ICMPv6 RA"),
+            Self::LanIpv6 => write!(f, "LAN IPv6"),
             Self::RouteLan => write!(f, "Route LAN"),
             Self::WiFi => write!(f, "WiFi"),
         }

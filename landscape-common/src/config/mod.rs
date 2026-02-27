@@ -4,6 +4,7 @@ pub mod flow;
 pub mod geo;
 pub mod iface;
 pub mod iface_ip;
+pub mod lan_ipv6;
 pub mod mss_clamp;
 pub mod nat;
 pub mod ppp;
@@ -26,6 +27,7 @@ use firewall::FirewallServiceConfig;
 use flow::FlowWanServiceConfig;
 use iface::NetworkIfaceConfig;
 use iface_ip::IfaceIpServiceConfig;
+use lan_ipv6::LanIPv6ServiceConfig;
 use mss_clamp::MSSClampServiceConfig;
 use nat::NatServiceConfig;
 use ppp::PPPDServiceConfig;
@@ -82,6 +84,9 @@ pub struct InitConfig {
     pub dhcpv6pds: Vec<IPV6PDServiceConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub icmpras: Vec<IPV6RAServiceConfig>,
+
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lan_ipv6s: Vec<LanIPv6ServiceConfig>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub firewalls: Vec<FirewallServiceConfig>,

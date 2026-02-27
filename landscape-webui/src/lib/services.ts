@@ -36,7 +36,7 @@ export class ServiceExhibitSwitch {
   nat_config: boolean;
   mark_config: boolean;
   ipv6pd: boolean;
-  icmpv6ra: boolean;
+  lan_ipv6: boolean;
   firewall: boolean;
   wifi: boolean;
   station: boolean;
@@ -54,7 +54,7 @@ export class ServiceExhibitSwitch {
     this.nat_config = false;
     this.mark_config = false;
     this.ipv6pd = false;
-    this.icmpv6ra = false;
+    this.lan_ipv6 = false;
     this.firewall = false;
     this.wifi = false;
     this.station = false;
@@ -95,11 +95,11 @@ export class ServiceExhibitSwitch {
     } else if (dev.name === "docker0") {
       this.zone_type = false;
       this.ip_config = false;
-      this.icmpv6ra = true;
+      this.lan_ipv6 = true;
     } else if (dev.zone_type === ZoneType.Lan) {
       this.dhcp_v4 = true;
       this.ip_config = false;
-      this.icmpv6ra = true;
+      this.lan_ipv6 = true;
       this.route_lan = true;
     } else if (dev.zone_type === ZoneType.Wan) {
       this.pppd = true;
@@ -123,7 +123,7 @@ export class TopologyServiceExhibitSwitch {
   nat_config: boolean;
   mark_config: boolean;
   ipv6pd: boolean;
-  icmpv6ra: boolean;
+  lan_ipv6: boolean;
   firewall: boolean;
   wifi: boolean;
   station: boolean;
@@ -142,7 +142,7 @@ export class TopologyServiceExhibitSwitch {
     this.nat_config = false;
     this.mark_config = false;
     this.ipv6pd = false;
-    this.icmpv6ra = false;
+    this.lan_ipv6 = false;
     this.firewall = false;
     this.wifi = false;
     this.station = false;
@@ -179,11 +179,11 @@ export class TopologyServiceExhibitSwitch {
     } else if (status.iface_name === "docker0") {
       this.zone_type = false;
       this.ip_config = false;
-      this.icmpv6ra = true;
+      this.lan_ipv6 = true;
     } else if (config.zone_type === ZoneType.Lan) {
       this.dhcp_v4 = true;
       this.ip_config = false;
-      this.icmpv6ra = true;
+      this.lan_ipv6 = true;
     } else if (config.zone_type === ZoneType.Wan) {
       this.pppd = true;
       this.ip_config = true;

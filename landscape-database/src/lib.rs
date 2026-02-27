@@ -10,6 +10,7 @@ pub mod firewall;
 pub mod flow_wan;
 pub mod iface;
 pub mod iface_ip;
+pub mod lan_ipv6;
 pub mod mss_clamp;
 pub mod pppd;
 pub mod provider;

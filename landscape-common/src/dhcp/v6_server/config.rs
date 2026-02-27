@@ -1,7 +1,6 @@
-use std::net::Ipv6Addr;
-
 use serde::{Deserialize, Serialize};
 
+use crate::config::ra::IPV6RaConfigSource;
 use crate::service::ServiceConfigError;
 
 /// DHCPv6 server config — nested inside IPV6RAConfig.
@@ -12,6 +11,11 @@ use crate::service::ServiceConfigError;
 pub struct DHCPv6ServerConfig {
     pub enable: bool,
 
+    /// Independent prefix sources for DHCPv6 (used in Stateful/SlaacDhcpv6 modes)
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub source: Vec<IPV6RaConfigSource>,
+
     /// IA_NA: stateful address assignment
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
@@ -21,20 +25,15 @@ pub struct DHCPv6ServerConfig {
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub ia_pd: Option<DHCPv6IAPDConfig>,
-
-    /// DNS servers to advertise via DHCPv6
-    #[serde(default)]
-    #[cfg_attr(feature = "openapi", schema(required = true, value_type = Vec<String>))]
-    pub dns_servers: Vec<Ipv6Addr>,
 }
 
 impl Default for DHCPv6ServerConfig {
     fn default() -> Self {
         Self {
             enable: false,
+            source: vec![],
             ia_na: None,
             ia_pd: None,
-            dns_servers: vec![],
         }
     }
 }

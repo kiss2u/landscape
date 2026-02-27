@@ -20,7 +20,6 @@ const enabled = computed({
     if (!config.value) {
       config.value = {
         enable: val,
-        dns_servers: [],
       };
     } else {
       config.value.enable = val;
@@ -60,17 +59,6 @@ const ia_pd_enabled = computed({
     } else {
       config.value.ia_pd = undefined;
     }
-  },
-});
-
-const dnsServersStr = computed({
-  get: () => config.value?.dns_servers?.join(", ") ?? "",
-  set: (val: string) => {
-    if (!config.value) return;
-    config.value.dns_servers = val
-      .split(/[,\s]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
   },
 });
 
@@ -227,14 +215,6 @@ const showMFlagWarning = computed(() => {
           />
         </n-form-item-gi>
       </template>
-
-      <!-- DNS Servers -->
-      <n-form-item-gi span="4" label="DNS 服务器">
-        <n-input
-          v-model:value="dnsServersStr"
-          placeholder="IPv6 DNS 地址, 逗号分隔"
-        />
-      </n-form-item-gi>
     </template>
   </n-grid>
 </template>

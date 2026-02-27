@@ -4,6 +4,7 @@ import sysinfo from "./sysinfo";
 import config from "./config";
 import error from "./error";
 import errors from "./errors";
+import lan_ipv6 from "./lan_ipv6";
 
 export default {
   docker_divider: "Docker Containers",
@@ -16,6 +17,7 @@ export default {
   config,
   error,
   errors,
+  lan_ipv6,
   common: {
     private_mode: "Private Mode",
   },

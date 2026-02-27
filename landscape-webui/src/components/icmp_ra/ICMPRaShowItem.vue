@@ -2,7 +2,7 @@
 import { computed } from "vue";
 
 import { HelpFilled, Time } from "@vicons/carbon";
-import type { IPv6NAInfo } from "@/api/service_icmpv6ra";
+import type { IPv6NAInfo } from "@landscape-router/types/api/schemas";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { usePreferenceStore } from "@/stores/preference";
 const prefStore = usePreferenceStore();

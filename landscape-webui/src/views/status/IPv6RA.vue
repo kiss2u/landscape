@@ -1,9 +1,12 @@
 <script lang="ts" setup>
 import {
-  get_icmpra_assigned_ips,
-  get_all_dhcpv6_assigned,
-} from "@/api/service_icmpv6ra";
-import type { IPv6NAInfo, DHCPv6OfferInfo } from "@/api/service_icmpv6ra";
+  get_lan_ipv6_assigned_ips,
+  get_all_lan_ipv6_dhcpv6_assigned,
+} from "@/api/service_lan_ipv6";
+import type {
+  IPv6NAInfo,
+  DHCPv6OfferInfo,
+} from "@landscape-router/types/api/schemas";
 import { onMounted, ref } from "vue";
 import DHCPv6AssignedTable from "@/components/dhcp_v6/DHCPv6AssignedTable.vue";
 
@@ -18,7 +21,7 @@ const dhcpv6_infos = ref<{ label: string; value: DHCPv6OfferInfo }[]>([]);
 async function get_info() {
   try {
     loading.value = true;
-    let req_data = await get_icmpra_assigned_ips();
+    let req_data = await get_lan_ipv6_assigned_ips();
     const result = [];
     for (const [label, value] of req_data) {
       result.push({
@@ -30,7 +33,7 @@ async function get_info() {
     infos.value = result;
 
     // DHCPv6 assigned
-    let dhcpv6_data = await get_all_dhcpv6_assigned();
+    let dhcpv6_data = await get_all_lan_ipv6_dhcpv6_assigned();
     const dhcpv6_result = [];
     for (const [label, value] of dhcpv6_data) {
       if (value) {

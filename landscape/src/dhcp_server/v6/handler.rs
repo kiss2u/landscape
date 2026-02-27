@@ -24,6 +24,29 @@ use super::utils::{
     combine_prefix_suffix, compute_delegated_prefix, extract_mac_from_duid, gen_server_duid,
 };
 
+/// Collect DNS server addresses dynamically from prefix sources.
+/// Strategy: sub_router addresses first (preferred), link-local always appended as fallback.
+fn collect_dns_servers(
+    runtime_sources: &[Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>],
+    static_infos: &[ICMPv6ConfigInfo],
+    link_local: Ipv6Addr,
+) -> Vec<Ipv6Addr> {
+    let mut dns = Vec::new();
+    // Static prefix sub_routers first
+    for info in static_infos {
+        dns.push(info.sub_router);
+    }
+    // Dynamic PD prefix sub_routers
+    for src in runtime_sources {
+        if let Some(info) = src.load().as_ref() {
+            dns.push(info.sub_router);
+        }
+    }
+    // Link-local always as fallback
+    dns.push(link_local);
+    dns
+}
+
 const LEASE_EXPIRE_INTERVAL: u64 = 60 * 10;
 static DHCPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0x1, 0x2);
 
@@ -40,6 +63,7 @@ pub async fn dhcp_v6_server(
     link_ifindex: u32,
     iface_name: String,
     mac: MacAddr,
+    link_local: Ipv6Addr,
     dhcpv6_config: DHCPv6ServerConfig,
     ra_pd_runtime_sources: Vec<Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>>,
     ra_static_infos: Vec<ICMPv6ConfigInfo>,
@@ -122,6 +146,7 @@ pub async fn dhcp_v6_server(
                             (msg_bytes, msg_addr),
                             &ra_pd_runtime_sources,
                             &ra_static_infos,
+                            link_local,
                         ).await;
                         if need_update {
                             update_assigned_info(
@@ -180,6 +205,7 @@ async fn handle_dhcpv6_message(
     (msg_bytes, msg_addr): (Vec<u8>, SocketAddr),
     runtime_sources: &[Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>],
     static_infos: &[ICMPv6ConfigInfo],
+    link_local: Ipv6Addr,
 ) -> bool {
     let msg = match v6::Message::decode(&mut Decoder::new(&msg_bytes)) {
         Ok(m) => m,
@@ -287,11 +313,8 @@ async fn handle_dhcpv6_message(
                 }
             }
 
-            if !server.dns_servers.is_empty() {
-                reply
-                    .opts_mut()
-                    .insert(v6::DhcpOption::DomainNameServers(server.dns_servers.clone()));
-            }
+            let dns = collect_dns_servers(runtime_sources, static_infos, link_local);
+            reply.opts_mut().insert(v6::DhcpOption::DomainNameServers(dns));
 
             send_dhcpv6_reply(&reply, send_socket, msg_addr).await;
             return true;
@@ -354,11 +377,8 @@ async fn handle_dhcpv6_message(
                 }
             }
 
-            if !server.dns_servers.is_empty() {
-                reply
-                    .opts_mut()
-                    .insert(v6::DhcpOption::DomainNameServers(server.dns_servers.clone()));
-            }
+            let dns = collect_dns_servers(runtime_sources, static_infos, link_local);
+            reply.opts_mut().insert(v6::DhcpOption::DomainNameServers(dns));
 
             send_dhcpv6_reply(&reply, send_socket, msg_addr).await;
             return true;
@@ -414,11 +434,8 @@ async fn handle_dhcpv6_message(
             reply.opts_mut().insert(v6::DhcpOption::ClientId(client_duid));
             reply.opts_mut().insert(v6::DhcpOption::ServerId(server_duid.to_vec()));
 
-            if !server.dns_servers.is_empty() {
-                reply
-                    .opts_mut()
-                    .insert(v6::DhcpOption::DomainNameServers(server.dns_servers.clone()));
-            }
+            let dns = collect_dns_servers(runtime_sources, static_infos, link_local);
+            reply.opts_mut().insert(v6::DhcpOption::DomainNameServers(dns));
 
             send_dhcpv6_reply(&reply, send_socket, msg_addr).await;
             return false;

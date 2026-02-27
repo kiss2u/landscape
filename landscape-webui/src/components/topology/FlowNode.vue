@@ -46,7 +46,7 @@ const show_mss_clamp_edit = ref(false);
 const iface_dhcp_v4_service_edit_show = ref(false);
 const iface_wifi_edit_show = ref(false);
 const iface_firewall_edit_show = ref(false);
-const iface_icmpv6ra_edit_show = ref(false);
+const iface_lan_ipv6_edit_show = ref(false);
 const iface_ipv6pd_edit_show = ref(false);
 const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
@@ -352,8 +352,8 @@ const show_switch = computed(() => {
       />
       <!-- ICMPv6 RA -->
       <ICMPv6RAStatusBtn
-        v-if="show_switch.icmpv6ra"
-        @click="iface_icmpv6ra_edit_show = true"
+        v-if="show_switch.lan_ipv6"
+        @click="iface_lan_ipv6_edit_show = true"
         :iface_name="node.name"
         :zone="node.zone_type"
       />
@@ -433,7 +433,7 @@ const show_switch = computed(() => {
     @refresh="refresh"
   />
   <ICMPRaEditModal
-    v-model:show="iface_icmpv6ra_edit_show"
+    v-model:show="iface_lan_ipv6_edit_show"
     :zone="node.zone_type"
     :iface_name="node.name"
     :mac="node.mac"

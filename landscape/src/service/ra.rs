@@ -153,11 +153,13 @@ impl ServiceStarterTrait for IPV6RAService {
                                 let dhcpv6_mac = mac.clone();
                                 let dhcpv6_status = status_clone.clone();
 
+                                let link_local = mac.to_ipv6_link_local();
                                 tokio::spawn(async move {
                                     crate::dhcp_server::v6::dhcp_v6_server(
                                         link_ifindex,
                                         dhcpv6_iface,
                                         dhcpv6_mac,
+                                        link_local,
                                         dhcpv6_config,
                                         pd_sources,
                                         static_infos,

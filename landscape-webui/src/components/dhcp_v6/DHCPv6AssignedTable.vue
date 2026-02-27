@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue";
-import type { DHCPv6OfferInfo } from "@/api/service_icmpv6ra";
+import type { DHCPv6OfferInfo } from "@landscape-router/types/api/schemas";
 import type {
   DHCPv6AddressItem,
   DHCPv6PrefixItem,

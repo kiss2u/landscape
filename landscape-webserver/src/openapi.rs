@@ -20,10 +20,10 @@ use crate::metrics::get_metric_paths;
 use crate::nat::static_mappings::get_static_nat_mapping_config_paths;
 use crate::services::dhcp_v4::get_dhcp_v4_service_paths;
 use crate::services::firewall::get_firewall_service_paths;
-use crate::services::icmp_ra::get_iface_icmpv6ra_paths;
 use crate::services::ip::get_iface_ipconfig_paths;
 use crate::services::ipv6pd::get_iface_pdclient_paths;
 use crate::services::lan::get_route_lan_paths;
+use crate::services::lan_ipv6::get_lan_ipv6_paths;
 use crate::services::mss_clamp::get_mss_clamp_service_paths;
 use crate::services::nat::get_iface_nat_paths;
 use crate::services::pppoe::get_iface_pppd_paths;
@@ -75,7 +75,7 @@ impl Modify for SecurityAddon {
         (name = "PPPoE", description = "PPPoE service"),
         (name = "WiFi", description = "WiFi service"),
         (name = "IPv6 PD", description = "IPv6 prefix delegation service"),
-        (name = "ICMPv6 RA", description = "ICMPv6 router advertisement service"),
+        (name = "LAN IPv6", description = "LAN IPv6 service (RA + DHCPv6)"),
         (name = "NAT Service", description = "NAT service"),
         (name = "DNS Service", description = "DNS service management"),
         (name = "DNS Rules", description = "DNS rule configuration"),
@@ -142,7 +142,7 @@ pub fn build_services_openapi_router() -> OpenApiRouter<LandscapeApp> {
         .merge(get_iface_pppd_paths())
         .merge(get_wifi_service_paths())
         .merge(get_iface_pdclient_paths())
-        .merge(get_iface_icmpv6ra_paths())
+        .merge(get_lan_ipv6_paths())
         .merge(get_iface_nat_paths())
 }
 
@@ -303,7 +303,7 @@ pub fn build_full_openapi_spec() -> utoipa::openapi::OpenApi {
                 "PPPoE",
                 "WiFi",
                 "IPv6 PD",
-                "ICMPv6 RA",
+                "LAN IPv6",
                 "NAT Service"
             ]
         },

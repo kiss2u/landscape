@@ -41,8 +41,6 @@ pub struct DHCPv6Server {
 
     // Static bindings (MAC → suffix)
     pub static_bindings: HashMap<MacAddr, Ipv6Addr>,
-
-    pub dns_servers: Vec<Ipv6Addr>,
 }
 
 impl DHCPv6Server {
@@ -81,7 +79,6 @@ impl DHCPv6Server {
             pd_allocated_indices: HashMap::new(),
             pd_offered: HashMap::new(),
             static_bindings,
-            dns_servers: config.dns_servers.clone(),
         }
     }
 
@@ -154,7 +151,7 @@ impl DHCPv6Server {
                         duid_hex: duid_to_hex(client_duid),
                         relative_offer_time: self.relative_boot_time.elapsed().as_secs(),
                         valid_time: OFFER_VALID_TIME,
-                        preferred_time: preferred_lifetime,
+                        preferred_time: preferred_lifetime.min(OFFER_VALID_TIME),
                         is_static: false,
                     },
                 );
@@ -215,7 +212,7 @@ impl DHCPv6Server {
                         duid_hex: duid_to_hex(client_duid),
                         relative_offer_time: self.relative_boot_time.elapsed().as_secs(),
                         valid_time: OFFER_VALID_TIME,
-                        preferred_time: pd_config.preferred_lifetime,
+                        preferred_time: pd_config.preferred_lifetime.min(OFFER_VALID_TIME),
                     },
                 );
                 return Some(sub_index);

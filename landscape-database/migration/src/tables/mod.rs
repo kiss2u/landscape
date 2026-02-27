@@ -21,3 +21,4 @@ pub mod route;
 
 pub mod enrolled_device;
 pub mod firewall_blacklist;
+pub mod lan_ipv6;

@@ -33,6 +33,7 @@ mod m20260126_111753_enrolled_device;
 mod m20260222_154411_geo_source_type;
 mod m20260222_171753_firewall_blacklist;
 mod m20260226_001739_pppd_plugin;
+mod m20260227_040525_lan_ipv6;
 mod tables;
 
 pub struct Migrator;
@@ -74,6 +75,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260222_154411_geo_source_type::Migration),
             Box::new(m20260222_171753_firewall_blacklist::Migration),
             Box::new(m20260226_001739_pppd_plugin::Migration),
+            Box::new(m20260227_040525_lan_ipv6::Migration),
         ]
     }
 }

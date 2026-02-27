@@ -8,22 +8,19 @@ use std::{
 };
 
 use clap::Parser;
+use landscape::ipv6::prefix::IPv6PrefixRuntime;
 use landscape::{
     dhcp_client::v6::dhcp_v6_pd_client, icmp::v6::icmp_ra_server, iface::get_iface_by_name,
 };
 use landscape_common::{
-    config::ra::IPV6RAConfig,
-    ipv6_pd::IAPrefixMap,
-    lan_services::ipv6_ra::IPv6NAInfo,
-    net::MacAddr,
-    route::{LanRouteInfo, LanRouteMode, RouteTargetInfo},
+    config::ra::RouterFlags, ipv6_pd::IAPrefixMap, lan_services::ipv6_ra::IPv6NAInfo, net::MacAddr,
+    route::RouteTargetInfo,
 };
 use landscape_common::{
     service::{ServiceStatus, WatchService},
     LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
 };
-use std::collections::HashMap;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -58,8 +55,6 @@ async fn main() {
 
     let dhcp_service_status = WatchService::new();
 
-    let config = IPV6RAConfig::new(args.dhcp_client_iface.clone());
-
     let (_, ip_route) = landscape::route::test_used_ip_route().await;
     let status = dhcp_service_status.clone();
     let ip_route_service = ip_route.clone();
@@ -93,32 +88,29 @@ async fn main() {
         }
     });
     let icmp_service_status = WatchService::new();
-    let ip_route_service = ip_route.clone();
     let status = icmp_service_status.clone();
-    let prefix_map_clone = prefix_map.clone();
     let assigned_ips = Arc::new(RwLock::new(IPv6NAInfo::init()));
+
+    let runtime = IPv6PrefixRuntime {
+        static_info: vec![],
+        pd_info: std::collections::HashMap::new(),
+        relative_boot_time: tokio::time::Instant::now(),
+    };
+    let (_change_tx, change_rx) = watch::channel(());
+    let ra_flag = RouterFlags::from(0u8);
+
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.icmp_ra_iface).await {
             if let Some(mac) = iface.mac {
-                let lan_info = LanRouteInfo {
-                    ifindex: iface.index,
-                    iface_name: iface.name.clone(),
-                    iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-                    mac: Some(mac.clone()),
-                    prefix: 128,
-                    mode: LanRouteMode::Reachable,
-                };
                 icmp_ra_server(
-                    config,
+                    300,
+                    ra_flag,
                     mac,
                     iface.name,
                     status,
-                    lan_info,
-                    ip_route_service,
-                    prefix_map_clone,
+                    &runtime,
+                    change_rx,
                     assigned_ips,
-                    None,
-                    HashMap::new(),
                 )
                 .await
                 .unwrap();

@@ -1,5 +1,4 @@
 use std::{
-    net::{IpAddr, Ipv6Addr},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -8,23 +7,18 @@ use std::{
 };
 
 use clap::Parser;
+use landscape::ipv6::prefix::IPv6PrefixRuntime;
 use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name};
 use landscape_common::{
-    config::ra::IPV6RAConfig,
-    ipv6_pd::{IAPrefixMap, LDIAPrefix},
+    config::ra::RouterFlags,
     lan_services::ipv6_ra::IPv6NAInfo,
-    route::{LanRouteInfo, LanRouteMode},
     service::{ServiceStatus, WatchService},
 };
-use std::collections::HashMap;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 use tracing::Level;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
-    #[arg(short, long, default_value = "veth0")]
-    pub depend_iface: String,
-
     #[arg(short, long, default_value = "ens5")]
     pub iface_name: String,
 }
@@ -32,7 +26,6 @@ pub struct Args {
 // ping6 -I ens5 ff02::1
 // cargo run --package landscape --bin icmp_sock_test
 // rdisc6 ens6
-// ip6tables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source fd8d:c6a4:708f:0:2a0:98ff:fe08:5909
 #[tokio::main]
 async fn main() {
     let (non_blocking, _guard) = tracing_appender::non_blocking(std::io::stdout());
@@ -41,19 +34,6 @@ async fn main() {
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
 
-    let prefix_map = IAPrefixMap::new();
-    prefix_map
-        .insert_or_replace(
-            &args.depend_iface,
-            LDIAPrefix {
-                preferred_lifetime: 60 * 60 * 24 * 1,
-                valid_lifetime: 60 * 60 * 24 * 2,
-                prefix_len: 48,
-                prefix_ip: "fd00:abcd:1234::".parse().unwrap(),
-                last_update_time: 0.0,
-            },
-        )
-        .await;
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {
@@ -62,35 +42,29 @@ async fn main() {
     .unwrap();
 
     let service_status = WatchService::new();
-
     let status = service_status.clone();
 
-    let (_, ip_route) = landscape::route::test_used_ip_route().await;
+    let runtime = IPv6PrefixRuntime {
+        static_info: vec![],
+        pd_info: std::collections::HashMap::new(),
+        relative_boot_time: tokio::time::Instant::now(),
+    };
+    let (_change_tx, change_rx) = watch::channel(());
 
     let assigned_ips = Arc::new(RwLock::new(IPv6NAInfo::init()));
+    let ra_flag = RouterFlags::from(0u8);
     tokio::spawn(async move {
         if let Some(iface) = get_iface_by_name(&args.iface_name).await {
             if let Some(mac) = iface.mac {
-                let config = IPV6RAConfig::new(args.depend_iface.clone());
-                let lan_info = LanRouteInfo {
-                    ifindex: iface.index,
-                    iface_name: iface.name.clone(),
-                    iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-                    mac: Some(mac.clone()),
-                    prefix: 128,
-                    mode: LanRouteMode::Reachable,
-                };
                 icmp_ra_server(
-                    config,
+                    300,
+                    ra_flag,
                     mac,
                     iface.name,
                     status,
-                    lan_info,
-                    ip_route,
-                    prefix_map,
+                    &runtime,
+                    change_rx,
                     assigned_ips,
-                    None,
-                    HashMap::new(),
                 )
                 .await
                 .unwrap();
