@@ -3,6 +3,7 @@ use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::sync::Arc;
 
+use landscape_common::config::ra::IPV6RAConfig;
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::ipv6_pd::IAPrefixMap;
@@ -22,6 +23,7 @@ use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
 use crate::iface::get_iface_by_name;
+use crate::ipv6::prefix::{cleanup_prefix_sources, setup_prefix_sources, PrefixSetupResult};
 use crate::route::IpRouteService;
 
 /// 控制进行路由通告
@@ -111,6 +113,7 @@ impl ServiceStarterTrait for IPV6RAService {
                 };
 
                 if let Some(mac) = iface.mac {
+                    let link_ifindex = iface.index;
                     let lan_info = LanRouteInfo {
                         ifindex: iface.index,
                         iface_name: config.iface_name.clone(),
@@ -120,19 +123,76 @@ impl ServiceStarterTrait for IPV6RAService {
                         mode: LanRouteMode::Reachable,
                     };
                     tokio::spawn(async move {
-                        let _ = crate::icmp::v6::icmp_ra_server(
-                            config.config,
-                            mac,
-                            config.iface_name,
-                            status_clone,
-                            lan_info,
-                            route_service,
-                            prefix_map,
-                            assigned_ips,
-                            dhcpv6_assigned,
-                            static_bindings,
+                        let IPV6RAConfig { ad_interval, ra_flag, source, dhcpv6 } = config.config;
+                        let iface_name = config.iface_name;
+
+                        // 1. Prefix setup
+                        let PrefixSetupResult {
+                            runtime,
+                            ra_token,
+                            dhcpv6_token,
+                            change_notify,
+                            cleanup_ips,
+                        } = setup_prefix_sources(
+                            source,
+                            &iface_name,
+                            &lan_info,
+                            &route_service,
+                            &prefix_map,
                         )
                         .await;
+
+                        // 2. Spawn DHCPv6 server if configured
+                        if let (Some(dhcpv6_config), Some(dhcpv6_assigned_info)) =
+                            (dhcpv6, dhcpv6_assigned)
+                        {
+                            if dhcpv6_config.enable {
+                                let pd_sources = runtime.pd_info.values().cloned().collect();
+                                let static_infos = runtime.static_info.clone();
+                                let dhcpv6_iface = iface_name.clone();
+                                let dhcpv6_mac = mac.clone();
+                                let dhcpv6_status = status_clone.clone();
+
+                                tokio::spawn(async move {
+                                    crate::dhcp_server::v6::dhcp_v6_server(
+                                        link_ifindex,
+                                        dhcpv6_iface,
+                                        dhcpv6_mac,
+                                        dhcpv6_config,
+                                        pd_sources,
+                                        static_infos,
+                                        dhcpv6_status,
+                                        dhcpv6_assigned_info,
+                                        static_bindings,
+                                    )
+                                    .await;
+                                    dhcpv6_token.cancel();
+                                });
+                            } else {
+                                dhcpv6_token.cancel();
+                            }
+                        } else {
+                            dhcpv6_token.cancel();
+                        }
+
+                        // 3. Run RA (blocks until exit)
+                        let _ = crate::icmp::v6::icmp_ra_server(
+                            ad_interval,
+                            ra_flag,
+                            mac,
+                            iface_name.clone(),
+                            status_clone,
+                            &runtime,
+                            change_notify,
+                            assigned_ips,
+                        )
+                        .await;
+
+                        // 4. RA exits: cancel token so PD watch tasks detect
+                        ra_token.cancel();
+
+                        // 5. Cleanup
+                        cleanup_prefix_sources(cleanup_ips, &iface_name, &route_service).await;
                     });
                 }
             }

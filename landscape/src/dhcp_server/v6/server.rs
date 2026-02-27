@@ -13,7 +13,7 @@ use landscape_common::dhcp::v6_server::status::{
 use landscape_common::net::MacAddr;
 use landscape_common::utils::time::get_f64_timestamp;
 
-use crate::icmp::v6::ICMPv6ConfigInfo;
+use crate::ipv6::prefix::ICMPv6ConfigInfo;
 
 use super::types::{DHCPv6NACache, DHCPv6PDCache};
 use super::utils::{combine_prefix_suffix, compute_delegated_prefix, duid_to_hex, hash_duid};

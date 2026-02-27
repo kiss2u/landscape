@@ -17,7 +17,7 @@ use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 
-use crate::icmp::v6::ICMPv6ConfigInfo;
+use crate::ipv6::prefix::ICMPv6ConfigInfo;
 
 use super::server::DHCPv6Server;
 use super::utils::{

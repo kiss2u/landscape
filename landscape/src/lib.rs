@@ -25,6 +25,7 @@ pub mod firewall;
 pub mod flow;
 pub mod icmp;
 pub mod iface;
+pub mod ipv6;
 pub mod metric;
 pub mod observer;
 pub mod pppoe_client;
