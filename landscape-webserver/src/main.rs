@@ -690,8 +690,25 @@ async fn do_auto_init(home_path: &PathBuf, config: &RuntimeConfig) -> LdResult<(
 }
 
 async fn shutdown_signal() {
-    tokio::signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
-    tracing::info!("Received Ctrl+C signal");
+    use tokio::signal::unix::{signal, SignalKind};
+    // Ctrl+C (SIGINT)
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        tracing::info!("Received SIGINT (Ctrl+C)");
+    };
+
+    // systemctl stop (SIGTERM)
+    let terminate = async {
+        signal(SignalKind::terminate()).expect("failed to install SIGTERM handler").recv().await;
+        tracing::info!("Received SIGTERM (systemctl stop)");
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutdown signal received, starting graceful cleanup...");
 }
 
 /// NOT Found
