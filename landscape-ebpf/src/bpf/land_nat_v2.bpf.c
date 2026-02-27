@@ -154,6 +154,12 @@ int nat_v4_egress(struct __sk_buff *skb) {
         .dst_port = nat_egress_value->port,
     };
 
+    // For ICMP, use the allocated ID (Pn) instead of original ID (Ps) in CT key
+    // so that Ingress can match the CT with the same key
+    if (pkg_offset.l4_protocol == IPPROTO_ICMP) {
+        server_nat_pair.src_port = nat_egress_value->port;
+    }
+
     struct nat_timer_value_v4 *ct_value;
     ret = lookup_or_new_ct(skb, pkg_offset.l4_protocol, allow_create_mapping, &server_nat_pair,
                            &ip_pair.src_addr, ip_pair.src_port, NAT_MAPPING_EGRESS, &ct_value);
