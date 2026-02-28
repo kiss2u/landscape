@@ -55,8 +55,40 @@ export default {
   priority_high: "高",
 
   update: "更新",
+  cancel: "取消",
+  confirm: "确定",
   form_validation_failed: "请检查配置项是否填写正确",
   cross_source_conflict: "RA 前缀源与 DHCPv6 前缀源的子网索引 {idx} 重复",
+
+  // Source binding modal
+  source_edit_title: "前缀来源编辑",
+  service_kind_ra: "RA",
+  service_kind_na: "DHCPv6 NA",
+  service_kind_pd: "DHCPv6 PD",
+  source_type_static: "静态前缀",
+  source_type_pd: "IPv6 PD",
+
+  source_base_prefix: "基础前缀地址",
+  source_base_prefix_cidr: "父前缀 (CIDR)",
+  source_base_prefix_hint:
+    "注意! 最多只可自定义到 /60, 格式需要保持 ::xxx0, 因为低位 0 不可省略",
+  source_depend_iface: "关联网卡（须开启 DHCPv6-PD）",
+  source_depend_iface_placeholder: "选择进行前缀申请的网卡",
+  source_no_iface: "未选择 PD 网卡",
+
+  source_pool_index: "池块序号",
+  source_pool_index_desc:
+    "在父前缀内的块序号。RA/NA 对应第几个 /64 子网，PD 对应以池块前缀长度划分的第几块。",
+  source_pool_len: "池块前缀长度",
+  source_pool_len_desc:
+    "池块的前缀长度。例如：父前缀=/48，池块长度=56，则每个池块为 /56，可容纳多个委派子前缀。",
+  source_max_source_prefix_len: "最大源前缀长度",
+  source_max_source_prefix_len_desc:
+    "过滤上游 PD 前缀：只有前缀长度不超过此值的上游前缀才用于委派。",
+  source_preferred_lifetime: "首选生存期 (s)",
+  source_preferred_lifetime_desc:
+    "主机会优先使用在首选时间内的 IP，相对于超过首选时间但未超过有效时间的 IP。",
+  source_valid_lifetime: "有效生存期 (s)",
 
   // DHCPv6 Server Card
   dhcpv6_server: "DHCPv6 服务器",
@@ -78,16 +110,13 @@ export default {
   ia_na_valid_lifetime_desc:
     "地址的最长有效时间（秒）。到期后设备必须重新申请地址。应大于首选生存期。",
 
-  ia_pd_max_source_prefix_len: "过滤源前缀长度",
-  ia_pd_max_source_prefix_len_desc:
-    "只从前缀长度不超过此值的前缀源中委派子前缀。例如设为 56，则长度大于 /56 的前缀源会被跳过。",
   ia_pd_delegate_prefix_len: "委派前缀长度",
   ia_pd_delegate_prefix_len_desc:
     "分配给每台设备的子前缀长度。例如源前缀为 /48、委派长度为 /64，则可委派 2^16 个 /64 子前缀。",
-  ia_pd_pool_start_index: "子前缀池起始",
-  ia_pd_pool_start_index_desc:
-    "子前缀的起始编号。用于跳过前几个子前缀，为静态分配或其他用途预留。",
   ia_pd_preferred_lifetime: "首选生存期",
   ia_pd_preferred_lifetime_desc:
     "设备优先使用该委派前缀的时长（秒）。到期后前缀仍可用但不再优先选择。",
+  ia_pd_valid_lifetime: "有效生存期",
+  ia_pd_valid_lifetime_desc:
+    "委派前缀的最长有效时间（秒）。到期后设备必须重新申请。应大于首选生存期。",
 };

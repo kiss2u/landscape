@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import type {
-  LanIPv6ServiceConfig,
-  IPV6RAServiceConfig,
-} from "@landscape-router/types/api/schemas";
+import type { LanIPv6ServiceConfig } from "@landscape-router/types/api/schemas";
 
 const { t } = useI18n({ useScope: "global" });
 
-const config = defineModel<LanIPv6ServiceConfig | IPV6RAServiceConfig>(
-  "service-config",
-  {
-    required: true,
-  },
-);
+const config = defineModel<LanIPv6ServiceConfig>("service-config", {
+  required: true,
+});
 
 function initialize_dhcpv6_if_needed() {
   if (!config.value?.config?.dhcpv6) {
@@ -56,9 +50,7 @@ function initialize_ia_pd(enable: boolean) {
 
   if (enable) {
     config.value.config.dhcpv6.ia_pd = {
-      max_source_prefix_len: 56,
       delegate_prefix_len: 64,
-      pool_start_index: 1,
       preferred_lifetime: 300,
       valid_lifetime: 600,
     };
@@ -99,9 +91,7 @@ function update_ia_pd_field(field: string, value: number | null) {
 
   if (!dhcpv6.ia_pd) {
     dhcpv6.ia_pd = {
-      max_source_prefix_len: 56,
       delegate_prefix_len: 64,
-      pool_start_index: 1,
       preferred_lifetime: 300,
       valid_lifetime: 600,
     };
@@ -246,28 +236,6 @@ function update_ia_pd_field(field: string, value: number | null) {
             <n-form-item-gi span="2">
               <template #label>
                 <Notice>
-                  {{ t("lan_ipv6.ia_pd_max_source_prefix_len") }}
-                  <template #msg>
-                    {{ t("lan_ipv6.ia_pd_max_source_prefix_len_desc") }}
-                  </template>
-                </Notice>
-              </template>
-              <n-input-number
-                style="flex: 1"
-                :value="
-                  config?.config.dhcpv6?.ia_pd?.max_source_prefix_len ?? 56
-                "
-                @update:value="
-                  (val: number | null) =>
-                    update_ia_pd_field('max_source_prefix_len', val)
-                "
-                :min="1"
-                :max="126"
-              />
-            </n-form-item-gi>
-            <n-form-item-gi span="2">
-              <template #label>
-                <Notice>
                   {{ t("lan_ipv6.ia_pd_delegate_prefix_len") }}
                   <template #msg>
                     {{ t("lan_ipv6.ia_pd_delegate_prefix_len_desc") }}
@@ -281,30 +249,8 @@ function update_ia_pd_field(field: string, value: number | null) {
                   (val: number | null) =>
                     update_ia_pd_field('delegate_prefix_len', val)
                 "
-                :min="
-                  (config?.config.dhcpv6?.ia_pd?.max_source_prefix_len ?? 56) +
-                  1
-                "
+                :min="1"
                 :max="128"
-              />
-            </n-form-item-gi>
-            <n-form-item-gi span="1">
-              <template #label>
-                <Notice>
-                  {{ t("lan_ipv6.ia_pd_pool_start_index") }}
-                  <template #msg>
-                    {{ t("lan_ipv6.ia_pd_pool_start_index_desc") }}
-                  </template>
-                </Notice>
-              </template>
-              <n-input-number
-                style="flex: 1"
-                :value="config?.config.dhcpv6?.ia_pd?.pool_start_index ?? 1"
-                @update:value="
-                  (val: number | null) =>
-                    update_ia_pd_field('pool_start_index', val)
-                "
-                :min="0"
               />
             </n-form-item-gi>
             <n-form-item-gi span="1">
@@ -322,6 +268,25 @@ function update_ia_pd_field(field: string, value: number | null) {
                 @update:value="
                   (val: number | null) =>
                     update_ia_pd_field('preferred_lifetime', val)
+                "
+                :min="1"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi span="1">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ia_pd_valid_lifetime") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ia_pd_valid_lifetime_desc") }}
+                  </template>
+                </Notice>
+              </template>
+              <n-input-number
+                style="flex: 1"
+                :value="config?.config.dhcpv6?.ia_pd?.valid_lifetime ?? 600"
+                @update:value="
+                  (val: number | null) =>
+                    update_ia_pd_field('valid_lifetime', val)
                 "
                 :min="1"
               />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import { FormInst, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { ZoneType } from "@/lib/service_ipconfig";
@@ -9,14 +9,13 @@ import {
   update_lan_ipv6_config,
 } from "@/api/service_lan_ipv6";
 import type {
-  IPV6RaConfigSource,
-  IPv6RaPdConfig,
   LanIPv6ServiceConfig,
-  IPv6RaStaticConfig,
+  LanIPv6SourceConfig,
   IPv6ServiceMode,
 } from "@landscape-router/types/api/schemas";
-import DHCPv6ConfigSection from "@/components/dhcp_v6/DHCPv6ConfigSection.vue";
 import DHCPv6ServerCard from "@/components/dhcp_v6/DHCPv6ServerCard.vue";
+import SourceBindingCard from "@/components/lan_ipv6/SourceBindingCard.vue";
+import SourceBindingModal from "@/components/lan_ipv6/SourceBindingModal.vue";
 
 const { t } = useI18n({ useScope: "global" });
 let ipv6PDStore = useIPv6PDStore();
@@ -49,13 +48,48 @@ function default_config(): LanIPv6ServiceConfig {
         nd_proxy: false,
         reserved: 0,
       },
-      source: [],
+      sources: [],
       dhcpv6: {
         enable: false,
-        source: [],
       },
     },
   };
+}
+
+// Filter sources by service kind
+function sources_by_kind(kind: "ra" | "na" | "pd"): LanIPv6SourceConfig[] {
+  if (!service_config.value) return [];
+  const sources = service_config.value.config.sources ?? [];
+  switch (kind) {
+    case "ra":
+      return sources.filter((s) => s.t === "ra_static" || s.t === "ra_pd");
+    case "na":
+      return sources.filter((s) => s.t === "na_static" || s.t === "na_pd");
+    case "pd":
+      return sources.filter((s) => s.t === "pd_static" || s.t === "pd_pd");
+  }
+}
+
+// Find index in the flat sources array for a filtered item
+function find_source_index(
+  filtered_index: number,
+  kind: "ra" | "na" | "pd",
+): number {
+  if (!service_config.value) return -1;
+  const sources = service_config.value.config.sources ?? [];
+  let count = 0;
+  for (let i = 0; i < sources.length; i++) {
+    const s = sources[i];
+    const matches =
+      (kind === "ra" && (s.t === "ra_static" || s.t === "ra_pd")) ||
+      (kind === "na" && (s.t === "na_static" || s.t === "na_pd")) ||
+      (kind === "pd" && (s.t === "pd_static" || s.t === "pd_pd"));
+    if (matches) {
+      if (count === filtered_index) return i;
+      count++;
+    }
+  }
+  return -1;
 }
 
 async function on_modal_enter() {
@@ -66,15 +100,15 @@ async function on_modal_enter() {
     } else {
       service_config.value = default_config();
     }
+    // Ensure sources is initialized
+    if (!service_config.value.config.sources) {
+      service_config.value.config.sources = [];
+    }
     // Always ensure dhcpv6 config is initialized
     if (!service_config.value.config.dhcpv6) {
       service_config.value.config.dhcpv6 = {
         enable: false,
-        source: [],
       };
-    }
-    if (!service_config.value.config.dhcpv6.source) {
-      service_config.value.config.dhcpv6.source = [];
     }
     // Default mode to slaac if not set
     if (!service_config.value.config.mode) {
@@ -103,7 +137,6 @@ function on_mode_change(mode: IPv6ServiceMode) {
     if (!service_config.value.config.dhcpv6) {
       service_config.value.config.dhcpv6 = {
         enable: true,
-        source: [],
       };
     } else {
       service_config.value.config.dhcpv6.enable = true;
@@ -115,7 +148,6 @@ function on_mode_change(mode: IPv6ServiceMode) {
     if (!service_config.value.config.dhcpv6) {
       service_config.value.config.dhcpv6 = {
         enable: true,
-        source: [],
       };
     } else {
       service_config.value.config.dhcpv6.enable = true;
@@ -127,28 +159,6 @@ async function save_config() {
   try {
     await formRef.value?.validate();
     if (service_config.value) {
-      if (!validate_ra_source(service_config.value.config.source)) {
-        return;
-      }
-      // For stateful and slaac_dhcpv6 modes, validate DHCPv6 source
-      const mode = service_config.value.config.mode;
-      if (mode === "stateful" || mode === "slaac_dhcpv6") {
-        const dhcpv6_source = service_config.value.config.dhcpv6?.source ?? [];
-        if (!validate_ra_source(dhcpv6_source)) {
-          return;
-        }
-        // Cross-source sub_index uniqueness for slaac_dhcpv6
-        if (mode === "slaac_dhcpv6") {
-          if (
-            !validate_cross_source_uniqueness(
-              service_config.value.config.source,
-              dhcpv6_source,
-            )
-          ) {
-            return;
-          }
-        }
-      }
       await update_lan_ipv6_config(service_config.value);
       await ipv6PDStore.UPDATE_INFO();
       show_model.value = false;
@@ -160,118 +170,30 @@ async function save_config() {
 
 const formRules = {};
 
-// RA source edit
-const show_source_edit = ref(false);
-function add_source(source: IPV6RaConfigSource) {
-  service_config.value?.config.source.unshift(source);
-}
+// Source edit modals
+const show_ra_source_edit = ref(false);
+const show_na_source_edit = ref(false);
+const show_pd_source_edit = ref(false);
 
-function replace_source(source: IPV6RaConfigSource, index: number) {
+function add_source(source: LanIPv6SourceConfig) {
   if (service_config.value) {
-    service_config.value.config.source[index] = source;
-  }
-}
-
-function delete_source(index: number) {
-  if (service_config.value) {
-    service_config.value.config.source.splice(index, 1);
-  }
-}
-
-// DHCPv6 source edit
-const show_dhcpv6_source_edit = ref(false);
-function add_dhcpv6_source(source: IPV6RaConfigSource) {
-  if (service_config.value?.config.dhcpv6) {
-    if (!service_config.value.config.dhcpv6.source) {
-      service_config.value.config.dhcpv6.source = [];
+    if (!service_config.value.config.sources) {
+      service_config.value.config.sources = [];
     }
-    service_config.value.config.dhcpv6.source.unshift(source);
+    service_config.value.config.sources.unshift(source);
   }
 }
 
-function replace_dhcpv6_source(source: IPV6RaConfigSource, index: number) {
-  if (service_config.value?.config.dhcpv6?.source) {
-    service_config.value.config.dhcpv6.source[index] = source;
+function replace_source(source: LanIPv6SourceConfig, flat_index: number) {
+  if (service_config.value?.config.sources) {
+    service_config.value.config.sources[flat_index] = source;
   }
 }
 
-function delete_dhcpv6_source(index: number) {
-  if (service_config.value?.config.dhcpv6?.source) {
-    service_config.value.config.dhcpv6.source.splice(index, 1);
+function delete_source(flat_index: number) {
+  if (service_config.value?.config.sources) {
+    service_config.value.config.sources.splice(flat_index, 1);
   }
-}
-
-function validate_ra_source(source: IPV6RaConfigSource[]): boolean {
-  const basePrefixes = new Set<string>();
-  const dependIfaces = new Set<string>();
-  const subnetIndices = new Set<number>();
-
-  for (const src of source) {
-    switch (src.t) {
-      case "static": {
-        const s = src as IPv6RaStaticConfig;
-        if (basePrefixes.has(s.base_prefix)) {
-          window.$message.warning(`重复的静态前缀配置: ${s.base_prefix}`);
-          return false;
-        }
-        basePrefixes.add(s.base_prefix);
-
-        if (subnetIndices.has(s.sub_index)) {
-          window.$message.warning(`重复的子网索引: ${s.sub_index}`);
-          return false;
-        }
-        subnetIndices.add(s.sub_index);
-        break;
-      }
-      case "pd": {
-        const p = src as IPv6RaPdConfig;
-        if (dependIfaces.has(p.depend_iface)) {
-          window.$message.warning(`重复的网卡: ${p.depend_iface}`);
-          return false;
-        }
-        dependIfaces.add(p.depend_iface);
-
-        if (subnetIndices.has(p.subnet_index)) {
-          window.$message.warning(`重复的子网索引: ${p.subnet_index}`);
-          return false;
-        }
-        subnetIndices.add(p.subnet_index);
-        break;
-      }
-    }
-  }
-
-  return true;
-}
-
-function validate_cross_source_uniqueness(
-  ra_source: IPV6RaConfigSource[],
-  dhcpv6_source: IPV6RaConfigSource[],
-): boolean {
-  const subnetIndices = new Set<number>();
-
-  for (const src of ra_source) {
-    if (src.t === "static") {
-      subnetIndices.add((src as IPv6RaStaticConfig).sub_index);
-    } else if (src.t === "pd") {
-      subnetIndices.add((src as IPv6RaPdConfig).subnet_index);
-    }
-  }
-
-  for (const src of dhcpv6_source) {
-    let idx: number;
-    if (src.t === "static") {
-      idx = (src as IPv6RaStaticConfig).sub_index;
-    } else {
-      idx = (src as IPv6RaPdConfig).subnet_index;
-    }
-    if (subnetIndices.has(idx)) {
-      window.$message.warning(t("lan_ipv6.cross_source_conflict", { idx }));
-      return false;
-    }
-  }
-
-  return true;
 }
 </script>
 
@@ -382,14 +304,15 @@ function validate_cross_source_uniqueness(
             <n-button
               :focusable="false"
               size="tiny"
-              @click="show_source_edit = true"
+              @click="show_ra_source_edit = true"
             >
               {{ t("lan_ipv6.add") }}
             </n-button>
-            <ICMPRaSourceEdit
+            <SourceBindingModal
               @commit="add_source"
-              v-model:show="show_source_edit"
-            ></ICMPRaSourceEdit>
+              v-model:show="show_ra_source_edit"
+              :allowed-service-kinds="['ra']"
+            />
           </template>
 
           <n-text
@@ -400,20 +323,23 @@ function validate_cross_source_uniqueness(
           </n-text>
 
           <n-scrollbar style="max-height: 300px">
-            <n-flex v-if="service_config.config.source.length > 0">
-              <ICMPRaSourceExhibit
-                v-for="(each, index) in service_config.config.source"
+            <n-flex v-if="sources_by_kind('ra').length > 0">
+              <SourceBindingCard
+                v-for="(each, index) in sources_by_kind('ra')"
+                :key="index"
                 :source="each"
-                @commit="(e: any) => replace_source(e, index)"
-                @delete="delete_source(index)"
-              >
-              </ICMPRaSourceExhibit>
+                :allowed-service-kinds="['ra']"
+                @commit="
+                  (e: any) => replace_source(e, find_source_index(index, 'ra'))
+                "
+                @delete="delete_source(find_source_index(index, 'ra'))"
+              />
             </n-flex>
             <n-empty v-else :description="t('lan_ipv6.no_prefix')" />
           </n-scrollbar>
         </n-card>
 
-        <!-- Mode 2 (Stateful): DHCPv6 prefix source full-width -->
+        <!-- Mode 2 (Stateful): DHCPv6 prefix sources (NA + PD) full-width -->
         <n-card
           v-if="service_config.config.mode === 'stateful'"
           style="width: 100%; margin-bottom: 12px"
@@ -434,14 +360,15 @@ function validate_cross_source_uniqueness(
             <n-button
               :focusable="false"
               size="tiny"
-              @click="show_dhcpv6_source_edit = true"
+              @click="show_na_source_edit = true"
             >
               {{ t("lan_ipv6.add") }}
             </n-button>
-            <ICMPRaSourceEdit
-              @commit="add_dhcpv6_source"
-              v-model:show="show_dhcpv6_source_edit"
-            ></ICMPRaSourceEdit>
+            <SourceBindingModal
+              @commit="add_source"
+              v-model:show="show_na_source_edit"
+              :allowed-service-kinds="['na', 'pd']"
+            />
           </template>
 
           <n-text
@@ -453,16 +380,38 @@ function validate_cross_source_uniqueness(
 
           <n-scrollbar style="max-height: 300px">
             <n-flex
-              v-if="(service_config.config.dhcpv6?.source ?? []).length > 0"
+              v-if="
+                [...sources_by_kind('na'), ...sources_by_kind('pd')].length > 0
+              "
             >
-              <ICMPRaSourceExhibit
-                v-for="(each, index) in service_config.config.dhcpv6?.source ??
-                []"
-                :source="each"
-                @commit="(e: any) => replace_dhcpv6_source(e, index)"
-                @delete="delete_dhcpv6_source(index)"
+              <template
+                v-for="(each, index) in sources_by_kind('na')"
+                :key="'na-' + index"
               >
-              </ICMPRaSourceExhibit>
+                <SourceBindingCard
+                  :source="each"
+                  :allowed-service-kinds="['na', 'pd']"
+                  @commit="
+                    (e: any) =>
+                      replace_source(e, find_source_index(index, 'na'))
+                  "
+                  @delete="delete_source(find_source_index(index, 'na'))"
+                />
+              </template>
+              <template
+                v-for="(each, index) in sources_by_kind('pd')"
+                :key="'pd-' + index"
+              >
+                <SourceBindingCard
+                  :source="each"
+                  :allowed-service-kinds="['na', 'pd']"
+                  @commit="
+                    (e: any) =>
+                      replace_source(e, find_source_index(index, 'pd'))
+                  "
+                  @delete="delete_source(find_source_index(index, 'pd'))"
+                />
+              </template>
             </n-flex>
             <n-empty v-else :description="t('lan_ipv6.no_dhcpv6_prefix')" />
           </n-scrollbar>
@@ -495,14 +444,15 @@ function validate_cross_source_uniqueness(
               <n-button
                 :focusable="false"
                 size="tiny"
-                @click="show_source_edit = true"
+                @click="show_ra_source_edit = true"
               >
                 {{ t("lan_ipv6.add") }}
               </n-button>
-              <ICMPRaSourceEdit
+              <SourceBindingModal
                 @commit="add_source"
-                v-model:show="show_source_edit"
-              ></ICMPRaSourceEdit>
+                v-model:show="show_ra_source_edit"
+                :allowed-service-kinds="['ra']"
+              />
             </template>
 
             <n-text
@@ -513,14 +463,18 @@ function validate_cross_source_uniqueness(
             </n-text>
 
             <n-scrollbar style="max-height: 300px">
-              <n-flex v-if="service_config.config.source.length > 0">
-                <ICMPRaSourceExhibit
-                  v-for="(each, index) in service_config.config.source"
+              <n-flex v-if="sources_by_kind('ra').length > 0">
+                <SourceBindingCard
+                  v-for="(each, index) in sources_by_kind('ra')"
+                  :key="index"
                   :source="each"
-                  @commit="(e: any) => replace_source(e, index)"
-                  @delete="delete_source(index)"
-                >
-                </ICMPRaSourceExhibit>
+                  :allowed-service-kinds="['ra']"
+                  @commit="
+                    (e: any) =>
+                      replace_source(e, find_source_index(index, 'ra'))
+                  "
+                  @delete="delete_source(find_source_index(index, 'ra'))"
+                />
               </n-flex>
               <n-empty v-else :description="t('lan_ipv6.no_ra_prefix')" />
             </n-scrollbar>
@@ -546,14 +500,15 @@ function validate_cross_source_uniqueness(
               <n-button
                 :focusable="false"
                 size="tiny"
-                @click="show_dhcpv6_source_edit = true"
+                @click="show_na_source_edit = true"
               >
                 {{ t("lan_ipv6.add") }}
               </n-button>
-              <ICMPRaSourceEdit
-                @commit="add_dhcpv6_source"
-                v-model:show="show_dhcpv6_source_edit"
-              ></ICMPRaSourceEdit>
+              <SourceBindingModal
+                @commit="add_source"
+                v-model:show="show_na_source_edit"
+                :allowed-service-kinds="['na', 'pd']"
+              />
             </template>
 
             <n-text
@@ -565,16 +520,39 @@ function validate_cross_source_uniqueness(
 
             <n-scrollbar style="max-height: 300px">
               <n-flex
-                v-if="(service_config.config.dhcpv6?.source ?? []).length > 0"
+                v-if="
+                  [...sources_by_kind('na'), ...sources_by_kind('pd')].length >
+                  0
+                "
               >
-                <ICMPRaSourceExhibit
-                  v-for="(each, index) in service_config.config.dhcpv6
-                    ?.source ?? []"
-                  :source="each"
-                  @commit="(e: any) => replace_dhcpv6_source(e, index)"
-                  @delete="delete_dhcpv6_source(index)"
+                <template
+                  v-for="(each, index) in sources_by_kind('na')"
+                  :key="'na-' + index"
                 >
-                </ICMPRaSourceExhibit>
+                  <SourceBindingCard
+                    :source="each"
+                    :allowed-service-kinds="['na', 'pd']"
+                    @commit="
+                      (e: any) =>
+                        replace_source(e, find_source_index(index, 'na'))
+                    "
+                    @delete="delete_source(find_source_index(index, 'na'))"
+                  />
+                </template>
+                <template
+                  v-for="(each, index) in sources_by_kind('pd')"
+                  :key="'pd-' + index"
+                >
+                  <SourceBindingCard
+                    :source="each"
+                    :allowed-service-kinds="['na', 'pd']"
+                    @commit="
+                      (e: any) =>
+                        replace_source(e, find_source_index(index, 'pd'))
+                    "
+                    @delete="delete_source(find_source_index(index, 'pd'))"
+                  />
+                </template>
               </n-flex>
               <n-empty v-else :description="t('lan_ipv6.no_dhcpv6_prefix')" />
             </n-scrollbar>

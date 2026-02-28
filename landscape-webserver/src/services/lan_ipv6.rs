@@ -10,6 +10,8 @@ use landscape_common::service::{ServiceStatus, WatchService};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use landscape_common::config::lan_ipv6::validate_cross_interface;
+use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::service::ServiceConfigError;
 
 use crate::api::JsonBody;
@@ -104,6 +106,12 @@ async fn handle_lan_ipv6(
 ) -> LandscapeApiResult<()> {
     state.validate_zone(&config).await?;
     config.config.validate()?;
+
+    // Cross-interface conflict detection
+    let other_configs: Vec<LanIPv6ServiceConfig> =
+        state.lan_ipv6_service.get_repository().list().await.unwrap_or_default();
+    validate_cross_interface(&config, &other_configs)?;
+
     state.lan_ipv6_service.handle_service_config(config).await?;
     LandscapeApiResp::success(())
 }

@@ -58,9 +58,41 @@ export default {
   priority_high: "High",
 
   update: "Update",
+  cancel: "Cancel",
+  confirm: "OK",
   form_validation_failed: "Please check the configuration fields",
   cross_source_conflict:
     "Subnet index {idx} conflicts between RA and DHCPv6 prefix sources",
+
+  // Source binding modal
+  source_edit_title: "Prefix Source Editor",
+  service_kind_ra: "RA",
+  service_kind_na: "DHCPv6 NA",
+  service_kind_pd: "DHCPv6 PD",
+  source_type_static: "Static Prefix",
+  source_type_pd: "IPv6 PD",
+
+  source_base_prefix: "Base Prefix Address",
+  source_base_prefix_cidr: "Parent Prefix (CIDR)",
+  source_base_prefix_hint:
+    "Note: You can customize up to /60. Format must keep trailing zeros (e.g., ::xxx0).",
+  source_depend_iface: "Associated Interface (DHCPv6-PD must be enabled)",
+  source_depend_iface_placeholder: "Select the interface for prefix delegation",
+  source_no_iface: "No PD interface selected",
+
+  source_pool_index: "Pool Block Index",
+  source_pool_index_desc:
+    "Block index within the parent prefix. For RA/NA this is the /64 subnet number; for PD it's the block number at the pool prefix length.",
+  source_pool_len: "Pool Block Prefix Length",
+  source_pool_len_desc:
+    "Prefix length of each pool block. E.g., parent=/48, pool_len=56 means each block is a /56, containing multiple delegatable sub-prefixes.",
+  source_max_source_prefix_len: "Max Source Prefix Length",
+  source_max_source_prefix_len_desc:
+    "Filter upstream PD prefixes: only prefixes with length <= this value are used for delegation.",
+  source_preferred_lifetime: "Preferred Lifetime (s)",
+  source_preferred_lifetime_desc:
+    "Devices will prefer using this IP during the preferred lifetime, over IPs that have exceeded their preferred lifetime but are still within valid lifetime.",
+  source_valid_lifetime: "Valid Lifetime (s)",
 
   // DHCPv6 Server Card
   dhcpv6_server: "DHCPv6 Server",
@@ -82,16 +114,13 @@ export default {
   ia_na_valid_lifetime_desc:
     "Maximum time (in seconds) the address remains valid. After expiry the device must request a new address. Should be greater than the preferred lifetime.",
 
-  ia_pd_max_source_prefix_len: "Filter Source Prefix Length",
-  ia_pd_max_source_prefix_len_desc:
-    "Only delegate sub-prefixes from sources with a prefix length no greater than this value. For example, set to 56 to skip any source prefix longer than /56.",
   ia_pd_delegate_prefix_len: "Delegated Prefix Length",
   ia_pd_delegate_prefix_len_desc:
     "The prefix length assigned to each device. For example, with a /48 source prefix and /64 delegation length, up to 2^16 sub-prefixes can be delegated.",
-  ia_pd_pool_start_index: "Sub-prefix Pool Start",
-  ia_pd_pool_start_index_desc:
-    "Starting index for sub-prefix allocation. Use this to skip the first few sub-prefixes, reserving them for static assignments or other purposes.",
   ia_pd_preferred_lifetime: "Preferred Lifetime",
   ia_pd_preferred_lifetime_desc:
     "How long (in seconds) the device will prefer using this delegated prefix. After expiry the prefix is still valid but no longer preferred.",
+  ia_pd_valid_lifetime: "Valid Lifetime",
+  ia_pd_valid_lifetime_desc:
+    "Maximum time (in seconds) the delegated prefix remains valid. After expiry the device must request again. Should be greater than the preferred lifetime.",
 };

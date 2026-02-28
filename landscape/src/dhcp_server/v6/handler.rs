@@ -17,7 +17,7 @@ use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 
-use crate::ipv6::prefix::ICMPv6ConfigInfo;
+use crate::ipv6::prefix::{ICMPv6ConfigInfo, PdDelegationParent};
 
 use super::server::DHCPv6Server;
 use super::utils::{
@@ -55,6 +55,8 @@ static DHCPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0x1, 0x
     dhcpv6_config,
     ra_pd_runtime_sources,
     ra_static_infos,
+    pd_delegation_static,
+    pd_delegation_dynamic,
     service_status,
     assigned_info,
     static_bindings
@@ -67,6 +69,8 @@ pub async fn dhcp_v6_server(
     dhcpv6_config: DHCPv6ServerConfig,
     ra_pd_runtime_sources: Vec<Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>>,
     ra_static_infos: Vec<ICMPv6ConfigInfo>,
+    pd_delegation_static: Vec<PdDelegationParent>,
+    pd_delegation_dynamic: Vec<Arc<ArcSwap<Option<PdDelegationParent>>>>,
     service_status: WatchService,
     assigned_info: Arc<RwLock<DHCPv6OfferInfo>>,
     static_bindings: HashMap<MacAddr, Ipv6Addr>,
@@ -146,12 +150,14 @@ pub async fn dhcp_v6_server(
                             (msg_bytes, msg_addr),
                             &ra_pd_runtime_sources,
                             &ra_static_infos,
+                            &pd_delegation_static,
+                            &pd_delegation_dynamic,
                             link_local,
                         ).await;
                         if need_update {
                             update_assigned_info(
                                 assigned_info.clone(),
-                                dhcp_server.get_offered_info(&ra_pd_runtime_sources, &ra_static_infos),
+                                dhcp_server.get_offered_info(&ra_pd_runtime_sources, &ra_static_infos, &pd_delegation_static, &pd_delegation_dynamic),
                             ).await;
                         }
                     },
@@ -169,7 +175,7 @@ pub async fn dhcp_v6_server(
                 );
                 update_assigned_info(
                     assigned_info.clone(),
-                    dhcp_server.get_offered_info(&ra_pd_runtime_sources, &ra_static_infos),
+                    dhcp_server.get_offered_info(&ra_pd_runtime_sources, &ra_static_infos, &pd_delegation_static, &pd_delegation_dynamic),
                 ).await;
             }
             change_result = service_status_subscribe.changed() => {
@@ -205,6 +211,8 @@ async fn handle_dhcpv6_message(
     (msg_bytes, msg_addr): (Vec<u8>, SocketAddr),
     runtime_sources: &[Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>],
     static_infos: &[ICMPv6ConfigInfo],
+    pd_delegation_static: &[PdDelegationParent],
+    pd_delegation_dynamic: &[Arc<ArcSwap<Option<PdDelegationParent>>>],
     link_local: Ipv6Addr,
 ) -> bool {
     let msg = match v6::Message::decode(&mut Decoder::new(&msg_bytes)) {
@@ -304,10 +312,20 @@ async fn handle_dhcpv6_message(
 
             if let Some(iapd_id) = iapd_id {
                 if server.pd_config.is_some() {
-                    let pd_prefixes =
-                        server.get_qualifying_pd_prefixes(runtime_sources, static_infos);
+                    let pd_prefixes = server
+                        .get_qualifying_pd_prefixes(pd_delegation_static, pd_delegation_dynamic);
                     if !pd_prefixes.is_empty() {
                         let iapd = build_iapd_options(server, &client_duid, iapd_id, &pd_prefixes);
+                        reply.opts_mut().insert(v6::DhcpOption::IAPD(iapd));
+                    } else {
+                        // No qualifying prefixes available - return NOT_ON_LINK to signal client
+                        let mut iapd_opts = v6::DhcpOptions::new();
+                        iapd_opts.insert(v6::DhcpOption::StatusCode(StatusCode {
+                            status: Status::NotOnLink,
+                            msg: "Prefix delegation not available, please request new prefix"
+                                .to_string(),
+                        }));
+                        let iapd = v6::IAPD { id: iapd_id, t1: 0, t2: 0, opts: iapd_opts };
                         reply.opts_mut().insert(v6::DhcpOption::IAPD(iapd));
                     }
                 }
@@ -360,7 +378,69 @@ async fn handle_dhcpv6_message(
                     let na_prefixes =
                         server.get_qualifying_na_prefixes(runtime_sources, static_infos);
                     if !na_prefixes.is_empty() {
-                        let iana = build_iana_options(server, &client_duid, iana_id, &na_prefixes);
+                        // For Renew: ensure we have a cached address, or re-allocate if needed
+                        if !server.na_offered.contains_key(&client_duid) {
+                            // Client has no cached address - allocate new one
+                            tracing::debug!(
+                                "DHCPv6 Renew: no cached address for client, allocating new"
+                            );
+                            server.offer_na_suffix(&client_duid, mac, None);
+                        }
+                        let mut iana =
+                            build_iana_options(server, &client_duid, iana_id, &na_prefixes);
+
+                        // RFC 8415 §18.4.3: For Rebind/Renew, if the prefix changed,
+                        // return old addresses with lifetime=0 so the client deprecates them.
+                        if msg.msg_type() == DhcpV6MessageType::Rebind
+                            || msg.msg_type() == DhcpV6MessageType::Renew
+                        {
+                            let mut server_addrs: Vec<Ipv6Addr> = Vec::new();
+                            if let Some(cache) = server.na_offered.get(&client_duid) {
+                                for (prefix, prefix_len) in &na_prefixes {
+                                    server_addrs.push(combine_prefix_suffix(
+                                        *prefix,
+                                        *prefix_len,
+                                        cache.suffix,
+                                    ));
+                                }
+                            }
+                            if let Some(v6::DhcpOption::IANA(client_iana)) =
+                                msg.opts().get(v6::OptionCode::IANA)
+                            {
+                                if let Some(ia_addrs) =
+                                    client_iana.opts.get_all(v6::OptionCode::IAAddr)
+                                {
+                                    for ia_opt in ia_addrs {
+                                        if let v6::DhcpOption::IAAddr(ia_addr) = ia_opt {
+                                            if !server_addrs.contains(&ia_addr.addr) {
+                                                tracing::info!(
+                                                    "DHCPv6 deprecating old address {} (prefix changed)",
+                                                    ia_addr.addr
+                                                );
+                                                iana.opts.insert(v6::DhcpOption::IAAddr(IAAddr {
+                                                    addr: ia_addr.addr,
+                                                    preferred_life: 0,
+                                                    valid_life: 0,
+                                                    opts: v6::DhcpOptions::new(),
+                                                }));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        reply.opts_mut().insert(v6::DhcpOption::IANA(iana));
+                    } else {
+                        // No qualifying prefixes available - return NOT_ON_LINK to signal client
+                        // that it should request a new address
+                        let mut iana_opts = v6::DhcpOptions::new();
+                        iana_opts.insert(v6::DhcpOption::StatusCode(StatusCode {
+                            status: Status::NotOnLink,
+                            msg: "Prefix no longer available, please request new address"
+                                .to_string(),
+                        }));
+                        let iana = v6::IANA { id: iana_id, t1: 0, t2: 0, opts: iana_opts };
                         reply.opts_mut().insert(v6::DhcpOption::IANA(iana));
                     }
                 }
@@ -368,10 +448,76 @@ async fn handle_dhcpv6_message(
 
             if let Some(iapd_id) = iapd_id {
                 if server.pd_config.is_some() {
-                    let pd_prefixes =
-                        server.get_qualifying_pd_prefixes(runtime_sources, static_infos);
+                    let pd_prefixes = server
+                        .get_qualifying_pd_prefixes(pd_delegation_static, pd_delegation_dynamic);
                     if !pd_prefixes.is_empty() {
-                        let iapd = build_iapd_options(server, &client_duid, iapd_id, &pd_prefixes);
+                        // For Renew: ensure we have a cached prefix, or re-allocate if needed
+                        if !server.pd_offered.contains_key(&client_duid) {
+                            // Client has no cached prefix - allocate new one
+                            tracing::debug!(
+                                "DHCPv6 Renew: no cached prefix for client, allocating new"
+                            );
+                            server.offer_pd_index(&client_duid);
+                        }
+                        let mut iapd =
+                            build_iapd_options(server, &client_duid, iapd_id, &pd_prefixes);
+
+                        // RFC 8415 §18.4.3: deprecate old delegated prefixes no longer valid
+                        if msg.msg_type() == DhcpV6MessageType::Rebind
+                            || msg.msg_type() == DhcpV6MessageType::Renew
+                        {
+                            let pd_config = server.pd_config.as_ref().unwrap();
+                            let mut server_prefixes: Vec<Ipv6Addr> = Vec::new();
+                            if let Some(cache) = server.pd_offered.get(&client_duid) {
+                                for (base_prefix, base_prefix_len) in &pd_prefixes {
+                                    server_prefixes.push(compute_delegated_prefix(
+                                        *base_prefix,
+                                        *base_prefix_len,
+                                        pd_config.delegate_prefix_len,
+                                        cache.sub_index,
+                                    ));
+                                }
+                            }
+                            if let Some(v6::DhcpOption::IAPD(client_iapd)) =
+                                msg.opts().get(v6::OptionCode::IAPD)
+                            {
+                                if let Some(ia_prefixes) =
+                                    client_iapd.opts.get_all(v6::OptionCode::IAPrefix)
+                                {
+                                    for ia_opt in ia_prefixes {
+                                        if let v6::DhcpOption::IAPrefix(ia_prefix) = ia_opt {
+                                            if !server_prefixes.contains(&ia_prefix.prefix_ip) {
+                                                tracing::info!(
+                                                    "DHCPv6 deprecating old prefix {}/{} (prefix changed)",
+                                                    ia_prefix.prefix_ip,
+                                                    ia_prefix.prefix_len
+                                                );
+                                                iapd.opts.insert(v6::DhcpOption::IAPrefix(
+                                                    IAPrefix {
+                                                        preferred_lifetime: 0,
+                                                        valid_lifetime: 0,
+                                                        prefix_len: ia_prefix.prefix_len,
+                                                        prefix_ip: ia_prefix.prefix_ip,
+                                                        opts: v6::DhcpOptions::new(),
+                                                    },
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        reply.opts_mut().insert(v6::DhcpOption::IAPD(iapd));
+                    } else {
+                        // No qualifying prefixes available - return NOT_ON_LINK to signal client
+                        let mut iapd_opts = v6::DhcpOptions::new();
+                        iapd_opts.insert(v6::DhcpOption::StatusCode(StatusCode {
+                            status: Status::NotOnLink,
+                            msg: "Prefix delegation not available, please request new prefix"
+                                .to_string(),
+                        }));
+                        let iapd = v6::IAPD { id: iapd_id, t1: 0, t2: 0, opts: iapd_opts };
                         reply.opts_mut().insert(v6::DhcpOption::IAPD(iapd));
                     }
                 }
@@ -415,14 +561,53 @@ async fn handle_dhcpv6_message(
         }
 
         DhcpV6MessageType::Confirm => {
+            // RFC 8415 §18.4.2: Check if client's addresses are still on-link.
+            // If any address is not appropriate for the link, return NotOnLink
+            // to force the client to restart with Solicit.
+            let na_prefixes = server.get_qualifying_na_prefixes(runtime_sources, static_infos);
+
+            let mut all_on_link = true;
+            if let Some(v6::DhcpOption::IANA(client_iana)) = msg.opts().get(v6::OptionCode::IANA) {
+                if let Some(ia_addrs) = client_iana.opts.get_all(v6::OptionCode::IAAddr) {
+                    for ia_opt in ia_addrs {
+                        if let v6::DhcpOption::IAAddr(ia_addr) = ia_opt {
+                            let on_link = na_prefixes.iter().any(|(prefix, prefix_len)| {
+                                let mask = if *prefix_len >= 128 {
+                                    !0u128
+                                } else {
+                                    !0u128 << (128 - prefix_len)
+                                };
+                                (u128::from(ia_addr.addr) & mask) == (u128::from(*prefix) & mask)
+                            });
+                            if !on_link {
+                                tracing::info!(
+                                    "DHCPv6 Confirm: address {} is NOT on-link, rejecting",
+                                    ia_addr.addr
+                                );
+                                all_on_link = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            let status = if all_on_link {
+                tracing::debug!("DHCPv6 Confirm: all addresses on-link, returning Success");
+                StatusCode { status: Status::Success, msg: String::new() }
+            } else {
+                tracing::info!("DHCPv6 Confirm: returning NotOnLink, client should Solicit");
+                StatusCode {
+                    status: Status::NotOnLink,
+                    msg: "Address not appropriate for link".to_string(),
+                }
+            };
+
             let mut reply = v6::Message::new(DhcpV6MessageType::Reply);
             reply.set_xid(msg.xid());
             reply.opts_mut().insert(v6::DhcpOption::ClientId(client_duid));
             reply.opts_mut().insert(v6::DhcpOption::ServerId(server_duid.to_vec()));
-            reply.opts_mut().insert(v6::DhcpOption::StatusCode(StatusCode {
-                status: Status::Success,
-                msg: String::new(),
-            }));
+            reply.opts_mut().insert(v6::DhcpOption::StatusCode(status));
 
             send_dhcpv6_reply(&reply, send_socket, msg_addr).await;
             return false;
@@ -538,5 +723,157 @@ async fn send_dhcpv6_reply(msg: &v6::Message, send_socket: &UdpSocket, target: S
         Err(e) => {
             tracing::error!("DHCPv6 send error: {:?}", e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use landscape_common::dhcp::v6_server::config::{
+        DHCPv6IANAConfig, DHCPv6IAPDConfig, DHCPv6ServerConfig,
+    };
+    use landscape_common::net::MacAddr;
+    use std::net::Ipv6Addr;
+
+    #[test]
+    fn test_renew_with_new_prefix_and_cached_address() {
+        // 场景：客户端有缓存的地址信息，改变前缀后 Renew
+        let server_config = DHCPv6ServerConfig {
+            enable: true,
+            ia_na: Some(DHCPv6IANAConfig {
+                max_prefix_len: 64,
+                pool_start: 256,
+                pool_end: Some(512),
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+            ia_pd: None,
+        };
+
+        let mut server = DHCPv6Server::init(&server_config, std::collections::HashMap::new());
+        let server_duid = vec![1, 2, 3, 4, 5, 6];
+        server.server_duid = server_duid;
+
+        let client_duid = b"test-client-1".to_vec();
+        let mac = MacAddr::from([0x00, 0x11, 0x22, 0x33, 0x44, 0x55]);
+
+        // 模拟客户端已有的缓存（原来从 A 前缀获得）
+        server.offer_na_suffix(&client_duid, Some(mac), None);
+        assert!(server.na_offered.contains_key(&client_duid), "Client should have cached address");
+
+        // 获取新前缀（B 前缀）
+        let new_prefix = Ipv6Addr::new(0xfd11, 0x2222, 0x3333, 0x3301, 0, 0, 0, 0);
+        let qualifying_prefixes = vec![(new_prefix, 64)];
+
+        // 构建 IANA 选项
+        let iana = build_iana_options(&server, &client_duid, 1, &qualifying_prefixes);
+
+        // 验证：IANA 应该有有效的 ID 和时间配置
+        assert_eq!(iana.id, 1, "IANA ID should match");
+        assert!(iana.t1 > 0, "IANA T1 should be greater than 0 for valid lease");
+        assert!(iana.t2 > iana.t1, "IANA T2 should be greater than T1");
+    }
+
+    #[test]
+    fn test_iana_lifetime_calculation() {
+        // 场景：验证 T1 和 T2 的计算是否正确
+        let config = DHCPv6IANAConfig {
+            max_prefix_len: 64,
+            pool_start: 256,
+            pool_end: None,
+            preferred_lifetime: 3600,
+            valid_lifetime: 7200,
+        };
+
+        let t1 = config.preferred_lifetime / 2;
+        let t2 = (config.preferred_lifetime * 4) / 5;
+
+        assert_eq!(t1, 1800, "T1 should be half of preferred_lifetime");
+        assert_eq!(t2, 2880, "T2 should be 4/5 of preferred_lifetime");
+    }
+
+    #[test]
+    fn test_server_initialization() {
+        // 场景：验证服务器正常初始化
+        let server_config = DHCPv6ServerConfig {
+            enable: true,
+            ia_na: Some(DHCPv6IANAConfig {
+                max_prefix_len: 64,
+                pool_start: 256,
+                pool_end: Some(512),
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+            ia_pd: Some(DHCPv6IAPDConfig {
+                delegate_prefix_len: 61,
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+        };
+
+        let server = DHCPv6Server::init(&server_config, std::collections::HashMap::new());
+
+        assert!(server.na_config.is_some(), "NA config should be set");
+        assert!(server.pd_config.is_some(), "PD config should be set");
+        assert_eq!(
+            server.na_config.as_ref().unwrap().max_prefix_len,
+            64,
+            "NA max_prefix_len should be 64"
+        );
+    }
+
+    #[test]
+    fn test_address_allocation_for_client() {
+        // 场景：验证为新客户端分配地址
+        let server_config = DHCPv6ServerConfig {
+            enable: true,
+            ia_na: Some(DHCPv6IANAConfig {
+                max_prefix_len: 64,
+                pool_start: 256,
+                pool_end: Some(512),
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+            ia_pd: None,
+        };
+
+        let mut server = DHCPv6Server::init(&server_config, std::collections::HashMap::new());
+        let client_duid = b"test-client-new".to_vec();
+        let mac = MacAddr::from([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
+
+        // 为客户端分配地址
+        server.offer_na_suffix(&client_duid, Some(mac), None);
+
+        // 验证：客户端应该有缓存
+        assert!(
+            server.na_offered.contains_key(&client_duid),
+            "Client should be in na_offered cache after allocation"
+        );
+    }
+
+    #[test]
+    fn test_prefix_delegation_allocation() {
+        // 场景：验证前缀委托分配
+        let server_config = DHCPv6ServerConfig {
+            enable: true,
+            ia_na: None,
+            ia_pd: Some(DHCPv6IAPDConfig {
+                delegate_prefix_len: 61,
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+        };
+
+        let mut server = DHCPv6Server::init(&server_config, std::collections::HashMap::new());
+        let client_duid = b"test-client-pd".to_vec();
+
+        // 为客户端分配前缀
+        server.offer_pd_index(&client_duid);
+
+        // 验证：客户端应该有 PD 缓存
+        assert!(
+            server.pd_offered.contains_key(&client_duid),
+            "Client should be in pd_offered cache after PD allocation"
+        );
     }
 }

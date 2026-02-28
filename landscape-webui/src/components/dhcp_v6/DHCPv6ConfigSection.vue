@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type {
-  DHCPv6ServerConfig,
-  DHCPv6IANAConfig,
-  DHCPv6IAPDConfig,
-} from "@landscape-router/types/api/schemas";
+import type { DHCPv6ServerConfig } from "@landscape-router/types/api/schemas";
 
 const props = defineProps<{
   managed_address_config: boolean;
@@ -50,9 +46,7 @@ const ia_pd_enabled = computed({
     if (!config.value) return;
     if (val) {
       config.value.ia_pd = {
-        max_source_prefix_len: 56,
         delegate_prefix_len: 64,
-        pool_start_index: 1,
         preferred_lifetime: 3600,
         valid_lifetime: 7200,
       };
@@ -154,48 +148,12 @@ const showMFlagWarning = computed(() => {
       </n-form-item-gi>
 
       <template v-if="config.ia_pd">
-        <n-form-item-gi span="2">
-          <template #label>
-            <Notice>
-              最大源前缀长度
-              <template #msg>
-                RA 中前缀长度 &le; 此值的前缀将用于委派<br />
-                例如: 56 表示仅 /56 及更短的前缀可用
-              </template>
-            </Notice>
-          </template>
-          <n-input-number
-            style="flex: 1"
-            v-model:value="config.ia_pd.max_source_prefix_len"
-            :min="1"
-            :max="126"
-          />
-        </n-form-item-gi>
-
         <n-form-item-gi span="2" label="委派前缀长度">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_pd.delegate_prefix_len"
-            :min="(config.ia_pd.max_source_prefix_len ?? 56) + 1"
+            :min="1"
             :max="128"
-          />
-        </n-form-item-gi>
-
-        <n-form-item-gi span="2" label="子前缀池起始索引">
-          <n-input-number
-            style="flex: 1"
-            v-model:value="config.ia_pd.pool_start_index"
-            :min="0"
-          />
-        </n-form-item-gi>
-
-        <n-form-item-gi span="2" label="子前缀池结束索引">
-          <n-input-number
-            style="flex: 1"
-            v-model:value="config.ia_pd.pool_end_index"
-            :min="config.ia_pd.pool_start_index + 1"
-            placeholder="默认: 自动计算"
-            clearable
           />
         </n-form-item-gi>
 

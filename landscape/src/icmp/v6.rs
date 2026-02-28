@@ -21,7 +21,15 @@ use std::time::Duration;
 static ICMPV6_MULTICAST_ROUTER: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0x2);
 static ICMPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0x1);
 
-#[tracing::instrument(skip(mac_addr, service_status, runtime, change_notify, assigned_ips,))]
+#[tracing::instrument(skip(
+    mac_addr,
+    service_status,
+    runtime,
+    change_notify,
+    assigned_ips,
+    onlink_runtime,
+    onlink_change_notify
+))]
 pub async fn icmp_ra_server(
     ad_interval: u32,
     ra_flag: RouterFlags,
@@ -31,6 +39,11 @@ pub async fn icmp_ra_server(
     runtime: &IPv6PrefixRuntime,
     mut change_notify: watch::Receiver<()>,
     assigned_ips: Arc<RwLock<IPv6NAInfo>>,
+    autonomous: bool,
+    // Optional: additional prefixes advertised with A=0 (on-link only, no SLAAC).
+    // Used in SlaacDhcpv6 mode so clients can detect DHCPv6 prefix changes via RA.
+    onlink_runtime: Option<&IPv6PrefixRuntime>,
+    mut onlink_change_notify: Option<watch::Receiver<()>>,
 ) -> LdResult<()> {
     {
         let mut ips = assigned_ips.write().await;
@@ -139,6 +152,9 @@ pub async fn icmp_ra_server(
     // Consume the initial "unseen" state to prevent the first changed() call
     // from returning immediately in the select! loop
     change_notify.borrow_and_update();
+    if let Some(ref mut rx) = onlink_change_notify {
+        rx.borrow_and_update();
+    }
 
     // RA main loop
     tracing::debug!("ICMP get IPv6 Prefix Watch");
@@ -153,7 +169,9 @@ pub async fn icmp_ra_server(
                     &mac_addr,
                     &send_socket,
                     runtime,
-                    ra_flag
+                    ra_flag,
+                    autonomous,
+                    onlink_runtime,
                 ).await;
 
                 {
@@ -174,7 +192,28 @@ pub async fn icmp_ra_server(
                     &mac_addr,
                     &send_socket,
                     runtime,
-                    ra_flag
+                    ra_flag,
+                    autonomous,
+                    onlink_runtime,
+                ).await;
+            },
+            result = async {
+                match onlink_change_notify.as_mut() {
+                    Some(rx) => rx.changed().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                if result.is_err() {
+                    tracing::warn!("onlink prefix change sender dropped");
+                    continue;
+                }
+                interval_msg(
+                    &mac_addr,
+                    &send_socket,
+                    runtime,
+                    ra_flag,
+                    autonomous,
+                    onlink_runtime,
                 ).await;
             },
             message_result = message_rx.recv() => {
@@ -186,6 +225,8 @@ pub async fn icmp_ra_server(
                             &send_socket,
                             runtime,
                             ra_flag,
+                            autonomous,
+                            onlink_runtime,
                             assigned_ips.clone()
                         ).await;
                     }
@@ -208,6 +249,10 @@ pub async fn icmp_ra_server(
         }
     }
 
+    // Send deprecation RA: all current prefixes with lifetime=0 so clients
+    // immediately stop using old prefixes (e.g., before service restarts with new config)
+    send_deprecation_ra(&mac_addr, &send_socket, runtime, ra_flag, onlink_runtime).await;
+
     std::fs::write(&ipv6_forwarding_path, "0")
         .expect(&format!("set {} ipv6 forwarding error", iface_name));
     tracing::info!("ICMP v6 RA Server Stop: {:#?}", service_status);
@@ -222,6 +267,8 @@ async fn interval_msg(
     send_socket: &UdpSocket,
     runtime: &IPv6PrefixRuntime,
     ra_flag: RouterFlags,
+    autonomous: bool,
+    onlink_runtime: Option<&IPv6PrefixRuntime>,
 ) {
     build_and_send_ra(
         my_mac_addr,
@@ -229,6 +276,8 @@ async fn interval_msg(
         SocketAddr::new(IpAddr::V6(ICMPV6_MULTICAST), 0),
         runtime,
         ra_flag,
+        autonomous,
+        onlink_runtime,
     )
     .await;
 }
@@ -239,6 +288,8 @@ async fn handle_rs_msg(
     send_socket: &UdpSocket,
     runtime: &IPv6PrefixRuntime,
     ra_flag: RouterFlags,
+    autonomous: bool,
+    onlink_runtime: Option<&IPv6PrefixRuntime>,
     assigned_ips: Arc<RwLock<IPv6NAInfo>>,
 ) {
     let icmp_v6_msg = Icmpv6Message::decode(&mut Decoder::new(&msg));
@@ -262,7 +313,16 @@ async fn handle_rs_msg(
         Icmpv6Message::RouterSolicitation(router_solicitation) => {
             tracing::debug!("router_solicitation: {router_solicitation:?}");
             tracing::debug!("target_ip: {target_ip:?}");
-            build_and_send_ra(my_mac_addr, send_socket, target_addr, runtime, ra_flag).await;
+            build_and_send_ra(
+                my_mac_addr,
+                send_socket,
+                target_addr,
+                runtime,
+                ra_flag,
+                autonomous,
+                onlink_runtime,
+            )
+            .await;
         }
         Icmpv6Message::RouterAdvertisement(_) => {}
         Icmpv6Message::NeighborAdvertisement(neighbor_advertisement) => {
@@ -304,21 +364,109 @@ async fn send_data(msg: &Icmpv6Message, send_socket: &UdpSocket, target_sock: So
     }
 }
 
+/// Send a deprecation RA: all current prefixes with lifetime=0.
+/// Tells clients to immediately deprecate old prefixes before service restarts with new config.
+/// router_lifetime is kept normal so clients don't briefly lose their default router.
+async fn send_deprecation_ra(
+    my_mac_addr: &MacAddr,
+    send_socket: &UdpSocket,
+    runtime: &IPv6PrefixRuntime,
+    ra_flag: RouterFlags,
+    onlink_runtime: Option<&IPv6PrefixRuntime>,
+) {
+    let mut opts = IcmpV6Options::new();
+    opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
+
+    let mut has_prefix = false;
+
+    // Deprecate all main runtime prefixes
+    for static_prefix in runtime.static_info.iter() {
+        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+            static_prefix.sub_prefix_len,
+            0,
+            0,
+            static_prefix.sub_prefix,
+            false,
+        )));
+        has_prefix = true;
+    }
+    for (_, pd_prefix) in runtime.pd_info.iter() {
+        let pd_prefix = pd_prefix.load();
+        let Some(pd_prefix) = pd_prefix.as_ref() else {
+            continue;
+        };
+        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+            pd_prefix.sub_prefix_len,
+            0,
+            0,
+            pd_prefix.sub_prefix,
+            false,
+        )));
+        has_prefix = true;
+    }
+
+    // Deprecate all onlink runtime prefixes
+    if let Some(onlink_rt) = onlink_runtime {
+        for static_prefix in onlink_rt.static_info.iter() {
+            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+                static_prefix.sub_prefix_len,
+                0,
+                0,
+                static_prefix.sub_prefix,
+                false,
+            )));
+            has_prefix = true;
+        }
+        for (_, pd_prefix) in onlink_rt.pd_info.iter() {
+            let pd_prefix = pd_prefix.load();
+            let Some(pd_prefix) = pd_prefix.as_ref() else {
+                continue;
+            };
+            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+                pd_prefix.sub_prefix_len,
+                0,
+                0,
+                pd_prefix.sub_prefix,
+                false,
+            )));
+            has_prefix = true;
+        }
+    }
+
+    if !has_prefix {
+        return;
+    }
+
+    tracing::info!("Sending deprecation RA (all prefixes lifetime=0)");
+
+    // Use link-local as RDNSS — sub_router addresses are about to be removed,
+    // but link-local is always reachable during the transition
+    let link_local = my_mac_addr.to_ipv6_link_local();
+    opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, link_local)));
+    opts.insert(IcmpV6Option::MTU(1500));
+
+    let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(ra_flag.into(), opts));
+    send_data(&msg, send_socket, SocketAddr::new(IpAddr::V6(ICMPV6_MULTICAST), 0)).await;
+}
+
 async fn build_and_send_ra(
     my_mac_addr: &MacAddr,
     send_socket: &UdpSocket,
     target_addr: SocketAddr,
     runtime: &IPv6PrefixRuntime,
     ra_flag: RouterFlags,
+    autonomous: bool,
+    onlink_runtime: Option<&IPv6PrefixRuntime>,
 ) {
     let mut opts = IcmpV6Options::new();
     opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
     for static_prefix in runtime.static_info.iter() {
-        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
+        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
             static_prefix.sub_prefix_len,
             600,
             300,
             static_prefix.sub_prefix,
+            autonomous,
         )));
 
         opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
@@ -333,11 +481,12 @@ async fn build_and_send_ra(
         let Some(pd_prefix) = pd_prefix.as_ref() else {
             continue;
         };
-        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::new(
+        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
             pd_prefix.sub_prefix_len,
             600,
             300,
             pd_prefix.sub_prefix,
+            autonomous,
         )));
 
         opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
@@ -346,6 +495,40 @@ async fn build_and_send_ra(
         )));
         opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, pd_prefix.sub_router)));
     }
+    // On-link only prefixes (A=0): advertised so clients can detect DHCPv6 prefix changes
+    if let Some(onlink_rt) = onlink_runtime {
+        for static_prefix in onlink_rt.static_info.iter() {
+            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+                static_prefix.sub_prefix_len,
+                600,
+                300,
+                static_prefix.sub_prefix,
+                false,
+            )));
+            opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
+                static_prefix.rt_prefix_len,
+                static_prefix.rt_prefix,
+            )));
+        }
+        for (_, pd_prefix) in onlink_rt.pd_info.iter() {
+            let pd_prefix = pd_prefix.load();
+            let Some(pd_prefix) = pd_prefix.as_ref() else {
+                continue;
+            };
+            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+                pd_prefix.sub_prefix_len,
+                600,
+                300,
+                pd_prefix.sub_prefix,
+                false,
+            )));
+            opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
+                pd_prefix.rt_prefix_len,
+                pd_prefix.rt_prefix,
+            )));
+        }
+    }
+
     opts.insert(IcmpV6Option::MTU(1500));
     opts.insert(IcmpV6Option::AdvertisementInterval(60_000));
 

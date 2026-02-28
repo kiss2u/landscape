@@ -13,7 +13,7 @@ use landscape_common::dhcp::v6_server::status::{
 use landscape_common::net::MacAddr;
 use landscape_common::utils::time::get_f64_timestamp;
 
-use crate::ipv6::prefix::ICMPv6ConfigInfo;
+use crate::ipv6::prefix::{ICMPv6ConfigInfo, PdDelegationParent};
 
 use super::types::{DHCPv6NACache, DHCPv6PDCache};
 use super::utils::{combine_prefix_suffix, compute_delegated_prefix, duid_to_hex, hash_duid};
@@ -52,14 +52,13 @@ impl DHCPv6Server {
             (0, 0)
         };
 
-        let (pd_pool_start, pd_range_capacity) = if let Some(pd) = &config.ia_pd {
-            let max_subs = 1u32
-                .checked_shl((pd.delegate_prefix_len - pd.max_source_prefix_len) as u32)
-                .unwrap_or(u32::MAX);
-            let end = pd
-                .pool_end_index
-                .unwrap_or(pd.pool_start_index.saturating_add(max_subs.saturating_sub(1)));
-            (pd.pool_start_index, end - pd.pool_start_index)
+        // IA_PD: pool management is now handled per-source in LanIPv6SourceConfig (PdStatic/PdPd).
+        // The DHCPv6 server doesn't manage the pool range itself anymore — it delegates
+        // based on runtime-resolved prefixes. We keep a simple counter for sub-index allocation.
+        let (pd_pool_start, pd_range_capacity) = if let Some(_pd) = &config.ia_pd {
+            // Default pool: start at 0, capacity based on delegate_prefix_len
+            // The actual capacity depends on the runtime source prefix, so we use a generous default
+            (0u32, 256u32) // Will be bounded at runtime by available prefix space
         } else {
             (0, 0)
         };
@@ -320,29 +319,25 @@ impl DHCPv6Server {
         result
     }
 
-    /// Get qualifying base prefixes for IA_PD from runtime sources
+    /// Get qualifying base prefixes for IA_PD from dedicated PD delegation sources.
+    /// Uses independent PdDelegationParent data (not NA prefix info).
     pub fn get_qualifying_pd_prefixes(
         &self,
-        runtime_sources: &[Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>],
-        static_infos: &[ICMPv6ConfigInfo],
+        pd_delegation_static: &[PdDelegationParent],
+        pd_delegation_dynamic: &[Arc<ArcSwap<Option<PdDelegationParent>>>],
     ) -> Vec<(Ipv6Addr, u8)> {
-        let Some(pd_config) = &self.pd_config else {
+        let Some(_) = &self.pd_config else {
             return vec![];
         };
         let mut result = vec![];
 
-        for info in static_infos {
-            if info.rt_prefix_len <= pd_config.max_source_prefix_len {
-                result.push((info.rt_prefix, info.rt_prefix_len));
-            }
+        for p in pd_delegation_static {
+            result.push((p.prefix, p.prefix_len));
         }
 
-        for source in runtime_sources {
-            let loaded = source.load();
-            if let Some(info) = loaded.as_ref() {
-                if info.rt_prefix_len <= pd_config.max_source_prefix_len {
-                    result.push((info.rt_prefix, info.rt_prefix_len));
-                }
+        for src in pd_delegation_dynamic {
+            if let Some(p) = src.load().as_ref() {
+                result.push((p.prefix, p.prefix_len));
             }
         }
 
@@ -353,6 +348,8 @@ impl DHCPv6Server {
         &self,
         runtime_sources: &[Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>],
         static_infos: &[ICMPv6ConfigInfo],
+        pd_delegation_static: &[PdDelegationParent],
+        pd_delegation_dynamic: &[Arc<ArcSwap<Option<PdDelegationParent>>>],
     ) -> DHCPv6OfferInfo {
         let relative_boot_time = self.relative_boot_time.elapsed().as_secs();
         let na_prefixes = self.get_qualifying_na_prefixes(runtime_sources, static_infos);
@@ -375,7 +372,8 @@ impl DHCPv6Server {
             }
         }
 
-        let pd_prefixes = self.get_qualifying_pd_prefixes(runtime_sources, static_infos);
+        let pd_prefixes =
+            self.get_qualifying_pd_prefixes(pd_delegation_static, pd_delegation_dynamic);
         let mut delegated_prefixes = Vec::new();
         for (_, cache) in &self.pd_offered {
             if let Some(pd_config) = &self.pd_config {

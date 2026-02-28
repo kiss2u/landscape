@@ -206,9 +206,23 @@ impl PrefixInformation {
         preferred_lifetime: u32,
         prefix: Ipv6Addr,
     ) -> Self {
+        Self::with_autonomous(prefix_length, valid_lifetime, preferred_lifetime, prefix, true)
+    }
+
+    /// Create PrefixInformation with explicit control over the A (autonomous) flag.
+    /// L (on-link) is always set. When autonomous=false, clients won't SLAAC from this prefix.
+    pub fn with_autonomous(
+        prefix_length: u8,
+        valid_lifetime: u32,
+        preferred_lifetime: u32,
+        prefix: Ipv6Addr,
+        autonomous: bool,
+    ) -> Self {
+        // L=1 always (0x80), A depends on autonomous flag (0x40)
+        let flags = if autonomous { 0xc0 } else { 0x80 };
         PrefixInformation {
             prefix_length,
-            flags: 0xc0,
+            flags,
             valid_lifetime,
             preferred_lifetime,
             reserved2: 0,

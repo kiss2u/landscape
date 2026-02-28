@@ -94,6 +94,8 @@ async fn main() {
     let runtime = IPv6PrefixRuntime {
         static_info: vec![],
         pd_info: std::collections::HashMap::new(),
+        pd_delegation_static: vec![],
+        pd_delegation_dynamic: vec![],
         relative_boot_time: tokio::time::Instant::now(),
     };
     let (_change_tx, change_rx) = watch::channel(());
@@ -111,6 +113,9 @@ async fn main() {
                     &runtime,
                     change_rx,
                     assigned_ips,
+                    true,
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();

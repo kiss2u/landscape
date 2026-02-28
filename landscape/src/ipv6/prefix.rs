@@ -1,5 +1,5 @@
 use arc_swap::ArcSwap;
-use landscape_common::config::ra::{IPV6RaConfigSource, IPv6RaPdConfig};
+use landscape_common::config::lan_ipv6::{LanIPv6SourceConfig, SourceServiceKind};
 use landscape_common::ipv6_pd::{IAPrefixMap, LDIAPrefix};
 use landscape_common::route::{LanIPv6RouteKey, LanRouteInfo};
 use std::collections::HashMap;
@@ -12,6 +12,15 @@ use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use crate::route::IpRouteService;
+
+/// Parent prefix block available for IA_PD delegation.
+/// Derived from PdStatic (static) or PdPd (upstream PD watch).
+/// Completely independent from NA prefix info.
+#[derive(Clone)]
+pub struct PdDelegationParent {
+    pub prefix: Ipv6Addr, // sub-block network address (computed from pool_index/pool_len)
+    pub prefix_len: u8,   // = pool_len, the parent block length for delegation
+}
 
 #[derive(Clone)]
 pub struct ICMPv6ConfigInfo {
@@ -30,6 +39,9 @@ pub struct ICMPv6ConfigInfo {
 pub struct IPv6PrefixRuntime {
     pub static_info: Vec<ICMPv6ConfigInfo>,
     pub pd_info: HashMap<String, Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>>,
+    // PD delegation sources (independent from NA path)
+    pub pd_delegation_static: Vec<PdDelegationParent>,
+    pub pd_delegation_dynamic: Vec<Arc<ArcSwap<Option<PdDelegationParent>>>>,
     pub relative_boot_time: Instant,
 }
 
@@ -42,13 +54,27 @@ pub struct PrefixSetupResult {
     pub cleanup_ips: Vec<(Ipv6Addr, u8, String)>,
 }
 
+/// Runtime config for a PD source, extracted from LanIPv6SourceConfig
+struct PdSourceConfig {
+    depend_iface: String,
+    pool_index: u32,
+    sub_prefix_len: u8,
+    preferred_lifetime: u32,
+    valid_lifetime: u32,
+}
+
 /// Set up prefix sources (static + PD) and return runtime data, tokens, and change notifications.
 ///
-/// - Static sources: allocate subnet, set interface IP, register route
-/// - PD sources: watch for prefix updates, notify on change
-/// - Returns `PrefixSetupResult` with tokens for RA and DHCPv6 lifecycle management
+/// Accepts the new flat `LanIPv6SourceConfig` sources, optionally filtered by service kind.
+/// - Ra* sources: used for RA prefix setup (static IP + route, or PD watch)
+/// - Na* sources: used for DHCPv6 IA_NA prefix setup (same mechanics)
+/// - Pd* sources: NOT handled here (IA_PD pool management is in DHCPv6 server)
+///
+/// If `filter_kind` is Some, only sources matching that kind are processed.
+/// For backward compat with the service layer, RA uses Ra sources, DHCPv6 NA uses Na sources.
 pub async fn setup_prefix_sources(
-    source: Vec<IPV6RaConfigSource>,
+    sources: &[LanIPv6SourceConfig],
+    filter_kinds: &[SourceServiceKind],
     iface_name: &str,
     lan_info: &LanRouteInfo,
     route_service: &IpRouteService,
@@ -62,124 +88,257 @@ pub async fn setup_prefix_sources(
     let mut runtime = IPv6PrefixRuntime {
         static_info: vec![],
         pd_info: HashMap::new(),
+        pd_delegation_static: vec![],
+        pd_delegation_dynamic: vec![],
         relative_boot_time: Instant::now(),
     };
     let mut cleanup_ips = vec![];
 
-    for src in source {
-        match src {
-            IPV6RaConfigSource::Static(static_config) => {
-                let rt_prefix_len = 56;
-                let (sub_prefix, sub_router) = allocate_subnet(
-                    static_config.base_prefix,
-                    rt_prefix_len,
-                    static_config.sub_prefix_len,
-                    static_config.sub_index as u128,
-                );
-                set_iface_ip(sub_router, static_config.sub_prefix_len, iface_name, None, None);
-                cleanup_ips.push((
-                    sub_router,
-                    static_config.sub_prefix_len,
-                    iface_name.to_string(),
-                ));
-                let mut li = lan_info.clone();
-                li.iface_ip = IpAddr::V6(sub_router);
-                li.prefix = static_config.sub_prefix_len;
-                let lan_info_key = LanIPv6RouteKey {
-                    iface_name: iface_name.to_string(),
-                    subnet_index: static_config.sub_index,
-                };
-                route_service.insert_ipv6_lan_route(lan_info_key, li).await;
-                runtime.static_info.push(ICMPv6ConfigInfo {
-                    rt_prefix: static_config.base_prefix,
-                    rt_prefix_len,
-                    sub_router,
-                    sub_prefix,
-                    sub_prefix_len: static_config.sub_prefix_len,
-                    ra_preferred_lifetime: static_config.ra_preferred_lifetime,
-                    ra_valid_lifetime: static_config.ra_valid_lifetime,
-                });
-            }
-            IPV6RaConfigSource::Pd(pd_config) => {
-                let pd_prefix_info: Option<ICMPv6ConfigInfo> = None;
-                let pd_prefix_info = Arc::new(ArcSwap::from_pointee(pd_prefix_info));
-                let mut ia_config_watch = prefix_map.get_ia_prefix(&pd_config.depend_iface).await;
-                runtime.pd_info.insert(pd_config.depend_iface.clone(), pd_prefix_info.clone());
+    for src in sources {
+        if !filter_kinds.contains(&src.service_kind()) {
+            continue;
+        }
 
-                let change_tx_clone = change_tx.clone();
-                let ra_token_clone = ra_token.clone();
+        // Extract common parameters from the source variant
+        let (base_prefix_opt, pd_config_opt) = match src {
+            LanIPv6SourceConfig::RaStatic {
+                base_prefix,
+                pool_index,
+                preferred_lifetime,
+                valid_lifetime,
+            } => (Some((*base_prefix, *pool_index, *preferred_lifetime, *valid_lifetime)), None),
+            LanIPv6SourceConfig::NaStatic { base_prefix, pool_index } => {
+                (Some((*base_prefix, *pool_index, 0, 0)), None)
+            }
+            LanIPv6SourceConfig::RaPd {
+                depend_iface,
+                pool_index,
+                preferred_lifetime,
+                valid_lifetime,
+            } => (
+                None,
+                Some(PdSourceConfig {
+                    depend_iface: depend_iface.clone(),
+                    pool_index: *pool_index,
+                    sub_prefix_len: 64,
+                    preferred_lifetime: *preferred_lifetime,
+                    valid_lifetime: *valid_lifetime,
+                }),
+            ),
+            LanIPv6SourceConfig::NaPd { depend_iface, pool_index } => (
+                None,
+                Some(PdSourceConfig {
+                    depend_iface: depend_iface.clone(),
+                    pool_index: *pool_index,
+                    sub_prefix_len: 64,
+                    preferred_lifetime: 0,
+                    valid_lifetime: 0,
+                }),
+            ),
+            // PdStatic: compute sub-block and store in pd_delegation_static
+            LanIPv6SourceConfig::PdStatic {
+                base_prefix,
+                base_prefix_len,
+                pool_index,
+                pool_len,
+            } => {
+                let (sub_block, _) =
+                    allocate_subnet(*base_prefix, *base_prefix_len, *pool_len, *pool_index as u128);
+                runtime
+                    .pd_delegation_static
+                    .push(PdDelegationParent { prefix: sub_block, prefix_len: *pool_len });
+                continue;
+            }
+            // PdPd: watch upstream PD and store in pd_delegation_dynamic
+            LanIPv6SourceConfig::PdPd {
+                depend_iface,
+                max_source_prefix_len,
+                pool_index,
+                pool_len,
+            } => {
+                let pd_prefix_info: Option<PdDelegationParent> = None;
+                let pd_prefix_info = Arc::new(ArcSwap::from_pointee(pd_prefix_info));
+                let mut ia_config_watch = prefix_map.get_ia_prefix(depend_iface).await;
+                runtime.pd_delegation_dynamic.push(pd_prefix_info.clone());
+
                 let dhcpv6_token_clone = dhcpv6_token.clone();
-                let iface_name_owned = iface_name.to_string();
-                let lan_info_clone = lan_info.clone();
-                let route_service_clone = route_service.clone();
+                let max_source_prefix_len = *max_source_prefix_len;
+                let pool_index = *pool_index;
+                let pool_len = *pool_len;
+                let depend_iface_owned = depend_iface.clone();
 
                 let mut expire_time = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
                 // Check once immediately
                 let ia_prefix = ia_config_watch.borrow().clone();
                 if let Some(ia_prefix) = ia_prefix {
-                    pd_prefix_info.store(Arc::new(Some(
-                        update_current_info(
-                            &iface_name_owned,
-                            ia_prefix,
-                            &pd_config,
-                            expire_time.as_mut(),
-                            &lan_info_clone,
-                            &route_service_clone,
-                        )
-                        .await,
-                    )));
+                    if ia_prefix.prefix_len <= max_source_prefix_len {
+                        let (sub_block, _) = allocate_subnet(
+                            ia_prefix.prefix_ip,
+                            ia_prefix.prefix_len,
+                            pool_len,
+                            pool_index as u128,
+                        );
+                        pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
+                            prefix: sub_block,
+                            prefix_len: pool_len,
+                        })));
+                        expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(
+                            ia_prefix.valid_lifetime as u64,
+                        )));
+                    }
                 }
 
                 tokio::spawn(async move {
-                    // Wait for both RA and DHCPv6 to finish before stopping
-                    let both_done = async {
-                        tokio::join!(ra_token_clone.cancelled(), dhcpv6_token_clone.cancelled());
-                    };
-                    tokio::pin!(both_done);
-
                     loop {
                         tokio::select! {
                             change_result = ia_config_watch.changed() => {
-                                tracing::info!("IA_PREFIX update");
-                                if let Err(_) = change_result {
-                                    tracing::error!("get change result error. exit loop");
+                                tracing::info!("PdPd IA_PREFIX update for {}", depend_iface_owned);
+                                if change_result.is_err() {
+                                    tracing::error!("PdPd change result error. exit loop");
                                     break;
                                 }
                                 let ia_prefix = ia_config_watch.borrow().clone();
                                 if let Some(ia_prefix) = ia_prefix {
-                                    pd_prefix_info.store(Arc::new(Some(update_current_info(
-                                        &iface_name_owned,
-                                        ia_prefix,
-                                        &pd_config,
-                                        expire_time.as_mut(),
-                                        &lan_info_clone,
-                                        &route_service_clone,
-                                    ).await)));
+                                    if ia_prefix.prefix_len <= max_source_prefix_len {
+                                        let (sub_block, _) = allocate_subnet(
+                                            ia_prefix.prefix_ip,
+                                            ia_prefix.prefix_len,
+                                            pool_len,
+                                            pool_index as u128,
+                                        );
+                                        pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
+                                            prefix: sub_block,
+                                            prefix_len: pool_len,
+                                        })));
+                                        expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
+                                    } else {
+                                        pd_prefix_info.store(Arc::new(None));
+                                    }
+                                } else {
+                                    pd_prefix_info.store(Arc::new(None));
                                 }
-                                let _ = change_tx_clone.send(());
                             },
-                            _ = &mut both_done => {
+                            _ = dhcpv6_token_clone.cancelled() => {
                                 break;
                             }
                             _ = expire_time.as_mut() => {
                                 pd_prefix_info.store(Arc::new(None));
-                                let _ = change_tx_clone.send(());
-                                tracing::debug!("expire_time active");
+                                tracing::debug!("PdPd expire_time active for {}", depend_iface_owned);
                                 expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(u64::MAX)));
                             }
                         }
                     }
-
-                    tracing::info!("iface: {} prefix listen is down", pd_config.depend_iface);
+                    tracing::info!("PdPd prefix listen for {} is down", depend_iface_owned);
                 });
+                continue;
             }
+        };
+
+        if let Some((base_prefix, pool_index, pref_lt, valid_lt)) = base_prefix_opt {
+            // Static source handling
+            let rt_prefix_len = 56;
+            let sub_prefix_len = 64u8;
+            let (sub_prefix, sub_router) =
+                allocate_subnet(base_prefix, rt_prefix_len, sub_prefix_len, pool_index as u128);
+            set_iface_ip(sub_router, sub_prefix_len, iface_name, None, None);
+            cleanup_ips.push((sub_router, sub_prefix_len, iface_name.to_string()));
+            let mut li = lan_info.clone();
+            li.iface_ip = IpAddr::V6(sub_router);
+            li.prefix = sub_prefix_len;
+            let lan_info_key = LanIPv6RouteKey {
+                iface_name: iface_name.to_string(),
+                subnet_index: pool_index,
+            };
+            route_service.insert_ipv6_lan_route(lan_info_key, li).await;
+            runtime.static_info.push(ICMPv6ConfigInfo {
+                rt_prefix: base_prefix,
+                rt_prefix_len,
+                sub_router,
+                sub_prefix,
+                sub_prefix_len,
+                ra_preferred_lifetime: pref_lt,
+                ra_valid_lifetime: valid_lt,
+            });
+        }
+
+        if let Some(pd_config) = pd_config_opt {
+            // PD source handling
+
+            let pd_prefix_info: Option<ICMPv6ConfigInfo> = None;
+            let pd_prefix_info = Arc::new(ArcSwap::from_pointee(pd_prefix_info));
+            let mut ia_config_watch = prefix_map.get_ia_prefix(&pd_config.depend_iface).await;
+            runtime.pd_info.insert(pd_config.depend_iface.clone(), pd_prefix_info.clone());
+
+            let change_tx_clone = change_tx.clone();
+            let ra_token_clone = ra_token.clone();
+            let dhcpv6_token_clone = dhcpv6_token.clone();
+            let iface_name_owned = iface_name.to_string();
+            let lan_info_clone = lan_info.clone();
+            let route_service_clone = route_service.clone();
+
+            let mut expire_time = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
+            // Check once immediately
+            let ia_prefix = ia_config_watch.borrow().clone();
+            if let Some(ia_prefix) = ia_prefix {
+                pd_prefix_info.store(Arc::new(Some(
+                    update_current_info(
+                        &iface_name_owned,
+                        ia_prefix,
+                        &pd_config,
+                        expire_time.as_mut(),
+                        &lan_info_clone,
+                        &route_service_clone,
+                    )
+                    .await,
+                )));
+            }
+
+            tokio::spawn(async move {
+                // Wait for both RA and DHCPv6 to finish before stopping
+                let both_done = async {
+                    tokio::join!(ra_token_clone.cancelled(), dhcpv6_token_clone.cancelled());
+                };
+                tokio::pin!(both_done);
+
+                loop {
+                    tokio::select! {
+                        change_result = ia_config_watch.changed() => {
+                            tracing::info!("IA_PREFIX update");
+                            if let Err(_) = change_result {
+                                tracing::error!("get change result error. exit loop");
+                                break;
+                            }
+                            let ia_prefix = ia_config_watch.borrow().clone();
+                            if let Some(ia_prefix) = ia_prefix {
+                                pd_prefix_info.store(Arc::new(Some(update_current_info(
+                                    &iface_name_owned,
+                                    ia_prefix,
+                                    &pd_config,
+                                    expire_time.as_mut(),
+                                    &lan_info_clone,
+                                    &route_service_clone,
+                                ).await)));
+                            }
+                            let _ = change_tx_clone.send(());
+                        },
+                        _ = &mut both_done => {
+                            break;
+                        }
+                        _ = expire_time.as_mut() => {
+                            pd_prefix_info.store(Arc::new(None));
+                            let _ = change_tx_clone.send(());
+                            tracing::debug!("expire_time active");
+                            expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(u64::MAX)));
+                        }
+                    }
+                }
+
+                tracing::info!("iface: {} prefix listen is down", pd_config.depend_iface);
+            });
         }
     }
 
     // Keep the change_tx sender alive until both RA and DHCPv6 tokens are cancelled.
-    // Without this, if there are no PD sources (only static), change_tx is dropped
-    // when this function returns, causing change_notify.changed() to immediately
-    // return Err in the RA main loop → infinite send storm.
     {
         let ra_token_clone = ra_token.clone();
         let dhcpv6_token_clone = dhcpv6_token.clone();
@@ -213,7 +372,7 @@ pub async fn cleanup_prefix_sources(
 async fn update_current_info(
     iface_name: &str,
     ia_prefix: LDIAPrefix,
-    pd_config: &IPv6RaPdConfig,
+    pd_config: &PdSourceConfig,
     mut expire_time: Pin<&mut tokio::time::Sleep>,
     lan_info: &LanRouteInfo,
     route_service: &IpRouteService,
@@ -222,23 +381,23 @@ async fn update_current_info(
     let (sub_prefix, sub_router) = allocate_subnet(
         ia_prefix.prefix_ip,
         ia_prefix.prefix_len,
-        pd_config.prefix_len,
-        pd_config.subnet_index as u128,
+        pd_config.sub_prefix_len,
+        pd_config.pool_index as u128,
     );
 
     let mut lan_info = lan_info.clone();
     lan_info.iface_ip = IpAddr::V6(sub_router);
-    lan_info.prefix = pd_config.prefix_len;
+    lan_info.prefix = pd_config.sub_prefix_len;
     let lan_info_key = LanIPv6RouteKey {
         iface_name: iface_name.to_string(),
-        subnet_index: pd_config.subnet_index,
+        subnet_index: pd_config.pool_index,
     };
     route_service.insert_ipv6_lan_route(lan_info_key, lan_info).await;
 
-    add_route(sub_prefix, pd_config.prefix_len, iface_name, Some(ia_prefix.valid_lifetime));
+    add_route(sub_prefix, pd_config.sub_prefix_len, iface_name, Some(ia_prefix.valid_lifetime));
     set_iface_ip(
         sub_router,
-        pd_config.prefix_len,
+        pd_config.sub_prefix_len,
         iface_name,
         Some(ia_prefix.valid_lifetime),
         Some(ia_prefix.preferred_lifetime),
@@ -248,10 +407,10 @@ async fn update_current_info(
         rt_prefix: ia_prefix.prefix_ip,
         rt_prefix_len: ia_prefix.prefix_len,
         sub_prefix,
-        sub_prefix_len: pd_config.prefix_len,
+        sub_prefix_len: pd_config.sub_prefix_len,
         sub_router,
-        ra_preferred_lifetime: pd_config.ra_preferred_lifetime,
-        ra_valid_lifetime: pd_config.ra_valid_lifetime,
+        ra_preferred_lifetime: pd_config.preferred_lifetime,
+        ra_valid_lifetime: pd_config.valid_lifetime,
     }
 }
 
@@ -354,7 +513,7 @@ pub fn set_iface_ip(
 #[cfg(test)]
 mod tests {
     use super::allocate_subnet;
-    use landscape_common::{config::ra::IPv6RaStaticConfig, ipv6_pd::LDIAPrefix};
+    use landscape_common::ipv6_pd::LDIAPrefix;
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::watch;
@@ -383,33 +542,19 @@ mod tests {
 
     #[test]
     fn test_static_setting() {
-        let ldia_prefix = IPv6RaStaticConfig {
-            base_prefix: "2001:db8::3".parse().unwrap(),
-            sub_prefix_len: 64,
-            sub_index: 2,
-            ra_preferred_lifetime: 300,
-            ra_valid_lifetime: 600,
-        };
-        let (subnet_network, router_addr) = allocate_subnet(
-            ldia_prefix.base_prefix,
-            60,
-            ldia_prefix.sub_prefix_len,
-            ldia_prefix.sub_index as u128,
-        );
-        println!("子网网络地址: {}/{}", subnet_network, ldia_prefix.sub_prefix_len);
+        let (subnet_network, router_addr) =
+            allocate_subnet("2001:db8::3".parse().unwrap(), 60, 64, 2);
+        println!("子网网络地址: {}/{}", subnet_network, 64);
         println!("路由器地址: {}", router_addr);
     }
 
     #[tokio::test]
     async fn test_change_channel_stays_alive_without_pd_sources() {
-        // Simulate setup_prefix_sources with only static sources (no PD):
-        // the keep-alive task should hold the sender alive.
         let (change_tx, mut change_rx) = watch::channel(());
         let change_tx = Arc::new(change_tx);
         let ra_token = CancellationToken::new();
         let dhcpv6_token = CancellationToken::new();
 
-        // keep-alive task (mirrors the fix in setup_prefix_sources)
         {
             let ra_clone = ra_token.clone();
             let dhcpv6_clone = dhcpv6_token.clone();
@@ -418,20 +563,16 @@ mod tests {
                 tokio::join!(ra_clone.cancelled(), dhcpv6_clone.cancelled());
             });
         }
-        // change_tx (original Arc) has been moved into spawn
 
         change_rx.borrow_and_update();
 
-        // changed() should timeout (no one sending), not return Err
         let result = tokio::time::timeout(Duration::from_millis(100), change_rx.changed()).await;
         assert!(result.is_err(), "should timeout, not get channel Err");
 
-        // Cancel tokens → keep-alive task ends → sender drops
         ra_token.cancel();
         dhcpv6_token.cancel();
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        // Now changed() should return Err (sender dropped)
         let result = change_rx.changed().await;
         assert!(result.is_err(), "sender dropped, should get Err");
     }
@@ -444,10 +585,8 @@ mod tests {
 
         change_rx.borrow_and_update();
 
-        // Simulate PD task sending notification
         tx_clone.send(()).unwrap();
 
-        // changed() should return Ok immediately
         let result = tokio::time::timeout(Duration::from_millis(100), change_rx.changed()).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_ok());

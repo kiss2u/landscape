@@ -3,7 +3,9 @@ use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::sync::Arc;
 
-use landscape_common::config::lan_ipv6::{IPv6ServiceMode, LanIPv6Config, LanIPv6ServiceConfig};
+use landscape_common::config::lan_ipv6::{
+    IPv6ServiceMode, LanIPv6Config, LanIPv6ServiceConfig, LanIPv6SourceConfig, SourceServiceKind,
+};
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::ipv6_pd::IAPrefixMap;
@@ -14,8 +16,8 @@ use landscape_common::route::LanRouteMode;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::service::manager::ServiceStarterTrait;
+use landscape_common::service::WatchService;
 use landscape_common::store::storev2::LandscapeStore;
-use landscape_common::{config::ra::IPV6RaConfigSource, service::WatchService};
 use landscape_database::enrolled_device::repository::EnrolledDeviceRepository;
 use landscape_database::lan_ipv6::repository::LanIPv6ServiceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -23,9 +25,7 @@ use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
 use crate::iface::get_iface_by_name;
-use crate::ipv6::prefix::{
-    cleanup_prefix_sources, setup_prefix_sources, IPv6PrefixRuntime, PrefixSetupResult,
-};
+use crate::ipv6::prefix::{cleanup_prefix_sources, setup_prefix_sources, PrefixSetupResult};
 use crate::route::IpRouteService;
 
 /// LAN IPv6 service: manages RA + DHCPv6 per interface with mode-aware orchestration
@@ -68,10 +68,12 @@ impl ServiceStarterTrait for LanIPv6Service {
                 let store_key = config.get_store_key();
                 let assigned_ips = {
                     let mut write = self.iface_lease_map.write().await;
-                    write
+                    let entry = write
                         .entry(store_key.clone())
-                        .or_insert_with(|| Arc::new(RwLock::new(IPv6NAInfo::init())))
-                        .clone()
+                        .or_insert_with(|| Arc::new(RwLock::new(IPv6NAInfo::init())));
+                    // Clear stale data from previous service run
+                    *entry.write().await = IPv6NAInfo::init();
+                    entry.clone()
                 };
 
                 // DHCPv6 setup
@@ -80,10 +82,12 @@ impl ServiceStarterTrait for LanIPv6Service {
                 let dhcpv6_assigned = if dhcpv6_enabled {
                     let assigned = {
                         let mut write = self.iface_dhcpv6_map.write().await;
-                        write
+                        let entry = write
                             .entry(store_key.clone())
-                            .or_insert_with(|| Arc::new(RwLock::new(DHCPv6OfferInfo::default())))
-                            .clone()
+                            .or_insert_with(|| Arc::new(RwLock::new(DHCPv6OfferInfo::default())));
+                        // Clear stale data from previous service run
+                        *entry.write().await = DHCPv6OfferInfo::default();
+                        entry.clone()
                     };
                     Some(assigned)
                 } else {
@@ -127,14 +131,14 @@ impl ServiceStarterTrait for LanIPv6Service {
                     };
                     tokio::spawn(async move {
                         let mode = config.config.mode;
-                        let LanIPv6Config { ad_interval, ra_flag, source, dhcpv6, .. } =
+                        let LanIPv6Config { ad_interval, ra_flag, sources, dhcpv6, .. } =
                             config.config;
                         let iface_name = config.iface_name;
 
                         match mode {
                             IPv6ServiceMode::Slaac => {
                                 run_slaac(
-                                    source,
+                                    &sources,
                                     &iface_name,
                                     &lan_info,
                                     &route_service,
@@ -149,6 +153,7 @@ impl ServiceStarterTrait for LanIPv6Service {
                             }
                             IPv6ServiceMode::Stateful => {
                                 run_stateful(
+                                    &sources,
                                     dhcpv6,
                                     &iface_name,
                                     &lan_info,
@@ -167,7 +172,7 @@ impl ServiceStarterTrait for LanIPv6Service {
                             }
                             IPv6ServiceMode::SlaacDhcpv6 => {
                                 run_slaac_dhcpv6(
-                                    source,
+                                    &sources,
                                     dhcpv6,
                                     &iface_name,
                                     &lan_info,
@@ -200,7 +205,7 @@ use landscape_common::net::MacAddr;
 
 /// Mode 1 (Slaac): RA with prefix info, no DHCPv6
 async fn run_slaac(
-    source: Vec<IPV6RaConfigSource>,
+    sources: &[LanIPv6SourceConfig],
     iface_name: &str,
     lan_info: &LanRouteInfo,
     route_service: &IpRouteService,
@@ -217,7 +222,15 @@ async fn run_slaac(
         dhcpv6_token,
         change_notify,
         cleanup_ips,
-    } = setup_prefix_sources(source, iface_name, lan_info, route_service, prefix_map).await;
+    } = setup_prefix_sources(
+        sources,
+        &[SourceServiceKind::Ra],
+        iface_name,
+        lan_info,
+        route_service,
+        prefix_map,
+    )
+    .await;
 
     // No DHCPv6 in Slaac mode
     dhcpv6_token.cancel();
@@ -232,6 +245,9 @@ async fn run_slaac(
         &runtime,
         change_notify,
         assigned_ips,
+        true, // autonomous: SLAAC clients auto-configure addresses from RA prefixes
+        None,
+        None,
     )
     .await;
 
@@ -241,6 +257,7 @@ async fn run_slaac(
 
 /// Mode 2 (Stateful): RA sends M=1 without prefix info, DHCPv6 assigns addresses
 async fn run_stateful(
+    sources: &[LanIPv6SourceConfig],
     dhcpv6: Option<DHCPv6ServerConfig>,
     iface_name: &str,
     lan_info: &LanRouteInfo,
@@ -263,15 +280,16 @@ async fn run_stateful(
         }
     };
 
-    // Setup prefix sources from dhcpv6.source for DHCPv6 server
+    // Setup prefix sources for DHCPv6 (Na + IaPd sources)
     let PrefixSetupResult {
         runtime: dhcpv6_runtime,
         ra_token: dhcpv6_ra_token,
         dhcpv6_token,
-        change_notify: _dhcpv6_change_notify,
+        change_notify: dhcpv6_change_notify,
         cleanup_ips: dhcpv6_cleanup_ips,
     } = setup_prefix_sources(
-        dhcpv6_config.source.clone(),
+        sources,
+        &[SourceServiceKind::Na, SourceServiceKind::IaPd],
         iface_name,
         lan_info,
         route_service,
@@ -286,6 +304,8 @@ async fn run_stateful(
     if let Some(dhcpv6_assigned_info) = dhcpv6_assigned {
         let pd_sources = dhcpv6_runtime.pd_info.values().cloned().collect();
         let static_infos = dhcpv6_runtime.static_info.clone();
+        let pd_delegation_static = dhcpv6_runtime.pd_delegation_static.clone();
+        let pd_delegation_dynamic = dhcpv6_runtime.pd_delegation_dynamic.clone();
         let dhcpv6_iface = iface_name.to_string();
         let dhcpv6_mac = mac.clone();
         let dhcpv6_status = status.clone();
@@ -300,6 +320,8 @@ async fn run_stateful(
                 dhcpv6_config,
                 pd_sources,
                 static_infos,
+                pd_delegation_static,
+                pd_delegation_dynamic,
                 dhcpv6_status,
                 dhcpv6_assigned_info,
                 static_bindings,
@@ -311,23 +333,20 @@ async fn run_stateful(
         dhcpv6_token.cancel();
     }
 
-    // RA with empty runtime (only M=1 flag, no prefix info)
-    let empty_runtime = IPv6PrefixRuntime {
-        static_info: vec![],
-        pd_info: HashMap::new(),
-        relative_boot_time: tokio::time::Instant::now(),
-    };
-    let (_empty_tx, empty_change_notify) = tokio::sync::watch::channel(());
-
+    // RA with DHCPv6 runtime: advertise prefixes with A=0 (no SLAAC) so clients
+    // can detect prefix changes via RA and re-initiate DHCPv6
     let _ = crate::icmp::v6::icmp_ra_server(
         ad_interval,
         ra_flag,
         mac,
         iface_name.to_string(),
         status,
-        &empty_runtime,
-        empty_change_notify,
+        &dhcpv6_runtime,
+        dhcpv6_change_notify,
         assigned_ips,
+        false, // autonomous=false: clients should NOT SLAAC, only use DHCPv6
+        None,
+        None,
     )
     .await;
 
@@ -336,7 +355,7 @@ async fn run_stateful(
 
 /// Mode 3 (SlaacDhcpv6): RA sends ULA prefixes, DHCPv6 assigns GUA addresses
 async fn run_slaac_dhcpv6(
-    ra_source: Vec<IPV6RaConfigSource>,
+    sources: &[LanIPv6SourceConfig],
     dhcpv6: Option<DHCPv6ServerConfig>,
     iface_name: &str,
     lan_info: &LanRouteInfo,
@@ -359,27 +378,36 @@ async fn run_slaac_dhcpv6(
         }
     };
 
-    // Setup RA prefix sources (ULA static)
+    // Setup RA prefix sources (Ra kind only)
     let PrefixSetupResult {
         runtime: ra_runtime,
         ra_token,
         dhcpv6_token: ra_dhcpv6_token,
         change_notify: ra_change_notify,
         cleanup_ips: ra_cleanup_ips,
-    } = setup_prefix_sources(ra_source, iface_name, lan_info, route_service, prefix_map).await;
+    } = setup_prefix_sources(
+        sources,
+        &[SourceServiceKind::Ra],
+        iface_name,
+        lan_info,
+        route_service,
+        prefix_map,
+    )
+    .await;
 
     // RA sources only watch ra_token
     ra_dhcpv6_token.cancel();
 
-    // Setup DHCPv6 prefix sources
+    // Setup DHCPv6 prefix sources (Na + IaPd kinds)
     let PrefixSetupResult {
         runtime: dhcpv6_runtime,
         ra_token: dhcpv6_ra_token,
         dhcpv6_token,
-        change_notify: _dhcpv6_change_notify,
+        change_notify: dhcpv6_change_notify,
         cleanup_ips: dhcpv6_cleanup_ips,
     } = setup_prefix_sources(
-        dhcpv6_config.source.clone(),
+        sources,
+        &[SourceServiceKind::Na, SourceServiceKind::IaPd],
         iface_name,
         lan_info,
         route_service,
@@ -394,6 +422,8 @@ async fn run_slaac_dhcpv6(
     if let Some(dhcpv6_assigned_info) = dhcpv6_assigned {
         let pd_sources = dhcpv6_runtime.pd_info.values().cloned().collect();
         let static_infos = dhcpv6_runtime.static_info.clone();
+        let pd_delegation_static = dhcpv6_runtime.pd_delegation_static.clone();
+        let pd_delegation_dynamic = dhcpv6_runtime.pd_delegation_dynamic.clone();
         let dhcpv6_iface = iface_name.to_string();
         let dhcpv6_mac = mac.clone();
         let dhcpv6_status = status.clone();
@@ -408,6 +438,8 @@ async fn run_slaac_dhcpv6(
                 dhcpv6_config,
                 pd_sources,
                 static_infos,
+                pd_delegation_static,
+                pd_delegation_dynamic,
                 dhcpv6_status,
                 dhcpv6_assigned_info,
                 static_bindings,
@@ -419,7 +451,7 @@ async fn run_slaac_dhcpv6(
         dhcpv6_token.cancel();
     }
 
-    // Run RA with ULA prefixes (blocks until exit)
+    // Run RA with ULA prefixes (A=1) + DHCPv6 GUA prefixes (A=0 on-link only)
     let _ = crate::icmp::v6::icmp_ra_server(
         ad_interval,
         ra_flag,
@@ -429,6 +461,9 @@ async fn run_slaac_dhcpv6(
         &ra_runtime,
         ra_change_notify,
         assigned_ips,
+        true, // autonomous: SLAAC clients auto-configure from RA ULA prefixes
+        Some(&dhcpv6_runtime),
+        Some(dhcpv6_change_notify),
     )
     .await;
 
