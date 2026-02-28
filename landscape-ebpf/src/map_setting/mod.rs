@@ -11,17 +11,49 @@ use landscape_common::{
 };
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    MapCore, MapFlags, OpenMapMut,
+    AsRawLibbpf, MapCore, MapFlags, OpenMapMut,
 };
 
 /// Try to reuse a pinned map. If the pinned map is incompatible (e.g. struct
 /// layout changed), remove the stale pin file so `load()` creates a fresh one.
+///
+/// NOTE: libbpf's `bpf_map__reuse_fd` silently overwrites the map definition
+/// with the reused fd's sizes, so we must check key/value sizes explicitly
+/// before calling `reuse_pinned_map`.
 pub fn reuse_pinned_map_or_recreate(map: &mut OpenMapMut, path: &(impl AsRef<Path> + ?Sized)) {
+    let ptr = map.as_libbpf_object().as_ptr();
+    let expected_ks = unsafe { libbpf_rs::libbpf_sys::bpf_map__key_size(ptr) };
+    let expected_vs = unsafe { libbpf_rs::libbpf_sys::bpf_map__value_size(ptr) };
     map.set_pin_path(path).unwrap();
     if path.as_ref().exists() {
+        match libbpf_rs::MapHandle::from_pinned_path(path) {
+            Ok(pinned) => {
+                if pinned.key_size() != expected_ks || pinned.value_size() != expected_vs {
+                    tracing::warn!(
+                        "Pinned map {} layout changed (ks {}->{}, vs {}->{}), will recreate",
+                        path.as_ref().display(),
+                        pinned.key_size(),
+                        expected_ks,
+                        pinned.value_size(),
+                        expected_vs,
+                    );
+                    drop(pinned);
+                    let _ = std::fs::remove_file(path);
+                    return;
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Cannot inspect pinned map {}: {e}, will recreate",
+                    path.as_ref().display(),
+                );
+                let _ = std::fs::remove_file(path);
+                return;
+            }
+        }
         if let Err(e) = map.reuse_pinned_map(path) {
             tracing::warn!(
-                "Pinned map {} incompatible, will recreate: {e}",
+                "Pinned map {} reuse failed: {e}, will recreate",
                 path.as_ref().display()
             );
             let _ = std::fs::remove_file(path);
