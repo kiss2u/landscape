@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import DnsRuleEditModal from "@/components/dns/DnsRuleEditModal.vue";
 import { DnsRule } from "@/lib/dns";
 import { delDnsRules } from "@landscape-router/types/api/dns-rules/dns-rules";
 import { CheckmarkOutline } from "@vicons/carbon";
 import FlowMarkExhibit from "@/components/flow/FlowMarkExhibit.vue";
 const rule = defineModel<DnsRule>("rule", { required: true });
+const { t } = useI18n();
 
 const show_edit_modal = ref(false);
 
@@ -20,7 +22,7 @@ async function del() {
 
 const title_name = computed(() =>
   rule.value.name == null || rule.value.name === ""
-    ? `无备注`
+    ? t("common.no_remark")
     : rule.value.name,
 );
 </script>
@@ -39,25 +41,31 @@ const title_name = computed(() =>
         <!-- <n-descriptions-item label="优先级">
           {{ rule.index }}
         </n-descriptions-item> -->
-        <n-descriptions-item label="流量动作">
+        <n-descriptions-item :label="t('dns_editor.rule_card.traffic_action')">
           <FlowMarkExhibit
             :mark="rule.mark"
             :flow_id="rule.flow_id"
           ></FlowMarkExhibit>
           <!-- {{ rule.mark }} -->
         </n-descriptions-item>
-        <n-descriptions-item label="DNS 上游配置">
+        <n-descriptions-item :label="t('dns_editor.rule_card.upstream_config')">
           <UpstreamExhibit :rule_id="rule.upstream_id"></UpstreamExhibit>
           <!-- {{ rule.resolve_mode }} -->
         </n-descriptions-item>
-        <n-descriptions-item label="匹配规则" span="2">
+        <n-descriptions-item
+          :label="t('dns_editor.rule_card.match_rules')"
+          span="2"
+        >
           <n-scrollbar v-if="rule.source.length > 0" style="max-height: 120px">
             <n-flex>
               <RuleSourceExhibit v-for="item in rule.source" :source="item">
               </RuleSourceExhibit>
             </n-flex>
           </n-scrollbar>
-          <n-empty v-else description="无匹配规则, 将会匹配所有域名">
+          <n-empty
+            v-else
+            :description="t('dns_editor.rule_card.no_match_rules')"
+          >
             <template #icon>
               <n-icon>
                 <CheckmarkOutline />
@@ -75,16 +83,16 @@ const title_name = computed(() =>
             secondary
             @click="show_edit_modal = true"
           >
-            编辑
+            {{ t("common.edit") }}
           </n-button>
 
           <n-popconfirm @positive-click="del()">
             <template #trigger>
               <n-button size="small" type="error" secondary @click="">
-                删除
+                {{ t("common.delete") }}
               </n-button>
             </template>
-            确定删除吗
+            {{ t("common.confirm_delete") }}
           </n-popconfirm>
         </n-flex>
       </template>

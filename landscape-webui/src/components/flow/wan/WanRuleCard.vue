@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import WanRuleEditModal from "./WanRuleEditModal.vue";
 import FlowMarkExhibit from "@/components/flow/FlowMarkExhibit.vue";
 import type { WanIpRuleConfig } from "@landscape-router/types/api/schemas";
 import { delete_dst_ip_rules_rule } from "@/api/dst_ip_rule";
 import { Warning } from "@vicons/carbon";
 const rule = defineModel<WanIpRuleConfig>("rule", { required: true });
+const { t } = useI18n();
 
 const show_edit_modal = ref(false);
 
@@ -19,7 +21,7 @@ async function del() {
 }
 const title_name = computed(() =>
   rule.value.remark == null || rule.value.remark === ""
-    ? `无备注`
+    ? t("common.no_remark")
     : rule.value.remark,
 );
 </script>
@@ -40,11 +42,11 @@ const title_name = computed(() =>
             :flow_id="rule.flow_id"
           ></FlowMarkExhibit>
         </n-descriptions-item>
-        <n-descriptions-item label="匹配规则">
+        <n-descriptions-item :label="t('flow.wan_rule_card.match_rules')">
           <n-scrollbar v-if="rule.source.length > 0" style="max-height: 120px">
             {{ rule.source }}
           </n-scrollbar>
-          <n-empty v-else description="无匹配规则, 没有任何作用">
+          <n-empty v-else :description="t('flow.wan_rule_card.no_match_rules')">
             <template #icon>
               <n-icon>
                 <Warning />
@@ -61,16 +63,16 @@ const title_name = computed(() =>
             secondary
             @click="show_edit_modal = true"
           >
-            编辑
+            {{ t("common.edit") }}
           </n-button>
 
           <n-popconfirm @positive-click="del()">
             <template #trigger>
               <n-button size="small" type="error" secondary @click="">
-                删除
+                {{ t("common.delete") }}
               </n-button>
             </template>
-            确定删除吗
+            {{ t("common.confirm_delete") }}
           </n-popconfirm>
         </n-flex>
       </template>
