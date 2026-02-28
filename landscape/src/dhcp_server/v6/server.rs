@@ -192,7 +192,7 @@ impl DHCPv6Server {
         let mut seed = hash_duid(client_duid) as u32;
         loop {
             if self.pd_allocated_indices.len() as u32 >= self.pd_range_capacity {
-                if !self.clean_expired_pd() {
+                if self.clean_expired_pd().is_empty() {
                     tracing::error!("DHCPv6 PD pool is full");
                     return None;
                 }
@@ -212,6 +212,8 @@ impl DHCPv6Server {
                         relative_offer_time: self.relative_boot_time.elapsed().as_secs(),
                         valid_time: OFFER_VALID_TIME,
                         preferred_time: pd_config.preferred_lifetime.min(OFFER_VALID_TIME),
+                        client_addr: Ipv6Addr::UNSPECIFIED,
+                        active_routes: Vec::new(),
                     },
                 );
                 return Some(sub_index);
@@ -244,10 +246,13 @@ impl DHCPv6Server {
         }
     }
 
-    /// Release PD for a client
-    pub fn release_pd(&mut self, client_duid: &[u8]) {
+    /// Release PD for a client. Returns the removed cache for route cleanup.
+    pub fn release_pd(&mut self, client_duid: &[u8]) -> Option<DHCPv6PDCache> {
         if let Some(cache) = self.pd_offered.remove(client_duid) {
             self.pd_allocated_indices.remove(&cache.sub_index);
+            Some(cache)
+        } else {
+            None
         }
     }
 
@@ -271,21 +276,24 @@ impl DHCPv6Server {
         !removed.is_empty()
     }
 
-    pub fn clean_expired_pd(&mut self) -> bool {
+    /// Clean expired PD entries. Returns removed caches for route cleanup.
+    pub fn clean_expired_pd(&mut self) -> Vec<DHCPv6PDCache> {
         let current_time = self.relative_boot_time.elapsed().as_secs();
-        let mut removed = vec![];
-        self.pd_offered.retain(|_, cache| {
-            if current_time > cache.relative_offer_time + cache.valid_time as u64 {
-                removed.push(cache.sub_index);
-                false
-            } else {
-                true
+        let expired_keys: Vec<Vec<u8>> = self
+            .pd_offered
+            .iter()
+            .filter(|(_, cache)| current_time > cache.relative_offer_time + cache.valid_time as u64)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        let mut removed_caches = Vec::new();
+        for key in expired_keys {
+            if let Some(cache) = self.pd_offered.remove(&key) {
+                self.pd_allocated_indices.remove(&cache.sub_index);
+                removed_caches.push(cache);
             }
-        });
-        for idx in &removed {
-            self.pd_allocated_indices.remove(idx);
         }
-        !removed.is_empty()
+        removed_caches
     }
 
     /// Get qualifying prefixes for IA_NA from runtime sources

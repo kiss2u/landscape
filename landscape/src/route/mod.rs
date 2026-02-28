@@ -161,6 +161,14 @@ impl IpRouteService {
         }
     }
 
+    pub async fn remove_ipv6_lan_route_by_key(&self, key: &LanIPv6RouteKey) {
+        let mut lock = self.ipv6_lan_ifaces.write().await;
+        if let Some(info) = lock.remove(key) {
+            drop(lock);
+            del_lan_route(info);
+        }
+    }
+
     pub async fn remove_ipv4_lan_route(&self, key: &str) {
         let mut lock = self.ipv4_lan_ifaces.write().await;
         let result = lock.remove(key);

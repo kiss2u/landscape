@@ -295,7 +295,8 @@ static __always_inline int ct6_state_transition(u8 pkt_type, u8 gress,
 
 static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb,
                                                            struct packet_offset_info *offset_info,
-                                                           struct inet_pair *ip_pair) {
+                                                           struct inet_pair *ip_pair,
+                                                           u8 npt_id_mask) {
     bool is_icmpx_error = is_icmp_error_pkt(offset_info);
     bool allow_create_mapping = pkt_allow_initiating_ct(offset_info->pkt_type);
 
@@ -303,7 +304,7 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
     key.client_port = ip_pair->src_port;
     COPY_ADDR_FROM(key.client_suffix, ip_pair->src_addr.bits + 8);
     // bpf_printk("client_suffix: %02x %02x", key.client_suffix[0], key.client_suffix[1]);
-    key.id_byte = ip_pair->src_addr.bits[7] & 0x0F;
+    key.id_byte = ip_pair->src_addr.bits[7] & npt_id_mask;
     // bpf_printk("client_suffix: %02x %02x", key.client_suffix[0], key.client_suffix[1]);
     key.l4_protocol = offset_info->l4_protocol;
 
@@ -426,13 +427,6 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
                                      struct inet_pair *ip_pair) {
 #define BPF_LOG_TOPIC "ipv6_egress_prefix_check_and_replace"
     int ret;
-    bool is_static =
-        (check_egress_static_mapping_exist(skb, offset_info->l4_protocol, ip_pair) == TC_ACT_OK);
-
-    int ct_ret = search_ipv6_hash_mapping_egress(skb, offset_info, ip_pair);
-    if (ct_ret != TC_ACT_OK && !is_static) {
-        return TC_ACT_SHOT;
-    }
 
     struct wan_ip_info_key wan_search_key = {0};
     wan_search_key.ifindex = skb->ifindex;
@@ -443,12 +437,22 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
         return TC_ACT_SHOT;
     }
 
+    u8 npt_id_mask = (u8)(wan_ip_info->npt_mask >> 56);
+
+    bool is_static =
+        (check_egress_static_mapping_exist(skb, offset_info->l4_protocol, ip_pair) == TC_ACT_OK);
+
+    int ct_ret = search_ipv6_hash_mapping_egress(skb, offset_info, ip_pair, npt_id_mask);
+    if (ct_ret != TC_ACT_OK && !is_static) {
+        return TC_ACT_SHOT;
+    }
+
     if (is_icmp_error_pkt(offset_info)) {
         __be64 old_ip_prefix, new_ip_prefix;
         COPY_ADDR_FROM(&old_ip_prefix, ip_pair->src_addr.all);
         COPY_ADDR_FROM(&new_ip_prefix, wan_ip_info->addr.all);
-        new_ip_prefix = (old_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
-                        (new_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
+        new_ip_prefix =
+            (old_ip_prefix & wan_ip_info->npt_mask) | (new_ip_prefix & ~wan_ip_info->npt_mask);
 
         u32 error_sender_offset =
             offset_info->l3_offset_when_scan + offsetof(struct ipv6hdr, saddr);
@@ -470,8 +474,8 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
 #endif
         COPY_ADDR_FROM(&new_sender_ip_prefix, wan_ip_info->addr.all);
 
-        new_sender_ip_prefix = (old_sender_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
-                               (new_sender_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
+        new_sender_ip_prefix = (old_sender_ip_prefix & wan_ip_info->npt_mask) |
+                               (new_sender_ip_prefix & ~wan_ip_info->npt_mask);
 
         u32 inner_l4_checksum_offset = 0;
         if (get_l4_checksum_offset(offset_info->icmp_error_inner_l4_offset,
@@ -528,8 +532,8 @@ ipv6_egress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offset
         __be64 old_ip_prefix, new_ip_prefix;
         COPY_ADDR_FROM(&old_ip_prefix, ip_pair->src_addr.all);
         COPY_ADDR_FROM(&new_ip_prefix, wan_ip_info->addr.all);
-        new_ip_prefix = (old_ip_prefix & LAND_IPV6_NET_PREFIX_TRANS_MASK) |
-                        (new_ip_prefix & ~LAND_IPV6_NET_PREFIX_TRANS_MASK);
+        new_ip_prefix =
+            (old_ip_prefix & wan_ip_info->npt_mask) | (new_ip_prefix & ~wan_ip_info->npt_mask);
         bpf_skb_store_bytes(skb, ip_src_offset, &new_ip_prefix, 8, 0);
         L4_CSUM_REPLACE_U64_OR_SHOT(skb, l4_checksum_offset, old_ip_prefix, new_ip_prefix,
                                     BPF_F_PSEUDO_HDR);
@@ -583,12 +587,12 @@ static __always_inline int check_ingress_mapping_exist(struct __sk_buff *skb, u8
 static __always_inline struct nat_timer_value_v6 *
 lookup_or_new_ct6_ingress(struct __sk_buff *skb, struct packet_offset_info *offset_info,
                           const struct inet_pair *ip_pair, bool is_static,
-                          const __be64 *client_prefix_hint) {
+                          const __be64 *client_prefix_hint, u8 npt_id_mask) {
 #define BPF_LOG_TOPIC "lookup_or_new_ct6_ingress"
     struct nat_timer_key_v6 key = {0};
     key.client_port = ip_pair->dst_port;
     COPY_ADDR_FROM(key.client_suffix, ip_pair->dst_addr.bits + 8);
-    key.id_byte = ip_pair->dst_addr.bits[7] & 0x0F;
+    key.id_byte = ip_pair->dst_addr.bits[7] & npt_id_mask;
     key.l4_protocol = offset_info->l4_protocol;
 
     struct nat_timer_value_v6 *value = bpf_map_lookup_elem(&nat6_conn_timer, &key);
@@ -626,6 +630,17 @@ ipv6_ingress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offse
     int ret;
     __be64 local_client_prefix = {0};
 
+    struct wan_ip_info_key wan_search_key = {0};
+    wan_search_key.ifindex = skb->ifindex;
+    wan_search_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
+
+    struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
+    if (wan_ip_info == NULL) {
+        return TC_ACT_SHOT;
+    }
+
+    u8 npt_id_mask = (u8)(wan_ip_info->npt_mask >> 56);
+
     ret = check_ingress_mapping_exist(skb, offset_info->l4_protocol, ip_pair, &local_client_prefix);
     bool is_static = (ret != TC_ACT_SHOT);
     bool need_prefix_replace = (ret == TC_ACT_OK);
@@ -639,8 +654,8 @@ ipv6_ingress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offse
     }
 
     // CT lookup/create (all cases)
-    struct nat_timer_value_v6 *ct_value =
-        lookup_or_new_ct6_ingress(skb, offset_info, ip_pair, is_static, &client_prefix_hint);
+    struct nat_timer_value_v6 *ct_value = lookup_or_new_ct6_ingress(
+        skb, offset_info, ip_pair, is_static, &client_prefix_hint, npt_id_mask);
 
     if (ct_value) {
         if (!is_static) {

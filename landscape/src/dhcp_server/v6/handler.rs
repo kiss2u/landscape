@@ -17,7 +17,10 @@ use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 
-use crate::ipv6::prefix::{ICMPv6ConfigInfo, PdDelegationParent};
+use landscape_common::route::{LanIPv6RouteKey, LanRouteInfo, LanRouteMode};
+
+use crate::ipv6::prefix::{add_route_via, del_route, ICMPv6ConfigInfo, PdDelegationParent};
+use crate::route::IpRouteService;
 
 use super::server::DHCPv6Server;
 use super::utils::{
@@ -59,7 +62,8 @@ static DHCPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0x1, 0x
     pd_delegation_dynamic,
     service_status,
     assigned_info,
-    static_bindings
+    static_bindings,
+    route_service
 ))]
 pub async fn dhcp_v6_server(
     link_ifindex: u32,
@@ -74,6 +78,7 @@ pub async fn dhcp_v6_server(
     service_status: WatchService,
     assigned_info: Arc<RwLock<DHCPv6OfferInfo>>,
     static_bindings: HashMap<MacAddr, Ipv6Addr>,
+    route_service: IpRouteService,
 ) {
     let server_duid = gen_server_duid(&mac);
 
@@ -153,6 +158,9 @@ pub async fn dhcp_v6_server(
                             &pd_delegation_static,
                             &pd_delegation_dynamic,
                             link_local,
+                            &iface_name,
+                            link_ifindex,
+                            &route_service,
                         ).await;
                         if need_update {
                             update_assigned_info(
@@ -169,7 +177,10 @@ pub async fn dhcp_v6_server(
             }
             _ = &mut timeout_timer => {
                 dhcp_server.clean_expired_na();
-                dhcp_server.clean_expired_pd();
+                let expired_pd = dhcp_server.clean_expired_pd();
+                for cache in &expired_pd {
+                    cleanup_pd_routes(cache, &iface_name, &route_service).await;
+                }
                 timeout_timer.as_mut().reset(
                     tokio::time::Instant::now() + tokio::time::Duration::from_secs(LEASE_EXPIRE_INTERVAL)
                 );
@@ -214,6 +225,9 @@ async fn handle_dhcpv6_message(
     pd_delegation_static: &[PdDelegationParent],
     pd_delegation_dynamic: &[Arc<ArcSwap<Option<PdDelegationParent>>>],
     link_local: Ipv6Addr,
+    iface_name: &str,
+    link_ifindex: u32,
+    route_service: &IpRouteService,
 ) -> bool {
     let msg = match v6::Message::decode(&mut Decoder::new(&msg_bytes)) {
         Ok(m) => m,
@@ -509,6 +523,68 @@ async fn handle_dhcpv6_message(
                         }
 
                         reply.opts_mut().insert(v6::DhcpOption::IAPD(iapd));
+
+                        // Add routes for delegated prefixes (system + eBPF)
+                        let delegate_prefix_len =
+                            server.pd_config.as_ref().map(|c| c.delegate_prefix_len);
+                        if let Some(delegate_prefix_len) = delegate_prefix_len {
+                            let client_ll = match msg_addr {
+                                SocketAddr::V6(v6) => *v6.ip(),
+                                _ => Ipv6Addr::UNSPECIFIED,
+                            };
+                            if let Some(cache) = server.pd_offered.get_mut(&client_duid) {
+                                // Remove old routes
+                                for (prefix, len) in cache.active_routes.drain(..) {
+                                    del_route(prefix, len, iface_name);
+                                    let key = LanIPv6RouteKey {
+                                        iface_name: iface_name.to_string(),
+                                        subnet_index: pd_route_key_index(cache.sub_index, &prefix),
+                                    };
+                                    route_service.remove_ipv6_lan_route_by_key(&key).await;
+                                }
+
+                                // Add new routes
+                                let mut new_routes = Vec::new();
+                                for (base_prefix, base_prefix_len) in &pd_prefixes {
+                                    let delegated = compute_delegated_prefix(
+                                        *base_prefix,
+                                        *base_prefix_len,
+                                        delegate_prefix_len,
+                                        cache.sub_index,
+                                    );
+                                    // System route: ip -6 route replace <prefix> via <client_ll> dev <iface>
+                                    add_route_via(
+                                        delegated,
+                                        delegate_prefix_len,
+                                        client_ll,
+                                        iface_name,
+                                        Some(cache.valid_time),
+                                    );
+                                    // eBPF route (mac = PD client's MAC from DUID)
+                                    let lan_info = LanRouteInfo {
+                                        ifindex: link_ifindex,
+                                        iface_name: iface_name.to_string(),
+                                        iface_ip: IpAddr::V6(delegated),
+                                        mac,
+                                        prefix: delegate_prefix_len,
+                                        mode: LanRouteMode::NextHop {
+                                            next_hop_ip: IpAddr::V6(client_ll),
+                                        },
+                                    };
+                                    let key = LanIPv6RouteKey {
+                                        iface_name: iface_name.to_string(),
+                                        subnet_index: pd_route_key_index(
+                                            cache.sub_index,
+                                            &delegated,
+                                        ),
+                                    };
+                                    route_service.insert_ipv6_lan_route(key, lan_info).await;
+                                    new_routes.push((delegated, delegate_prefix_len));
+                                }
+                                cache.client_addr = client_ll;
+                                cache.active_routes = new_routes;
+                            }
+                        }
                     } else {
                         // No qualifying prefixes available - return NOT_ON_LINK to signal client
                         let mut iapd_opts = v6::DhcpOptions::new();
@@ -538,7 +614,9 @@ async fn handle_dhcpv6_message(
 
             tracing::info!("DHCPv6 RELEASE from {:?}", mac);
             server.release_na(&client_duid);
-            server.release_pd(&client_duid);
+            if let Some(released_pd) = server.release_pd(&client_duid) {
+                cleanup_pd_routes(&released_pd, iface_name, route_service).await;
+            }
 
             let mut reply = v6::Message::new(DhcpV6MessageType::Reply);
             reply.set_xid(msg.xid());
@@ -723,6 +801,31 @@ async fn send_dhcpv6_reply(msg: &v6::Message, send_socket: &UdpSocket, target: S
         Err(e) => {
             tracing::error!("DHCPv6 send error: {:?}", e);
         }
+    }
+}
+
+/// Generate a unique subnet_index for PD delegation routes in LanIPv6RouteKey.
+/// Uses a high offset (0x8000_0000) + hash to avoid collision with regular RA/NA routes.
+fn pd_route_key_index(sub_index: u32, delegated_prefix: &Ipv6Addr) -> u32 {
+    let prefix_hash = (u128::from(*delegated_prefix) >> 64) as u32;
+    0x8000_0000u32 | (sub_index.wrapping_mul(31).wrapping_add(prefix_hash))
+}
+
+use super::types::DHCPv6PDCache;
+
+/// Clean up system and eBPF routes for a released/expired PD cache entry.
+async fn cleanup_pd_routes(
+    cache: &DHCPv6PDCache,
+    iface_name: &str,
+    route_service: &IpRouteService,
+) {
+    for (prefix, len) in &cache.active_routes {
+        del_route(*prefix, *len, iface_name);
+        let key = LanIPv6RouteKey {
+            iface_name: iface_name.to_string(),
+            subnet_index: pd_route_key_index(cache.sub_index, prefix),
+        };
+        route_service.remove_ipv6_lan_route_by_key(&key).await;
     }
 }
 

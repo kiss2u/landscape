@@ -309,6 +309,7 @@ async fn run_stateful(
         let dhcpv6_iface = iface_name.to_string();
         let dhcpv6_mac = mac.clone();
         let dhcpv6_status = status.clone();
+        let dhcpv6_route_service = route_service.clone();
 
         let link_local = mac.to_ipv6_link_local();
         tokio::spawn(async move {
@@ -325,6 +326,7 @@ async fn run_stateful(
                 dhcpv6_status,
                 dhcpv6_assigned_info,
                 static_bindings,
+                dhcpv6_route_service,
             )
             .await;
             dhcpv6_token.cancel();
@@ -427,6 +429,7 @@ async fn run_slaac_dhcpv6(
         let dhcpv6_iface = iface_name.to_string();
         let dhcpv6_mac = mac.clone();
         let dhcpv6_status = status.clone();
+        let dhcpv6_route_service = route_service.clone();
         let link_local = mac.to_ipv6_link_local();
 
         tokio::spawn(async move {
@@ -443,6 +446,7 @@ async fn run_slaac_dhcpv6(
                 dhcpv6_status,
                 dhcpv6_assigned_info,
                 static_bindings,
+                dhcpv6_route_service,
             )
             .await;
             dhcpv6_token.cancel();
