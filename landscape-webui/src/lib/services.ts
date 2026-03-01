@@ -68,7 +68,10 @@ export class ServiceExhibitSwitch {
       if (dev.wifi_info.wifi_type.t == WLANTypeTag.Station) {
         this.station = true;
       } else if (dev.wifi_info.wifi_type.t == WLANTypeTag.Ap) {
-        this.wifi = true;
+        // WiFi AP mode only allowed in LAN or Undefined zone, not WAN
+        if (dev.zone_type !== ZoneType.Wan) {
+          this.wifi = true;
+        }
       }
     }
     if (dev.controller_name != undefined || dev.controller_id != undefined) {
@@ -152,7 +155,10 @@ export class TopologyServiceExhibitSwitch {
       if (wifi_info.wifi_type.t == WLANTypeTag.Station) {
         this.station = true;
       } else if (wifi_info.wifi_type.t == WLANTypeTag.Ap) {
-        this.wifi = true;
+        // WiFi AP mode only allowed in LAN or Undefined zone, not WAN
+        if (config.zone_type !== ZoneType.Wan) {
+          this.wifi = true;
+        }
       }
     }
     if (

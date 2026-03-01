@@ -140,6 +140,8 @@ pub enum ZoneRequirement {
     WanOrLan,
     /// WAN interface or PPP device (verified by querying pppd service)
     WanOrPpp,
+    /// LAN interface or Undefined zone (e.g. for WiFi AP mode)
+    LanOrUndefined,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

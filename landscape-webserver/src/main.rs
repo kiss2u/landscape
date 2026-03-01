@@ -187,6 +187,9 @@ impl LandscapeApp {
             ZoneRequirement::WanOrLan => {
                 matches!(iface_config.zone_type, IfaceZoneType::Wan | IfaceZoneType::Lan)
             }
+            ZoneRequirement::LanOrUndefined => {
+                matches!(iface_config.zone_type, IfaceZoneType::Lan | IfaceZoneType::Undefined)
+            }
         };
 
         if allowed {

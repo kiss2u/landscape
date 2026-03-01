@@ -56,7 +56,7 @@ impl super::iface::ZoneAwareConfig for WifiServiceConfig {
         &self.iface_name
     }
     fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::WanOrLan
+        super::iface::ZoneRequirement::LanOrUndefined
     }
     fn service_kind() -> super::iface::ServiceKind {
         super::iface::ServiceKind::WiFi
