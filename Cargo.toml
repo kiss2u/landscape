@@ -22,7 +22,7 @@ default-members = ["landscape-webserver"]
 
 [workspace.dependencies]
 # const_format = "0.2.34"
-sysinfo = "0.37.2"
+sysinfo = "0.38.2"
 
 # base
 anyhow = "1.0.100"
@@ -60,9 +60,9 @@ rustls-pemfile = "2.2.0"
 dhcproto = "0.14.0"
 
 # libbpf
-libbpf-rs = { version = "0.25.0" }
-libbpf-cargo = { version = "0.25.0" }
-libbpf-sys = { version = "1.5.1" }
+libbpf-rs = { version = "0.26.1" }
+libbpf-cargo = { version = "0.26.1" }
+libbpf-sys = { version = "1.6.3" }
 
 # web
 axum = { version = "0.8.8", features = ["ws", "multipart"] }

@@ -51,3 +51,8 @@ impl Drop for TcHookProxy {
         // }
     }
 }
+
+// TC operations are thread-safe as they are system calls on file descriptors
+// and don't share mutable state across threads
+unsafe impl Send for TcHookProxy {}
+unsafe impl Sync for TcHookProxy {}

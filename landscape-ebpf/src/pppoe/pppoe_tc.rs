@@ -46,15 +46,18 @@ pub async fn create_pppoe_tc_ebpf<'a>(
         PPPOE_EGRESS_PRIORITY,
     );
 
+    // Attach the TC hook synchronously since it's blocking I/O
+    pppoe_egress_builder.attach();
+
     // let mut pppoe_xdp_ingress = pppoe_skel.progs.pppoe_xdp_ingress;
     // let _link = pppoe_xdp_ingress.attach_xdp(ifindex as i32).unwrap();
     let (notice_tx, mut notice_rx) = tokio::sync::broadcast::channel::<()>(1);
 
-    tokio::spawn(async move {
-        // pppoe_ingress_builder.attach();
-        pppoe_egress_builder.attach();
-
-        let _ = notice_rx.recv().await;
+    // Use std::thread::spawn instead of tokio::spawn since TcHookProxy is not Send
+    std::thread::spawn(move || {
+        let _ = notice_rx.blocking_recv();
+        // pppoe_egress_builder is dropped here, which detaches the hook via Drop impl
+        drop(pppoe_egress_builder);
     });
     (notice_tx, pppoe_skel)
 }
