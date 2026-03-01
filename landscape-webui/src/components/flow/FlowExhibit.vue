@@ -4,8 +4,10 @@ import type { FlowConfig } from "@landscape-router/types/api/schemas";
 import { onMounted, ref, watch, watchEffect } from "vue";
 import { Docker, NetworkWired } from "@vicons/fa";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { useI18n } from "vue-i18n";
 
 const frontEndStore = useFrontEndStore();
+const { t } = useI18n();
 type Props = {
   flow_id: number;
 };
@@ -33,9 +35,10 @@ async function refresh() {
     <template #trigger>
       <n-flex align="center">
         {{
-          config.remark ? frontEndStore.MASK_INFO(config.remark) : "`未命名`"
+          config.remark
+            ? frontEndStore.MASK_INFO(config.remark)
+            : t("common.unnamed")
         }}
-        的
         <n-tag
           size="small"
           v-for="each in config.flow_targets"
@@ -55,5 +58,5 @@ async function refresh() {
     <FlowConfigCard :show_action="false" :config="config"></FlowConfigCard>
     <!-- <span>{{ config }}</span> -->
   </n-popover>
-  <n-flex v-else> 使用 FlowID: {{ flow_id }} 查询不到 Flow 信息</n-flex>
+  <n-flex v-else> {{ t("flow.exhibit.flow_not_found", { flow_id }) }}</n-flex>
 </template>

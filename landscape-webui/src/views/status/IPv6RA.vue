@@ -8,7 +8,10 @@ import type {
   DHCPv6OfferInfo,
 } from "@landscape-router/types/api/schemas";
 import { onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import DHCPv6AssignedTable from "@/components/dhcp_v6/DHCPv6AssignedTable.vue";
+
+const { t } = useI18n();
 
 onMounted(async () => {
   await get_info();
@@ -51,11 +54,13 @@ async function get_info() {
 <template>
   <n-flex vertical style="flex: 1">
     <n-alert type="info">
-      目前列表不会自动刷新， 30s 不活跃的 IP 将会被标记为
+      {{ t("common.list_no_auto_refresh") }}
       <n-tag :bordered="false" type="warning">STALE</n-tag>
     </n-alert>
     <n-flex>
-      <n-button :loading="loading" @click="get_info">刷新</n-button>
+      <n-button :loading="loading" @click="get_info">{{
+        t("common.refresh")
+      }}</n-button>
     </n-flex>
     <n-flex v-if="infos.length > 0">
       <ICMPRaShowItem
@@ -69,7 +74,9 @@ async function get_info() {
 
     <!-- DHCPv6 Assigned -->
     <template v-if="dhcpv6_infos.length > 0">
-      <n-divider title-placement="left"> DHCPv6 分配信息 </n-divider>
+      <n-divider title-placement="left">
+        {{ t("dhcp_v6.dhcpv6_assigned_info") }}
+      </n-divider>
       <n-flex>
         <DHCPv6AssignedTable
           v-for="(data, index) in dhcpv6_infos"

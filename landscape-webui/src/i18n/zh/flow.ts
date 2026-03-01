@@ -1,10 +1,4 @@
 export default {
-  common: {
-    enable: "启用",
-    disable: "禁用",
-    cancel: "取消",
-    save: "保存",
-  },
   default_card: {
     title: "默认 Flow",
     target_ip: "目标 IP",
@@ -128,5 +122,16 @@ export default {
   wan_rule_card: {
     match_rules: "匹配规则",
     no_match_rules: "无匹配规则, 没有任何作用",
+  },
+  config_card: {
+    no_ingress_rules: "没有入口规则",
+  },
+  exhibit: {
+    flow_not_found: "使用 FlowID: {flow_id} 查询不到 Flow 信息",
+  },
+  select: {
+    select_flow: "选择 Flow",
+    all: "全部",
+    get_list_failed: "获取 Flow 列表失败",
   },
 };

@@ -145,13 +145,13 @@ const network_mask = computed({
           {{ t("dhcp_editor.service.warning") }}
         </n-alert>
         <n-form :model="service_config">
-          <n-form-item :label="t('dhcp_editor.service.enable')">
+          <n-form-item :label="t('common.enable_question')">
             <n-switch v-model:value="service_config.enable">
               <template #checked>
-                {{ t("dhcp_editor.service.enabled_yes") }}
+                {{ t("common.enable") }}
               </template>
               <template #unchecked>
-                {{ t("dhcp_editor.service.enabled_no") }}
+                {{ t("common.disable") }}
               </template>
             </n-switch>
           </n-form-item>
@@ -190,7 +190,7 @@ const network_mask = computed({
       <template #footer>
         <n-flex justify="space-between" align="center">
           <n-button round @click="show_model = false">
-            {{ t("dhcp_editor.service.cancel") }}
+            {{ t("common.cancel") }}
           </n-button>
           <n-button
             :loading="commit_loading"
@@ -198,7 +198,7 @@ const network_mask = computed({
             type="primary"
             @click="save_config"
           >
-            {{ t("dhcp_editor.service.update") }}
+            {{ t("common.update") }}
           </n-button>
         </n-flex>
       </template>

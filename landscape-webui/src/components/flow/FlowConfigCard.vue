@@ -68,7 +68,7 @@ const title_name = computed(() =>
           DNS
         </n-button>
         <n-button secondary @click="show_ip_rule = true" size="small">
-          目标 IP
+          {{ t("flow.default_card.target_ip") }}
         </n-button>
         <n-popconfirm @positive-click="del">
           <template #trigger>
@@ -135,7 +135,11 @@ const title_name = computed(() =>
       v-if="config.flow_match_rules.length == 0"
       style="flex: 1"
     >
-      <n-empty :show-icon="false" description="没有入口规则"> </n-empty>
+      <n-empty
+        :show-icon="false"
+        :description="t('flow.config_card.no_ingress_rules')"
+      >
+      </n-empty>
     </n-flex>
     <n-flex v-else>
       <FlowEntryRuleExhibit

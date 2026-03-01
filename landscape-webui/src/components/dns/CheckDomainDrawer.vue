@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { SearchLocate } from "@vicons/carbon";
 import type {
   CheckChainDnsResult,
@@ -13,6 +14,7 @@ import { DnsRule } from "@/lib/dns";
 import { getDnsRule } from "@landscape-router/types/api/dns-rules/dns-rules";
 import { get_dns_redirect } from "@/api/dns_rule/redirect";
 const message = useMessage();
+const { t } = useI18n();
 
 interface Props {
   flow_id?: number;
@@ -102,7 +104,7 @@ async function query() {
       loading.value = false;
     }
   } else {
-    message.info("请输入待查询域名");
+    message.info(t("dns_editor.check_domain.enter_domain"));
   }
 }
 const showInner = ref(false);
@@ -124,7 +126,7 @@ async function quick_btn(record_type: "A" | "AAAA", domain: string) {
     :mask-closable="false"
   >
     <n-drawer-content
-      :title="`测试 flow: ${flow_id} 域名查询 (结果不缓存)`"
+      :title="t('dns_editor.check_domain.test_flow_query', { flow_id })"
       closable
     >
       <n-flex style="height: 100%" vertical>
@@ -174,7 +176,7 @@ async function quick_btn(record_type: "A" | "AAAA", domain: string) {
               :options="options"
             />
             <n-input
-              placeholder="输入域名后, 点击右侧按钮或使用回车"
+              :placeholder="t('dns_editor.check_domain.query_instruction')"
               @keyup.enter="query"
               v-model:value="req.domain"
             />
@@ -193,13 +195,17 @@ async function quick_btn(record_type: "A" | "AAAA", domain: string) {
           <n-flex v-if="config_rule" vertical>
             <DnsRuleCard :rule="config_rule"> </DnsRuleCard>
 
-            <n-divider title-placement="left"> DNS 上游查询结果 </n-divider>
+            <n-divider title-placement="left">
+              {{ t("dns_editor.check_domain.upstream_result") }}
+            </n-divider>
             <n-flex v-if="result.records">
               <n-flex v-for="each in result.records">
                 {{ each }}
               </n-flex>
             </n-flex>
-            <n-divider title-placement="left"> DNS 内部缓存结果 </n-divider>
+            <n-divider title-placement="left">
+              {{ t("dns_editor.check_domain.cache_result") }}
+            </n-divider>
             <n-flex v-if="result.cache_records">
               <n-flex v-for="each in result.cache_records">
                 {{ each }}
@@ -209,7 +215,9 @@ async function quick_btn(record_type: "A" | "AAAA", domain: string) {
 
           <n-flex v-if="redirect_rule" vertical>
             <DnsRedirectCard :rule="redirect_rule"></DnsRedirectCard>
-            <n-divider title-placement="left"> 域名重定向结果 </n-divider>
+            <n-divider title-placement="left">
+              {{ t("dns_editor.check_domain.redirect_result") }}
+            </n-divider>
             <n-flex v-if="result.records">
               <n-flex v-for="each in result.records">
                 {{ each }}

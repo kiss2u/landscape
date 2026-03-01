@@ -56,4 +56,9 @@ export default {
   save_success: "Save successful",
   save_failed: "Save failed",
   conflict: "Configuration conflict, please refresh and try again",
+
+  chinese_simplified: "Simplified Chinese",
+  dark_mode: "Dark",
+  light_mode: "Light",
+  welcome: "Welcome, {username}",
 };

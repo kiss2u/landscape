@@ -69,17 +69,17 @@ async function confirm_config() {
 
     <n-form style="flex: 1" ref="formRef" :model="value" :cols="4">
       <n-grid :cols="5">
-        <n-form-item-gi :label="t('pppd_editor.enable')" :span="1">
+        <n-form-item-gi :label="t('common.enable_question')" :span="1">
           <n-switch v-model:value="value.enable">
-            <template #checked> {{ t("pppd_editor.enabled_yes") }} </template>
-            <template #unchecked> {{ t("pppd_editor.enabled_no") }} </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item-gi>
 
         <n-form-item-gi :span="2" :label="t('pppd_editor.default_route')">
           <n-switch v-model:value="value.pppd_config.default_route">
-            <template #checked> {{ t("pppd_editor.enabled_yes") }} </template>
-            <template #unchecked> {{ t("pppd_editor.enabled_no") }} </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item-gi>
 
@@ -127,13 +127,13 @@ async function confirm_config() {
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{ t("pppd_editor.cancel") }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           @click="confirm_config()"
           type="success"
           :disabled="!isModified"
         >
-          {{ t("pppd_editor.confirm") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

@@ -46,7 +46,7 @@ const onGeoUpload = async (formData: FormData) => {
         ></StatusTitle>
       </template>
       <n-descriptions bordered label-placement="top" :column="2">
-        <n-descriptions-item label="来源类型">
+        <n-descriptions-item :label="t('geo_editor.item_card.source_type')">
           <n-tag
             :bordered="false"
             :type="geo_ip_source.source.t === 'url' ? 'info' : 'success'"
@@ -65,7 +65,9 @@ const onGeoUpload = async (formData: FormData) => {
               }}
             </n-ellipsis>
           </n-descriptions-item>
-          <n-descriptions-item label="下次更新时间">
+          <n-descriptions-item
+            :label="t('geo_editor.item_card.next_update_time')"
+          >
             <n-time
               :time="geo_ip_source.source.next_update_at"
               format="yyyy-MM-dd hh:mm:ss"
@@ -74,7 +76,7 @@ const onGeoUpload = async (formData: FormData) => {
           </n-descriptions-item>
         </template>
         <template v-if="geo_ip_source.source.t === 'direct'">
-          <n-descriptions-item label="Key 数量">
+          <n-descriptions-item :label="t('geo_editor.item_card.key_count')">
             {{ geo_ip_source.source.data.length }}
           </n-descriptions-item>
         </template>
@@ -88,7 +90,7 @@ const onGeoUpload = async (formData: FormData) => {
             secondary
             @click="show_upload = true"
           >
-            使用文件更新
+            {{ t("geo_editor.item_card.update_with_file") }}
           </n-button>
 
           <n-button

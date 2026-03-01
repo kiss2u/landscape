@@ -165,7 +165,7 @@ const tags = computed(() => {
           {{ frontEndStore.MASK_INFO(props.container.Image) }}
         </n-ellipsis>
       </n-descriptions-item>
-      <n-descriptions-item label="状态">
+      <n-descriptions-item :label="t('common.status')">
         {{ props.container.State }}
       </n-descriptions-item>
 
@@ -192,11 +192,13 @@ const tags = computed(() => {
 
         <n-flex>
           <n-button text v-if="tags[1].length == 0">
-            {{ "无其他标签" }}
+            {{ t("misc.docker_container.no_other_tags") }}
           </n-button>
           <n-tooltip v-else trigger="hover">
             <template #trigger>
-              <n-button text> 其他标签 </n-button>
+              <n-button text>
+                {{ t("misc.docker_container.other_tags") }}
+              </n-button>
             </template>
             <n-flex>
               <n-tag v-for="tag in tags[1]" :bordered="false">

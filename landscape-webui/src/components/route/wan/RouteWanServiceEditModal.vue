@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 import type { RouteWanServiceConfig } from "@landscape-router/types/api/schemas";
@@ -9,6 +10,7 @@ import {
   update_route_wans_config,
 } from "@/api/route/wan";
 
+const { t } = useI18n();
 let routeWanConfigStore = useRouteWanConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
@@ -52,24 +54,26 @@ async function save_config() {
   >
     <n-card
       style="width: 600px"
-      title="Wan 路由转发服务"
+      :title="t('misc.route_wan.title')"
       :bordered="false"
       size="small"
       role="dialog"
       aria-modal="true"
     >
       <n-form v-if="service_config !== null" :model="service_config">
-        <n-form-item label="是否启用">
+        <n-form-item :label="t('common.enable_question')">
           <n-switch v-model:value="service_config.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item>
       </n-form>
 
       <template #footer>
         <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+          <n-button round type="primary" @click="save_config">
+            {{ t("common.update") }}
+          </n-button>
         </n-flex>
       </template>
     </n-card>

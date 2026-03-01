@@ -36,18 +36,22 @@ async function del() {
       :column="1"
       size="small"
     >
-      <n-descriptions-item label="应用于">
+      <n-descriptions-item :label="t('dns_editor.redirect_card.apply_to')">
         <n-flex v-if="rule.apply_flows.length > 0">
           <n-tag v-for="value in rule.apply_flows" :bordered="false">
-            {{ value === 0 ? "默认流" : value }}
+            {{
+              value === 0 ? t("dns_editor.redirect_card.default_flow") : value
+            }}
           </n-tag>
         </n-flex>
         <n-flex v-else>
-          <span style="min-height: 28px">全部 Flow </span>
+          <span style="min-height: 28px">{{
+            t("dns_editor.redirect_card.all_flows")
+          }}</span>
         </n-flex>
       </n-descriptions-item>
 
-      <n-descriptions-item label="回应信息">
+      <n-descriptions-item :label="t('dns_editor.redirect_card.response_info')">
         <n-flex v-if="rule.result_info.length > 0">
           <n-tag v-for="value in rule.result_info" :bordered="false">
             {{ frontEndStore.MASK_INFO(value) }}

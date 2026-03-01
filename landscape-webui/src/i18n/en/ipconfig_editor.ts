@@ -3,8 +3,6 @@ export default {
   mode_none: "None",
   mode_static: "Static IP",
   mode_dhcp_client: "DHCP Client",
-  enabled_yes: "Enabled",
-  enabled_no: "Disabled",
   static_ip: "Static IP",
   set_default_route: "Set default route",
   yes: "Yes",

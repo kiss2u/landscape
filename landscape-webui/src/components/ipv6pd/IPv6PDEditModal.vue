@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import { IPV6PDConfig, IPV6PDServiceConfig } from "@/lib/ipv6pd";
 import {
@@ -13,6 +14,7 @@ import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 
 let ipv6PDStore = useIPv6PDStore();
 const message = useMessage();
+const { t } = useI18n();
 
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
@@ -53,7 +55,7 @@ async function save_config() {
     service_config.value.config.mac === "" ||
     service_config.value.config.mac === undefined
   ) {
-    message.warning("MAC 地址不能为空");
+    message.warning(t("lan_ipv6.mac_required"));
   } else {
     let config = await update_ipv6pd_config(service_config.value);
     await ipv6PDStore.UPDATE_INFO();
@@ -70,7 +72,7 @@ async function save_config() {
   >
     <n-card
       style="width: 600px"
-      title="IPv6-PD 客户端配置"
+      :title="t('lan_ipv6.ipv6_pd_config')"
       :bordered="false"
       size="small"
       role="dialog"
@@ -78,13 +80,13 @@ async function save_config() {
     >
       <!-- {{ service_config }} -->
       <n-form :model="service_config">
-        <n-form-item label="是否启用">
+        <n-form-item :label="t('common.enable_question')">
           <n-switch v-model:value="service_config.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item>
-        <n-form-item label="申请使用的 mac 地址 (PPP网卡上是生成虚拟的)">
+        <n-form-item :label="t('lan_ipv6.mac_hint')">
           <n-input
             :value="service_config.config.mac"
             @update:value="
@@ -96,7 +98,9 @@ async function save_config() {
 
       <template #footer>
         <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+          <n-button round type="primary" @click="save_config">
+            {{ t("common.update") }}
+          </n-button>
         </n-flex>
       </template>
     </n-card>

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { DHCPv6ServerConfig } from "@landscape-router/types/api/schemas";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   managed_address_config: boolean;
@@ -63,25 +66,25 @@ const showMFlagWarning = computed(() => {
 
 <template>
   <n-grid :x-gap="12" :y-gap="8" cols="4" item-responsive>
-    <n-form-item-gi span="2" label="启用 DHCPv6">
+    <n-form-item-gi span="2" :label="t('dhcp_v6.enable_dhcpv6')">
       <n-switch v-model:value="enabled">
-        <template #checked> 启用 </template>
-        <template #unchecked> 禁用 </template>
+        <template #checked> {{ t("common.enable") }} </template>
+        <template #unchecked> {{ t("common.disable") }} </template>
       </n-switch>
     </n-form-item-gi>
 
     <n-form-item-gi span="4" v-if="showMFlagWarning">
       <n-alert type="warning" :bordered="false">
-        DHCPv6 已启用但 RA M 标志未设置，客户端可能不会请求 DHCPv6 地址
+        {{ t("dhcp_v6.m_flag_warning") }}
       </n-alert>
     </n-form-item-gi>
 
     <template v-if="enabled && config">
       <!-- IA_NA Section -->
-      <n-form-item-gi span="4" label="IA_NA (地址分配)">
+      <n-form-item-gi span="4" :label="t('dhcp_v6.ia_na')">
         <n-switch v-model:value="ia_na_enabled">
-          <template #checked> 启用 </template>
-          <template #unchecked> 禁用 </template>
+          <template #checked> {{ t("common.enable") }} </template>
+          <template #unchecked> {{ t("common.disable") }} </template>
         </n-switch>
       </n-form-item-gi>
 
@@ -89,10 +92,9 @@ const showMFlagWarning = computed(() => {
         <n-form-item-gi span="2">
           <template #label>
             <Notice>
-              最大前缀长度
+              {{ t("dhcp_v6.max_prefix_len") }}
               <template #msg>
-                RA 中前缀长度 &le; 此值的前缀将用于地址分配<br />
-                例如: 64 表示 /64 及更短的前缀可用
+                {{ t("dhcp_v6.max_prefix_len_desc") }}
               </template>
             </Notice>
           </template>
@@ -104,7 +106,7 @@ const showMFlagWarning = computed(() => {
           />
         </n-form-item-gi>
 
-        <n-form-item-gi span="2" label="地址池起始后缀">
+        <n-form-item-gi span="2" :label="t('dhcp_v6.pool_start')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_na.pool_start"
@@ -112,17 +114,17 @@ const showMFlagWarning = computed(() => {
           />
         </n-form-item-gi>
 
-        <n-form-item-gi span="2" label="地址池结束后缀">
+        <n-form-item-gi span="2" :label="t('dhcp_v6.pool_end')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_na.pool_end"
             :min="config.ia_na.pool_start + 1"
-            placeholder="默认: 起始 + 65535"
+            :placeholder="t('dhcp_v6.pool_end_placeholder')"
             clearable
           />
         </n-form-item-gi>
 
-        <n-form-item-gi span="1" label="首选生存期(秒)">
+        <n-form-item-gi span="1" :label="t('dhcp_v6.preferred_lifetime')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_na.preferred_lifetime"
@@ -130,7 +132,7 @@ const showMFlagWarning = computed(() => {
           />
         </n-form-item-gi>
 
-        <n-form-item-gi span="1" label="有效生存期(秒)">
+        <n-form-item-gi span="1" :label="t('dhcp_v6.valid_lifetime')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_na.valid_lifetime"
@@ -140,15 +142,15 @@ const showMFlagWarning = computed(() => {
       </template>
 
       <!-- IA_PD Section -->
-      <n-form-item-gi span="4" label="IA_PD (前缀委派)">
+      <n-form-item-gi span="4" :label="t('dhcp_v6.ia_pd')">
         <n-switch v-model:value="ia_pd_enabled">
-          <template #checked> 启用 </template>
-          <template #unchecked> 禁用 </template>
+          <template #checked> {{ t("common.enable") }} </template>
+          <template #unchecked> {{ t("common.disable") }} </template>
         </n-switch>
       </n-form-item-gi>
 
       <template v-if="config.ia_pd">
-        <n-form-item-gi span="2" label="委派前缀长度">
+        <n-form-item-gi span="2" :label="t('dhcp_v6.delegate_prefix_length')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_pd.delegate_prefix_len"
@@ -157,7 +159,7 @@ const showMFlagWarning = computed(() => {
           />
         </n-form-item-gi>
 
-        <n-form-item-gi span="1" label="首选生存期(秒)">
+        <n-form-item-gi span="1" :label="t('dhcp_v6.preferred_lifetime')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_pd.preferred_lifetime"
@@ -165,7 +167,7 @@ const showMFlagWarning = computed(() => {
           />
         </n-form-item-gi>
 
-        <n-form-item-gi span="1" label="有效生存期(秒)">
+        <n-form-item-gi span="1" :label="t('dhcp_v6.valid_lifetime')">
           <n-input-number
             style="flex: 1"
             v-model:value="config.ia_pd.valid_lifetime"

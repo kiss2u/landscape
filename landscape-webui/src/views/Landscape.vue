@@ -34,7 +34,7 @@ const { t } = useI18n({ useScope: "global" });
       </n-gi>
     </n-grid>
     <n-divider style="margin: 0px 0" title-placement="left">
-      {{ t("topology_divider") }}
+      {{ t("common.topology_divider") }}
     </n-divider>
     <!-- <NetTopology
       style="flex: 1; min-height: 550px; min-width: 100%"

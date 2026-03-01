@@ -161,13 +161,13 @@ async function append_import_rules() {
         <!-- <n-form-item-gi label="优先级" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi> -->
-        <n-form-item-gi :label="t('dns_editor.redirect_edit.enable')" :span="1">
+        <n-form-item-gi :label="t('common.enable')" :span="1">
           <n-switch v-model:value="rule.enable">
             <template #checked>
-              {{ t("dns_editor.redirect_edit.enabled_yes") }}
+              {{ t("common.enable") }}
             </template>
             <template #unchecked>
-              {{ t("dns_editor.redirect_edit.enabled_no") }}
+              {{ t("common.disable") }}
             </template>
           </n-switch>
         </n-form-item-gi>
@@ -271,15 +271,13 @@ async function append_import_rules() {
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{
-          t("dns_editor.redirect_edit.cancel")
-        }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
         >
-          {{ t("dns_editor.redirect_edit.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

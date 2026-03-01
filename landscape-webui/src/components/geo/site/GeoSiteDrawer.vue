@@ -8,7 +8,9 @@ import type { GeoSiteSourceConfig } from "@landscape-router/types/api/schemas";
 import { onMounted, ref } from "vue";
 
 import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 const message = useMessage();
+const { t } = useI18n();
 
 const emit = defineEmits(["refresh", "refresh:keys"]);
 
@@ -57,20 +59,22 @@ async function import_rules() {
     width="500px"
     placement="right"
   >
-    <n-drawer-content title="Geo 配置来源" closable>
+    <n-drawer-content :title="t('geo_editor.drawer.config_source')" closable>
       <n-flex style="height: 100%" vertical>
         <n-flex>
           <n-button style="flex: 1" @click="show_create_modal = true">
-            增加规则
+            {{ t("geo_editor.drawer.add_rule") }}
           </n-button>
           <n-button style="flex: 1" @click="export_config">
-            导出规则至剪贴板
+            {{ t("geo_editor.drawer.export_clipboard") }}
           </n-button>
           <n-popconfirm @positive-click="import_rules">
             <template #trigger>
-              <n-button style="flex: 1" @click=""> 从剪贴板导入规则 </n-button>
+              <n-button style="flex: 1" @click="">
+                {{ t("geo_editor.drawer.import_clipboard") }}
+              </n-button>
             </template>
-            确定从剪贴板导入吗?
+            {{ t("geo_editor.drawer.confirm_import") }}
           </n-popconfirm>
         </n-flex>
 

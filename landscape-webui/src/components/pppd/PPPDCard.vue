@@ -22,21 +22,26 @@ async function del() {
 </script>
 <template>
   <n-flex>
-    <n-card :title="`网卡: ${config.iface_name}`" size="small">
+    <n-card
+      :title="
+        t('misc.pppd_card.interface_label', { iface_name: config.iface_name })
+      "
+      size="small"
+    >
       <!-- {{ rule }} -->
       <n-descriptions bordered label-placement="top" :column="3">
-        <n-descriptions-item label="附着网卡">
+        <n-descriptions-item :label="t('misc.pppd_card.attach_interface')">
           {{ config.attach_iface_name }}
         </n-descriptions-item>
-        <n-descriptions-item label="启用">
+        <n-descriptions-item :label="t('common.enable')">
           <n-tag :bordered="false" :type="config.enable ? 'success' : ''">
             {{ config.enable }}
           </n-tag>
         </n-descriptions-item>
-        <n-descriptions-item label="默认路由">
+        <n-descriptions-item :label="t('pppd_editor.default_route')">
           {{ config.pppd_config.default_route }}
         </n-descriptions-item>
-        <n-descriptions-item label="用户名">
+        <n-descriptions-item :label="t('common.username')">
           {{ frontEndStore.MASK_INFO(config.pppd_config.peer_id) }}
         </n-descriptions-item>
       </n-descriptions>

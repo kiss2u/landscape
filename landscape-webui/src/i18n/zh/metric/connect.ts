@@ -106,5 +106,12 @@ export default {
     bytes_axis_rate: "数据速度",
     packets_axis_total: "封包总量",
     packets_axis_rate: "封包速度 (PPS)",
+    second_level: "秒级 (5分钟保留)",
+    minute_level: "分钟级 (1天保留)",
+    hour_level: "小时级 (7天保留)",
+    day_level: "天级 (30天保留)",
+  },
+  ip_stats: {
+    query_ip_ownership: "查询目标 IP 归属",
   },
 };

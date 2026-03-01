@@ -100,7 +100,7 @@ const show_create_model = ref(false);
         <span v-else>N/A</span>
       </n-descriptions-item>
 
-      <n-descriptions-item label="大小">
+      <n-descriptions-item :label="t('common.size')">
         <span v-if="size !== undefined"> {{ size }} MB</span>
         <span v-else>N/A</span>
       </n-descriptions-item>

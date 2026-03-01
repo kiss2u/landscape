@@ -3,8 +3,6 @@ export default {
   mode_none: "无",
   mode_static: "静态IP",
   mode_dhcp_client: "DHCP 客户端",
-  enabled_yes: "启用",
-  enabled_no: "禁用",
   static_ip: "静态 IP",
   set_default_route: "是否设置默认路由",
   yes: "是",

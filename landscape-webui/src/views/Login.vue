@@ -8,7 +8,9 @@ import { useMessage } from "naive-ui";
 import CopyRight from "@/components/CopyRight.vue";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const login_info = ref<LoginInfo>({ username: "", password: "" });
 
 const router = useRouter();
@@ -30,7 +32,7 @@ async function login() {
   router.push({
     path: redirect,
   });
-  message.success(`欢迎, ${login_info.value.username}`);
+  message.success(t("config.welcome", { username: login_info.value.username }));
 }
 </script>
 
@@ -51,12 +53,12 @@ async function login() {
       content-style="display: flex"
     >
       <n-flex style="flex: 1" align="center" justify="center">
-        <n-card title="登录" style="max-width: 400px">
+        <n-card :title="t('common.login')" style="max-width: 400px">
           <n-form>
-            <n-form-item-row label="用户名">
+            <n-form-item-row :label="t('common.username')">
               <n-input v-model:value="login_info.username" />
             </n-form-item-row>
-            <n-form-item-row label="密码">
+            <n-form-item-row :label="t('common.password')">
               <n-input
                 type="password"
                 show-password-on="click"
@@ -66,7 +68,7 @@ async function login() {
             </n-form-item-row>
           </n-form>
           <n-button type="primary" block secondary strong @click="login">
-            登录
+            {{ t("common.login") }}
           </n-button>
         </n-card>
       </n-flex>

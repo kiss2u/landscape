@@ -61,13 +61,13 @@ async function save_config() {
       aria-modal="true"
     >
       <n-form :model="service_config">
-        <n-form-item :label="t('firewall.service_edit.enable')">
+        <n-form-item :label="t('common.enable_question')">
           <n-switch v-model:value="service_config.enable">
             <template #checked>
-              {{ t("firewall.service_edit.enabled_yes") }}
+              {{ t("common.enable") }}
             </template>
             <template #unchecked>
-              {{ t("firewall.service_edit.enabled_no") }}
+              {{ t("common.disable") }}
             </template>
           </n-switch>
         </n-form-item>
@@ -76,7 +76,7 @@ async function save_config() {
       <template #footer>
         <n-flex justify="end">
           <n-button round type="primary" @click="save_config">
-            {{ t("firewall.service_edit.update") }}
+            {{ t("common.update") }}
           </n-button>
         </n-flex>
       </template>

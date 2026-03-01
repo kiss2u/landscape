@@ -7,6 +7,7 @@ import FlowNode from "@/components/topology/FlowNode.vue";
 import { add_controller } from "@/api/network";
 
 import { useMessage } from "naive-ui";
+import { useI18n } from "vue-i18n";
 
 import { onMounted } from "vue";
 import { useIfaceNodeStore } from "@/stores/iface_node";
@@ -14,6 +15,7 @@ import { WLANTypeTag } from "@/lib/dev";
 
 const { zoomOnScroll, fitView, onConnect } = useVueFlow();
 const naive_message = useMessage();
+const { t } = useI18n();
 
 interface Props {
   fit_padding?: number;
@@ -39,27 +41,23 @@ onConnect(async (params: any) => {
   const is_source_bridge = ifaceNodeStore.FIND_BRIDGE_BY_IFINDEX(params.source);
   const is_target_bridge = ifaceNodeStore.FIND_BRIDGE_BY_IFINDEX(params.target);
   if (is_source_bridge && is_target_bridge) {
-    naive_message.warning("还没做好 Bridge 环路检测");
+    naive_message.warning(t("misc.topology.bridge_loop_warning"));
   } else if (is_target_bridge) {
-    naive_message.warning("只能从 Bridge 的右边开始连");
+    naive_message.warning(t("misc.topology.bridge_right_side_only"));
   } else if (!is_source_bridge && !is_target_bridge) {
-    naive_message.warning(
-      "连接的双方, 必须要有一个是 Bridge, 且只能从 Bridge 的右边开始连",
-    );
+    naive_message.warning(t("misc.topology.bridge_connection_rule"));
   }
 
   let dev = ifaceNodeStore.FIND_DEV_BY_IFINDEX(params.target);
   if (dev?.wifi_info !== undefined) {
     if (dev.wifi_info.wifi_type.t !== WLANTypeTag.Ap) {
-      naive_message.warning(
-        "当前无线网卡为客户端模式, 需要转为 AP 模式才能加入桥接网络",
-      );
+      naive_message.warning(t("misc.topology.wifi_client_mode_warning"));
     }
   }
   let master_dev = ifaceNodeStore.FIND_DEV_BY_IFINDEX(params.source);
   if (dev) {
     if (dev.controller_id || dev.controller_name) {
-      naive_message.error("此设备已有上级设备了");
+      naive_message.error(t("misc.topology.device_has_parent"));
     }
     let result = await add_controller({
       link_name: dev.name,
@@ -71,7 +69,7 @@ onConnect(async (params: any) => {
     // 检查 target 是否有
     console.log(params);
   } else {
-    naive_message.error("找不到设备");
+    naive_message.error(t("misc.topology.device_not_found"));
   }
 });
 </script>

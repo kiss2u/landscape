@@ -287,9 +287,9 @@ const mappingPortsRule = {
         </n-form-item-gi> -->
           <n-form-item-gi :label="t('nat.mapping.enabled')" :span="2">
             <n-switch v-model:value="rule.enable">
-              <template #checked> {{ t("nat.mapping.enabled_yes") }} </template>
+              <template #checked> {{ t("common.enable") }} </template>
               <template #unchecked>
-                {{ t("nat.mapping.enabled_no") }}
+                {{ t("common.disable") }}
               </template>
             </n-switch>
           </n-form-item-gi>
@@ -451,13 +451,13 @@ const mappingPortsRule = {
 
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{ t("nat.mapping.cancel") }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
         >
-          {{ t("nat.mapping.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

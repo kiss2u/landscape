@@ -2,9 +2,6 @@ export default {
   rule_edit: {
     title: "Rule Editor",
     priority: "Priority",
-    enable: "Enabled",
-    enabled_yes: "Enabled",
-    enabled_no: "Disabled",
     remark: "Remark",
     filter_result: "Filter result",
     flow_action: "Flow action",
@@ -23,8 +20,6 @@ export default {
     select_match_type: "Select match type",
     duplicate_priority_warning:
       "**Priority** cannot be -1 and must be unique, or it may overwrite existing rules",
-    cancel: "Cancel",
-    save: "Save",
     source_style_full: "Exact Match",
     source_style_domain: "Domain Match",
     source_style_regex: "Regex Match",
@@ -35,9 +30,6 @@ export default {
   },
   redirect_edit: {
     title: "DNS Redirect Config",
-    enable: "Enabled",
-    enabled_yes: "Enabled",
-    enabled_no: "Disabled",
     remark: "Remark",
     apply_flows: "Applied flows (empty means all flows)",
     apply_flows_placeholder: "Select flow IDs",
@@ -49,8 +41,6 @@ export default {
     copy: "Copy",
     paste_replace: "Paste Replace",
     paste_append: "Paste Append",
-    cancel: "Cancel",
-    save: "Save",
     default_flow: "Default Flow",
     err_ip_required: "IP address is required",
     err_ip_invalid: "Please enter a valid IPv4 or IPv6 address",
@@ -80,8 +70,6 @@ export default {
     server_ips: "DNS Server IPs",
     enter_ip: "Enter IP",
     enter_ip_v46: "Enter an IPv4 or IPv6 address",
-    cancel: "Cancel",
-    save: "Save",
     err_ip_required: "IP address is required",
     err_ip_invalid: "Please enter a valid IPv4 or IPv6 address",
     err_ips_required: "At least one DNS server IP is required",
@@ -115,5 +103,23 @@ export default {
     export_clipboard: "Export Rules to Clipboard",
     import_clipboard: "Import Rules from Clipboard",
     confirm_import: "Confirm import from clipboard?",
+  },
+  check_domain: {
+    enter_domain: "Enter domain to query",
+    test_flow_query: "Test flow: {flow_id} domain query (results not cached)",
+    query_instruction:
+      "Enter a domain, then click the button on the right or press Enter",
+    upstream_result: "DNS Upstream Query Results",
+    cache_result: "DNS Internal Cache Results",
+    redirect_result: "Domain Redirect Results",
+  },
+  redirect_card: {
+    apply_to: "Applied to",
+    default_flow: "Default Flow",
+    all_flows: "All Flows",
+    response_info: "Response Info",
+  },
+  select_upstream: {
+    redirect_flow_id: "Redirect Flow ID",
   },
 };

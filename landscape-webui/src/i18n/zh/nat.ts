@@ -16,8 +16,6 @@ export default {
       "如果开放的是路由的端口，那么就设置为 0.0.0.0 不映射留空即可",
     target_ipv6_hint: "如果开放的是路由的端口，那么就设置为 :: 不映射留空即可",
     remark: "备注",
-    cancel: "取消",
-    save: "保存",
     validation_ipv4: "请输入合法的 IPv4 地址",
     validation_ipv6: "请输入合法的 IPv6 地址",
     select_protocol_required: "请至少选择一个协议",
@@ -25,7 +23,11 @@ export default {
     range: "范围 1-65535",
     invalid_port_value: "存在无效的端口值",
     duplicate_port_config: "存在重复的端口配置",
-    enabled_yes: "启用",
-    enabled_no: "禁用",
+  },
+  service_edit: {
+    title: "网卡NAT配置",
+    tcp_port_range: "TCP 端口范围",
+    udp_port_range: "UDP 端口范围",
+    icmp_id_range: "ICMP ID 范围",
   },
 };

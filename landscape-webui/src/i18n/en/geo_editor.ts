@@ -1,8 +1,5 @@
 export default {
   common: {
-    enable: "Enabled",
-    enabled_yes: "Enabled",
-    enabled_no: "Disabled",
     source_type: "Source Type",
     source_url: "Download URL",
     source_url_mode: "Download from URL",
@@ -11,8 +8,6 @@ export default {
     name_required: "Name is required",
     name_invalid:
       "Name can only contain letters, numbers, dot, underscore, and hyphen",
-    cancel: "Cancel",
-    save: "Save",
     remove: "Delete",
     add_key_group: "Add Key Group",
     key: "Key",
@@ -29,5 +24,25 @@ export default {
     domain_list: "Domain List",
     domain_placeholder: "Domain",
     add_domain: "Add Domain",
+  },
+  drawer: {
+    config_source: "Geo Configuration Source",
+    geo_ip_config_source: "Geo IP Configuration Source",
+    add_rule: "Add Rule",
+    export_clipboard: "Export Rules to Clipboard",
+    import_clipboard: "Import Rules from Clipboard",
+    confirm_import: "Confirm import from clipboard?",
+  },
+  item_card: {
+    source_type: "Source Type",
+    next_update_time: "Next Update Time",
+    key_count: "Key Count",
+    update_with_file: "Update Using File",
+  },
+  detail_drawer: {
+    rule_details: "Rule Details",
+  },
+  geo_ip_name_select: {
+    select_geo_ip_name: "Select Geo IP Name",
   },
 };

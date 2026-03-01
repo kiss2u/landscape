@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import { HelpFilled, Time } from "@vicons/carbon";
 import type { IPv6NAInfo } from "@landscape-router/types/api/schemas";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { usePreferenceStore } from "@/stores/preference";
 const prefStore = usePreferenceStore();
+const { t } = useI18n();
 
 const frontEndStore = useFrontEndStore();
 
@@ -102,7 +104,7 @@ const info = computed(() => {
       style="height: 190px; flex: 1"
       v-else
     >
-      <n-empty description="IPv6 邻居数量未知"> </n-empty>
+      <n-empty :description="t('lan_ipv6.neighbor_count_unknown')"> </n-empty>
     </n-flex>
   </n-card>
 </template>

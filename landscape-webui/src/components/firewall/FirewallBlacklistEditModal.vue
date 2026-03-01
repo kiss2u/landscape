@@ -125,13 +125,13 @@ async function saveConfig() {
   >
     <n-form v-if="config" style="flex: 1" :model="config">
       <n-grid :cols="5">
-        <n-form-item-gi :label="t('firewall.blacklist_edit.enable')" :span="2">
+        <n-form-item-gi :label="t('common.enable_question')" :span="2">
           <n-switch v-model:value="config.enable">
             <template #checked>
-              {{ t("firewall.blacklist_edit.enabled_yes") }}
+              {{ t("common.enable") }}
             </template>
             <template #unchecked>
-              {{ t("firewall.blacklist_edit.enabled_no") }}
+              {{ t("common.disable") }}
             </template>
           </n-switch>
         </n-form-item-gi>
@@ -179,15 +179,13 @@ async function saveConfig() {
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{
-          t("firewall.blacklist_edit.cancel")
-        }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveConfig"
           :disabled="!isModified"
         >
-          {{ t("firewall.blacklist_edit.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

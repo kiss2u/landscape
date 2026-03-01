@@ -20,6 +20,7 @@ import IfaceChangeZone from "@/components/iface/IfaceChangeZone.vue";
 import { AreaCustom, Power, Link, DotMark } from "@vicons/carbon";
 import { PlugDisconnected20Regular } from "@vicons/fluent";
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 
 import { DevStateType, NetDev } from "@/lib/dev";
 import { useIfaceNodeStore } from "@/stores/iface_node";
@@ -40,6 +41,7 @@ const props = defineProps<{
 }>();
 
 const themeVars = ref(useThemeVars());
+const { t } = useI18n();
 const ifaceNodeStore = useIfaceNodeStore();
 // const connections = useHandleConnections({
 //   type: 'target',
@@ -175,9 +177,14 @@ function has_source_hook() {
                     </n-icon>
                   </n-button>
                 </template>
-                确定
-                {{ status.dev_status.t === DevStateType.Up ? "关闭" : "开启" }}
-                网卡吗
+                {{
+                  t("misc.topology_managed_node.confirm_toggle", {
+                    action:
+                      status.dev_status.t === DevStateType.Up
+                        ? t("common.close")
+                        : t("common.open"),
+                  })
+                }}
               </n-popconfirm>
               <n-button
                 v-if="show_switch.zone_type"
@@ -223,7 +230,9 @@ function has_source_hook() {
           justify="space-between"
           style="margin-bottom: 12px"
         >
-          <span style="font-weight: 600">设备详情</span>
+          <span style="font-weight: 600">{{
+            t("misc.topology_managed_node.device_details")
+          }}</span>
           <n-tag
             size="small"
             :bordered="false"
@@ -254,7 +263,7 @@ function has_source_hook() {
         <!-- Details Grid -->
         <n-grid :cols="2" :x-gap="12" :y-gap="8" style="margin-bottom: 12px">
           <n-gi>
-            <n-statistic label="类型" style="zoom: 0.9">
+            <n-statistic :label="t('common.type')" style="zoom: 0.9">
               <template #default>
                 <n-tag size="small" :bordered="false" type="info">
                   {{ status.dev_type ?? "N/A" }}
@@ -278,7 +287,7 @@ function has_source_hook() {
           <n-text
             depth="3"
             style="font-size: 12px; display: block; margin-bottom: 4px"
-            >上层设备</n-text
+            >{{ t("misc.topology_managed_node.parent_device") }}</n-text
           >
           <n-flex
             align="center"

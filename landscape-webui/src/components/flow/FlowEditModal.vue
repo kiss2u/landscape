@@ -130,8 +130,8 @@ function switch_target() {}
         </n-form-item-gi>
         <n-form-item-gi :label="t('flow.edit.enabled')" :offset="1" :span="1">
           <n-switch v-model:value="rule.enable">
-            <template #checked> {{ t("flow.common.enable") }} </template>
-            <template #unchecked> {{ t("flow.common.disable") }} </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item-gi>
 
@@ -173,13 +173,13 @@ function switch_target() {}
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{ t("flow.common.cancel") }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
         >
-          {{ t("flow.common.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

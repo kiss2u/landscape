@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
+import { useI18n } from "vue-i18n";
 import { getFlowRules } from "@landscape-router/types/api/flow-rules/flow-rules";
+
+const { t } = useI18n();
 
 interface Props {
   placeholder?: string;
@@ -12,7 +15,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: "选择 Flow",
+  placeholder: undefined,
   disabled: false,
   clearable: true,
   filterable: true,
@@ -32,7 +35,7 @@ const flowOptions = computed(() => {
   }));
 
   if (props.includeAll) {
-    return [{ label: "全部", value: null }, ...options];
+    return [{ label: t("flow.select.all"), value: null }, ...options];
   }
 
   return options;
@@ -43,7 +46,7 @@ async function loadFlowRules() {
   try {
     flowRules.value = await getFlowRules();
   } catch (error) {
-    console.error("获取 Flow 列表失败:", error);
+    console.error(t("flow.select.get_list_failed"), error);
   } finally {
     loading.value = false;
   }
@@ -62,7 +65,7 @@ defineExpose({
 <template>
   <n-select
     v-model:value="flowId"
-    :placeholder="placeholder"
+    :placeholder="placeholder ?? t('flow.select.select_flow')"
     :options="flowOptions"
     :disabled="disabled || loading"
     :filterable="filterable"

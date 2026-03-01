@@ -43,7 +43,10 @@ const title_name = computed(() =>
             />
           </n-flex>
         </n-scrollbar>
-        <n-empty v-else description="无来源规则, 没有任何作用">
+        <n-empty
+          v-else
+          :description="t('firewall.blacklist_card.no_source_rules')"
+        >
           <template #icon>
             <n-icon>
               <Warning />

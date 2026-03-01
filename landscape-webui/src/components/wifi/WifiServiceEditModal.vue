@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import { WifiServiceConfig } from "@/lib/wifi";
 import { useWifiConfigStore } from "@/stores/status_wifi";
 import { get_iface_wifi_config, update_wifi_config } from "@/api/service_wifi";
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 
+const { t } = useI18n();
 const wifiConfigStore = useWifiConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
@@ -49,32 +51,34 @@ async function save_config() {
   >
     <n-card
       style="width: 600px"
-      title="无线服务配置"
+      :title="t('misc.wifi.title')"
       :bordered="false"
       size="small"
       role="dialog"
       aria-modal="true"
     >
       <n-form :model="service_config">
-        <n-form-item label="是否启用">
+        <n-form-item :label="t('common.enable_question')">
           <n-switch v-model:value="service_config.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item>
-        <n-form-item label="配置">
+        <n-form-item :label="t('misc.wifi.config')">
           <n-input
             v-model:value="service_config.config"
             type="textarea"
             rows="10"
-            placeholder="hostapd 配置"
+            :placeholder="t('misc.wifi.hostapd_config')"
           />
         </n-form-item>
       </n-form>
 
       <template #footer>
         <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+          <n-button round type="primary" @click="save_config">
+            {{ t("common.update") }}
+          </n-button>
         </n-flex>
       </template>
     </n-card>

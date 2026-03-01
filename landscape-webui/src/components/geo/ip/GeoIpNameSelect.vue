@@ -2,6 +2,8 @@
 import { get_geo_ip_configs } from "@/api/geo/ip";
 import type { GeoIpSourceConfig } from "@landscape-router/types/api/schemas";
 import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 
 const name = defineModel<string | null>("name", { required: true });
 
@@ -41,7 +43,7 @@ const geo_name_options = computed(() => {
   <n-select
     v-model:value="name"
     filterable
-    placeholder="选择 geo ip 名称"
+    :placeholder="t('geo_editor.geo_ip_name_select.select_geo_ip_name')"
     :options="geo_name_options"
     :loading="loading"
     clearable

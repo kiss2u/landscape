@@ -18,8 +18,6 @@ export default {
     target_ipv6_hint:
       "If opening router's own port, set :: or leave empty for no mapping",
     remark: "Remark",
-    cancel: "Cancel",
-    save: "Save",
     validation_ipv4: "Please enter a valid IPv4 address",
     validation_ipv6: "Please enter a valid IPv6 address",
     select_protocol_required: "Please select at least one protocol",
@@ -27,7 +25,11 @@ export default {
     range: "Range 1-65535",
     invalid_port_value: "Invalid port value found",
     duplicate_port_config: "Duplicate port mapping found",
-    enabled_yes: "Enabled",
-    enabled_no: "Disabled",
+  },
+  service_edit: {
+    title: "Interface NAT Config",
+    tcp_port_range: "TCP Port Range",
+    udp_port_range: "UDP Port Range",
+    icmp_id_range: "ICMP ID Range",
   },
 };

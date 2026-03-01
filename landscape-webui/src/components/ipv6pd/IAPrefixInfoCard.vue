@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import { HelpFilled } from "@vicons/carbon";
 import type { LDIAPrefix } from "@/api/service_ipv6pd";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { usePreferenceStore } from "@/stores/preference";
 const prefStore = usePreferenceStore();
+const { t } = useI18n();
 
 const frontEndStore = useFrontEndStore();
 
@@ -59,7 +61,7 @@ const status = computed(() => {
       <n-descriptions-item>
         <template #label>
           <n-flex align="center">
-            <span> IP 首选时间 </span>
+            <span> {{ t("lan_ipv6.prefix_info.ip_preferred_time") }} </span>
             <n-popover trigger="hover">
               <template #trigger>
                 <n-button text>
@@ -68,7 +70,9 @@ const status = computed(() => {
                   </template>
                 </n-button>
               </template>
-              <span>当有多个 IP 时, 作为首选IP的时间</span>
+              <span>{{
+                t("lan_ipv6.prefix_info.ip_preferred_time_desc")
+              }}</span>
             </n-popover>
           </n-flex>
         </template>
@@ -77,7 +81,7 @@ const status = computed(() => {
       <n-descriptions-item>
         <template #label>
           <n-flex align="center">
-            <span> IP 有效时间 </span>
+            <span> {{ t("lan_ipv6.prefix_info.ip_valid_time") }} </span>
             <n-popover trigger="hover">
               <template #trigger>
                 <n-button text>
@@ -86,19 +90,19 @@ const status = computed(() => {
                   </template>
                 </n-button>
               </template>
-              <span>从获得到丢弃该 IP 的时间, 包含首选时间</span>
+              <span>{{ t("lan_ipv6.prefix_info.ip_valid_time_desc") }}</span>
             </n-popover>
           </n-flex>
         </template>
         {{ config.valid_lifetime }}s
       </n-descriptions-item>
-      <n-descriptions-item label="前缀">
+      <n-descriptions-item :label="t('lan_ipv6.prefix_info.prefix')">
         {{ frontEndStore.MASK_INFO(config.prefix_ip) }}/{{ config.prefix_len }}
       </n-descriptions-item>
       <n-descriptions-item :span="3">
         <template #label>
           <n-flex align="center">
-            <span>最近更新时间</span>
+            <span>{{ t("lan_ipv6.prefix_info.last_update") }}</span>
             <n-popover trigger="hover">
               <template #trigger>
                 <n-button text>
@@ -107,7 +111,9 @@ const status = computed(() => {
                   </template>
                 </n-button>
               </template>
-              <span>DHCPv6 Client 得到前缀的时间</span>
+              <span>{{
+                t("lan_ipv6.prefix_info.dhcpv6_client_prefix_time")
+              }}</span>
             </n-popover>
           </n-flex>
         </template>
@@ -124,7 +130,8 @@ const status = computed(() => {
       style="height: 190px; flex: 1"
       v-else
     >
-      <n-empty description="IPv6 PD 还未获得前缀"> </n-empty>
+      <n-empty :description="t('lan_ipv6.prefix_info.no_prefix_yet')">
+      </n-empty>
     </n-flex>
   </n-card>
 </template>

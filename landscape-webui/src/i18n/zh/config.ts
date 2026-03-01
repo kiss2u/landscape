@@ -50,4 +50,9 @@ export default {
   save_success: "保存成功",
   save_failed: "保存失败",
   conflict: "配置冲突，请刷新后重试",
+
+  chinese_simplified: "简体中文",
+  dark_mode: "深色",
+  light_mode: "浅色",
+  welcome: "欢迎, {username}",
 };

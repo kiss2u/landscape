@@ -4,7 +4,9 @@ import PPPDCard from "@/components/pppd/PPPDCard.vue";
 import { get_attach_iface_pppd_config } from "@/api/service_pppd";
 import { PPPDServiceConfig } from "@/lib/pppd";
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const show = defineModel<boolean>("show", { required: true });
 const props = defineProps<{
   attach_iface_name: string;
@@ -22,12 +24,16 @@ const show_create_pppd_modal = ref(false);
 <template>
   <n-drawer v-model:show="show" width="500px" @after-enter="inti_drawer">
     <n-drawer-content
-      :title="`配置 ${props.attach_iface_name} PPPD 服务`"
+      :title="
+        t('misc.pppd_drawer.configure_pppd', {
+          iface_name: props.attach_iface_name,
+        })
+      "
       closable
     >
       <n-flex style="height: 100%" vertical>
         <n-button @click="show_create_pppd_modal = true">
-          添加 PPPD 配置
+          {{ t("misc.pppd_drawer.add_pppd") }}
         </n-button>
 
         <n-scrollbar>

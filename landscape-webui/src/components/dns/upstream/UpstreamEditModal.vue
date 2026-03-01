@@ -302,15 +302,13 @@ async function import_rules() {
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{
-          t("dns_editor.upstream_edit.cancel")
-        }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
         >
-          {{ t("dns_editor.upstream_edit.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

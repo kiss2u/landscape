@@ -2,6 +2,9 @@
 import { get_dns_upstreams } from "@/api/dns_rule/upstream";
 import type { DnsUpstreamConfig } from "@landscape-router/types/api/schemas";
 import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const upstream_id = defineModel<string>("upstream_id", { required: true });
 
@@ -29,7 +32,7 @@ async function search_upstreams() {
   <n-select
     v-model:value="upstream_id"
     filterable
-    placeholder="重定向的流 ID"
+    :placeholder="t('dns_editor.select_upstream.redirect_flow_id')"
     :options="upstream_options"
     :loading="flow_search_loading"
     remote

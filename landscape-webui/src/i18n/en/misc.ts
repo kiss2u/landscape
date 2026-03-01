@@ -71,4 +71,56 @@ export default {
     dock_mode: "Dock Mode",
     float_mode: "Float Mode",
   },
+  topology: {
+    bridge_loop_warning: "Bridge loop detection not yet implemented",
+    bridge_right_side_only: "Can only connect from the right side of Bridge",
+    bridge_connection_rule:
+      "Both sides must include a Bridge, and connections must start from the Bridge's right side",
+    wifi_client_mode_warning:
+      "This wireless NIC is in client mode. Switch to AP mode to join a bridge network",
+    device_has_parent: "This device already has a parent device",
+    device_not_found: "Device not found",
+  },
+  route_lan: {
+    title: "LAN Route Forwarding Service",
+    static_route_limit: "Static Routes (only one supported currently)",
+    add_subnet: "Add reachable subnet",
+    next_hop: "Next hop",
+    subnet_range: "Subnet range",
+  },
+  route_wan: {
+    title: "WAN Route Forwarding Service",
+  },
+  mss_clamp: {
+    title: "Configure TCP MSS Clamping",
+    clamp_value: "Clamp Value",
+  },
+  wifi: {
+    title: "Wireless Service Config",
+    config: "Config",
+    hostapd_config: "hostapd config",
+  },
+  pppd_card: {
+    interface_label: "Interface: {iface_name}",
+    attach_interface: "Attached Interface",
+  },
+  pppd_drawer: {
+    configure_pppd: "Configure {iface_name} PPPD Service",
+    add_pppd: "Add PPPD Config",
+  },
+  docker_container: {
+    no_other_tags: "No other tags",
+    other_tags: "Other tags",
+  },
+  docker_image: {
+    history_tasks: "History Tasks",
+  },
+  docker_pull: {
+    download_history: "Download History",
+  },
+  topology_managed_node: {
+    device_details: "Device Details",
+    parent_device: "Parent Device",
+    confirm_toggle: "Confirm {action} this NIC?",
+  },
 };

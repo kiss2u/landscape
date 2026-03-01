@@ -2,8 +2,8 @@ import dns from "./metric/dns";
 import connect from "./metric/connect";
 import sysinfo from "./sysinfo";
 import config from "./config";
-import error from "./error";
-import errors from "./errors";
+import not_found from "./not_found";
+import errors from "./api_errors";
 import enrolled_device from "./enrolled_device";
 import lan_ipv6 from "./lan_ipv6";
 import flow from "./flow";
@@ -15,17 +15,16 @@ import geo_editor from "./geo_editor";
 import ipconfig_editor from "./ipconfig_editor";
 import dhcp_editor from "./dhcp_editor";
 import pppd_editor from "./pppd_editor";
+import dhcp_v6 from "./dhcp_v6";
 
 export default {
-  docker_divider: "Docker 容器",
-  topology_divider: "网络拓扑",
   metric: {
     dns,
     connect,
   },
   sysinfo,
   config,
-  error,
+  not_found,
   errors,
   enrolled_device,
   lan_ipv6,
@@ -38,6 +37,7 @@ export default {
   ipconfig_editor,
   dhcp_editor,
   pppd_editor,
+  dhcp_v6,
   common: {
     private_mode: "隐私模式",
     create: "创建",
@@ -82,6 +82,44 @@ export default {
     filter_key: "筛选key",
     filter_attr: "筛选 attr",
     inverse: "反选",
+
+    // 按钮/动作
+    enable: "启用",
+    disable: "禁用",
+    cancel: "取消",
+    save: "保存",
+    update: "更新",
+    login: "登录",
+    close: "关闭",
+    open: "开启",
+    override: "覆盖",
+    add: "增加",
+
+    // 表单标签
+    username: "用户名",
+    password: "密码",
+    remark: "备注",
+    priority: "优先级",
+    status: "状态",
+    type: "类型",
+    time: "时间",
+    size: "大小",
+    name: "名称",
+    tags: "标签",
+    unknown: "未知",
+    unnamed: "未命名",
+    undefined: "未定义",
+
+    // 表单提示
+    enable_question: "是否启用",
+    ip_format_invalid: "IP 格式不正确",
+    ip_input_placeholder: "请输入 IPv4 或者 IPv6",
+
+    // 操作反馈
+    update_success: "更新成功",
+
+    // 布局
+    topology_divider: "网络拓扑",
   },
   routes: {
     dashboard: "系统概览",

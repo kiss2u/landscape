@@ -192,17 +192,13 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
         <n-form-item-gi :label="t('dns_editor.rule_edit.priority')" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi>
-        <n-form-item-gi
-          :label="t('dns_editor.rule_edit.enable')"
-          :offset="1"
-          :span="1"
-        >
+        <n-form-item-gi :label="t('common.enable')" :offset="1" :span="1">
           <n-switch v-model:value="rule.enable">
             <template #checked>
-              {{ t("dns_editor.rule_edit.enabled_yes") }}
+              {{ t("common.enable") }}
             </template>
             <template #unchecked>
-              {{ t("dns_editor.rule_edit.enabled_no") }}
+              {{ t("common.disable") }}
             </template>
           </n-switch>
         </n-form-item-gi>
@@ -385,15 +381,13 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{
-          t("dns_editor.rule_edit.cancel")
-        }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
         >
-          {{ t("dns_editor.rule_edit.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

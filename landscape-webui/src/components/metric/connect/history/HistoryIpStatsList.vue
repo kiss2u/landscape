@@ -91,7 +91,8 @@ const columns = computed(() => [
                           h(NIcon, { component: GlobeSearch24Regular }),
                       },
                     ),
-                  default: () => "查询目标 IP 归属",
+                  default: () =>
+                    t("metric.connect.ip_stats.query_ip_ownership"),
                 },
               )
             : null,

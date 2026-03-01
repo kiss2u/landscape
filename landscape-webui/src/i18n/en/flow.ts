@@ -1,10 +1,4 @@
 export default {
-  common: {
-    enable: "Enable",
-    disable: "Disable",
-    cancel: "Cancel",
-    save: "Save",
-  },
   default_card: {
     title: "Default Flow",
     target_ip: "Destination IP",
@@ -132,5 +126,16 @@ export default {
   wan_rule_card: {
     match_rules: "Match rules",
     no_match_rules: "No match rules. No effect.",
+  },
+  config_card: {
+    no_ingress_rules: "No ingress rules",
+  },
+  exhibit: {
+    flow_not_found: "Cannot find Flow info for FlowID: {flow_id}",
+  },
+  select: {
+    select_flow: "Select Flow",
+    all: "All",
+    get_list_failed: "Failed to get Flow list",
   },
 };

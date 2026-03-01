@@ -71,4 +71,56 @@ export default {
     dock_mode: "停靠模式",
     float_mode: "悬浮模式",
   },
+  topology: {
+    bridge_loop_warning: "还没做好 Bridge 环路检测",
+    bridge_right_side_only: "只能从 Bridge 的右边开始连",
+    bridge_connection_rule:
+      "连接的双方, 必须要有一个是 Bridge, 且只能从 Bridge 的右边开始连",
+    wifi_client_mode_warning:
+      "当前无线网卡为客户端模式, 需要转为 AP 模式才能加入桥接网络",
+    device_has_parent: "此设备已有上级设备了",
+    device_not_found: "找不到设备",
+  },
+  route_lan: {
+    title: "Lan 路由转发服务",
+    static_route_limit: "静态路由 (当前只能设置一个)",
+    add_subnet: "增加可达子网",
+    next_hop: "下一跳",
+    subnet_range: "子网范围",
+  },
+  route_wan: {
+    title: "Wan 路由转发服务",
+  },
+  mss_clamp: {
+    title: "配置 TCP MSS 钳制",
+    clamp_value: "钳制值",
+  },
+  wifi: {
+    title: "无线服务配置",
+    config: "配置",
+    hostapd_config: "hostapd 配置",
+  },
+  pppd_card: {
+    interface_label: "网卡: {iface_name}",
+    attach_interface: "附着网卡",
+  },
+  pppd_drawer: {
+    configure_pppd: "配置 {iface_name} PPPD 服务",
+    add_pppd: "添加 PPPD 配置",
+  },
+  docker_container: {
+    no_other_tags: "无其他标签",
+    other_tags: "其他标签",
+  },
+  docker_image: {
+    history_tasks: "历史任务",
+  },
+  docker_pull: {
+    download_history: "下载记录",
+  },
+  topology_managed_node: {
+    device_details: "设备详情",
+    parent_device: "上层设备",
+    confirm_toggle: "确定{action}网卡吗",
+  },
 };

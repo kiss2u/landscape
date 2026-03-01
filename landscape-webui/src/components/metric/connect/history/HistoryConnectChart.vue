@@ -39,12 +39,12 @@ const resolution = ref<MetricResolution>(
   })(),
 );
 
-const resolutionOptions = [
-  { label: "秒级 (5分钟保留)", value: "second" },
-  { label: "分钟级 (1天保留)", value: "minute" },
-  { label: "小时级 (7天保留)", value: "hour" },
-  { label: "天级 (30天保留)", value: "day" },
-];
+const resolutionOptions = computed(() => [
+  { label: t("metric.connect.chart.second_level"), value: "second" },
+  { label: t("metric.connect.chart.minute_level"), value: "minute" },
+  { label: t("metric.connect.chart.hour_level"), value: "hour" },
+  { label: t("metric.connect.chart.day_level"), value: "day" },
+]);
 
 async function fetchData() {
   loading.value = true;

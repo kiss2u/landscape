@@ -142,16 +142,16 @@ const matchTypeOptions = [
     >
       <n-grid :cols="5">
         <n-form-item-gi
-          :label="t('geo_editor.common.enable')"
+          :label="t('common.enable_question')"
           :offset="0"
           :span="1"
         >
           <n-switch v-model:value="rule.enable">
             <template #checked>
-              {{ t("geo_editor.common.enabled_yes") }}
+              {{ t("common.enable") }}
             </template>
             <template #unchecked>
-              {{ t("geo_editor.common.enabled_no") }}
+              {{ t("common.disable") }}
             </template>
           </n-switch>
         </n-form-item-gi>
@@ -256,15 +256,13 @@ const matchTypeOptions = [
     </n-form>
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{
-          t("geo_editor.common.cancel")
-        }}</n-button>
+        <n-button @click="show = false">{{ t("common.cancel") }}</n-button>
         <n-button
           :loading="commit_spin"
           @click="saveRule"
           :disabled="!isModified"
         >
-          {{ t("geo_editor.common.save") }}
+          {{ t("common.save") }}
         </n-button>
       </n-flex>
     </template>

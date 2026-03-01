@@ -106,5 +106,12 @@ export default {
     bytes_axis_rate: "Rate",
     packets_axis_total: "Total Packets",
     packets_axis_rate: "PPS",
+    second_level: "Second Level (5-min retention)",
+    minute_level: "Minute Level (1-day retention)",
+    hour_level: "Hour Level (7-day retention)",
+    day_level: "Day Level (30-day retention)",
+  },
+  ip_stats: {
+    query_ip_ownership: "Query IP ownership",
   },
 };

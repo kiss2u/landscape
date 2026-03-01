@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import {
   get_iface_mss_clamp_config,
@@ -8,6 +9,7 @@ import {
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 import type { MSSClampServiceConfig } from "@landscape-router/types/api/schemas";
 
+const { t } = useI18n();
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
 
@@ -52,7 +54,7 @@ async function save_config() {
   >
     <n-card
       style="width: 600px"
-      title="配置 TCP MSS 钳制"
+      :title="t('misc.mss_clamp.title')"
       :bordered="false"
       size="small"
       role="dialog"
@@ -60,13 +62,13 @@ async function save_config() {
     >
       <n-form :model="service_config">
         <n-grid :cols="5">
-          <n-form-item-gi label="是否启用" :span="1">
+          <n-form-item-gi :label="t('common.enable_question')" :span="1">
             <n-switch v-model:value="service_config.enable">
-              <template #checked> 启用 </template>
-              <template #unchecked> 禁用 </template>
+              <template #checked> {{ t("common.enable") }} </template>
+              <template #unchecked> {{ t("common.disable") }} </template>
             </n-switch>
           </n-form-item-gi>
-          <n-form-item-gi label="钳制值" :span="4">
+          <n-form-item-gi :label="t('misc.mss_clamp.clamp_value')" :span="4">
             <n-input-number
               v-model:value="service_config.clamp_size"
               :show-button="false"
@@ -81,7 +83,9 @@ async function save_config() {
 
       <template #footer>
         <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+          <n-button round type="primary" @click="save_config">
+            {{ t("common.update") }}
+          </n-button>
         </n-flex>
       </template>
     </n-card>

@@ -2,8 +2,8 @@ import dns from "./metric/dns";
 import connect from "./metric/connect";
 import sysinfo from "./sysinfo";
 import config from "./config";
-import error from "./error";
-import errors from "./errors";
+import not_found from "./not_found";
+import errors from "./api_errors";
 import lan_ipv6 from "./lan_ipv6";
 import enrolled_device from "./enrolled_device";
 import flow from "./flow";
@@ -15,17 +15,16 @@ import geo_editor from "./geo_editor";
 import ipconfig_editor from "./ipconfig_editor";
 import dhcp_editor from "./dhcp_editor";
 import pppd_editor from "./pppd_editor";
+import dhcp_v6 from "./dhcp_v6";
 
 export default {
-  docker_divider: "Docker Containers",
-  topology_divider: "Network topology",
   metric: {
     dns,
     connect,
   },
   sysinfo,
   config,
-  error,
+  not_found,
   errors,
   lan_ipv6,
   enrolled_device,
@@ -38,6 +37,7 @@ export default {
   ipconfig_editor,
   dhcp_editor,
   pppd_editor,
+  dhcp_v6,
   common: {
     private_mode: "Private Mode",
     create: "Create",
@@ -45,7 +45,7 @@ export default {
     delete: "Delete",
     confirm_delete: "Confirm deletion?",
     no_remark: "No remark",
-    not_configured: "Not Configured",
+    not_configured: "N/A",
     starting: "Starting",
     running: "Running",
     stopping: "Stopping",
@@ -84,6 +84,44 @@ export default {
     filter_key: "Filter key",
     filter_attr: "Filter attr",
     inverse: "Inverse",
+
+    // Buttons / Actions
+    enable: "Enable",
+    disable: "Disable",
+    cancel: "Cancel",
+    save: "Save",
+    update: "Update",
+    login: "Login",
+    close: "Close",
+    open: "Open",
+    override: "Override",
+    add: "Add",
+
+    // Form labels
+    username: "Username",
+    password: "Password",
+    remark: "Remark",
+    priority: "Priority",
+    status: "Status",
+    type: "Type",
+    time: "Time",
+    size: "Size",
+    name: "Name",
+    tags: "Tags",
+    unknown: "Unknown",
+    unnamed: "Unnamed",
+    undefined: "Undefined",
+
+    // Form hints
+    enable_question: "Enable?",
+    ip_format_invalid: "Invalid IP format",
+    ip_input_placeholder: "Enter IPv4 or IPv6",
+
+    // Feedback
+    update_success: "Updated",
+
+    // Layout
+    topology_divider: "Network topology",
   },
   routes: {
     dashboard: "Dashboard",

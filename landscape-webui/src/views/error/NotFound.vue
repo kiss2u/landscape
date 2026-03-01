@@ -12,12 +12,12 @@ const goHome = () => {
   <div class="not-found">
     <n-result
       status="404"
-      :title="$t('error.not_found_title')"
-      :description="$t('error.not_found_desc')"
+      :title="$t('not_found.not_found_title')"
+      :description="$t('not_found.not_found_desc')"
     >
       <template #footer>
         <n-button type="primary" secondary @click="goHome">
-          {{ $t("error.back_home") }}
+          {{ $t("not_found.back_home") }}
         </n-button>
       </template>
     </n-result>

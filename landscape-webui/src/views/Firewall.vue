@@ -25,7 +25,7 @@ onMounted(async () => {
         t("common.create")
       }}</n-button>
       <n-text depth="3">
-        当前配置为 IP 黑名单, 命中规则的 IP 将被阻止访问. ICMP 默认不放行.
+        {{ t("firewall.card.ip_blacklist_desc") }}
       </n-text>
     </n-flex>
 

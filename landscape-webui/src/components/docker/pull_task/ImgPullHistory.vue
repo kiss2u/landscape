@@ -2,6 +2,8 @@
 import { get_docker_images, pull_docker_image } from "@/api/docker";
 import { ref } from "vue";
 import DockerImageCard from "@/components/docker/image/DockerImageCard.vue";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 const show = defineModel<boolean>("show", { required: true });
 
 import useDockerImgTask from "@/stores/docker_img_task";
@@ -26,7 +28,7 @@ function leave() {
     placement="right"
     responsive
   >
-    <n-drawer-content title="下载记录" closable>
+    <n-drawer-content :title="t('misc.docker_pull.download_history')" closable>
       <n-flex style="height: 100%" vertical>
         <n-scrollbar>
           <n-flex>

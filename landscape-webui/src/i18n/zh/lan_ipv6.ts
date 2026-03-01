@@ -119,4 +119,24 @@ export default {
   ia_pd_valid_lifetime: "有效生存期",
   ia_pd_valid_lifetime_desc:
     "委派前缀的最长有效时间（秒）。到期后设备必须重新申请。应大于首选生存期。",
+
+  // IAPrefixInfoCard
+  prefix_info: {
+    ip_preferred_time: "IP 首选时间",
+    ip_preferred_time_desc: "当有多个 IP 时, 作为首选IP的时间",
+    ip_valid_time: "IP 有效时间",
+    ip_valid_time_desc: "从获得到丢弃该 IP 的时间, 包含首选时间",
+    prefix: "前缀",
+    last_update: "最近更新时间",
+    dhcpv6_client_prefix_time: "DHCPv6 Client 得到前缀的时间",
+    no_prefix_yet: "IPv6 PD 还未获得前缀",
+  },
+
+  // IPv6PDEditModal
+  ipv6_pd_config: "IPv6-PD 客户端配置",
+  mac_required: "MAC 地址不能为空",
+  mac_hint: "申请使用的 mac 地址 (PPP网卡上是生成虚拟的)",
+
+  // ICMPRaShowItem
+  neighbor_count_unknown: "IPv6 邻居数量未知",
 };

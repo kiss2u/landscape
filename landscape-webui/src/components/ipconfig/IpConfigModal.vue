@@ -121,10 +121,10 @@ function select_ip_model(value: IfaceIpMode) {
           <n-flex>
             <n-switch v-model:value="iface_data.enable">
               <template #checked>
-                {{ t("ipconfig_editor.enabled_yes") }}
+                {{ t("common.enable") }}
               </template>
               <template #unchecked>
-                {{ t("ipconfig_editor.enabled_no") }}
+                {{ t("common.disable") }}
               </template>
             </n-switch>
           </n-flex>

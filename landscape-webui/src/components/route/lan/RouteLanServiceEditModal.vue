@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 
 import type {
   RouteLanServiceConfig,
@@ -11,6 +12,7 @@ import {
 } from "@/api/route/lan";
 import { useRouteLanConfigStore } from "@/stores/status_route_lan";
 
+const { t } = useI18n();
 const routeLanConfigStore = useRouteLanConfigStore();
 const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
@@ -62,37 +64,39 @@ function onCreate(): StaticRouteConfig {
   >
     <n-card
       style="width: 600px"
-      title="Lan 路由转发服务"
+      :title="t('misc.route_lan.title')"
       :bordered="false"
       size="small"
       role="dialog"
       aria-modal="true"
     >
       <n-form v-if="service_config !== null" :model="service_config">
-        <n-form-item label="是否启用">
+        <n-form-item :label="t('common.enable_question')">
           <n-switch v-model:value="service_config.enable">
-            <template #checked> 启用 </template>
-            <template #unchecked> 禁用 </template>
+            <template #checked> {{ t("common.enable") }} </template>
+            <template #unchecked> {{ t("common.disable") }} </template>
           </n-switch>
         </n-form-item>
 
-        <n-form-item label="静态路由 (当前只能设置一个)">
+        <n-form-item :label="t('misc.route_lan.static_route_limit')">
           <n-dynamic-input
             item-style="padding-right: 15px"
             :max="1"
             v-model:value="service_config.static_routes"
             :on-create="onCreate"
           >
-            <template #create-button-default> 增加可达子网 </template>
+            <template #create-button-default>
+              {{ t("misc.route_lan.add_subnet") }}
+            </template>
             <template #default="{ value, index }">
               <n-input-group>
                 <n-input
-                  placeholder="下一跳"
+                  :placeholder="t('misc.route_lan.next_hop')"
                   v-model:value="value.next_hop"
                   type="text"
                 />
                 <n-input
-                  placeholder="子网范围"
+                  :placeholder="t('misc.route_lan.subnet_range')"
                   v-model:value="value.subnet"
                   type="text"
                 />
@@ -111,7 +115,9 @@ function onCreate(): StaticRouteConfig {
 
       <template #footer>
         <n-flex justify="end">
-          <n-button round type="primary" @click="save_config"> 更新 </n-button>
+          <n-button round type="primary" @click="save_config">
+            {{ t("common.update") }}
+          </n-button>
         </n-flex>
       </template>
     </n-card>

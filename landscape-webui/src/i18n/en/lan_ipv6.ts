@@ -123,4 +123,26 @@ export default {
   ia_pd_valid_lifetime: "Valid Lifetime",
   ia_pd_valid_lifetime_desc:
     "Maximum time (in seconds) the delegated prefix remains valid. After expiry the device must request again. Should be greater than the preferred lifetime.",
+
+  // IAPrefixInfoCard
+  prefix_info: {
+    ip_preferred_time: "IP Preferred Time",
+    ip_preferred_time_desc:
+      "When multiple IPs exist, the time this IP is preferred",
+    ip_valid_time: "IP Valid Time",
+    ip_valid_time_desc:
+      "Time from obtaining to discarding this IP, including preferred time",
+    prefix: "Prefix",
+    last_update: "Last Update",
+    dhcpv6_client_prefix_time: "Time when DHCPv6 Client obtained the prefix",
+    no_prefix_yet: "IPv6 PD has not obtained a prefix yet",
+  },
+
+  // IPv6PDEditModal
+  ipv6_pd_config: "IPv6-PD Client Config",
+  mac_required: "MAC address cannot be empty",
+  mac_hint: "MAC address used for request (virtual on PPP interfaces)",
+
+  // ICMPRaShowItem
+  neighbor_count_unknown: "IPv6 neighbor count unknown",
 };

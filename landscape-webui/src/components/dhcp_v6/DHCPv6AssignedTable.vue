@@ -8,7 +8,9 @@ import type {
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { usePreferenceStore } from "@/stores/preference";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const prefStore = usePreferenceStore();
 const frontEndStore = useFrontEndStore();
 const enrolledDeviceStore = useEnrolledDeviceStore();
@@ -60,16 +62,18 @@ const show_prefixes = computed(() => {
     <!-- IA_NA Addresses -->
     <template v-if="show_addresses.length > 0">
       <n-divider title-placement="left" style="margin: 4px 0">
-        IA_NA 地址分配
+        {{ t("dhcp_v6.ia_na_title") }}
       </n-divider>
       <n-table :bordered="true" size="small" striped>
         <thead>
           <tr>
-            <th style="text-align: center">主机名</th>
-            <th style="text-align: center">MAC</th>
-            <th style="text-align: center">IPv6 地址</th>
-            <th style="text-align: center">请求时间</th>
-            <th style="text-align: center">剩余租期 (s)</th>
+            <th style="text-align: center">{{ t("dhcp_v6.hostname") }}</th>
+            <th style="text-align: center">{{ t("dhcp_v6.mac") }}</th>
+            <th style="text-align: center">{{ t("dhcp_v6.ipv6_address") }}</th>
+            <th style="text-align: center">{{ t("dhcp_v6.request_time") }}</th>
+            <th style="text-align: center">
+              {{ t("dhcp_v6.remaining_lease") }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -97,7 +101,9 @@ const show_prefixes = computed(() => {
               />
             </td>
             <td style="text-align: center">
-              <n-flex justify="center" v-if="item.is_static"> 静态分配 </n-flex>
+              <n-flex justify="center" v-if="item.is_static">
+                {{ t("dhcp_v6.static_allocation") }}
+              </n-flex>
               <n-countdown
                 v-else
                 :duration="item.real_remaining"
@@ -112,16 +118,20 @@ const show_prefixes = computed(() => {
     <!-- IA_PD Prefixes -->
     <template v-if="show_prefixes.length > 0">
       <n-divider title-placement="left" style="margin: 4px 0">
-        IA_PD 前缀委派
+        {{ t("dhcp_v6.ia_pd_title") }}
       </n-divider>
       <n-table :bordered="true" size="small" striped>
         <thead>
           <tr>
-            <th style="text-align: center">DUID</th>
-            <th style="text-align: center">委派前缀</th>
-            <th style="text-align: center">前缀长度</th>
-            <th style="text-align: center">请求时间</th>
-            <th style="text-align: center">剩余租期 (s)</th>
+            <th style="text-align: center">{{ t("dhcp_v6.duid") }}</th>
+            <th style="text-align: center">
+              {{ t("dhcp_v6.delegated_prefix") }}
+            </th>
+            <th style="text-align: center">{{ t("dhcp_v6.prefix_length") }}</th>
+            <th style="text-align: center">{{ t("dhcp_v6.request_time") }}</th>
+            <th style="text-align: center">
+              {{ t("dhcp_v6.remaining_lease") }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -149,7 +159,7 @@ const show_prefixes = computed(() => {
 
     <n-empty
       v-if="show_addresses.length === 0 && show_prefixes.length === 0"
-      description="暂无 DHCPv6 分配记录"
+      :description="t('dhcp_v6.no_records')"
       style="padding: 20px 0"
     />
   </n-card>

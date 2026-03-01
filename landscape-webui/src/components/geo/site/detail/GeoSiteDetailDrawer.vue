@@ -5,6 +5,8 @@ import type {
   GeoDomainConfig,
 } from "@landscape-router/types/api/schemas";
 import { onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+const { t } = useI18n();
 
 const key = defineModel<GeoConfigKey>("geo_key", {
   required: true,
@@ -24,7 +26,10 @@ async function refresh() {
     width="500px"
     placement="right"
   >
-    <n-drawer-content title="规则细节" closable>
+    <n-drawer-content
+      :title="t('geo_editor.detail_drawer.rule_details')"
+      closable
+    >
       <n-virtual-list v-if="config" :item-size="110" :items="config.values">
         <template #default="{ item }">
           <n-card style="margin: 5px 0px" :title="item.value" size="small">
