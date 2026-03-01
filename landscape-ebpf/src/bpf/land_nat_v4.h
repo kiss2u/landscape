@@ -624,6 +624,12 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
     struct nat_mapping_value_v4 *nat_egress_value =
         bpf_map_lookup_elem(&nat4_mappings, &egress_key);
     if (!nat_egress_value) {
+        // Fallback: try addr=0 for static mapping targeting local router
+        egress_key.from_addr = 0;
+        nat_egress_value = bpf_map_lookup_elem(&nat4_mappings, &egress_key);
+        egress_key.from_addr = pkt_ip_pair->src_addr.addr;
+    }
+    if (!nat_egress_value) {
         if (!allow_create_mapping) {
             return TC_ACT_SHOT;
         }
