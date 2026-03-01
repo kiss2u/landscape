@@ -1,7 +1,6 @@
 use std::{
     mem::MaybeUninit,
-    net::{IpAddr, Ipv6Addr},
-    str::FromStr,
+    net::{IpAddr, Ipv4Addr},
 };
 
 use landscape_common::net::MacAddr;
@@ -12,6 +11,19 @@ use libbpf_rs::{
 use zerocopy::IntoBytes;
 
 use crate::{map_setting::add_wan_ip, nat::v2::land_nat_v2::LandNatV2SkelBuilder, tests::TestSkb};
+
+/// https://www.cloudshark.org/captures/456a264486bf?filter=tcp
+/// 192.168.101.201:56186 -> 50.18.88.205:443
+fn ipv4_tcp_syn() -> Vec<u8> {
+    [
+        0x00, 0x25, 0x90, 0x97, 0x4b, 0x8e, 0x00, 0x21, 0xcc, 0xd2, 0x9b, 0x82, 0x08, 0x00, 0x45,
+        0x00, 0x00, 0x34, 0x0a, 0x6d, 0x40, 0x00, 0x80, 0x06, 0x00, 0x00, 0xc0, 0xa8, 0x65, 0xc9,
+        0x32, 0x12, 0x58, 0xcd, 0xdb, 0x7a, 0x01, 0xbb, 0xc7, 0xde, 0x8e, 0xce, 0x00, 0x00, 0x00,
+        0x00, 0x80, 0x02, 0x20, 0x00, 0xb1, 0x77, 0x00, 0x00, 0x02, 0x04, 0x05, 0xb4, 0x01, 0x03,
+        0x03, 0x02, 0x01, 0x01, 0x04, 0x02,
+    ]
+    .to_vec()
+}
 
 pub fn handle_ipv4_egress(mut payload: Vec<u8>) {
     let landscape_builder = LandNatV2SkelBuilder::default();
@@ -25,9 +37,9 @@ pub fn handle_ipv4_egress(mut payload: Vec<u8>) {
     add_wan_ip(
         &landscape_skel.maps.wan_ip_binding,
         ifindex,
-        IpAddr::V6(Ipv6Addr::from_str("2409:8888:6666:4f21::").unwrap()),
+        IpAddr::V4(Ipv4Addr::new(192, 168, 101, 201)),
         None,
-        60,
+        24,
         Some(MacAddr::broadcast()),
     );
     let handle_ipv4_egress = landscape_skel.progs.egress_nat;
@@ -35,7 +47,7 @@ pub fn handle_ipv4_egress(mut payload: Vec<u8>) {
     let mut ctx = TestSkb::default();
     ctx.ifindex = ifindex;
 
-    let mut packet_out = vec![0 as u8; payload.len()];
+    let mut packet_out = vec![0u8; payload.len()];
     let input = ProgramInput {
         data_in: Some(&mut payload),
         context_in: Some(ctx.as_mut_bytes()),
@@ -53,8 +65,7 @@ pub fn handle_ipv4_egress(mut payload: Vec<u8>) {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::tests::nat::ipv4_egress::handle_ipv4_egress;
-    use crate::tests::nat::package::*;
+    use super::*;
 
     #[test]
     fn tcp_syn() {

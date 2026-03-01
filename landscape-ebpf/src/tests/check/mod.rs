@@ -1,4 +1,4 @@
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use etherparse::{NetHeaders, PacketHeaders, TransportHeader};
 
@@ -6,13 +6,62 @@ pub fn analyze(packet_out: &[u8]) {
     let pkt = match PacketHeaders::from_ethernet_slice(packet_out) {
         Ok(p) => p,
         Err(e) => {
-            println!("解析失败: {:?}", e);
+            println!("parse failed: {:?}", e);
             return;
         }
     };
 
-    // 打印 IPv6 地址
-    if let Some(NetHeaders::Ipv6(ipv6, _exts)) = pkt.net {
+    if let Some(NetHeaders::Ipv4(ipv4, _exts)) = &pkt.net {
+        let source: Ipv4Addr = ipv4.source.into();
+        let destination: Ipv4Addr = ipv4.destination.into();
+        println!("IPv4 src = {:?}, dst = {:?}", source, destination);
+
+        if let Some(transport) = &pkt.transport {
+            match transport {
+                TransportHeader::Tcp(tcp) => {
+                    println!(
+                        "TCP src_port = {}, dst_port = {}",
+                        tcp.source_port, tcp.destination_port
+                    );
+                    match tcp.calc_checksum_ipv4(ipv4, pkt.payload.slice()) {
+                        Ok(calc) => {
+                            println!(
+                                "TCP checksum on packet = {:#x}, calculated = {:#x}, match = {}",
+                                tcp.checksum,
+                                calc,
+                                tcp.checksum == calc
+                            );
+                        }
+                        Err(err) => {
+                            println!("TCP checksum calc error: {:?}", err);
+                        }
+                    }
+                }
+                TransportHeader::Udp(udp) => {
+                    println!(
+                        "UDP src_port = {}, dst_port = {}",
+                        udp.source_port, udp.destination_port
+                    );
+                    match udp.calc_checksum_ipv4(ipv4, pkt.payload.slice()) {
+                        Ok(calc) => {
+                            println!(
+                                "UDP checksum on packet = {:#x}, calculated = {:#x}, match = {}",
+                                udp.checksum,
+                                calc,
+                                udp.checksum == calc
+                            );
+                        }
+                        Err(err) => {
+                            println!("UDP checksum calc error: {:?}", err);
+                        }
+                    }
+                }
+                _ => {
+                    println!("other transport: {:?}", transport);
+                }
+            }
+        }
+    } else if let Some(NetHeaders::Ipv6(ipv6, _exts)) = pkt.net {
         let source: Ipv6Addr = ipv6.source.into();
         let destination: Ipv6Addr = ipv6.destination.into();
         println!("IPv6 src = {:?}, dst = {:?}", source, destination);
