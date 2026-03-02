@@ -133,8 +133,12 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
                 match &ifconfig.create_dev_type {
                     // 目前仅处理桥接设别的创建
                     CreateDevType::Bridge => {
-                        if let Err(e) =
-                            handle.link().add().bridge(ifconfig.name.clone()).execute().await
+                        use rtnetlink::LinkBridge;
+                        if let Err(e) = handle
+                            .link()
+                            .add(LinkBridge::new(&ifconfig.name).build())
+                            .execute()
+                            .await
                         {
                             tracing::error!("create bridge error: {e:?}");
                         }
@@ -147,8 +151,15 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
                     continue;
                 };
                 // 启动刚刚创建的 bridge
-                if let Ok(_) = handle.link().set(current_iface.index).up().execute().await {
-                    current_iface.dev_status = DevState::Up;
+                {
+                    use netlink_packet_route::link::{LinkFlags, LinkMessage};
+                    let mut msg = LinkMessage::default();
+                    msg.header.index = current_iface.index;
+                    msg.header.flags = LinkFlags::Up;
+                    msg.header.change_mask = LinkFlags::Up;
+                    if let Ok(_) = handle.link().change(msg).execute().await {
+                        current_iface.dev_status = DevState::Up;
+                    }
                 }
                 current_iface
             };
@@ -156,12 +167,11 @@ pub async fn init_devs(network_config: Vec<NetworkIfaceConfig>) {
             // 先检查是否有 master 且 master 是否已经初始化
             if let Some(master_ifac_name) = ifconfig.controller_name.as_ref() {
                 if let Some(master_iface) = get_iface_by_name(master_ifac_name).await {
-                    let create_result = handle
-                        .link()
-                        .set(current_iface.index)
-                        .controller(master_iface.index)
-                        .execute()
-                        .await;
+                    use netlink_packet_route::link::{LinkAttribute, LinkMessage};
+                    let mut msg = LinkMessage::default();
+                    msg.header.index = current_iface.index;
+                    msg.attributes = vec![LinkAttribute::Controller(master_iface.index)];
+                    let create_result = handle.link().change(msg).execute().await;
                     if let Err(e) = create_result {
                         tracing::error!("set controller error: {e:?}");
                     }

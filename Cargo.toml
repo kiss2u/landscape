@@ -81,11 +81,11 @@ toml_edit = "0.22.24"
 fs2 = "0.4.3"
 sha2 = "0.10.8"
 
-rtnetlink = { version = "0.14.1" }
-netlink-packet-route = { version = "0.19.0" }
-netlink-packet-core = { version = "0.7.0" }
-netlink-sys = { version = "0.8.6" }
-wl-nl80211 = { version = "0.2.0" }
+rtnetlink = { version = "0.20" }
+netlink-packet-route = { version = "0.28" }
+netlink-packet-core = { version = "0.8" }
+netlink-sys = { version = "0.8" }
+wl-nl80211 = { version = "0.4" }
 
 # for docker
 bollard = "0.19.4"

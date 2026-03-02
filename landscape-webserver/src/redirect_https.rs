@@ -6,7 +6,8 @@ use axum::{
     response::Redirect,
     BoxError,
 };
-use axum_extra::extract::Host;
+use axum_extra::extract::TypedHeader;
+use headers::Host;
 use landscape_common::config::WebRuntimeConfig;
 
 #[allow(dead_code)]
@@ -37,8 +38,9 @@ pub async fn redirect_http_to_https(web_config: WebRuntimeConfig) {
     }
 
     let https_port = web_config.https_port;
-    let redirect = move |Host(host): Host, uri: Uri| async move {
-        match make_https(&host, uri, https_port) {
+    let redirect = move |TypedHeader(host): TypedHeader<Host>, uri: Uri| async move {
+        let host_str = host.hostname();
+        match make_https(host_str, uri, https_port) {
             Ok(uri) => Ok(Redirect::permanent(&uri.to_string())),
             Err(error) => {
                 tracing::warn!(%error, "failed to convert URI to HTTPS");

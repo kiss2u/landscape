@@ -135,7 +135,7 @@ pub async fn get_all_wifi_devices() -> HashMap<String, LandscapeWifiInterface> {
         Err(_) => return HashMap::new(),
     };
 
-    let mut interface_handle = handle.interface().get().execute().await;
+    let mut interface_handle = handle.interface().get(vec![]).execute().await;
     let mut result = HashMap::new();
 
     loop {

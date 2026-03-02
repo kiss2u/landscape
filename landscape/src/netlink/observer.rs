@@ -1,6 +1,6 @@
 use landscape_common::observer::IfaceObserverAction;
 use netlink_packet_core::{NetlinkMessage, NetlinkPayload};
-use netlink_packet_route::{address::AddressMessage, link::LinkFlag, RouteNetlinkMessage};
+use netlink_packet_route::{address::AddressMessage, RouteNetlinkMessage};
 use netlink_sys::AsyncSocket;
 use rtnetlink::constants::{RTMGRP_IPV4_IFADDR, RTMGRP_LINK};
 use tokio::sync::broadcast;
@@ -57,7 +57,11 @@ pub fn filter_message_status(
             match inner_message {
                 RouteNetlinkMessage::NewLink(link_message) => {
                     // tracing::debug!("NewLink: {:?}", link_message);
-                    if link_message.header.change_mask.contains(&LinkFlag::Up) {
+                    if link_message
+                        .header
+                        .change_mask
+                        .contains(netlink_packet_route::link::LinkFlags::Up)
+                    {
                         let mut ifacename = None;
                         for attr in link_message.attributes {
                             match attr {
@@ -73,14 +77,12 @@ pub fn filter_message_status(
                         };
 
                         let mut result = IfaceObserverAction::Down(ifacename.clone());
-                        for attr in link_message.header.flags {
-                            match attr {
-                                LinkFlag::Up => {
-                                    result = IfaceObserverAction::Up(ifacename);
-                                    break;
-                                }
-                                _ => {}
-                            }
+                        if link_message
+                            .header
+                            .flags
+                            .contains(netlink_packet_route::link::LinkFlags::Up)
+                        {
+                            result = IfaceObserverAction::Up(ifacename);
                         }
 
                         Some(result)

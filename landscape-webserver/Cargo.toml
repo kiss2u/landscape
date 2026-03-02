@@ -26,8 +26,9 @@ tokio = { workspace = true, features = ["full"] }
 clap = { workspace = true }
 
 axum = { workspace = true }
-axum-extra = { workspace = true }
+axum-extra = { workspace = true, features = ["typed-header"] }
 axum-server = { workspace = true, features = ["tls-rustls"] }
+headers = "0.4"
 
 homedir = { workspace = true }
 

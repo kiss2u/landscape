@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use futures::stream::TryStreamExt;
-use netlink_packet_route::address::{AddressAttribute, AddressHeaderFlag, AddressMessage};
+use netlink_packet_route::address::{AddressAttribute, AddressMessage};
 use netlink_packet_route::AddressFamily;
 use rtnetlink::Handle;
 use serde::Serialize;
@@ -18,8 +18,9 @@ pub struct LandscapeSingleIpInfo {
 
 impl LandscapeSingleIpInfo {
     fn new(msg: AddressMessage) -> Option<Self> {
+        // In newer versions, flags structure changed - check for IFA_F_PERMANENT bit
         let is_permanent =
-            msg.header.flags.iter().find(|e| matches!(e, AddressHeaderFlag::Permanent)).is_some();
+            msg.header.flags.contains(netlink_packet_route::address::AddressHeaderFlags::Permanent);
         let mut address = None;
         for each in msg.attributes.iter() {
             match each {

@@ -48,11 +48,13 @@ pub async fn get_all_devices() -> Vec<LandscapeInterface> {
 }
 
 pub async fn create_bridge(name: String) -> bool {
+    use rtnetlink::LinkBridge;
+
     let handle = match create_handle() {
         Ok(h) => h,
         Err(_) => return false,
     };
-    let create_result = handle.link().add().bridge(name).execute().await;
+    let create_result = handle.link().add(LinkBridge::new(&name).build()).execute().await;
     create_result.is_ok()
 }
 
@@ -91,9 +93,14 @@ pub async fn set_controller(
     master_index: Option<u32>,
 ) -> Option<LandscapeInterface> {
     if let Some(dev) = get_iface_by_name(link_name).await {
+        use netlink_packet_route::link::{LinkAttribute, LinkMessage};
+
         let handle = create_handle().ok()?;
-        let create_result =
-            handle.link().set(dev.index).controller(master_index.unwrap_or(0)).execute().await;
+        let mut msg = LinkMessage::default();
+        msg.header.index = dev.index;
+        msg.attributes = vec![LinkAttribute::Controller(master_index.unwrap_or(0))];
+
+        let create_result = handle.link().change(msg).execute().await;
         if create_result.is_ok() {
             Some(dev)
         } else {
