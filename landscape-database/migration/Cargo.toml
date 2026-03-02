@@ -8,7 +8,7 @@ name = "migration"
 path = "src/lib.rs"
 
 [dependencies]
-async-std = { version = "1", features = ["attributes", "tokio1"] }
+async-std = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 

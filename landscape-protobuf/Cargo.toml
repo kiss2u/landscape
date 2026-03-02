@@ -7,13 +7,13 @@ edition.workspace = true
 [dependencies]
 landscape-common = { path = "../landscape-common" }
 
-quick-protobuf = "0.8.1"
+quick-protobuf = { workspace = true }
 tokio = { workspace = true, features = ['fs', 'net'] }
 
 
 [build-dependencies]
-pb-rs = "0.10.0"
-walkdir = "*"
+pb-rs = { workspace = true }
+walkdir = { workspace = true }
 
 [dev-dependencies]
 homedir = { workspace = true }

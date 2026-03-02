@@ -18,7 +18,7 @@ arc-swap = { workspace = true }
 
 tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
-bytes = "1.0"
+bytes = { workspace = true }
 homedir = { workspace = true }
 hostname = { workspace = true }
 dotenvy = { workspace = true }
@@ -49,4 +49,4 @@ utoipa = { workspace = true, optional = true }
 openapi = ["utoipa"]
 
 [dev-dependencies]
-tempfile = "*"
+tempfile = { workspace = true }

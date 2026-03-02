@@ -13,13 +13,14 @@ landscape-ebpf = { path = "../landscape-ebpf" }
 
 rustls = { workspace = true }
 rcgen = { workspace = true }
-rustls-pemfile = { workspace = true }
+rustls-pki-types = { workspace = true }
+pem = { workspace = true }
 tokio-rustls = { workspace = true }
 toml = { workspace = true }
 chrono = { workspace = true }
 
 colored = { workspace = true }
-jsonwebtoken = "9"
+jsonwebtoken = { workspace = true }
 once_cell = { workspace = true }
 
 tokio = { workspace = true, features = ["full"] }
@@ -28,24 +29,24 @@ clap = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true, features = ["typed-header"] }
 axum-server = { workspace = true, features = ["tls-rustls"] }
-headers = "0.4"
+headers = { workspace = true }
 
 homedir = { workspace = true }
 
-futures = "0.3"
+futures = { workspace = true }
 
-futures-util = { version = "0.3", default-features = false, features = [
+futures-util = { workspace = true, default-features = false, features = [
     "sink",
     "std",
 ] }
 
 thiserror = { workspace = true }
 
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5.0", features = ["fs", "trace"] }
+tower = { workspace = true }
+tower-http = { workspace = true }
 
-serde = { version = "*", features = ["derive"] }
-serde_json = { version = "*" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 bollard = { workspace = true }
 

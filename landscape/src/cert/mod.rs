@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use landscape_common::{TLS_DEFAULT_CERT, TLS_DEFAULT_KEY};
+use pem::parse_many;
 use rcgen::generate_simple_self_signed;
 use rustls::ServerConfig;
+use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::fs;
 
 /// 尝试加载本地证书，如果不存在则生成新的
@@ -36,22 +38,32 @@ pub async fn load_or_generate_cert(home_path: PathBuf) -> ServerConfig {
     let cert_pem = fs::read(&cert_path).await.expect("read cert");
     let key_pem = fs::read(&key_path).await.expect("read key");
 
-    let mut cert_reader = std::io::BufReader::new(cert_pem.as_slice());
-    let mut key_reader = std::io::BufReader::new(key_pem.as_slice());
+    // 解析 PEM 格式的证书
+    let cert_pems = parse_many(&cert_pem).expect("failed to parse cert PEM");
+    let certs: Vec<CertificateDer> = cert_pems
+        .into_iter()
+        .filter(|p| p.tag() == "CERTIFICATE")
+        .map(|p| CertificateDer::from(p.contents().to_vec()))
+        .collect();
 
-    let certs = rustls_pemfile::certs(&mut cert_reader).filter_map(Result::ok).collect::<Vec<_>>();
-
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut key_reader)
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
-
-    if keys.is_empty() {
-        panic!("No valid private key found");
+    if certs.is_empty() {
+        panic!("No valid certificate found");
     }
+
+    // 解析 PEM 格式的私钥
+    let key_pems = parse_many(&key_pem).expect("failed to parse key PEM");
+    let private_key = key_pems
+        .into_iter()
+        .find_map(|p| match p.tag() {
+            "PRIVATE KEY" => Some(PrivateKeyDer::Pkcs8(p.contents().to_vec().into())),
+            "RSA PRIVATE KEY" => Some(PrivateKeyDer::Pkcs1(p.contents().to_vec().into())),
+            _ => None,
+        })
+        .expect("No valid private key found");
 
     let config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, rustls::pki_types::PrivateKeyDer::Pkcs8(keys.remove(0)))
+        .with_single_cert(certs, private_key)
         .expect("invalid TLS config");
 
     config

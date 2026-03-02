@@ -22,7 +22,7 @@ socket2 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
-plain = "0.2"
+plain = { workspace = true }
 
 # logs
 tracing = { workspace = true }
