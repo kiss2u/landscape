@@ -8,11 +8,11 @@ import {
 } from "@/api/sys/config";
 import i18n from "@/i18n";
 
-function normalizeLanguage(lang?: string): string {
-  if (!lang) return "zh";
+function normalizeLanguage(lang?: string, fallback: string = "zh"): string {
+  if (!lang) return fallback;
   if (lang === "zh-CN" || lang.startsWith("zh")) return "zh";
   if (lang === "en-US" || lang.startsWith("en")) return "en";
-  return "zh";
+  return fallback;
 }
 
 export const usePreferenceStore = defineStore("preference", () => {
@@ -24,7 +24,11 @@ export const usePreferenceStore = defineStore("preference", () => {
   async function loadPreference() {
     try {
       const config = await get_ui_config();
-      language.value = normalizeLanguage(config.language);
+      // 使用 i18n 当前语言作为默认值，正规化后不覆盖浏览器设置
+      const currentLocale = normalizeLanguage(
+        i18n.global.locale.value as string,
+      );
+      language.value = normalizeLanguage(config.language, currentLocale);
       timezone.value = config.timezone || "Asia/Shanghai";
       theme.value = config.theme || "dark";
 
@@ -36,7 +40,9 @@ export const usePreferenceStore = defineStore("preference", () => {
 
   async function loadPreferenceForEdit() {
     const { ui, hash } = await get_ui_config_edit();
-    language.value = normalizeLanguage(ui.language);
+    // 使用 i18n 当前语言作为默认值，正规化后不覆盖浏览器设置
+    const currentLocale = normalizeLanguage(i18n.global.locale.value as string);
+    language.value = normalizeLanguage(ui.language, currentLocale);
     timezone.value = ui.timezone || "Asia/Shanghai";
     theme.value = ui.theme || "dark";
     expectedHash.value = hash;
