@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
+use futures::TryStreamExt;
 pub use landscape_common::iface::dev_wifi::{LandscapeWifiInterface, WLANType};
 use wl_nl80211::Nl80211Message;
 
-pub fn new_landscape_wifi_interface(msg: Nl80211Message) -> Option<LandscapeWifiInterface> {
+use super::handle::create_wifi_handle;
+
+pub fn parse_wifi_message(msg: Nl80211Message) -> Option<LandscapeWifiInterface> {
     let mut name = None;
     let mut index = None;
     let mut wifi_type = None;
@@ -13,7 +18,7 @@ pub fn new_landscape_wifi_interface(msg: Nl80211Message) -> Option<LandscapeWifi
             // wl_nl80211::Nl80211Attr::Wiphy(_) => todo!(),
             // wl_nl80211::Nl80211Attr::WiphyName(_) => todo!(),
             wl_nl80211::Nl80211Attr::IfType(nl80211_interface_type) => {
-                wifi_type = Some(nl80211_type_into_wlan_type(nl80211_interface_type))
+                wifi_type = Some(convert_wifi_type(nl80211_interface_type))
             }
             // wl_nl80211::Nl80211Attr::IfTypeExtCap(nl80211_if_type_ext_capas) => todo!(),
             // wl_nl80211::Nl80211Attr::MacAddrs(items) => todo!(),
@@ -105,7 +110,7 @@ pub fn new_landscape_wifi_interface(msg: Nl80211Message) -> Option<LandscapeWifi
     }
 }
 
-pub fn nl80211_type_into_wlan_type(ty: wl_nl80211::Nl80211InterfaceType) -> WLANType {
+pub fn convert_wifi_type(ty: wl_nl80211::Nl80211InterfaceType) -> WLANType {
     match ty {
         wl_nl80211::Nl80211InterfaceType::Unspecified => WLANType::Unspecified,
         wl_nl80211::Nl80211InterfaceType::Adhoc => WLANType::Adhoc,
@@ -122,4 +127,32 @@ pub fn nl80211_type_into_wlan_type(ty: wl_nl80211::Nl80211InterfaceType) -> WLAN
         wl_nl80211::Nl80211InterfaceType::Nan => WLANType::Nan,
         wl_nl80211::Nl80211InterfaceType::Other(n) => WLANType::Other(n),
     }
+}
+
+pub async fn get_all_wifi_devices() -> HashMap<String, LandscapeWifiInterface> {
+    let handle = match create_wifi_handle() {
+        Ok(h) => h,
+        Err(_) => return HashMap::new(),
+    };
+
+    let mut interface_handle = handle.interface().get().execute().await;
+    let mut result = HashMap::new();
+
+    loop {
+        let msg_opt = match interface_handle.try_next().await {
+            Ok(opt) => opt,
+            Err(_) => None,
+        };
+
+        let msg = match msg_opt {
+            Some(m) => m,
+            None => break,
+        };
+
+        if let Some(data) = parse_wifi_message(msg.payload) {
+            result.insert(data.name.clone(), data);
+        }
+    }
+
+    result
 }

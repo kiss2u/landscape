@@ -7,8 +7,8 @@ use tokio::net::UdpSocket;
 use tokio::sync::{watch, RwLock};
 
 use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
-use crate::iface::ip::addresses_by_iface_name;
 use crate::ipv6::prefix::IPv6PrefixRuntime;
+use crate::netlink::address::addresses_by_iface_name;
 use landscape_common::net::MacAddr;
 use landscape_common::net_proto::icmpv6::options::{
     IcmpV6Option, IcmpV6OptionCode, IcmpV6Options, PrefixInformation, RouteInformation,

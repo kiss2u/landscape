@@ -1,7 +1,8 @@
 use axum::{extract::State, routing::get, Router};
 
-use landscape::{dev::LandscapeInterface, sys_service::routerstatus::get_sys_running_status};
+use landscape::sys_service::routerstatus::get_sys_running_status;
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
+use landscape_common::dev::LandscapeInterface;
 use landscape_common::info::{
     LandscapeStatus, LandscapeSystemInfo, WatchResource, LAND_SYS_BASE_INFO,
 };

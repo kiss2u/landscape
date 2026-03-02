@@ -19,8 +19,9 @@ use landscape_database::{
 };
 use tokio::sync::broadcast;
 
+use crate::iface::get_iface_by_name;
 use crate::route::IpRouteService;
-use crate::{dev::LandscapeInterface, iface::get_iface_by_name};
+use landscape_common::dev::LandscapeInterface;
 
 #[derive(Clone)]
 #[allow(dead_code)]

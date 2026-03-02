@@ -1,8 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use config::from_phy_dev;
-use futures::stream::TryStreamExt;
-use landscape_common::dev::LandscapeInterface;
 pub use landscape_common::iface::{IfaceInfo, IfaceTopology, IfacesInfo, RawIfaceInfo};
 use landscape_common::service::controller::ConfigController;
 use landscape_common::{
@@ -13,23 +11,11 @@ use landscape_common::{
 use landscape_database::iface::repository::NetIfaceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::repository::Repository;
-use rtnetlink::new_connection;
 
 pub mod config;
-pub mod dev_wifi;
-pub mod ip;
 
-pub async fn get_iface_by_name(name: &str) -> Option<LandscapeInterface> {
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
-    let mut links = handle.link().get().match_name(name.to_string()).execute();
-
-    if let Ok(Some(msg)) = links.try_next().await {
-        crate::dev::new_landscape_interface(msg)
-    } else {
-        None
-    }
-}
+// Re-export from netlink::link
+pub use crate::netlink::link::get_iface_by_name;
 
 /// interface manager
 #[derive(Clone)]

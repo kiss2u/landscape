@@ -11,7 +11,6 @@ use crate::dump::udp_packet::dhcp::{
 };
 
 use cidr::Ipv4Inet;
-use futures::TryStreamExt;
 use landscape_common::dhcp::v4_server::config::DHCPv4ServerConfig;
 use landscape_common::dhcp::v4_server::status::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
 use landscape_common::net::MacAddr;
@@ -20,8 +19,6 @@ use landscape_common::utils::time::get_f64_timestamp;
 use landscape_common::{
     LANDSCAPE_DEFAULE_DHCP_V4_SERVER_PORT, LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME,
 };
-use netlink_packet_route::address::AddressAttribute;
-use rtnetlink::{new_connection, Handle};
 use socket2::{Domain, Protocol, Type};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
@@ -29,51 +26,6 @@ use tracing::instrument;
 
 const OFFER_VALID_TIME: u32 = 20;
 const IP_EXPIRE_INTERVAL: u64 = 60 * 10;
-
-async fn add_address(link_name: &str, ip: IpAddr, prefix_length: u8, handle: Handle) {
-    let mut links = handle.link().get().match_name(link_name.to_string()).execute();
-    if let Some(link) = links.try_next().await.unwrap() {
-        let mut addr_iter = handle.address().get().execute();
-        // 与要添加的 ip 是否相同
-        let mut need_create_ip = true;
-        while let Some(addr) = addr_iter.try_next().await.unwrap() {
-            let perfix_len_equal = addr.header.prefix_len == prefix_length;
-            let mut link_name_equal = false;
-            let mut ip_equal = false;
-
-            for attr in addr.attributes.iter() {
-                match attr {
-                    AddressAttribute::Address(addr) => {
-                        if *addr == ip {
-                            ip_equal = true;
-                        }
-                    }
-                    AddressAttribute::Label(label) => {
-                        if *label == link_name.to_string() {
-                            link_name_equal = true;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            if link_name_equal {
-                if ip_equal && perfix_len_equal {
-                    need_create_ip = false;
-                } else {
-                    tracing::info!("stop dhcp v4 server and del: {addr:?}");
-                    handle.address().del(addr).execute().await.unwrap();
-                    need_create_ip = true;
-                }
-            }
-        }
-
-        if need_create_ip {
-            // tracing::info!("need create ip: {need_create_ip:?}");
-            handle.address().add(link.header.index, ip, prefix_length).execute().await.unwrap()
-        }
-    }
-}
 
 #[instrument(skip(config, service_status, assigned_ips))]
 pub async fn dhcp_v4_server(
@@ -89,9 +41,20 @@ pub async fn dhcp_v4_server(
     let prefix_length = config.network_mask;
     let link_name = iface_name.clone();
     tokio::spawn(async move {
-        let (connection, handle, _) = new_connection().unwrap();
-        tokio::spawn(connection);
-        add_address(&link_name, IpAddr::V4(ip), prefix_length, handle).await
+        let handle = match crate::netlink::handle::create_handle() {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::error!("failed to create netlink handle: {e:?}");
+                return;
+            }
+        };
+        crate::netlink::address::add_address_with_handle(
+            &link_name,
+            IpAddr::V4(ip),
+            prefix_length,
+            handle,
+        )
+        .await
     });
 
     let socket_addr =

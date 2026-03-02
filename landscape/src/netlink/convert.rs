@@ -4,7 +4,7 @@ pub use landscape_common::dev::{DevState, DeviceKind, DeviceType, LandscapeInter
 use landscape_common::net::MacAddr;
 use netlink_packet_route::link::{LinkAttribute, LinkMessage};
 
-pub fn new_landscape_interface(msg: LinkMessage) -> Option<LandscapeInterface> {
+pub fn parse_link_message(msg: LinkMessage) -> Option<LandscapeInterface> {
     let mut name = None;
     let mut mac = None;
     let mut perm_mac = None;
@@ -140,12 +140,10 @@ pub fn new_landscape_interface(msg: LinkMessage) -> Option<LandscapeInterface> {
                 name,
                 index: msg.header.index,
                 mac,
-                dev_type: netlink_type_into_device_type(msg.header.link_layer_type),
+                dev_type: convert_link_type(msg.header.link_layer_type),
                 controller_id,
-                dev_status: status
-                    .map_or(DevState::Unknown, |status| netlink_state_into_dev_state(status)),
-                dev_kind: kind
-                    .map_or(DeviceKind::UnKnow, |kind| netlink_kind_into_device_kind(kind)),
+                dev_status: status.map_or(DevState::Unknown, |status| convert_link_state(status)),
+                dev_kind: kind.map_or(DeviceKind::UnKnow, |kind| convert_link_kind(kind)),
                 perm_mac,
                 carrier,
                 netns_id,
@@ -157,7 +155,7 @@ pub fn new_landscape_interface(msg: LinkMessage) -> Option<LandscapeInterface> {
     }
 }
 
-pub fn netlink_state_into_dev_state(state: netlink_packet_route::link::State) -> DevState {
+pub fn convert_link_state(state: netlink_packet_route::link::State) -> DevState {
     match state {
         netlink_packet_route::link::State::Unknown => DevState::Unknown,
         netlink_packet_route::link::State::NotPresent => DevState::NotPresent,
@@ -171,7 +169,7 @@ pub fn netlink_state_into_dev_state(state: netlink_packet_route::link::State) ->
     }
 }
 
-pub fn netlink_kind_into_device_kind(kind: netlink_packet_route::link::InfoKind) -> DeviceKind {
+pub fn convert_link_kind(kind: netlink_packet_route::link::InfoKind) -> DeviceKind {
     match kind {
         netlink_packet_route::link::InfoKind::Dummy => DeviceKind::Dummy,
         netlink_packet_route::link::InfoKind::Ifb => DeviceKind::Ifb,
@@ -204,7 +202,7 @@ pub fn netlink_kind_into_device_kind(kind: netlink_packet_route::link::InfoKind)
     }
 }
 
-pub fn netlink_type_into_device_type(ty: netlink_packet_route::link::LinkLayerType) -> DeviceType {
+pub fn convert_link_type(ty: netlink_packet_route::link::LinkLayerType) -> DeviceType {
     match ty {
         netlink_packet_route::link::LinkLayerType::Ether => DeviceType::Ethernet,
         netlink_packet_route::link::LinkLayerType::Ppp => DeviceType::Ppp,
