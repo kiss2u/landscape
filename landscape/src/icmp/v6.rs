@@ -1,22 +1,21 @@
-use dhcproto::{Decodable, Decoder, Encodable, Encoder};
+use bytes::BytesMut;
 use landscape_common::config::ra::RouterFlags;
 use landscape_common::error::LdResult;
 use landscape_common::lan_services::ipv6_ra::{IPv6NAInfo, IPv6NAInfoItem};
-use landscape_common::service::{ServiceStatus, WatchService};
-use tokio::net::UdpSocket;
-use tokio::sync::{watch, RwLock};
-
-use crate::dump::icmp::v6::options::{Icmpv6Message, RouterAdvertisement};
-use crate::ipv6::prefix::IPv6PrefixRuntime;
-use crate::netlink::address::addresses_by_iface_name;
 use landscape_common::net::MacAddr;
-use landscape_common::net_proto::icmpv6::options::{
-    IcmpV6Option, IcmpV6OptionCode, IcmpV6Options, PrefixInformation, RouteInformation,
-};
+use landscape_common::net_proto::icmpv6::messages::{Icmpv6Message, RouterAdvertisement};
+use landscape_common::net_proto::icmpv6::options::{IcmpV6Option, IcmpV6Options};
+use landscape_common::net_proto::NetProtoCodec;
+use landscape_common::service::{ServiceStatus, WatchService};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::net::UdpSocket;
+use tokio::sync::{watch, RwLock};
+
+use crate::ipv6::prefix::IPv6PrefixRuntime;
+use crate::netlink::address::addresses_by_iface_name;
 
 static ICMPV6_MULTICAST_ROUTER: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0x2);
 static ICMPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0, 0x1);
@@ -292,9 +291,10 @@ async fn handle_rs_msg(
     onlink_runtime: Option<&IPv6PrefixRuntime>,
     assigned_ips: Arc<RwLock<IPv6NAInfo>>,
 ) {
-    let icmp_v6_msg = Icmpv6Message::decode(&mut Decoder::new(&msg));
-    let icmp_v6_msg = match icmp_v6_msg {
-        Ok(msg) => msg,
+    let mut buf = BytesMut::from(msg.as_slice());
+    let icmp_v6_msg = match Icmpv6Message::decode(&mut buf) {
+        Ok(Some(msg)) => msg,
+        Ok(None) => return,
         Err(e) => {
             tracing::error!("decode msg error: {e:?}");
             return;
@@ -326,11 +326,12 @@ async fn handle_rs_msg(
         }
         Icmpv6Message::RouterAdvertisement(_) => {}
         Icmpv6Message::NeighborAdvertisement(neighbor_advertisement) => {
-            if let Some(IcmpV6Option::TargetLinkLayerAddress(mac)) =
-                neighbor_advertisement.opts.get(IcmpV6OptionCode::TargetLinkLayerAddress)
+            if let Some(IcmpV6Option::TargetLinkLayerAddress { addr, .. }) =
+                neighbor_advertisement.opts.get(2)
             {
+                let mac = MacAddr::from_arry(addr).unwrap();
                 let data = IPv6NAInfoItem {
-                    mac: mac.clone(),
+                    mac,
                     ip: target_ip,
                     relative_active_time: runtime.relative_boot_time.elapsed().as_secs(),
                 };
@@ -348,9 +349,8 @@ async fn handle_rs_msg(
 }
 
 async fn send_data(msg: &Icmpv6Message, send_socket: &UdpSocket, target_sock: SocketAddr) {
-    let mut buf = Vec::new();
-    let mut e = Encoder::new(&mut buf);
-    if let Err(e) = msg.encode(&mut e) {
+    let mut buf = BytesMut::new();
+    if let Err(e) = NetProtoCodec::encode(msg, &mut buf) {
         tracing::error!("msg encode error: {e:?}");
         return;
     }
@@ -375,19 +375,19 @@ async fn send_deprecation_ra(
     onlink_runtime: Option<&IPv6PrefixRuntime>,
 ) {
     let mut opts = IcmpV6Options::new();
-    opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
+    opts.insert(IcmpV6Option::source_link_layer_address(&my_mac_addr.octets()));
 
     let mut has_prefix = false;
 
     // Deprecate all main runtime prefixes
     for static_prefix in runtime.static_info.iter() {
-        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+        opts.insert(IcmpV6Option::prefix_information(
             static_prefix.sub_prefix_len,
             0,
             0,
             static_prefix.sub_prefix,
             false,
-        )));
+        ));
         has_prefix = true;
     }
     for (_, pd_prefix) in runtime.pd_info.iter() {
@@ -395,26 +395,26 @@ async fn send_deprecation_ra(
         let Some(pd_prefix) = pd_prefix.as_ref() else {
             continue;
         };
-        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+        opts.insert(IcmpV6Option::prefix_information(
             pd_prefix.sub_prefix_len,
             0,
             0,
             pd_prefix.sub_prefix,
             false,
-        )));
+        ));
         has_prefix = true;
     }
 
     // Deprecate all onlink runtime prefixes
     if let Some(onlink_rt) = onlink_runtime {
         for static_prefix in onlink_rt.static_info.iter() {
-            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+            opts.insert(IcmpV6Option::prefix_information(
                 static_prefix.sub_prefix_len,
                 0,
                 0,
                 static_prefix.sub_prefix,
                 false,
-            )));
+            ));
             has_prefix = true;
         }
         for (_, pd_prefix) in onlink_rt.pd_info.iter() {
@@ -422,13 +422,13 @@ async fn send_deprecation_ra(
             let Some(pd_prefix) = pd_prefix.as_ref() else {
                 continue;
             };
-            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+            opts.insert(IcmpV6Option::prefix_information(
                 pd_prefix.sub_prefix_len,
                 0,
                 0,
                 pd_prefix.sub_prefix,
                 false,
-            )));
+            ));
             has_prefix = true;
         }
     }
@@ -442,8 +442,8 @@ async fn send_deprecation_ra(
     // Use link-local as RDNSS — sub_router addresses are about to be removed,
     // but link-local is always reachable during the transition
     let link_local = my_mac_addr.to_ipv6_link_local();
-    opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, link_local)));
-    opts.insert(IcmpV6Option::MTU(1500));
+    opts.insert(IcmpV6Option::recursive_dns_server(60_000, link_local));
+    opts.insert(IcmpV6Option::mtu(1500));
 
     let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(ra_flag.into(), opts));
     send_data(&msg, send_socket, SocketAddr::new(IpAddr::V6(ICMPV6_MULTICAST), 0)).await;
@@ -459,21 +459,21 @@ async fn build_and_send_ra(
     onlink_runtime: Option<&IPv6PrefixRuntime>,
 ) {
     let mut opts = IcmpV6Options::new();
-    opts.insert(IcmpV6Option::SourceLinkLayerAddress(my_mac_addr.octets().to_vec()));
+    opts.insert(IcmpV6Option::source_link_layer_address(&my_mac_addr.octets()));
     for static_prefix in runtime.static_info.iter() {
-        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+        opts.insert(IcmpV6Option::prefix_information(
             static_prefix.sub_prefix_len,
             600,
             300,
             static_prefix.sub_prefix,
             autonomous,
-        )));
+        ));
 
-        opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
+        opts.insert(IcmpV6Option::route_information(
             static_prefix.rt_prefix_len,
             static_prefix.rt_prefix,
-        )));
-        opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, static_prefix.sub_router)));
+        ));
+        opts.insert(IcmpV6Option::recursive_dns_server(60_000, static_prefix.sub_router));
     }
 
     for (_, pd_prefix) in runtime.pd_info.iter() {
@@ -481,56 +481,53 @@ async fn build_and_send_ra(
         let Some(pd_prefix) = pd_prefix.as_ref() else {
             continue;
         };
-        opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+        opts.insert(IcmpV6Option::prefix_information(
             pd_prefix.sub_prefix_len,
             600,
             300,
             pd_prefix.sub_prefix,
             autonomous,
-        )));
+        ));
 
-        opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
-            pd_prefix.rt_prefix_len,
-            pd_prefix.rt_prefix,
-        )));
-        opts.insert(IcmpV6Option::RecursiveDNSServer((60_000, pd_prefix.sub_router)));
+        opts.insert(IcmpV6Option::route_information(pd_prefix.rt_prefix_len, pd_prefix.rt_prefix));
+        opts.insert(IcmpV6Option::recursive_dns_server(60_000, pd_prefix.sub_router));
     }
     // On-link only prefixes (A=0): advertised so clients can detect DHCPv6 prefix changes
     if let Some(onlink_rt) = onlink_runtime {
         for static_prefix in onlink_rt.static_info.iter() {
-            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+            opts.insert(IcmpV6Option::prefix_information(
                 static_prefix.sub_prefix_len,
                 600,
                 300,
                 static_prefix.sub_prefix,
                 false,
-            )));
-            opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
+            ));
+            opts.insert(IcmpV6Option::route_information(
                 static_prefix.rt_prefix_len,
                 static_prefix.rt_prefix,
-            )));
+            ));
         }
         for (_, pd_prefix) in onlink_rt.pd_info.iter() {
             let pd_prefix = pd_prefix.load();
             let Some(pd_prefix) = pd_prefix.as_ref() else {
                 continue;
             };
-            opts.insert(IcmpV6Option::PrefixInformation(PrefixInformation::with_autonomous(
+            opts.insert(IcmpV6Option::prefix_information(
                 pd_prefix.sub_prefix_len,
                 600,
                 300,
                 pd_prefix.sub_prefix,
                 false,
-            )));
-            opts.insert(IcmpV6Option::RouteInformation(RouteInformation::new(
+            ));
+            opts.insert(IcmpV6Option::route_information(
                 pd_prefix.rt_prefix_len,
                 pd_prefix.rt_prefix,
-            )));
+            ));
         }
     }
 
-    opts.insert(IcmpV6Option::MTU(1500));
-    opts.insert(IcmpV6Option::AdvertisementInterval(60_000));
+    opts.insert(IcmpV6Option::mtu(1500));
+    opts.insert(IcmpV6Option::advertisement_interval(60_000));
 
     let msg = Icmpv6Message::RouterAdvertisement(RouterAdvertisement::new(ra_flag.into(), opts));
 

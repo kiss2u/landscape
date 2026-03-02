@@ -20,6 +20,10 @@ pub enum NetProtoError {
     #[error("Protocol error: {0}")]
     Protocol(String),
 
+    /// Deku binary parsing error
+    #[error("Deku error: {0}")]
+    Deku(String),
+
     /// Custom error for specific protocol implementations
     #[error("{0}")]
     Other(String),
