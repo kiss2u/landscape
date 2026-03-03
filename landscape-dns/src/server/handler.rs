@@ -8,7 +8,13 @@ use std::{
 use arc_swap::ArcSwap;
 use hickory_proto::{
     op::{Header, ResponseCode},
-    rr::{Record, RecordType},
+    rr::{
+        rdata::{
+            svcb::{SvcParamKey, SVCB},
+            HTTPS,
+        },
+        RData, Record, RecordType,
+    },
 };
 use hickory_server::{
     authority::MessageResponseBuilder,
@@ -501,6 +507,35 @@ fn filter_result(un_filter_records: Vec<Record>, filter: &FilterResult) -> Vec<R
             (RecordType::AAAA, FilterResult::OnlyIPv4) => false,
             (RecordType::AAAA, FilterResult::OnlyIPv6) => true,
             _ => true,
+        })
+        .map(|mut r| {
+            // For HTTPS records, strip ipv4hint/ipv6hint SvcParams
+            // that contradict the IP-version filter, so clients won't
+            // use a hint to bypass the filter.
+            if r.record_type() == RecordType::HTTPS {
+                if let RData::HTTPS(https) = r.data().clone() {
+                    let key_to_remove = match filter {
+                        FilterResult::OnlyIPv4 => Some(SvcParamKey::Ipv6Hint),
+                        FilterResult::OnlyIPv6 => Some(SvcParamKey::Ipv4Hint),
+                        FilterResult::Unfilter => None,
+                    };
+                    if let Some(remove_key) = key_to_remove {
+                        let filtered_params: Vec<_> = https
+                            .svc_params()
+                            .iter()
+                            .filter(|(k, _)| *k != remove_key)
+                            .cloned()
+                            .collect();
+                        let new_svcb = SVCB::new(
+                            https.svc_priority(),
+                            https.target_name().clone(),
+                            filtered_params,
+                        );
+                        r.set_data(RData::HTTPS(HTTPS(new_svcb)));
+                    }
+                }
+            }
+            r
         })
         .collect()
 }

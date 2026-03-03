@@ -1,6 +1,6 @@
 use hickory_proto::{
     op::ResponseCode,
-    rr::{Record, RecordType},
+    rr::{rdata::svcb::SvcParamValue, RData, Record, RecordType},
 };
 use landscape_common::config::dns::LandscapeDnsRecordType;
 use landscape_common::{
@@ -88,6 +88,7 @@ pub fn convert_record_type(record_type: LandscapeDnsRecordType) -> RecordType {
     match record_type {
         LandscapeDnsRecordType::A => RecordType::A,
         LandscapeDnsRecordType::AAAA => RecordType::AAAA,
+        LandscapeDnsRecordType::HTTPS => RecordType::HTTPS,
     }
 }
 
@@ -109,24 +110,50 @@ impl CacheDNSItem {
 
     fn get_update_rules_with_mark(&self, info: &DnsRuntimeMarkInfo) -> HashSet<FlowMarkInfo> {
         let mut result = HashSet::new();
+        if !info.mark.need_insert_in_ebpf_map() {
+            return result;
+        }
         for rdata in self.rdatas.iter() {
             match rdata.data() {
-                hickory_proto::rr::RData::A(a) => {
-                    if info.mark.need_insert_in_ebpf_map() {
-                        result.insert(FlowMarkInfo {
-                            mark: info.mark.clone().into(),
-                            ip: std::net::IpAddr::V4(a.0),
-                            priority: info.priority,
-                        });
-                    }
+                RData::A(a) => {
+                    result.insert(FlowMarkInfo {
+                        mark: info.mark.clone().into(),
+                        ip: std::net::IpAddr::V4(a.0),
+                        priority: info.priority,
+                    });
                 }
-                hickory_proto::rr::RData::AAAA(a) => {
-                    if info.mark.need_insert_in_ebpf_map() {
-                        result.insert(FlowMarkInfo {
-                            mark: info.mark.clone().into(),
-                            ip: std::net::IpAddr::V6(a.0),
-                            priority: info.priority,
-                        });
+                RData::AAAA(a) => {
+                    result.insert(FlowMarkInfo {
+                        mark: info.mark.clone().into(),
+                        ip: std::net::IpAddr::V6(a.0),
+                        priority: info.priority,
+                    });
+                }
+                // HTTPS 记录中的 ipv4hint / ipv6hint 包含客户端可能直接用来建连的
+                // IP 地址，同样需要写入 eBPF map，确保这些连接也受路由标记控制。
+                RData::HTTPS(https) => {
+                    for (_key, value) in https.svc_params().iter() {
+                        match value {
+                            SvcParamValue::Ipv4Hint(hint) => {
+                                for a in hint.0.iter() {
+                                    result.insert(FlowMarkInfo {
+                                        mark: info.mark.clone().into(),
+                                        ip: std::net::IpAddr::V4(a.0),
+                                        priority: info.priority,
+                                    });
+                                }
+                            }
+                            SvcParamValue::Ipv6Hint(hint) => {
+                                for aaaa in hint.0.iter() {
+                                    result.insert(FlowMarkInfo {
+                                        mark: info.mark.clone().into(),
+                                        ip: std::net::IpAddr::V6(aaaa.0),
+                                        priority: info.priority,
+                                    });
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 _ => {}

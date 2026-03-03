@@ -66,6 +66,10 @@ const options = [
     label: "AAAA",
     value: "AAAA",
   },
+  {
+    label: "HTTPS",
+    value: "HTTPS",
+  },
 ];
 
 function extractDomain(input: string): string {
@@ -109,7 +113,7 @@ async function query() {
 }
 const showInner = ref(false);
 
-async function quick_btn(record_type: "A" | "AAAA", domain: string) {
+async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
   req.value.domain = domain;
   req.value.record_type = record_type;
   query();
@@ -148,6 +152,15 @@ async function quick_btn(record_type: "A" | "AAAA", domain: string) {
             @click="quick_btn('AAAA', 'www.baidu.com')"
           >
             IPv6 Baidu
+          </n-button>
+          <n-button
+            size="small"
+            :loading="loading"
+            type="info"
+            ghost
+            @click="quick_btn('HTTPS', 'crypto.cloudflare.com')"
+          >
+            HTTPS CF
           </n-button>
           <n-button
             size="small"

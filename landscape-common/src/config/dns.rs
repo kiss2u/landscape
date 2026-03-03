@@ -152,4 +152,5 @@ pub enum FilterResult {
 pub enum LandscapeDnsRecordType {
     A,
     AAAA,
+    HTTPS,
 }
