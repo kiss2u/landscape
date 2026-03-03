@@ -36,6 +36,10 @@ pub enum CertError {
     #[api_error(id = "cert.invalid_status_transition", status = 409)]
     InvalidStatusTransition(String),
 
+    #[error("Cannot change ACME account while certificate is valid; revoke it first")]
+    #[api_error(id = "cert.acme_account_change_requires_revocation", status = 409)]
+    AcmeAccountChangeRequiresRevocation,
+
     #[error("Certificate issuance failed: {0}")]
     #[api_error(id = "cert.issuance_failed", status = 500)]
     IssuanceFailed(String),

@@ -141,6 +141,19 @@ impl CertService {
         &self,
         mut config: CertConfig,
     ) -> Result<CertConfig, CertError> {
+        if let Some(existing) = self.find_by_id(config.id).await {
+            if let (CertType::Acme(existing_acme), CertType::Acme(new_acme)) =
+                (&existing.cert_type, &config.cert_type)
+            {
+                let has_valid_certificate = matches!(existing.status, CertStatus::Valid)
+                    && existing.certificate.as_deref().is_some_and(|pem| !pem.trim().is_empty());
+
+                if existing_acme.account_id != new_acme.account_id && has_valid_certificate {
+                    return Err(CertError::AcmeAccountChangeRequiresRevocation);
+                }
+            }
+        }
+
         if let CertType::Manual = &config.cert_type {
             let cert_pem_opt = config.certificate.as_deref().map(str::trim);
             let key_pem_opt = config.private_key.as_deref().map(str::trim);

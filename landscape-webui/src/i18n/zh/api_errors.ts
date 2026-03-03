@@ -33,6 +33,8 @@ export default {
   "docker.stop_failed": "停止容器失败",
   "docker.remove_failed": "移除容器失败",
   "docker.run_cmd_failed": "通过命令运行容器失败",
+  "cert.acme_account_change_requires_revocation":
+    "证书处于有效状态时不能切换 ACME 账户，请先吊销证书",
   "config.conflict": "配置已被他人修改，请刷新后重试",
   "internal.error": "服务器内部错误",
   "request.invalid_json": "请求数据格式错误",

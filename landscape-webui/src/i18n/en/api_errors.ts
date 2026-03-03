@@ -33,6 +33,8 @@ export default {
   "docker.stop_failed": "Failed to stop container",
   "docker.remove_failed": "Failed to remove container",
   "docker.run_cmd_failed": "Failed to run container by command",
+  "cert.acme_account_change_requires_revocation":
+    "Cannot change ACME account while certificate is valid; revoke it first",
   "config.conflict":
     "Configuration has been modified. Please refresh and try again",
   "internal.error": "Internal server error",
