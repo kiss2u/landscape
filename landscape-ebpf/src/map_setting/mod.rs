@@ -22,42 +22,72 @@ use libbpf_rs::{
 /// before calling `reuse_pinned_map`.
 pub fn reuse_pinned_map_or_recreate(map: &mut OpenMapMut, path: &(impl AsRef<Path> + ?Sized)) {
     let ptr = map.as_libbpf_object().as_ptr();
+    let expected_ty = unsafe { libbpf_rs::libbpf_sys::bpf_map__type(ptr) };
     let expected_ks = unsafe { libbpf_rs::libbpf_sys::bpf_map__key_size(ptr) };
     let expected_vs = unsafe { libbpf_rs::libbpf_sys::bpf_map__value_size(ptr) };
+    let expected_me = unsafe { libbpf_rs::libbpf_sys::bpf_map__max_entries(ptr) };
+    let expected_flags = unsafe { libbpf_rs::libbpf_sys::bpf_map__map_flags(ptr) };
     map.set_pin_path(path).unwrap();
-    if path.as_ref().exists() {
-        match libbpf_rs::MapHandle::from_pinned_path(path) {
-            Ok(pinned) => {
-                if pinned.key_size() != expected_ks || pinned.value_size() != expected_vs {
+    if !path.as_ref().exists() {
+        return;
+    }
+    match libbpf_rs::MapHandle::from_pinned_path(path) {
+        Ok(pinned) => {
+            let pinned_info = match pinned.info() {
+                Ok(info) => info,
+                Err(e) => {
                     tracing::warn!(
-                        "Pinned map {} layout changed (ks {}->{}, vs {}->{}), will recreate",
+                        "Cannot inspect pinned map {} info: {e}, will recreate",
                         path.as_ref().display(),
-                        pinned.key_size(),
-                        expected_ks,
-                        pinned.value_size(),
-                        expected_vs,
                     );
                     drop(pinned);
                     let _ = std::fs::remove_file(path);
                     return;
                 }
-            }
-            Err(e) => {
+            };
+            let actual_ty = pinned.map_type() as u32;
+            let actual_ks = pinned.key_size();
+            let actual_vs = pinned.value_size();
+            let actual_me = pinned.max_entries();
+            let actual_flags = pinned_info.info.map_flags;
+
+            if actual_ty != expected_ty
+                || actual_ks != expected_ks
+                || actual_vs != expected_vs
+                || actual_me != expected_me
+                || actual_flags != expected_flags
+            {
                 tracing::warn!(
-                    "Cannot inspect pinned map {}: {e}, will recreate",
+                    "Pinned map {} layout changed (type {}->{}, ks {}->{}, vs {}->{}, max_entries {}->{}, flags {:#x}->{:#x}), will recreate",
                     path.as_ref().display(),
+                    actual_ty,
+                    expected_ty,
+                    actual_ks,
+                    expected_ks,
+                    actual_vs,
+                    expected_vs,
+                    actual_me,
+                    expected_me,
+                    actual_flags,
+                    expected_flags,
                 );
+                drop(pinned);
                 let _ = std::fs::remove_file(path);
                 return;
             }
         }
-        if let Err(e) = map.reuse_pinned_map(path) {
+        Err(e) => {
             tracing::warn!(
-                "Pinned map {} reuse failed: {e}, will recreate",
-                path.as_ref().display()
+                "Cannot inspect pinned map {}: {e}, will recreate",
+                path.as_ref().display(),
             );
             let _ = std::fs::remove_file(path);
+            return;
         }
+    }
+    if let Err(e) = map.reuse_pinned_map(path) {
+        tracing::warn!("Pinned map {} reuse failed: {e}, will recreate", path.as_ref().display());
+        let _ = std::fs::remove_file(path);
     }
 }
 
