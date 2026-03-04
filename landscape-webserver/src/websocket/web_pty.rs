@@ -39,7 +39,13 @@ async fn create_pty(
 
     println!("query: {config:?}");
 
-    let session = LandscapePtySession::new(config).await.unwrap();
+    let session = match LandscapePtySession::new(config).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to create PTY session: {e:?}");
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+        }
+    };
     ws.on_upgrade(move |socket| handle_socket(socket, session))
 }
 

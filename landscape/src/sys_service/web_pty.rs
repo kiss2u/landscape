@@ -126,14 +126,69 @@ impl LandscapePtySession {
         })?;
 
         // 设置命令
-        let mut cmd = CommandBuilder::new(config.shell);
-        cmd.env("TERM", "xterm-256color");
-        let mut child = pair.slave.spawn_command(cmd)?;
-        drop(pair.slave);
+        let shell = config.shell.clone();
+        let candidates = if shell == "bash" {
+            vec![
+                "bash",
+                "/usr/bin/bash",
+                "/bin/bash",
+                "/usr/local/bin/bash",
+                "sh",
+                "/usr/bin/sh",
+                "/bin/sh",
+            ]
+        } else if shell == "sh" {
+            vec!["sh", "/usr/bin/sh", "/bin/sh", "bash", "/usr/bin/bash", "/bin/bash"]
+        } else {
+            vec![shell.as_str()]
+        };
 
-        // 获取读写器
-        let mut reader = pair.master.try_clone_reader()?;
-        let mut writer = pair.master.take_writer()?;
+        let mut spawn_err = None;
+        let mut child_and_writer = None;
+
+        for &candidate in &candidates {
+            let mut cmd = CommandBuilder::new(candidate);
+            cmd.env("TERM", "xterm-256color");
+            cmd.env("LANG", "en_US.UTF-8");
+            cmd.env("LC_ALL", "en_US.UTF-8");
+
+            if let Ok(path) = std::env::var("PATH") {
+                cmd.env("PATH", path);
+            }
+
+            match pair.slave.spawn_command(cmd) {
+                Ok(child) => {
+                    // 获取读写器
+                    match pair.master.try_clone_reader() {
+                        Ok(reader) => match pair.master.take_writer() {
+                            Ok(writer) => {
+                                child_and_writer = Some((child, reader, writer));
+                                break;
+                            }
+                            Err(e) => spawn_err = Some(PtyError::AnyErr(e)),
+                        },
+                        Err(e) => spawn_err = Some(PtyError::AnyErr(e)),
+                    }
+                }
+                Err(e) => {
+                    spawn_err = Some(PtyError::SpawnCommand(format!(
+                        "Unable to spawn {} because: {}",
+                        candidate, e
+                    )));
+                }
+            }
+        }
+
+        let (mut child, mut reader, mut writer) = match child_and_writer {
+            Some(res) => res,
+            None => {
+                return Err(spawn_err.unwrap_or_else(|| {
+                    PtyError::SpawnCommand("No viable shell found".to_string())
+                }))
+            }
+        };
+
+        drop(pair.slave);
 
         // 克隆必要的通道和令牌用于任务
         let out_tx_clone = out_tx.clone();
