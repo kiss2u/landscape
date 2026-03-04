@@ -2,6 +2,7 @@ use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::process::Command;
 use std::process::Stdio;
+use std::time::{Duration, Instant};
 
 use landscape_common::route::LanRouteInfo;
 use landscape_common::route::LanRouteMode;
@@ -27,6 +28,33 @@ use landscape_database::provider::LandscapeDBServiceProvider;
 
 use crate::iface::get_iface_by_name;
 use crate::route::IpRouteService;
+
+const PPPD_RETRY_BASE_SECS: u64 = 4;
+const PPPD_RETRY_MAX_SECS: u64 = 10 * 60;
+
+fn calc_pppd_retry_backoff_secs(failure_count: u32) -> u64 {
+    let exp = failure_count.saturating_sub(1).min(31);
+    let secs = PPPD_RETRY_BASE_SECS.saturating_mul(1u64 << exp);
+    secs.min(PPPD_RETRY_MAX_SECS)
+}
+
+fn wait_stop_or_timeout(rx: &mut oneshot::Receiver<()>, duration: Duration) -> bool {
+    let deadline = Instant::now() + duration;
+    loop {
+        match rx.try_recv() {
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
+            Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => return true,
+        }
+
+        let now = Instant::now();
+        if now >= deadline {
+            return false;
+        }
+
+        let remain = deadline.saturating_duration_since(now);
+        std::thread::sleep(remain.min(Duration::from_millis(200)));
+    }
+}
 
 #[derive(Clone)]
 pub struct PPPDService {
@@ -168,51 +196,91 @@ pub async fn create_pppd_thread(
     tracing::info!("pppd 配置写入成功");
     let iface_name = ppp_iface_name.clone();
     std::thread::spawn(move || {
-        tracing::info!("pppd 启动中");
-        let mut child = match Command::new("pppd")
-            .arg("nodetach")
-            .arg("call")
-            .arg(&ppp_iface_name)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(e) => {
-                tracing::error!("启动 pppd 失败: {}", e);
-                return;
-            }
-        };
-        let mut check_error_times = 0;
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            updata_ip.send_replace(());
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    tracing::warn!("pppd 退出， 状态码： {:?}", status);
-                    break;
-                }
-                Ok(None) => {
-                    check_error_times = 0;
-                }
-                Err(e) => {
-                    tracing::error!("pppd error: {e:?}");
-                    if check_error_times > 3 {
-                        break;
-                    }
-                    check_error_times += 1;
-                }
+        let mut connect_failure_count: u32 = 0;
+        let mut should_stop = false;
+
+        'restart: loop {
+            if wait_stop_or_timeout(&mut rx, Duration::from_secs(0)) {
+                break;
             }
 
-            match rx.try_recv() {
-                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
-                Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                    tracing::error!("rx, 通知错误");
-                    break;
+            tracing::info!("pppd 启动中");
+            let mut child = match Command::new("pppd")
+                .arg("nodetach")
+                .arg("call")
+                .arg(&ppp_iface_name)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+            {
+                Ok(child) => child,
+                Err(e) => {
+                    connect_failure_count = connect_failure_count.saturating_add(1);
+                    let backoff = calc_pppd_retry_backoff_secs(connect_failure_count);
+                    tracing::error!(
+                        "启动 pppd 失败: {}, {} 秒后重试 (failure_count={})",
+                        e,
+                        backoff,
+                        connect_failure_count
+                    );
+                    if wait_stop_or_timeout(&mut rx, Duration::from_secs(backoff)) {
+                        break;
+                    }
+                    continue 'restart;
+                }
+            };
+            let mut check_error_times = 0;
+            let mut healthy_once = false;
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                updata_ip.send_replace(());
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        tracing::warn!("pppd 退出， 状态码： {:?}", status);
+                        break;
+                    }
+                    Ok(None) => {
+                        check_error_times = 0;
+                        if !healthy_once {
+                            healthy_once = true;
+                            connect_failure_count = 0;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("pppd error: {e:?}");
+                        if check_error_times > 3 {
+                            break;
+                        }
+                        check_error_times += 1;
+                    }
+                }
+
+                match rx.try_recv() {
+                    Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
+                    Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                        tracing::info!("收到停止 pppd 信号");
+                        should_stop = true;
+                        break;
+                    }
                 }
             }
+            let _ = child.kill();
+            if should_stop {
+                break;
+            }
+
+            connect_failure_count = connect_failure_count.saturating_add(1);
+            let backoff = calc_pppd_retry_backoff_secs(connect_failure_count);
+            tracing::warn!(
+                "pppd 连接中断，{} 秒后重试 (failure_count={})",
+                backoff,
+                connect_failure_count
+            );
+            if wait_stop_or_timeout(&mut rx, Duration::from_secs(backoff)) {
+                break;
+            }
         }
-        let _ = child.kill();
+
         tracing::info!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
         pppd_conf.delete_config(&ppp_iface_name);

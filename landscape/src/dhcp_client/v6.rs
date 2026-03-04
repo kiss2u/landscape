@@ -26,11 +26,18 @@ use landscape_common::{net::MacAddr, route::RouteTargetInfo};
 pub const IPV6_TIMEOUT_DEFAULT_DURACTION: u64 = 10;
 pub const IPV6_TIMEOUT_RENEW_DURACTION: u64 = 10;
 pub const IPV6_TIMEOUT_REBIND_DURACTION: u64 = 20;
+const MAX_CONNECT_RETRY_BACKOFF_SECS: u64 = 10 * 60;
 
 pub const IPV6_T1_DEFAULT: u64 = 60 * 60 * 12;
 pub const IPV6_T2_DEFAULT: u64 = (IPV6_T1_DEFAULT * 8) / 5; // IPV6_T1_DEFAULT * 1.6
 
 static DHCPV6_MULTICAST: Ipv6Addr = Ipv6Addr::new(0xff02, 0, 0, 0, 0, 0, 0x1, 0x2);
+
+fn calc_connect_retry_backoff_secs(failure_count: u32) -> u64 {
+    let exp = failure_count.saturating_sub(1).min(31);
+    let secs = IPV6_TIMEOUT_DEFAULT_DURACTION.saturating_mul(1u64 << exp);
+    secs.min(MAX_CONNECT_RETRY_BACKOFF_SECS)
+}
 
 type V6MessageType = dhcproto::v6::MessageType;
 #[derive(Clone, Debug)]
@@ -258,6 +265,7 @@ pub async fn dhcp_v6_pd_client(
 
     // 超时次数
     let mut timeout_times: u64 = 1;
+    let mut connect_failure_count: u32 = 0;
     // 下一次超时事件
     // let mut current_timeout_time = IPV6_TIMEOUT_DEFAULT_DURACTION;
 
@@ -279,8 +287,19 @@ pub async fn dhcp_v6_pd_client(
                 if timeout_times > 4 {
                     // 如果当前状态是 Solicit 并且 超时 4 次 就退出
                     if matches!(status, IpV6PdState::Solicit { .. }) {
-                        tracing::error!("Timeout exceeded limit");
-                        break;
+                        connect_failure_count = connect_failure_count.saturating_add(1);
+                        let backoff = calc_connect_retry_backoff_secs(connect_failure_count);
+                        tracing::warn!(
+                            "DHCPv6 solicit timeout exceeded limit, retry in {}s (failure_count={})",
+                            backoff,
+                            connect_failure_count
+                        );
+                        status = IpV6PdState::init_status();
+                        timeout_times = 1;
+                        active_send
+                            .as_mut()
+                            .set(tokio::time::sleep(Duration::from_secs(backoff)));
+                        continue;
                     // } else {
                     //     timeout_times = 0;
                     //     // current_timeout_time = IPV6_TIMEOUT_DEFAULT_DURACTION;
@@ -302,6 +321,9 @@ pub async fn dhcp_v6_pd_client(
                 match message_result {
                     Some(data) => {
                         let need_reset_time = handle_packet(&iface_name, ifindex, &client_id, &mut status, data, &wan_route_info, &route_service, &prefix_map, &mac_addr).await;
+                        if matches!(status, IpV6PdState::Bound { .. }) {
+                            connect_failure_count = 0;
+                        }
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                             // current_timeout_time = t2;

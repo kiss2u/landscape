@@ -22,6 +22,13 @@ use landscape_common::{
 };
 
 pub const DEFAULT_TIME_OUT: u64 = 4;
+const MAX_CONNECT_RETRY_BACKOFF_SECS: u64 = 10 * 60;
+
+fn calc_connect_retry_backoff_secs(failure_count: u32) -> u64 {
+    let exp = failure_count.saturating_sub(1).min(31);
+    let secs = DEFAULT_TIME_OUT.saturating_mul(1u64 << exp);
+    secs.min(MAX_CONNECT_RETRY_BACKOFF_SECS)
+}
 
 #[derive(Clone, Debug)]
 pub enum DhcpState {
@@ -196,6 +203,7 @@ pub async fn dhcp_v4_client(
     tracing::info!("DHCP V4 Client Running");
 
     let mut timeout_times: u64 = 1;
+    let mut connect_failure_count: u32 = 0;
     let mut active_send = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
     let mut ip_arg: Option<Vec<String>> = None;
     let mut service_status_subscribe = service_status.subscribe();
@@ -210,8 +218,18 @@ pub async fn dhcp_v4_client(
             // 分支 1: 发送逻辑
             _ = active_send.as_mut() => {
                 if timeout_times > 4 && matches!(status, DhcpState::Discovering { .. }) {
-                    tracing::error!("Timeout exceeded limit");
-                    break;
+                    connect_failure_count = connect_failure_count.saturating_add(1);
+                    let backoff = calc_connect_retry_backoff_secs(connect_failure_count);
+                    tracing::warn!(
+                        "DHCPv4 discover timeout exceeded limit, retry in {}s (failure_count={})",
+                        backoff,
+                        connect_failure_count
+                    );
+
+                    status = DhcpState::init_status(None);
+                    timeout_times = 1;
+                    active_send.as_mut().set(tokio::time::sleep(Duration::from_secs(backoff)));
+                    continue;
                 }
 
                 let need_reset_timeout = send_current_status_packet(
@@ -233,6 +251,11 @@ pub async fn dhcp_v4_client(
                     Ok(packet) => {
                         let need_reset_time = handle_packet(&mut status, packet,
                             &mut ip_arg, default_router, &iface_name, ifindex, &route_service, &mac_addr).await;
+
+                        if matches!(status, DhcpState::Bound { .. }) {
+                            connect_failure_count = 0;
+                        }
+
                         if need_reset_time {
                             timeout_times = get_status_timeout_config(&status, 0, active_send.as_mut());
                         }
