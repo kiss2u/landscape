@@ -208,7 +208,8 @@ function mountTerminal() {
     cols: 80,
     rows: 24,
     cursorBlink: true,
-    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+    fontFamily:
+      '"JetBrains Mono", "Fira Code", "Source Code Pro", Menlo, Monaco, "Courier New", monospace',
     allowProposedApi: true,
   });
 

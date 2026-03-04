@@ -14,6 +14,7 @@ export const usePtyStore = defineStore("pty", () => {
   // The "Master" terminal holds the state but never renders to DOM
   const masterTerminal = ref<Terminal | null>(null);
   const masterSerializeAddon = ref<SerializeAddon | null>(null);
+  const decoder = new TextDecoder("utf-8"); // Decoder for incoming UTF-8 bytes
 
   // The "Active" terminal is the one currently visible (if any)
   const activeTerminal = ref<Terminal | null>(null);
@@ -172,7 +173,9 @@ export const usePtyStore = defineStore("pty", () => {
       try {
         const msg = JSON.parse(event.data) as PtyOutMessage;
         if (msg.t === "data") {
-          const text = String.fromCharCode(...msg.data);
+          const text = decoder.decode(new Uint8Array(msg.data), {
+            stream: true,
+          });
 
           // Write to Master (State)
           masterTerminal.value?.write(text);
