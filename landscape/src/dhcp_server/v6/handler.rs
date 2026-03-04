@@ -35,18 +35,23 @@ fn collect_dns_servers(
     link_local: Ipv6Addr,
 ) -> Vec<Ipv6Addr> {
     let mut dns = Vec::new();
-    // Static prefix sub_routers first
+    // Link-local always FIRST (highly recommended for stability and source-address-selection correctness)
+    dns.push(link_local);
+
+    // Static prefix sub_routers
     for info in static_infos {
-        dns.push(info.sub_router);
+        if !dns.contains(&info.sub_router) {
+            dns.push(info.sub_router);
+        }
     }
     // Dynamic PD prefix sub_routers
     for src in runtime_sources {
         if let Some(info) = src.load().as_ref() {
-            dns.push(info.sub_router);
+            if !dns.contains(&info.sub_router) {
+                dns.push(info.sub_router);
+            }
         }
     }
-    // Link-local always as fallback
-    dns.push(link_local);
     dns
 }
 

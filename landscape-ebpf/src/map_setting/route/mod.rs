@@ -84,7 +84,7 @@ pub fn trace_flow_match(req: FlowMatchRequest) -> FlowMatchResult {
     // IPv6 match
     let flow_id_by_ipv6 = if let Some(ipv6) = &req.src_ipv6 {
         let mut key = flow_match_key::default();
-        key.prefixlen = 96; // FLOW_IP_IPV6_MATCH_LEN
+        key.prefixlen = 160; // FLOW_IP_IPV6_MATCH_LEN
         key.l3_protocol = LANDSCAPE_IPV6_TYPE;
         key.is_match_ip = FLOW_ENTRY_MODE_IP;
         key.__anon_flow_match_key_1.src_addr.bits = ipv6.to_bits().to_be_bytes();

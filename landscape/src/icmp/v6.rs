@@ -460,6 +460,9 @@ async fn build_and_send_ra(
 ) {
     let mut opts = IcmpV6Options::new();
     opts.insert(IcmpV6Option::source_link_layer_address(&my_mac_addr.octets()));
+
+    // Link-local always FIRST (highly recommended for stability and SAS correctness)
+    opts.insert(IcmpV6Option::recursive_dns_server(60_000, my_mac_addr.to_ipv6_link_local()));
     for static_prefix in runtime.static_info.iter() {
         opts.insert(IcmpV6Option::prefix_information(
             static_prefix.sub_prefix_len,
@@ -473,7 +476,7 @@ async fn build_and_send_ra(
             static_prefix.rt_prefix_len,
             static_prefix.rt_prefix,
         ));
-        opts.insert(IcmpV6Option::recursive_dns_server(60_000, static_prefix.sub_router));
+        opts.insert(IcmpV6Option::recursive_dns_server(600, static_prefix.sub_router));
     }
 
     for (_, pd_prefix) in runtime.pd_info.iter() {
