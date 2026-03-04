@@ -6,6 +6,7 @@ use instant_acme::{
     Account, ChallengeType as AcmeChallengeType, Identifier, NewOrder, OrderStatus, RetryPolicy,
     RevocationRequest,
 };
+use landscape_common::cert::account::AccountStatus;
 use landscape_common::cert::order::{CertConfig, CertParsedInfo, CertStatus, CertType};
 use landscape_common::cert::CertError;
 use landscape_common::service::controller::ConfigController;
@@ -318,7 +319,23 @@ impl CertService {
             .await
             .ok_or(CertError::AccountNotFound(acme.account_id))?;
 
-        let credentials_json = account_config
+        if !matches!(account_config.status, AccountStatus::Registered) {
+            return Err(CertError::InvalidStatusTransition(format!(
+                "ACME account is not registered: {:?}",
+                account_config.status
+            )));
+        }
+
+        let verified_account = self.account_service.verify_account(acme.account_id).await?;
+
+        if !matches!(verified_account.status, AccountStatus::Registered) {
+            return Err(CertError::IssuanceFailed(format!(
+                "ACME account verification failed, current status: {:?}",
+                verified_account.status
+            )));
+        }
+
+        let credentials_json = verified_account
             .account_private_key
             .as_ref()
             .ok_or_else(|| CertError::IssuanceFailed("Account has no credentials".to_string()))?;
