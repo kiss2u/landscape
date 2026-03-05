@@ -26,7 +26,13 @@ pub async fn inspect_all_networks() -> Vec<LandscapeDockerNetwork> {
     };
 
     let query: Option<ListNetworksOptions> = None;
-    let networks = docker.list_networks(query).await.unwrap();
+    let networks = match docker.list_networks(query).await {
+        Ok(networks) => networks,
+        Err(err) => {
+            tracing::warn!(error = %err, "Docker list_networks failed");
+            return vec![];
+        }
+    };
 
     let mut result = Vec::with_capacity(networks.len());
     for networks in networks {
