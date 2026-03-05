@@ -17,6 +17,7 @@ pub fn get_cert_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_cert, delete_cert))
         .routes(routes!(get_cert_info))
         .routes(routes!(issue_cert))
+        .routes(routes!(cancel_cert))
         .routes(routes!(revoke_cert))
         .routes(routes!(renew_cert))
 }
@@ -122,6 +123,25 @@ async fn issue_cert(
     Path(id): Path<ConfigId>,
 ) -> LandscapeApiResult<CertConfig> {
     let result = state.cert_service.issue_cert(id).await?;
+    LandscapeApiResp::success(result)
+}
+
+#[utoipa::path(
+    post,
+    path = "/certs/{id}/cancel",
+    tag = "Certificates",
+    params(("id" = Uuid, Path, description = "Certificate ID")),
+    responses(
+        (status = 200, body = CommonApiResp<CertConfig>),
+        (status = 404, description = "Not found"),
+        (status = 409, description = "Invalid status transition")
+    )
+)]
+async fn cancel_cert(
+    State(state): State<LandscapeApp>,
+    Path(id): Path<ConfigId>,
+) -> LandscapeApiResult<CertConfig> {
+    let result = state.cert_service.cancel_cert(id).await?;
     LandscapeApiResp::success(result)
 }
 

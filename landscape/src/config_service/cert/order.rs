@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::cert::{reload_api_tls_resolver, validate_certified_key_from_pem, SharedSniResolver};
@@ -14,6 +15,8 @@ use landscape_database::cert::repository::CertRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use rustls_pki_types::CertificateDer;
 use sha2::{Digest, Sha256};
+use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use super::dns_provider;
@@ -24,9 +27,22 @@ pub struct CertService {
     store: CertRepository,
     account_service: CertAccountService,
     api_tls_resolver: SharedSniResolver,
+    tasks: Arc<Mutex<HashMap<Uuid, CertIssueTask>>>,
+}
+
+#[derive(Clone)]
+struct CertIssueTask {
+    cancel: CancellationToken,
+}
+
+enum DoIssueResult {
+    Issued { private_key_pem: String, cert_chain_pem: String, expires_at: f64 },
+    Cancelled,
 }
 
 impl CertService {
+    const ACCOUNT_STATUS_HINT_PREFIX: &'static str = "ACME account status:";
+
     pub async fn new(
         store_provider: LandscapeDBServiceProvider,
         account_service: CertAccountService,
@@ -36,6 +52,7 @@ impl CertService {
             store,
             account_service,
             api_tls_resolver: SharedSniResolver::new(),
+            tasks: Arc::new(Mutex::new(HashMap::new())),
         };
 
         // Startup resume: re-trigger ACME certs stuck in Processing
@@ -47,7 +64,7 @@ impl CertService {
                     let id = cert.id;
                     tracing::info!("Resuming issuance for cert {id}");
                     tokio::spawn(async move {
-                        if let Err(e) = svc.do_issue_cert(id).await {
+                        if let Err(e) = svc.enqueue_issuance_task(id).await {
                             tracing::error!("Failed to resume cert {id}: {e}");
                         }
                     });
@@ -118,17 +135,12 @@ impl CertService {
                 // Reset to Processing and enqueue
                 let mut config = cert;
                 config.status = CertStatus::Processing;
-                config.private_key = None;
-                config.certificate = None;
-                config.certificate_chain = None;
-                config.expires_at = None;
-                config.issued_at = None;
                 config.status_message = None;
                 let saved = self.set_and_notify(config).await;
                 let svc = self.clone();
                 let id = saved.id;
                 tokio::spawn(async move {
-                    if let Err(e) = svc.do_issue_cert(id).await {
+                    if let Err(e) = svc.enqueue_issuance_task(id).await {
                         tracing::error!("Auto-renewal failed for cert {id}: {e}");
                     }
                 });
@@ -258,6 +270,96 @@ impl CertService {
         )))
     }
 
+    async fn enqueue_issuance_task(&self, id: Uuid) -> Result<(), CertError> {
+        let cancel = CancellationToken::new();
+        {
+            let mut tasks = self.tasks.lock().await;
+            if tasks.contains_key(&id) {
+                return Err(CertError::InvalidStatusTransition(
+                    "issuance task is already running; cancel it first".to_string(),
+                ));
+            }
+            tasks.insert(id, CertIssueTask { cancel: cancel.clone() });
+        }
+
+        let svc = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = svc.run_issue_task(id, cancel).await {
+                tracing::error!("Issue task failed for cert {id}: {e}");
+            }
+        });
+        Ok(())
+    }
+
+    pub async fn ensure_account_mutation_allowed(&self, account_id: Uuid) -> Result<(), CertError> {
+        let certs = self.list().await;
+        let mut blockers = Vec::new();
+
+        for cert in certs {
+            let CertType::Acme(acme) = &cert.cert_type else {
+                continue;
+            };
+            if acme.account_id != account_id {
+                continue;
+            }
+
+            if matches!(
+                cert.status,
+                CertStatus::Processing
+                    | CertStatus::Ready
+                    | CertStatus::Valid
+                    | CertStatus::Expired
+            ) {
+                blockers.push(format!("{}({:?})", cert.id, cert.status));
+            }
+        }
+
+        if blockers.is_empty() {
+            return Ok(());
+        }
+
+        blockers.sort_unstable();
+        Err(CertError::AccountHasActiveCertificates(blockers.join(", ")))
+    }
+
+    pub async fn sync_account_status_hint(&self, account_id: Uuid, account_status: &AccountStatus) {
+        let tx_result = match self
+            .store
+            .sync_account_status_hint_tx(
+                account_id,
+                account_status,
+                Self::ACCOUNT_STATUS_HINT_PREFIX,
+            )
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                tracing::warn!("Failed to sync cert/account status hint in transaction: {e}");
+                return;
+            }
+        };
+
+        {
+            let tasks = self.tasks.lock().await;
+            for cert_id in &tx_result.cancelled_cert_ids {
+                if let Some(task) = tasks.get(cert_id) {
+                    task.cancel.cancel();
+                }
+            }
+        }
+
+        if !tx_result.changed_cert_ids.is_empty() && self.reload_api_tls_mapping().await.is_err() {
+            tracing::warn!("Failed to reload API TLS mapping after account status sync");
+        }
+    }
+
+    async fn run_issue_task(&self, id: Uuid, cancel: CancellationToken) -> Result<(), CertError> {
+        let result = self.do_issue_cert(id, &cancel).await;
+        let mut tasks = self.tasks.lock().await;
+        tasks.remove(&id);
+        result
+    }
+
     /// Validate, set status to Processing, enqueue to background worker.
     /// Returns immediately with the Processing config.
     pub async fn issue_cert(&self, id: Uuid) -> Result<CertConfig, CertError> {
@@ -278,7 +380,8 @@ impl CertService {
             CertStatus::Pending
             | CertStatus::Invalid
             | CertStatus::Expired
-            | CertStatus::Revoked => {}
+            | CertStatus::Revoked
+            | CertStatus::Cancelled => {}
             ref s => {
                 return Err(CertError::InvalidStatusTransition(format!("{s:?}")));
             }
@@ -289,19 +392,40 @@ impl CertService {
         config.status_message = None;
         let saved = self.set_and_notify(config).await;
 
-        // Spawn background issuance
-        let svc = self.clone();
-        tokio::spawn(async move {
-            if let Err(e) = svc.do_issue_cert(id).await {
-                tracing::error!("Background issuance failed for cert {id}: {e}");
-            }
-        });
+        self.enqueue_issuance_task(id).await?;
 
         Ok(saved)
     }
 
+    pub async fn cancel_cert(&self, id: Uuid) -> Result<CertConfig, CertError> {
+        let mut config = self.find_by_id(id).await.ok_or(CertError::CertNotFound(id))?;
+        match &config.cert_type {
+            CertType::Acme(_) => {}
+            _ => {
+                return Err(CertError::InvalidStatusTransition(
+                    "not an ACME certificate".to_string(),
+                ));
+            }
+        }
+        if !matches!(config.status, CertStatus::Processing) {
+            return Err(CertError::InvalidStatusTransition(format!("{:?}", config.status)));
+        }
+
+        {
+            let tasks = self.tasks.lock().await;
+            if let Some(task) = tasks.get(&id) {
+                task.cancel.cancel();
+            }
+        }
+
+        config.status = CertStatus::Cancelled;
+        config.status_message = Some("cancelled by user".to_string());
+        let saved = self.set_and_notify(config).await;
+        Ok(saved)
+    }
+
     /// The actual ACME issuance logic (runs in background worker).
-    async fn do_issue_cert(&self, id: Uuid) -> Result<(), CertError> {
+    async fn do_issue_cert(&self, id: Uuid, cancel: &CancellationToken) -> Result<(), CertError> {
         let mut config = self.find_by_id(id).await.ok_or(CertError::CertNotFound(id))?;
 
         let acme = match &config.cert_type {
@@ -309,52 +433,55 @@ impl CertService {
             _ => return Ok(()),
         };
 
-        // Build DNS solver
-        let solver = dns_provider::build_solver(&acme.challenge_type)?;
-
-        // Load account
-        let account_config = self
-            .account_service
-            .find_by_id(acme.account_id)
-            .await
-            .ok_or(CertError::AccountNotFound(acme.account_id))?;
-
-        if !matches!(account_config.status, AccountStatus::Registered) {
-            return Err(CertError::InvalidStatusTransition(format!(
-                "ACME account is not registered: {:?}",
-                account_config.status
-            )));
-        }
-
-        let verified_account = self.account_service.verify_account(acme.account_id).await?;
-
-        if !matches!(verified_account.status, AccountStatus::Registered) {
-            return Err(CertError::IssuanceFailed(format!(
-                "ACME account verification failed, current status: {:?}",
-                verified_account.status
-            )));
-        }
-
-        let credentials_json = verified_account
-            .account_private_key
-            .as_ref()
-            .ok_or_else(|| CertError::IssuanceFailed("Account has no credentials".to_string()))?;
-
-        // Track DNS records for cleanup
-        let mut dns_records: Vec<(String, String)> = Vec::new();
-
-        let result =
-            self.do_issue(credentials_json, &config, solver.as_ref(), &mut dns_records).await;
-
-        // Always attempt DNS cleanup
-        for (domain, value) in &dns_records {
-            if let Err(e) = solver.cleanup_txt_record(domain, value).await {
-                tracing::warn!("Failed to clean up DNS record for {domain}: {e}");
+        let result = async {
+            if cancel.is_cancelled() {
+                return Ok(DoIssueResult::Cancelled);
             }
+            let solver = dns_provider::build_solver(&acme.challenge_type)?;
+
+            let account_config = self
+                .account_service
+                .find_by_id(acme.account_id)
+                .await
+                .ok_or(CertError::AccountNotFound(acme.account_id))?;
+
+            if !matches!(account_config.status, AccountStatus::Registered) {
+                return Err(CertError::IssuanceFailed(format!(
+                    "ACME account is not registered: {:?}",
+                    account_config.status
+                )));
+            }
+
+            let verified_account = self.account_service.verify_account(acme.account_id).await?;
+
+            if !matches!(verified_account.status, AccountStatus::Registered) {
+                return Err(CertError::IssuanceFailed(format!(
+                    "ACME account verification failed, current status: {:?}",
+                    verified_account.status
+                )));
+            }
+
+            let credentials_json =
+                verified_account.account_private_key.as_ref().ok_or_else(|| {
+                    CertError::IssuanceFailed("Account has no credentials".to_string())
+                })?;
+
+            let mut dns_records: Vec<(String, String)> = Vec::new();
+            let issue_result = self
+                .do_issue(credentials_json, &config, solver.as_ref(), cancel, &mut dns_records)
+                .await;
+
+            for (domain, value) in &dns_records {
+                if let Err(e) = solver.cleanup_txt_record(domain, value).await {
+                    tracing::warn!("Failed to clean up DNS record for {domain}: {e}");
+                }
+            }
+            issue_result
         }
+        .await;
 
         match result {
-            Ok((private_key_pem, cert_chain_pem, expires_at)) => {
+            Ok(DoIssueResult::Issued { private_key_pem, cert_chain_pem, expires_at }) => {
                 let (certificate, certificate_chain) = split_cert_chain(&cert_chain_pem);
 
                 config.status = CertStatus::Valid;
@@ -370,6 +497,10 @@ impl CertService {
                         .unwrap_or_default()
                         .as_secs() as f64,
                 );
+            }
+            Ok(DoIssueResult::Cancelled) => {
+                config.status = CertStatus::Cancelled;
+                config.status_message = Some("cancelled by user".to_string());
             }
             Err(e) => {
                 config.status = CertStatus::Invalid;
@@ -387,8 +518,12 @@ impl CertService {
         credentials_json: &str,
         config: &CertConfig,
         solver: &dyn dns_provider::DnsChallengeSolver,
+        cancel: &CancellationToken,
         dns_records: &mut Vec<(String, String)>,
-    ) -> Result<(String, String, f64), CertError> {
+    ) -> Result<DoIssueResult, CertError> {
+        if cancel.is_cancelled() {
+            return Ok(DoIssueResult::Cancelled);
+        }
         let credentials: instant_acme::AccountCredentials = serde_json::from_str(credentials_json)
             .map_err(|e| {
                 CertError::IssuanceFailed(format!("Failed to parse account credentials: {e}"))
@@ -411,7 +546,6 @@ impl CertService {
             .map_err(|e| CertError::IssuanceFailed(format!("Failed to create ACME order: {e}")))?;
 
         // Phase 1: create all DNS TXT records
-        let mut challenges_to_set: Vec<(String, String)> = Vec::new();
         {
             let mut authz_stream = order.authorizations();
             while let Some(result) = authz_stream.next().await {
@@ -430,15 +564,21 @@ impl CertService {
                 let domain = raw_domain.strip_prefix("*.").unwrap_or(&raw_domain).to_string();
                 let dns_value = challenge.key_authorization().dns_value();
 
-                solver.create_txt_record(&domain, &dns_value).await?;
+                tokio::select! {
+                    _ = cancel.cancelled() => return Ok(DoIssueResult::Cancelled),
+                    create_result = solver.create_txt_record(&domain, &dns_value) => {
+                        create_result?;
+                    }
+                }
                 dns_records.push((domain.clone(), dns_value.clone()));
-                challenges_to_set.push((domain, dns_value));
             }
         }
 
         // Wait for DNS propagation before notifying ACME server
         tracing::info!("Waiting 45s for DNS propagation...");
-        tokio::time::sleep(Duration::from_secs(45)).await;
+        if cancellable_sleep(cancel, Duration::from_secs(45)).await {
+            return Ok(DoIssueResult::Cancelled);
+        }
 
         // Phase 2: notify ACME server that challenges are ready
         {
@@ -454,27 +594,37 @@ impl CertService {
                     )
                 })?;
 
-                challenge.set_ready().await.map_err(|e| {
-                    CertError::IssuanceFailed(format!("Challenge set_ready failed: {e}"))
-                })?;
+                tokio::select! {
+                    _ = cancel.cancelled() => return Ok(DoIssueResult::Cancelled),
+                    ready_result = challenge.set_ready() => {
+                        ready_result.map_err(|e| {
+                            CertError::IssuanceFailed(format!("Challenge set_ready failed: {e}"))
+                        })?;
+                    }
+                }
 
                 // Brief delay between set_ready calls to avoid API rate limits
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                if cancellable_sleep(cancel, Duration::from_secs(1)).await {
+                    return Ok(DoIssueResult::Cancelled);
+                }
             }
         }
 
         // Wait briefly for ACME server to start validating
-        tokio::time::sleep(Duration::from_secs(10)).await;
+        if cancellable_sleep(cancel, Duration::from_secs(10)).await {
+            return Ok(DoIssueResult::Cancelled);
+        }
 
         // Wait for order to become Ready (or Invalid)
         let retry_policy = RetryPolicy::new()
             .initial_delay(Duration::from_secs(5))
             .timeout(Duration::from_secs(300));
 
-        let order_status = order
-            .poll_ready(&retry_policy)
-            .await
-            .map_err(|e| CertError::IssuanceFailed(format!("Order poll_ready failed: {e}")))?;
+        let order_status = tokio::select! {
+            _ = cancel.cancelled() => return Ok(DoIssueResult::Cancelled),
+            status = order.poll_ready(&retry_policy) => status
+        }
+        .map_err(|e| CertError::IssuanceFailed(format!("Order poll_ready failed: {e}")))?;
 
         if order_status != OrderStatus::Ready {
             return Err(CertError::IssuanceFailed(format!(
@@ -483,20 +633,23 @@ impl CertService {
         }
 
         // Finalize: auto-generates CSR, returns private key PEM
-        let private_key_pem = order
-            .finalize()
-            .await
-            .map_err(|e| CertError::IssuanceFailed(format!("Order finalize failed: {e}")))?;
+        let private_key_pem = tokio::select! {
+            _ = cancel.cancelled() => return Ok(DoIssueResult::Cancelled),
+            key = order.finalize() => key
+        }
+        .map_err(|e| CertError::IssuanceFailed(format!("Order finalize failed: {e}")))?;
 
         // Get certificate chain PEM
-        let cert_chain_pem = order.poll_certificate(&retry_policy).await.map_err(|e| {
-            CertError::IssuanceFailed(format!("Order poll_certificate failed: {e}"))
-        })?;
+        let cert_chain_pem = tokio::select! {
+            _ = cancel.cancelled() => return Ok(DoIssueResult::Cancelled),
+            chain = order.poll_certificate(&retry_policy) => chain
+        }
+        .map_err(|e| CertError::IssuanceFailed(format!("Order poll_certificate failed: {e}")))?;
 
         // Parse certificate to extract expiry (not_after)
         let expires_at = parse_cert_expiry(&cert_chain_pem)?;
 
-        Ok((private_key_pem, cert_chain_pem, expires_at))
+        Ok(DoIssueResult::Issued { private_key_pem, cert_chain_pem, expires_at })
     }
 
     pub async fn revoke_cert(&self, id: Uuid) -> Result<CertConfig, CertError> {
@@ -569,7 +722,7 @@ impl CertService {
         Ok(saved)
     }
 
-    /// Validate, reset cert fields, set Processing, enqueue to background worker.
+    /// Validate, set Processing, enqueue to background worker.
     /// Returns immediately with the Processing config.
     pub async fn renew_cert(&self, id: Uuid) -> Result<CertConfig, CertError> {
         let mut config = self.find_by_id(id).await.ok_or(CertError::CertNotFound(id))?;
@@ -592,23 +745,12 @@ impl CertService {
             }
         }
 
-        // Reset to Processing and clear cert fields
+        // Set to Processing, keep current cert data until renewal succeeds
         config.status = CertStatus::Processing;
-        config.private_key = None;
-        config.certificate = None;
-        config.certificate_chain = None;
-        config.expires_at = None;
-        config.issued_at = None;
         config.status_message = None;
         let saved = self.set_and_notify(config).await;
 
-        // Spawn background issuance
-        let svc = self.clone();
-        tokio::spawn(async move {
-            if let Err(e) = svc.do_issue_cert(id).await {
-                tracing::error!("Background renewal failed for cert {id}: {e}");
-            }
-        });
+        self.enqueue_issuance_task(id).await?;
 
         Ok(saved)
     }
@@ -753,6 +895,13 @@ fn parse_cert_details(pem_str: &str) -> Result<CertParsedInfo, CertError> {
 
 fn hex_string(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":")
+}
+
+async fn cancellable_sleep(cancel: &CancellationToken, duration: Duration) -> bool {
+    tokio::select! {
+        _ = cancel.cancelled() => true,
+        _ = tokio::time::sleep(duration) => false,
+    }
 }
 
 /// Convert PEM-encoded certificate to DER bytes

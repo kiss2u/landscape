@@ -74,6 +74,7 @@ export default {
   status_pending: "待处理",
   status_ready: "已就绪",
   status_processing: "处理中",
+  status_cancelled: "已取消",
   status_valid: "有效",
   status_invalid: "无效",
   status_expired: "已过期",
@@ -94,10 +95,12 @@ export default {
   action_verify: "验证",
   action_deactivate: "注销",
   action_issue: "签发",
+  action_cancel: "取消",
   action_revoke: "吊销",
   action_renew: "续期",
   action_view: "查看",
   confirm_deactivate: "注销此 ACME 账户？此操作不可撤销。",
+  confirm_cancel: "取消当前签发任务？",
   confirm_revoke: "吊销此证书？此操作不可撤销。",
 
   // Misc

@@ -5,6 +5,7 @@ import {
   createCert,
   deleteCert,
   issueCert,
+  cancelCert,
   revokeCert,
   renewCert,
 } from "@landscape-router/types/api/certificates/certificates";
@@ -31,6 +32,10 @@ export async function delete_cert(id: string): Promise<void> {
 
 export async function issue_cert(id: string): Promise<CertConfig> {
   return issueCert(id);
+}
+
+export async function cancel_cert(id: string): Promise<CertConfig> {
+  return cancelCert(id);
 }
 
 export async function revoke_cert(id: string): Promise<CertConfig> {

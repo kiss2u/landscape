@@ -43,7 +43,7 @@ function on_cert_type_change(val: string) {
       t: "acme",
       account_id: accounts.value[0]?.id ?? "",
       challenge_type: {
-        http: { port: 80 },
+        dns: { dns_provider: { cloudflare: { api_token: "" } } },
       } as unknown as CertType extends { t: "acme" } ? CertType : never,
       key_type: "ecdsa_p256",
       auto_renew: true,
@@ -78,10 +78,7 @@ const account_options = computed(() =>
   })),
 );
 
-const challenge_options = [
-  { label: "HTTP-01", value: "http" },
-  { label: "DNS-01", value: "dns" },
-];
+const challenge_options = [{ label: "DNS-01", value: "dns" }];
 
 const key_type_options = [
   { label: "ECDSA P-256", value: "ecdsa_p256" },
@@ -91,13 +88,13 @@ const key_type_options = [
 ];
 
 const dns_provider_options = [
-  { label: t("cert.dns_provider_manual"), value: "manual" },
   { label: t("cert.dns_provider_cloudflare"), value: "cloudflare" },
-  { label: t("cert.dns_provider_aliyun"), value: "aliyun" },
-  { label: t("cert.dns_provider_tencent"), value: "tencent" },
-  { label: t("cert.dns_provider_aws"), value: "aws" },
-  { label: t("cert.dns_provider_google"), value: "google" },
-  { label: t("cert.dns_provider_custom"), value: "custom" },
+  // Temporarily disabled until backend support is ready:
+  // { label: t("cert.dns_provider_aliyun"), value: "aliyun" },
+  // { label: t("cert.dns_provider_tencent"), value: "tencent" },
+  // { label: t("cert.dns_provider_aws"), value: "aws" },
+  // { label: t("cert.dns_provider_google"), value: "google" },
+  // { label: t("cert.dns_provider_custom"), value: "custom" },
 ];
 
 const cert_type_options = [
@@ -205,7 +202,7 @@ async function enter() {
         t: "acme",
         account_id: accounts.value[0]?.id ?? "",
         challenge_type: {
-          http: { port: 80 },
+          dns: { dns_provider: { cloudflare: { api_token: "" } } },
         },
         key_type: "ecdsa_p256",
         auto_renew: true,
@@ -213,12 +210,27 @@ async function enter() {
       } as CertType,
     };
   }
+  // Keep UI consistent with currently supported challenge/provider combinations.
+  if (rule.value?.cert_type?.t === "acme") {
+    const challenge = getChallengeKind(getAcmeField("challenge_type"));
+    if (challenge !== "dns") {
+      setAcmeField("challenge_type", {
+        dns: { dns_provider: { cloudflare: { api_token: "" } } },
+      });
+    }
+    const provider = getDnsProviderKey(getAcmeField("challenge_type"));
+    if (provider !== "cloudflare") {
+      setDnsProvider("cloudflare", { api_token: "" });
+    }
+  }
   origin_json.value = JSON.stringify(rule.value);
 }
 
 function on_challenge_change(val: string) {
   if (val === "dns") {
-    setAcmeField("challenge_type", { dns: { dns_provider: "manual" } });
+    setAcmeField("challenge_type", {
+      dns: { dns_provider: { cloudflare: { api_token: "" } } },
+    });
   } else {
     setAcmeField("challenge_type", { http: { port: 80 } });
   }
@@ -229,27 +241,28 @@ function on_dns_provider_change(val: string) {
     case "cloudflare":
       setDnsProvider("cloudflare", { api_token: "" });
       break;
-    case "aliyun":
-      setDnsProvider("aliyun", { access_key_id: "", access_key_secret: "" });
-      break;
-    case "tencent":
-      setDnsProvider("tencent", { secret_id: "", secret_key: "" });
-      break;
-    case "aws":
-      setDnsProvider("aws", {
-        access_key_id: "",
-        secret_access_key: "",
-        region: "",
-      });
-      break;
-    case "google":
-      setDnsProvider("google", { service_account_json: "" });
-      break;
-    case "custom":
-      setDnsProvider("custom", { script_path: "" });
-      break;
+    // Temporarily disabled until backend support is ready:
+    // case "aliyun":
+    //   setDnsProvider("aliyun", { access_key_id: "", access_key_secret: "" });
+    //   break;
+    // case "tencent":
+    //   setDnsProvider("tencent", { secret_id: "", secret_key: "" });
+    //   break;
+    // case "aws":
+    //   setDnsProvider("aws", {
+    //     access_key_id: "",
+    //     secret_access_key: "",
+    //     region: "",
+    //   });
+    //   break;
+    // case "google":
+    //   setDnsProvider("google", { service_account_json: "" });
+    //   break;
+    // case "custom":
+    //   setDnsProvider("custom", { script_path: "" });
+    //   break;
     default:
-      setDnsProvider("manual", {});
+      setDnsProvider("cloudflare", { api_token: "" });
   }
 }
 
@@ -412,7 +425,7 @@ async function save() {
             </n-form-item>
           </template>
 
-          <!-- Aliyun -->
+          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'aliyun'">
             <n-form-item label="Access Key ID">
               <n-input
@@ -431,8 +444,9 @@ async function save() {
               />
             </n-form-item>
           </template>
+          -->
 
-          <!-- Tencent -->
+          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'tencent'">
             <n-form-item label="Secret ID">
               <n-input
@@ -449,8 +463,9 @@ async function save() {
               />
             </n-form-item>
           </template>
+          -->
 
-          <!-- AWS -->
+          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'aws'">
             <n-form-item label="Access Key ID">
               <n-input
@@ -476,8 +491,9 @@ async function save() {
               />
             </n-form-item>
           </template>
+          -->
 
-          <!-- Google -->
+          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'google'">
             <n-form-item label="Service Account JSON">
               <n-input
@@ -490,8 +506,9 @@ async function save() {
               />
             </n-form-item>
           </template>
+          -->
 
-          <!-- Custom -->
+          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'custom'">
             <n-form-item label="Script Path">
               <n-input
@@ -501,6 +518,7 @@ async function save() {
               />
             </n-form-item>
           </template>
+          -->
         </template>
 
         <n-form-item :label="t('cert.acme_auto_renew')">

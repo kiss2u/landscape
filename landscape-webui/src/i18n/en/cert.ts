@@ -74,6 +74,7 @@ export default {
   status_pending: "Pending",
   status_ready: "Ready",
   status_processing: "Processing",
+  status_cancelled: "Cancelled",
   status_valid: "Valid",
   status_invalid: "Invalid",
   status_expired: "Expired",
@@ -94,11 +95,13 @@ export default {
   action_verify: "Verify",
   action_deactivate: "Deactivate",
   action_issue: "Issue",
+  action_cancel: "Cancel",
   action_revoke: "Revoke",
   action_renew: "Renew",
   action_view: "View",
   confirm_deactivate:
     "Deactivate this ACME account? This action is irreversible.",
+  confirm_cancel: "Cancel the current issuance task?",
   confirm_revoke: "Revoke this certificate? This action is irreversible.",
 
   // Misc

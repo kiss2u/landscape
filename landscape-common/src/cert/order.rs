@@ -71,6 +71,7 @@ pub enum CertStatus {
     Pending,
     Ready,
     Processing,
+    Cancelled,
     Valid,
     Invalid,
     Expired,

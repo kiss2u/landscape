@@ -3,6 +3,17 @@ import router from "@/router";
 import i18n from "@/i18n";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 
+function formatApiErrorTemplate(
+  template: string,
+  args: Record<string, unknown> | undefined,
+): string {
+  if (!args) return template;
+  return template.replace(/\{([^}]+)\}/g, (_m: string, key: string) => {
+    const value = args[key];
+    return value == null ? `{${key}}` : String(value);
+  });
+}
+
 /**
  * Apply common interceptors (auth token, token refresh, error handling)
  * to any axios instance.
@@ -43,9 +54,24 @@ export function applyInterceptors(instance: AxiosInstance): AxiosInstance {
           });
         }
 
+        const locale =
+          typeof i18n.global.locale === "string"
+            ? i18n.global.locale
+            : i18n.global.locale.value;
+        const localeMessages = i18n.global.getLocaleMessage(locale) as Record<
+          string,
+          unknown
+        >;
+        const errorsMap = localeMessages.errors as
+          | Record<string, string>
+          | undefined;
+        const flatTemplate =
+          error_id && errorsMap ? errorsMap[error_id] : undefined;
+
         const errorKey = error_id ? `errors.${error_id}` : "";
-        const displayMsg =
-          errorKey && i18n.global.te(errorKey)
+        const displayMsg = flatTemplate
+          ? formatApiErrorTemplate(flatTemplate, args || {})
+          : errorKey && i18n.global.te(errorKey)
             ? (i18n.global.t(errorKey, args || {}) as string)
             : message;
 

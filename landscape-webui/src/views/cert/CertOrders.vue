@@ -3,6 +3,7 @@ import {
   get_certs,
   delete_cert,
   issue_cert,
+  cancel_cert,
   revoke_cert,
   renew_cert,
 } from "@/api/cert/order";
@@ -29,13 +30,32 @@ const show_info_modal = ref(false);
 const current_info_cert = ref<CertConfig | null>(null);
 const loading_ids = ref<Set<string>>(new Set());
 let poll_timer: ReturnType<typeof setInterval> | null = null;
+let refresh_promise: Promise<void> | null = null;
+let refresh_queued = false;
 
 const has_processing = computed(() =>
   items.value.some((item) => item.status === "processing"),
 );
 
 async function refresh() {
-  items.value = await get_certs();
+  if (refresh_promise) {
+    refresh_queued = true;
+    await refresh_promise;
+    return;
+  }
+
+  refresh_promise = (async () => {
+    do {
+      refresh_queued = false;
+      items.value = await get_certs();
+    } while (refresh_queued);
+  })();
+
+  try {
+    await refresh_promise;
+  } finally {
+    refresh_promise = null;
+  }
 }
 
 function start_polling() {
@@ -74,6 +94,8 @@ function status_type(status?: string) {
     case "ready":
     case "processing":
       return "warning";
+    case "cancelled":
+      return "default";
     case "invalid":
     case "expired":
     case "revoked":
@@ -117,16 +139,34 @@ function setLoading(id: string, val: boolean) {
   loading_ids.value = new Set(loading_ids.value);
 }
 
-function do_issue(id: string) {
-  issue_cert(id);
-  // The backend sets status to "processing" synchronously before the actual
-  // ACME work begins, so a short delay then refresh will pick it up.
-  setTimeout(refresh, 500);
+async function do_issue(id: string) {
+  setLoading(id, true);
+  try {
+    await issue_cert(id);
+    await refresh();
+  } finally {
+    setLoading(id, false);
+  }
 }
 
-function do_renew(id: string) {
-  renew_cert(id);
-  setTimeout(refresh, 500);
+async function do_renew(id: string) {
+  setLoading(id, true);
+  try {
+    await renew_cert(id);
+    await refresh();
+  } finally {
+    setLoading(id, false);
+  }
+}
+
+async function do_cancel(id: string) {
+  setLoading(id, true);
+  try {
+    await cancel_cert(id);
+    await refresh();
+  } finally {
+    setLoading(id, false);
+  }
 }
 
 async function do_revoke(id: string) {
@@ -256,7 +296,8 @@ const columns = computed<DataTableColumns<CertConfig>>(() => [
         (row.status === "pending" ||
           row.status === "invalid" ||
           row.status === "expired" ||
-          row.status === "revoked")
+          row.status === "revoked" ||
+          row.status === "cancelled")
       ) {
         btns.push(
           h(
@@ -265,6 +306,7 @@ const columns = computed<DataTableColumns<CertConfig>>(() => [
               size: "small",
               type: "success",
               secondary: true,
+              loading: is_loading,
               onClick: () => do_issue(id),
             },
             () => t("cert.action_issue"),
@@ -284,9 +326,33 @@ const columns = computed<DataTableColumns<CertConfig>>(() => [
               size: "small",
               type: "info",
               secondary: true,
+              loading: is_loading,
               onClick: () => do_renew(id),
             },
             () => t("cert.action_renew"),
+          ),
+        );
+      }
+
+      if (is_acme(row) && row.status === "processing") {
+        btns.push(
+          h(
+            NPopconfirm,
+            { onPositiveClick: () => do_cancel(id) },
+            {
+              trigger: () =>
+                h(
+                  NButton,
+                  {
+                    size: "small",
+                    type: "warning",
+                    secondary: true,
+                    loading: is_loading,
+                  },
+                  () => t("cert.action_cancel"),
+                ),
+              default: () => t("cert.confirm_cancel"),
+            },
           ),
         );
       }

@@ -32,9 +32,13 @@ pub enum CertError {
     #[api_error(id = "cert.staging_not_supported", status = 400)]
     StagingNotSupported,
 
-    #[error("Operation not allowed: account is currently in '{0}' status")]
+    #[error("Operation not allowed in current status: {0}")]
     #[api_error(id = "cert.invalid_status_transition", status = 409)]
     InvalidStatusTransition(String),
+
+    #[error("Cannot mutate account while active/renewable certificates exist: {0}")]
+    #[api_error(id = "cert.account_has_active_certificates", status = 409)]
+    AccountHasActiveCertificates(String),
 
     #[error("Cannot change ACME account while certificate is valid; revoke it first")]
     #[api_error(id = "cert.acme_account_change_requires_revocation", status = 409)]
