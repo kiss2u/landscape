@@ -7,6 +7,7 @@ import {
   verify_cert_account,
   deactivate_cert_account_api,
 } from "@/api/cert/account";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
 const props = defineProps<Props>();
 const emit = defineEmits(["refresh"]);
 const { t } = useI18n();
+const frontEndStore = useFrontEndStore();
 
 const show_edit_modal = ref(false);
 const register_spin = ref(false);
@@ -123,7 +125,7 @@ async function deactivate() {
       </n-descriptions-item>
 
       <n-descriptions-item :label="t('cert.account_email')">
-        {{ rule.email }}
+        {{ frontEndStore.MASK_INFO(rule.email) }}
       </n-descriptions-item>
 
       <n-descriptions-item :label="t('cert.account_status')">
