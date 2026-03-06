@@ -36,7 +36,7 @@ async function handleSaveMetric() {
         <n-gi>
           <n-form-item :label="t('config.conn_retention_mins')">
             <n-input-number
-              v-model:value="metricStore.connRetentionMins"
+              v-model:value="metricStore.rawRetentionMinutes"
               :min="1"
               :max="1440"
               placeholder="5"
@@ -48,23 +48,25 @@ async function handleSaveMetric() {
           </n-form-item>
         </n-gi>
         <n-gi>
-          <n-form-item :label="t('config.conn_retention_minute_days')">
-            <n-input-number
-              v-model:value="metricStore.connRetentionMinuteDays"
-              :min="1"
-              :max="365"
-              placeholder="1"
-              style="width: 100%"
-            />
-            <template #feedback>
-              {{ t("config.conn_retention_minute_days_desc") }}
-            </template>
-          </n-form-item>
+          <n-gi>
+            <n-form-item :label="t('config.conn_retention_minute_days')">
+              <n-input-number
+                v-model:value="metricStore.rollup1mRetentionDays"
+                :min="1"
+                :max="365"
+                placeholder="1"
+                style="width: 100%"
+              />
+              <template #feedback>
+                {{ t("config.conn_retention_minute_days_desc") }}
+              </template>
+            </n-form-item>
+          </n-gi>
         </n-gi>
         <n-gi>
           <n-form-item :label="t('config.conn_retention_hour_days')">
             <n-input-number
-              v-model:value="metricStore.connRetentionHourDays"
+              v-model:value="metricStore.rollup1hRetentionDays"
               :min="1"
               :max="365"
               placeholder="7"
@@ -78,7 +80,7 @@ async function handleSaveMetric() {
         <n-gi>
           <n-form-item :label="t('config.conn_retention_day_days')">
             <n-input-number
-              v-model:value="metricStore.connRetentionDayDays"
+              v-model:value="metricStore.rollup1dRetentionDays"
               :min="1"
               :max="3650"
               placeholder="30"
@@ -110,46 +112,126 @@ async function handleSaveMetric() {
       <n-divider title-placement="left">
         {{ t("config.performance_settings") }}
       </n-divider>
-      <n-form-item :label="t('config.flush_interval')">
-        <n-input-number
-          v-model:value="metricStore.flushIntervalSecs"
-          :min="1"
-          :max="3600"
-          placeholder="5"
-          style="width: 200px"
-        />
-        <template #feedback> {{ t("config.flush_interval_desc") }} </template>
-      </n-form-item>
-      <n-form-item :label="t('config.batch_size')">
-        <n-input-number
-          v-model:value="metricStore.batchSize"
-          :min="100"
-          :max="10000"
-          placeholder="2000"
-          style="width: 200px"
-        />
-        <template #feedback> {{ t("config.batch_size_desc") }} </template>
-      </n-form-item>
-      <n-form-item :label="t('config.max_memory')">
-        <n-input-number
-          v-model:value="metricStore.maxMemory"
-          :min="32"
-          :max="4096"
-          placeholder="128"
-          style="width: 200px"
-        />
-        <template #feedback> {{ t("config.max_memory_desc") }} </template>
-      </n-form-item>
-      <n-form-item :label="t('config.max_threads')">
-        <n-input-number
-          v-model:value="metricStore.maxThreads"
-          :min="1"
-          :max="16"
-          placeholder="4"
-          style="width: 200px"
-        />
-        <template #feedback> {{ t("config.max_threads_desc") }} </template>
-      </n-form-item>
+      <n-grid x-gap="12" :cols="2">
+        <n-gi>
+          <n-form-item :label="t('config.write_flush_interval')">
+            <n-input-number
+              v-model:value="metricStore.writeFlushIntervalSecs"
+              :min="1"
+              :max="3600"
+              placeholder="30"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.write_flush_interval_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.write_batch_size')">
+            <n-input-number
+              v-model:value="metricStore.writeBatchSize"
+              :min="100"
+              :max="50000"
+              placeholder="20000"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.write_batch_size_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.db_max_memory')">
+            <n-input-number
+              v-model:value="metricStore.dbMaxMemoryMb"
+              :min="32"
+              :max="8192"
+              placeholder="256"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.db_max_memory_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.db_max_threads')">
+            <n-input-number
+              v-model:value="metricStore.dbMaxThreads"
+              :min="1"
+              :max="64"
+              placeholder="4"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.db_max_threads_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+      </n-grid>
+
+      <n-divider title-placement="left">
+        {{ t("config.maintenance_settings") }}
+      </n-divider>
+      <n-grid x-gap="12" :cols="2">
+        <n-gi>
+          <n-form-item :label="t('config.cleanup_interval')">
+            <n-input-number
+              v-model:value="metricStore.cleanupIntervalSecs"
+              :min="60"
+              :max="86400"
+              placeholder="300"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.cleanup_interval_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.cleanup_budget')">
+            <n-input-number
+              v-model:value="metricStore.cleanupTimeBudgetMs"
+              :min="100"
+              :max="60000"
+              placeholder="2000"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.cleanup_budget_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.cleanup_slice_window')">
+            <n-input-number
+              v-model:value="metricStore.cleanupSliceWindowSecs"
+              :min="10"
+              :max="3600"
+              placeholder="300"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.cleanup_slice_window_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
+          <n-form-item :label="t('config.aggregate_interval')">
+            <n-input-number
+              v-model:value="metricStore.aggregateIntervalSecs"
+              :min="300"
+              :max="86400"
+              placeholder="3600"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.aggregate_interval_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+      </n-grid>
     </n-form>
   </n-card>
 </template>

@@ -38,15 +38,28 @@ export default {
   dns_retention_days: "DNS Retention (Days)",
   dns_retention_days_desc:
     "Retention period for DNS query logs and metrics in days",
-  performance_settings: "Performance Settings",
-  flush_interval: "Flush Interval (s)",
-  flush_interval_desc: "Interval for flushing metrics to storage",
-  batch_size: "Batch Size",
-  batch_size_desc: "Maximum number of records per write to storage",
-  max_memory: "Max Memory (MB)",
-  max_memory_desc: "Maximum memory allowed for metric cache",
-  max_threads: "Max Threads",
-  max_threads_desc: "Number of background threads for processing metric data",
+
+  performance_settings: "Performance & Storage Settings",
+  write_batch_size: "Write Batch Size",
+  write_batch_size_desc: "Maximum record count for metrics flush to disk",
+  write_flush_interval: "Commit Interval (s)",
+  write_flush_interval_desc: "Maximum seconds before forcing a database commit",
+  db_max_memory: "DB Max Memory (MB)",
+  db_max_memory_desc: "Maximum memory allowed for DuckDB (metrics storage)",
+  db_max_threads: "DB Max Threads",
+  db_max_threads_desc: "Maximum background threads for database operations",
+
+  maintenance_settings: "Maintenance & Aggregation Tasks",
+  cleanup_interval: "Cleanup Interval (s)",
+  cleanup_interval_desc: "Interval between history cleanup tasks",
+  cleanup_budget: "Cleanup Budget (ms)",
+  cleanup_budget_desc: "Maximum milliseconds allowed per cleanup task",
+  cleanup_slice_window: "Cleanup Slice Window (s)",
+  cleanup_slice_window_desc:
+    "Time granularity for each cleanup transaction slice",
+  aggregate_interval: "Aggregate Interval (s)",
+  aggregate_interval_desc:
+    "Interval between global statistics aggregation tasks",
 
   backup_desc:
     "You can export all current router configurations (including DNS, firewall, network interfaces, etc.) as an init file for quick recovery or migration.",

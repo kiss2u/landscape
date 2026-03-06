@@ -14,7 +14,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 fn clean_ip_string(ip: &IpAddr) -> String {
     match ip {
@@ -44,16 +44,6 @@ pub enum DBMessage {
     // Write Operations
     InsertMetric(ConnectMetric),
     InsertDnsMetric(DnsMetric),
-
-    // Command Operations (Maintenance/Cleanup)
-    CollectAndCleanupOldMetrics {
-        cutoff_raw: u64,
-        cutoff_1m: u64,
-        cutoff_1h: u64,
-        cutoff_1d: u64,
-        cutoff_dns: u64,
-        resp: oneshot::Sender<Box<Vec<ConnectMetric>>>,
-    },
 }
 
 #[derive(Clone)]
@@ -83,9 +73,11 @@ pub fn start_db_thread(
     realtime_cache: Arc<DashMap<ConnectKey, RealtimeState>>,
 ) {
     let flush_interval_duration =
-        std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS);
+        std::time::Duration::from_secs(metric_config.write_flush_interval_secs.max(1));
     let cleanup_interval_duration =
-        std::time::Duration::from_secs(landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS);
+        std::time::Duration::from_secs(metric_config.cleanup_interval_secs.max(1));
+    let aggregate_interval_duration =
+        std::time::Duration::from_secs(metric_config.aggregate_interval_secs.max(1));
     let summary_sync_duration = std::time::Duration::from_secs(60);
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
@@ -96,6 +88,7 @@ pub fn start_db_thread(
 
         let mut flush_interval = tokio::time::interval(flush_interval_duration);
         let mut cleanup_interval = tokio::time::interval(cleanup_interval_duration);
+        let mut aggregate_interval = tokio::time::interval(aggregate_interval_duration);
         let mut summary_sync_interval = tokio::time::interval(summary_sync_duration);
 
         loop {
@@ -179,10 +172,10 @@ pub fn start_db_thread(
                 _ = cleanup_interval.tick() => {
                     let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
 
-                    let cutoff_raw = now_ms.saturating_sub(metric_config.conn_retention_mins * MS_PER_MINUTE);
-                    let cutoff_1m = now_ms.saturating_sub(metric_config.conn_retention_minute_days * MS_PER_DAY);
-                    let cutoff_1h = now_ms.saturating_sub(metric_config.conn_retention_hour_days * MS_PER_DAY);
-                    let cutoff_1d = now_ms.saturating_sub(metric_config.conn_retention_day_days * MS_PER_DAY);
+                    let cutoff_raw = now_ms.saturating_sub(metric_config.raw_retention_minutes * MS_PER_MINUTE);
+                    let cutoff_1m = now_ms.saturating_sub(metric_config.rollup_1m_retention_days * MS_PER_DAY);
+                    let cutoff_1h = now_ms.saturating_sub(metric_config.rollup_1h_retention_days * MS_PER_DAY);
+                    let cutoff_1d = now_ms.saturating_sub(metric_config.rollup_1d_retention_days * MS_PER_DAY);
                     let cutoff_dns = now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
 
                     // Flush appenders
@@ -199,24 +192,47 @@ pub fn start_db_thread(
                         let _ = connect::perform_inner_db_rollup(&conn_disk);
                         // Use a fresh connection for maintenance instead of conn_disk_writer
                         if let Ok(conn_maint) = disk_pool.get() {
-                            let _ = connect::collect_and_cleanup_old_metrics(
-                                &conn_maint, &conn_disk, cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d,
+                            let stats = connect::cleanup_old_metrics_only(
+                                &conn_maint,
+                                &conn_disk,
+                                cutoff_raw,
+                                cutoff_1m,
+                                cutoff_1h,
+                                cutoff_1d,
+                                metric_config.cleanup_time_budget_ms,
+                                metric_config.cleanup_slice_window_secs,
+                            );
+                            tracing::info!(
+                                "phase=cleanup elapsed_ms={} budget_hit={} deleted_raw={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_summaries={}",
+                                stats.elapsed_ms,
+                                stats.budget_hit,
+                                stats.deleted_raw,
+                                stats.deleted_1m,
+                                stats.deleted_1h,
+                                stats.deleted_1d,
+                                stats.deleted_summaries,
                             );
                         }
-                        let _ = connect::aggregate_global_stats(&conn_disk);
                     }
 
                     tracing::info!(
-                        "Auto cleanup metrics, raw: {}, 1m: {}, 1h: {}, 1d: {}, dns: {}",
+                        "Auto cleanup metrics, raw: {}, 1m: {}, 1h: {}, 1d: {}, dns: {}, budget_ms: {}, slice_window_secs: {}",
                         cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d, cutoff_dns
+                        , metric_config.cleanup_time_budget_ms, metric_config.cleanup_slice_window_secs
                     );
+                }
+                _ = aggregate_interval.tick() => {
+                    if let Ok(conn_disk) = disk_pool.get() {
+                        let _ = connect::aggregate_global_stats(&conn_disk);
+                        tracing::debug!("phase=aggregate_global_stats done");
+                    }
                 }
                 msg_opt = rx.recv() => {
                     match msg_opt {
                         Some(msg) => {
                             let mut current_msg = Some(msg);
                             // Process in batches to reduce select! overhead
-                            for _ in 0..metric_config.batch_size.max(100) {
+                            for _ in 0..metric_config.write_batch_size.max(100) {
                                 if let Some(m) = current_msg.take() {
                                     match m {
                                         DBMessage::InsertMetric(metric) => {
@@ -306,41 +322,9 @@ pub fn start_db_thread(
                                                 ]);
                                             }
                                         }
-
-                                        DBMessage::CollectAndCleanupOldMetrics {
-                                            cutoff_raw,
-                                            cutoff_1m,
-                                            cutoff_1h,
-                                            cutoff_1d,
-                                            cutoff_dns,
-                                            resp,
-                                        } => {
-                                            if let Some(ref mut appender) = dns_appender {
-                                                let _ = appender.flush();
-                                            }
-                                            if let Some(ref mut appender) = metrics_appender {
-                                                let _ = appender.flush();
-                                            }
-
-                                            dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
-
-                                            let result = if let Ok(conn_disk_pool) = disk_pool.get() {
-                                                if let Ok(conn_maint) = disk_pool.get() {
-                                                    connect::collect_and_cleanup_old_metrics(
-                                                        &conn_maint, &conn_disk_pool, cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d,
-                                                    )
-                                                } else {
-                                                    Box::new(Vec::new())
-                                                }
-                                            } else {
-                                                Box::new(Vec::new())
-                                            };
-
-                                            let _ = resp.send(result);
-                                        }
                                     }
 
-                                    if batch_count >= metric_config.batch_size {
+                                    if batch_count >= metric_config.write_batch_size {
                                         if let Some(ref mut appender) = dns_appender {
                                             let _ = appender.flush();
                                         }
@@ -383,9 +367,9 @@ impl DuckMetricStore {
         let disk_manager = DuckdbConnectionManager::file_with_flags(
             &db_path,
             duckdb::Config::default()
-                .threads(config.max_threads as i64)
+                .threads(config.db_max_threads as i64)
                 .unwrap()
-                .max_memory(&format!("{}MB", config.max_memory))
+                .max_memory(&format!("{}MB", config.db_max_memory_mb))
                 .unwrap(),
         )
         .unwrap();
@@ -416,16 +400,19 @@ impl DuckMetricStore {
         let realtime_cache = Arc::new(DashMap::new());
         let thread_realtime_cache = realtime_cache.clone();
 
-        thread::spawn(move || {
-            start_db_thread(
-                rx,
-                config_clone,
-                thread_disk_pool,
-                conn_dns,
-                conn_disk_writer,
-                thread_realtime_cache,
-            );
-        });
+        thread::Builder::new()
+            .name("metric-db-thread".to_string())
+            .spawn(move || {
+                start_db_thread(
+                    rx,
+                    config_clone,
+                    thread_disk_pool,
+                    conn_dns,
+                    conn_disk_writer,
+                    thread_realtime_cache,
+                );
+            })
+            .expect("failed to spawn metric db thread");
 
         DuckMetricStore { tx, db_path, config, disk_pool, realtime_cache }
     }
@@ -487,31 +474,6 @@ impl DuckMetricStore {
         })
         .await
         .unwrap_or_default()
-    }
-
-    pub async fn collect_and_cleanup_old_metrics(
-        &self,
-        cutoff_raw: u64,
-        cutoff_1m: u64,
-        cutoff_1h: u64,
-        cutoff_1d: u64,
-    ) -> Box<Vec<ConnectMetric>> {
-        let (resp, rx) = oneshot::channel();
-        let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-        let cutoff_dns = now_ms.saturating_sub(self.config.dns_retention_days * MS_PER_DAY);
-
-        let _ = self
-            .tx
-            .send(DBMessage::CollectAndCleanupOldMetrics {
-                cutoff_raw,
-                cutoff_1m,
-                cutoff_1h,
-                cutoff_1d,
-                cutoff_dns,
-                resp,
-            })
-            .await;
-        rx.await.unwrap()
     }
 
     pub async fn history_summaries_complex(

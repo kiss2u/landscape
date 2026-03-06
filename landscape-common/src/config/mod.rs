@@ -192,32 +192,44 @@ pub struct LandscapeStoreConfig {
 pub struct LandscapeMetricConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub conn_retention_mins: Option<u64>,
+    pub raw_retention_minutes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub conn_retention_minute_days: Option<u64>,
+    pub rollup_1m_retention_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub conn_retention_hour_days: Option<u64>,
+    pub rollup_1h_retention_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub conn_retention_day_days: Option<u64>,
+    pub rollup_1d_retention_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub dns_retention_days: Option<u64>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub batch_size: Option<usize>,
+    pub write_batch_size: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub flush_interval_secs: Option<u64>,
+    pub write_flush_interval_secs: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub max_memory: Option<usize>,
+    pub db_max_memory_mb: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub max_threads: Option<usize>,
+    pub db_max_threads: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub cleanup_interval_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub cleanup_time_budget_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub cleanup_slice_window_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub aggregate_interval_secs: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -421,33 +433,58 @@ impl RuntimeConfig {
         };
 
         let metric = MetricRuntimeConfig {
-            conn_retention_mins: config
+            raw_retention_minutes: config
                 .metric
-                .conn_retention_mins
-                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_MINS),
-            conn_retention_minute_days: config
+                .raw_retention_minutes
+                .unwrap_or(crate::DEFAULT_METRIC_RAW_RETENTION_MINUTES),
+            rollup_1m_retention_days: config
                 .metric
-                .conn_retention_minute_days
-                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_DAYS_1M),
-            conn_retention_hour_days: config
+                .rollup_1m_retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_ROLLUP_1M_RETENTION_DAYS),
+            rollup_1h_retention_days: config
                 .metric
-                .conn_retention_hour_days
-                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_DAYS_1H),
-            conn_retention_day_days: config
+                .rollup_1h_retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_ROLLUP_1H_RETENTION_DAYS),
+            rollup_1d_retention_days: config
                 .metric
-                .conn_retention_day_days
-                .unwrap_or(crate::DEFAULT_CONN_METRIC_RETENTION_DAYS_1D),
+                .rollup_1d_retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_ROLLUP_1D_RETENTION_DAYS),
             dns_retention_days: config
                 .metric
                 .dns_retention_days
                 .unwrap_or(crate::DEFAULT_DNS_METRIC_RETENTION_DAYS),
-            batch_size: config.metric.batch_size.unwrap_or(crate::DEFAULT_METRIC_BATCH_SIZE),
-            flush_interval_secs: config
+            write_batch_size: config
                 .metric
-                .flush_interval_secs
-                .unwrap_or(crate::DEFAULT_METRIC_FLUSH_INTERVAL_SECS),
-            max_memory: config.metric.max_memory.unwrap_or(crate::DEFAULT_METRIC_MAX_MEMORY),
-            max_threads: config.metric.max_threads.unwrap_or(crate::DEFAULT_METRIC_MAX_THREADS),
+                .write_batch_size
+                .unwrap_or(crate::DEFAULT_METRIC_WRITE_BATCH_SIZE),
+            write_flush_interval_secs: config
+                .metric
+                .write_flush_interval_secs
+                .unwrap_or(crate::DEFAULT_METRIC_WRITE_FLUSH_INTERVAL_SECS),
+            db_max_memory_mb: config
+                .metric
+                .db_max_memory_mb
+                .unwrap_or(crate::DEFAULT_METRIC_DB_MAX_MEMORY_MB),
+            db_max_threads: config
+                .metric
+                .db_max_threads
+                .unwrap_or(crate::DEFAULT_METRIC_DB_MAX_THREADS),
+            cleanup_interval_secs: config
+                .metric
+                .cleanup_interval_secs
+                .unwrap_or(crate::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS),
+            cleanup_time_budget_ms: config
+                .metric
+                .cleanup_time_budget_ms
+                .unwrap_or(crate::DEFAULT_METRIC_CLEANUP_TIME_BUDGET_MS),
+            cleanup_slice_window_secs: config
+                .metric
+                .cleanup_slice_window_secs
+                .unwrap_or(crate::DEFAULT_METRIC_CLEANUP_SLICE_WINDOW_SECS),
+            aggregate_interval_secs: config
+                .metric
+                .aggregate_interval_secs
+                .unwrap_or(crate::DEFAULT_METRIC_AGGREGATE_INTERVAL_SECS),
         };
         let dns = DnsRuntimeConfig {
             cache_capacity: config.dns.cache_capacity.unwrap_or(crate::DEFAULT_DNS_CACHE_CAPACITY),
@@ -515,15 +552,19 @@ impl RuntimeConfig {
          Database Connect: {}\n\
          \n\
           [Metric]\n\
-         Retention Mins (Raw): {} mins\n\
-         Retention Days (1m): {} days\n\
-         Retention Days (1h): {} days\n\
-         Retention Days (1d): {} days\n\
-         Retention Days (DNS): {} days\n\
-         Batch Size: {}\n\
-         Flush Interval: {}s\n\
-         Max Memory: {}MB\n\
-         Max Threads: {}\n",
+         Raw Retention: {} mins\n\
+         Rollup 1m Retention: {} days\n\
+         Rollup 1h Retention: {} days\n\
+         Rollup 1d Retention: {} days\n\
+         DNS Retention: {} days\n\
+         Write Batch Size: {}\n\
+         Write Flush Interval: {}s\n\
+         DB Max Memory: {}MB\n\
+         DB Max Threads: {}\n\
+         Cleanup Interval: {}s\n\
+         Cleanup Budget: {}ms\n\
+         Cleanup Slice Window: {}s\n\
+         Aggregate Interval: {}s\n",
             self.home_path.display(),
             self.auth.admin_user,
             self.auth.admin_pass,
@@ -535,15 +576,19 @@ impl RuntimeConfig {
             address_http_str,
             address_https_str,
             self.store.database_path,
-            self.metric.conn_retention_mins,
-            self.metric.conn_retention_minute_days,
-            self.metric.conn_retention_hour_days,
-            self.metric.conn_retention_day_days,
+            self.metric.raw_retention_minutes,
+            self.metric.rollup_1m_retention_days,
+            self.metric.rollup_1h_retention_days,
+            self.metric.rollup_1d_retention_days,
             self.metric.dns_retention_days,
-            self.metric.batch_size,
-            self.metric.flush_interval_secs,
-            self.metric.max_memory,
-            self.metric.max_threads,
+            self.metric.write_batch_size,
+            self.metric.write_flush_interval_secs,
+            self.metric.db_max_memory_mb,
+            self.metric.db_max_threads,
+            self.metric.cleanup_interval_secs,
+            self.metric.cleanup_time_budget_ms,
+            self.metric.cleanup_slice_window_secs,
+            self.metric.aggregate_interval_secs,
         )
     }
 }
@@ -587,15 +632,19 @@ pub struct StoreRuntimeConfig {
 
 #[derive(Clone, Debug)]
 pub struct MetricRuntimeConfig {
-    pub conn_retention_mins: u64,
-    pub conn_retention_minute_days: u64,
-    pub conn_retention_hour_days: u64,
-    pub conn_retention_day_days: u64,
+    pub raw_retention_minutes: u64,
+    pub rollup_1m_retention_days: u64,
+    pub rollup_1h_retention_days: u64,
+    pub rollup_1d_retention_days: u64,
     pub dns_retention_days: u64,
-    pub batch_size: usize,
-    pub flush_interval_secs: u64,
-    pub max_memory: usize,
-    pub max_threads: usize,
+    pub write_batch_size: usize,
+    pub write_flush_interval_secs: u64,
+    pub db_max_memory_mb: usize,
+    pub db_max_threads: usize,
+    pub cleanup_interval_secs: u64,
+    pub cleanup_time_budget_ms: u64,
+    pub cleanup_slice_window_secs: u64,
+    pub aggregate_interval_secs: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -609,32 +658,44 @@ pub struct DnsRuntimeConfig {
 
 impl MetricRuntimeConfig {
     pub fn update_from_file_config(&mut self, config: &LandscapeMetricConfig) {
-        if let Some(v) = config.conn_retention_mins {
-            self.conn_retention_mins = v;
+        if let Some(v) = config.raw_retention_minutes {
+            self.raw_retention_minutes = v;
         }
-        if let Some(v) = config.conn_retention_minute_days {
-            self.conn_retention_minute_days = v;
+        if let Some(v) = config.rollup_1m_retention_days {
+            self.rollup_1m_retention_days = v;
         }
-        if let Some(v) = config.conn_retention_hour_days {
-            self.conn_retention_hour_days = v;
+        if let Some(v) = config.rollup_1h_retention_days {
+            self.rollup_1h_retention_days = v;
         }
-        if let Some(v) = config.conn_retention_day_days {
-            self.conn_retention_day_days = v;
+        if let Some(v) = config.rollup_1d_retention_days {
+            self.rollup_1d_retention_days = v;
         }
         if let Some(v) = config.dns_retention_days {
             self.dns_retention_days = v;
         }
-        if let Some(v) = config.batch_size {
-            self.batch_size = v;
+        if let Some(v) = config.write_batch_size {
+            self.write_batch_size = v;
         }
-        if let Some(v) = config.flush_interval_secs {
-            self.flush_interval_secs = v;
+        if let Some(v) = config.write_flush_interval_secs {
+            self.write_flush_interval_secs = v;
         }
-        if let Some(v) = config.max_memory {
-            self.max_memory = v;
+        if let Some(v) = config.db_max_memory_mb {
+            self.db_max_memory_mb = v;
         }
-        if let Some(v) = config.max_threads {
-            self.max_threads = v;
+        if let Some(v) = config.db_max_threads {
+            self.db_max_threads = v;
+        }
+        if let Some(v) = config.cleanup_interval_secs {
+            self.cleanup_interval_secs = v;
+        }
+        if let Some(v) = config.cleanup_time_budget_ms {
+            self.cleanup_time_budget_ms = v;
+        }
+        if let Some(v) = config.cleanup_slice_window_secs {
+            self.cleanup_slice_window_secs = v;
+        }
+        if let Some(v) = config.aggregate_interval_secs {
+            self.aggregate_interval_secs = v;
         }
     }
 }

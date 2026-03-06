@@ -1,9 +1,10 @@
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
     ConnectMetricPoint, ConnectSortKey, MetricResolution, SortOrder,
 };
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 pub const SUMMARY_INSERT_SQL: &str = "
     INSERT INTO conn_summaries (
@@ -461,117 +462,156 @@ pub fn perform_inner_db_rollup(conn: &Connection) -> duckdb::Result<()> {
     Ok(())
 }
 
-pub fn collect_and_cleanup_old_metrics(
+#[derive(Debug, Default, Clone)]
+pub struct CleanupStats {
+    pub deleted_raw: usize,
+    pub deleted_1m: usize,
+    pub deleted_1h: usize,
+    pub deleted_1d: usize,
+    pub deleted_summaries: usize,
+    pub budget_hit: bool,
+    pub elapsed_ms: u128,
+}
+
+fn query_next_timestamp_before(
+    conn: &Connection,
+    table: &str,
+    time_column: &str,
+    lower_bound_inclusive: u64,
+    cutoff_exclusive: u64,
+) -> Option<u64> {
+    let sql = format!(
+        "SELECT MIN({time_column}) FROM {table} WHERE {time_column} >= ?1 AND {time_column} < ?2"
+    );
+    conn.query_row(&sql, params![lower_bound_inclusive as i64, cutoff_exclusive as i64], |row| {
+        row.get::<_, Option<i64>>(0)
+    })
+    .ok()
+    .flatten()
+    .map(|ts| ts.max(0) as u64)
+}
+
+fn delete_table_in_slices(
+    conn: &Connection,
+    table: &str,
+    time_column: &str,
+    cutoff_exclusive: u64,
+    slice_window_ms: u64,
+    deadline: Instant,
+) -> (usize, bool) {
+    let mut deleted_total = 0usize;
+    let mut cursor = query_next_timestamp_before(conn, table, time_column, 0, cutoff_exclusive);
+
+    while let Some(slice_start) = cursor {
+        if Instant::now() >= deadline {
+            return (deleted_total, true);
+        }
+
+        let slice_end = (slice_start.saturating_add(slice_window_ms)).min(cutoff_exclusive);
+        let sql = format!("DELETE FROM {table} WHERE {time_column} >= ?1 AND {time_column} < ?2");
+        let deleted =
+            conn.execute(&sql, params![slice_start as i64, slice_end as i64]).unwrap_or_else(|e| {
+                tracing::error!("Failed to delete slice from {}: {}", table, e);
+                0
+            });
+        deleted_total += deleted;
+
+        cursor = query_next_timestamp_before(conn, table, time_column, slice_end, cutoff_exclusive);
+    }
+
+    (deleted_total, false)
+}
+
+pub fn cleanup_old_metrics_only(
     conn_mem: &Connection,
     conn_disk: &Connection,
     cutoff_raw: u64,
     cutoff_1m: u64,
     cutoff_1h: u64,
     cutoff_1d: u64,
-) -> Box<Vec<ConnectMetric>> {
-    // Fetch expired metric records from memory (for return value)
-    // Join with memory summaries to get full metric info
-    let stmt = "
-        SELECT
-            s.create_time, s.cpu_id, s.src_ip, s.dst_ip, s.src_port, s.dst_port, s.l4_proto, s.l3_proto, s.flow_id, s.trace_id,
-            m.report_time, m.ingress_bytes, m.ingress_packets, m.egress_bytes, m.egress_packets, m.status, s.create_time_ms, s.gress
-        FROM conn_metrics m
-        JOIN conn_summaries s ON m.create_time = s.create_time AND m.cpu_id = s.cpu_id
-        WHERE m.report_time < ?1
-    ";
+    cleanup_time_budget_ms: u64,
+    cleanup_slice_window_secs: u64,
+) -> CleanupStats {
+    let start = Instant::now();
+    let budget_ms = cleanup_time_budget_ms.max(1);
+    let deadline = start + Duration::from_millis(budget_ms);
+    let slice_window_ms = cleanup_slice_window_secs.max(1) * 1000;
 
-    let mut stmt = match conn_mem.prepare(stmt) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("Failed to prepare cleanup SELECT SQL: {}, error: {}", stmt, e);
-            return Box::new(Vec::new());
-        }
-    };
+    let mut stats = CleanupStats::default();
 
-    let metrics_iter = stmt.query_map([cutoff_raw as i64], |row| {
-        let key = ConnectKey {
-            create_time: row.get::<_, i64>(0)? as u64,
-            cpu_id: row.get::<_, i64>(1)? as u32,
-        };
-
-        Ok(ConnectMetric {
-            key,
-            src_ip: row.get::<_, String>(2)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-            dst_ip: row.get::<_, String>(3)?.parse().unwrap_or("0.0.0.0".parse().unwrap()),
-            src_port: row.get::<_, i64>(4)? as u16,
-            dst_port: row.get::<_, i64>(5)? as u16,
-            l4_proto: row.get::<_, i64>(6)? as u8,
-            l3_proto: row.get::<_, i64>(7)? as u8,
-            flow_id: row.get::<_, i64>(8)? as u8,
-            trace_id: row.get::<_, i64>(9)? as u8,
-            gress: row.get::<_, Option<i64>>(17)?.unwrap_or(0) as u8,
-            report_time: row.get(10)?,
-            create_time_ms: row.get(16)?,
-            ingress_bytes: row.get(11)?,
-            ingress_packets: row.get(12)?,
-            egress_bytes: row.get(13)?,
-            egress_packets: row.get(14)?,
-            status: row.get::<_, u8>(15)?.into(),
-        })
-    });
-
-    let metrics = match metrics_iter {
-        Ok(r) => r.filter_map(Result::ok).collect::<Vec<_>>(),
-        Err(e) => {
-            tracing::error!("Failed to execute cleanup SELECT: {}", e);
-            Vec::new()
-        }
-    };
-
-    // Delete expired metric records from Disk (raw metrics table)
-    let deleted_metrics = conn_mem
-        .execute("DELETE FROM conn_metrics WHERE report_time < ?1", params![cutoff_raw as i64])
-        .unwrap_or_else(|e| {
-            tracing::error!("Failed to delete expired raw metrics: {}", e);
-            0
-        });
-
-    // We no longer delete from conn_summaries here using cutoff_raw,
-    // because conn_mem and conn_disk are the same database now.
-    // The long-term cleanup is handled at the end of this function.
-
-    let size = match conn_mem.prepare("SELECT COUNT(*) FROM conn_metrics") {
-        Ok(mut stmt) => stmt.query_row([], |row| row.get::<_, usize>(0)).unwrap_or(0),
-        Err(e) => {
-            tracing::error!("Failed to prepare count query: {}", e);
-            0
-        }
-    };
-
-    tracing::info!(
-        "Metric cleanup complete: deleted {} raw metric records, current raw size: {}",
-        deleted_metrics,
-        size
+    let (deleted_raw, budget_hit) = delete_table_in_slices(
+        conn_mem,
+        "conn_metrics",
+        "report_time",
+        cutoff_raw,
+        slice_window_ms,
+        deadline,
     );
+    stats.deleted_raw = deleted_raw;
+    stats.budget_hit = budget_hit;
+    if stats.budget_hit {
+        stats.elapsed_ms = start.elapsed().as_millis();
+        return stats;
+    }
 
-    // Delete expired metric records from disk
-    let _ = conn_disk
-        .execute("DELETE FROM conn_metrics_1m WHERE report_time < ?1", params![cutoff_1m as i64])
-        .map_err(|e| tracing::error!("Failed to delete expired 1m metrics: {}", e));
+    let (deleted_1m, budget_hit) = delete_table_in_slices(
+        conn_disk,
+        "conn_metrics_1m",
+        "report_time",
+        cutoff_1m,
+        slice_window_ms,
+        deadline,
+    );
+    stats.deleted_1m = deleted_1m;
+    stats.budget_hit = budget_hit;
+    if stats.budget_hit {
+        stats.elapsed_ms = start.elapsed().as_millis();
+        return stats;
+    }
 
-    let _ = conn_disk
-        .execute("DELETE FROM conn_metrics_1h WHERE report_time < ?1", params![cutoff_1h as i64])
-        .map_err(|e| tracing::error!("Failed to delete expired 1h metrics: {}", e));
+    let (deleted_1h, budget_hit) = delete_table_in_slices(
+        conn_disk,
+        "conn_metrics_1h",
+        "report_time",
+        cutoff_1h,
+        slice_window_ms,
+        deadline,
+    );
+    stats.deleted_1h = deleted_1h;
+    stats.budget_hit = budget_hit;
+    if stats.budget_hit {
+        stats.elapsed_ms = start.elapsed().as_millis();
+        return stats;
+    }
 
-    let _ = conn_disk
-        .execute("DELETE FROM conn_metrics_1d WHERE report_time < ?1", params![cutoff_1d as i64])
-        .map_err(|e| tracing::error!("Failed to delete expired 1d metrics: {}", e));
+    let (deleted_1d, budget_hit) = delete_table_in_slices(
+        conn_disk,
+        "conn_metrics_1d",
+        "report_time",
+        cutoff_1d,
+        slice_window_ms,
+        deadline,
+    );
+    stats.deleted_1d = deleted_1d;
+    stats.budget_hit = budget_hit;
+    if stats.budget_hit {
+        stats.elapsed_ms = start.elapsed().as_millis();
+        return stats;
+    }
 
-    let deleted_disk_summaries = conn_disk
-        .execute(
-            "DELETE FROM conn_summaries WHERE last_report_time < ?1",
-            params![cutoff_1d as i64],
-        )
-        .unwrap_or(0);
+    let (deleted_summaries, budget_hit) = delete_table_in_slices(
+        conn_disk,
+        "conn_summaries",
+        "last_report_time",
+        cutoff_1d,
+        slice_window_ms,
+        deadline,
+    );
+    stats.deleted_summaries = deleted_summaries;
+    stats.budget_hit = budget_hit;
+    stats.elapsed_ms = start.elapsed().as_millis();
 
-    tracing::info!("Cleanup disk complete: deleted {} summaries", deleted_disk_summaries);
-
-    Box::new(metrics)
+    stats
 }
 
 pub fn query_connection_ip_history(

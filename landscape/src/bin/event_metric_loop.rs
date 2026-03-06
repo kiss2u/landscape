@@ -29,15 +29,19 @@ async fn main() {
     let metric_service = MetricData::new(
         metric_path,
         landscape_common::config::MetricRuntimeConfig {
-            conn_retention_mins: landscape_common::DEFAULT_CONN_METRIC_RETENTION_MINS,
-            conn_retention_minute_days: landscape_common::DEFAULT_CONN_METRIC_RETENTION_DAYS_1M,
-            conn_retention_hour_days: landscape_common::DEFAULT_CONN_METRIC_RETENTION_DAYS_1H,
-            conn_retention_day_days: landscape_common::DEFAULT_CONN_METRIC_RETENTION_DAYS_1D,
+            raw_retention_minutes: landscape_common::DEFAULT_METRIC_RAW_RETENTION_MINUTES,
+            rollup_1m_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1M_RETENTION_DAYS,
+            rollup_1h_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1H_RETENTION_DAYS,
+            rollup_1d_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1D_RETENTION_DAYS,
             dns_retention_days: landscape_common::DEFAULT_DNS_METRIC_RETENTION_DAYS,
-            batch_size: landscape_common::DEFAULT_METRIC_BATCH_SIZE,
-            flush_interval_secs: landscape_common::DEFAULT_METRIC_FLUSH_INTERVAL_SECS,
-            max_memory: 128,
-            max_threads: 1,
+            write_batch_size: landscape_common::DEFAULT_METRIC_WRITE_BATCH_SIZE,
+            write_flush_interval_secs: landscape_common::DEFAULT_METRIC_WRITE_FLUSH_INTERVAL_SECS,
+            db_max_memory_mb: 128,
+            db_max_threads: 1,
+            cleanup_interval_secs: landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS,
+            cleanup_time_budget_ms: landscape_common::DEFAULT_METRIC_CLEANUP_TIME_BUDGET_MS,
+            cleanup_slice_window_secs: landscape_common::DEFAULT_METRIC_CLEANUP_SLICE_WINDOW_SECS,
+            aggregate_interval_secs: landscape_common::DEFAULT_METRIC_AGGREGATE_INTERVAL_SECS,
         },
     )
     .await;
