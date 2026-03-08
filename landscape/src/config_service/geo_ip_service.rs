@@ -84,6 +84,9 @@ impl GeoIpService {
         configs: Vec<WanIpRuleConfig>,
     ) -> Vec<IpMarkInfo> {
         let mut lock = self.file_cache.lock().await;
+        // Deduplicate by cidr (ip + prefix) — keep the first occurrence (highest priority).
+        // Configs are sorted by ascending index before calling, so the first seen = highest priority.
+        let mut seen = std::collections::HashSet::new();
         let mut result = vec![];
         for config in configs.into_iter() {
             let mut source = vec![];
@@ -100,10 +103,16 @@ impl GeoIpService {
                 }
             }
 
-            let ip_marks = source.into_iter().map(|cidr| IpMarkInfo {
-                mark: config.mark,
-                cidr,
-                priority: config.index as u16,
+            let ip_marks = source.into_iter().filter_map(|cidr| {
+                if seen.insert(cidr.clone()) {
+                    Some(IpMarkInfo {
+                        mark: config.mark,
+                        cidr,
+                        priority: config.index as u16,
+                    })
+                } else {
+                    None
+                }
             });
             result.extend(ip_marks);
         }

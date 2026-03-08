@@ -66,21 +66,18 @@ where
 
     let mut count = 0;
     for IpMarkInfo { mark, cidr, priority } in ips.iter() {
+        let ipv4_addr = match cidr.ip {
+            std::net::IpAddr::V4(addr) => addr,
+            std::net::IpAddr::V6(_) => continue,
+        };
+
         let mark: u32 = mark.clone().into();
         let mut value = flow_ip_trie_value_v4::default();
-
         value.mark = mark;
         value.priority = *priority;
 
         let mut key = flow_ip_trie_key_v4::default();
-        match cidr.ip {
-            std::net::IpAddr::V4(ipv4_addr) => {
-                key.addr = ipv4_addr.to_bits().to_be();
-            }
-            std::net::IpAddr::V6(_) => {
-                continue;
-            }
-        };
+        key.addr = ipv4_addr.to_bits().to_be();
         key.prefixlen = cidr.prefix;
 
         keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
@@ -154,22 +151,18 @@ where
 
     let mut count = 0;
     for IpMarkInfo { mark, cidr, priority } in ips.iter() {
+        let ipv6_addr = match cidr.ip {
+            std::net::IpAddr::V4(_) => continue,
+            std::net::IpAddr::V6(addr) => addr,
+        };
+
         let mark: u32 = mark.clone().into();
         let mut value = flow_ip_trie_value_v6::default();
-
         value.mark = mark;
         value.priority = *priority;
 
-        // TODO: 抽取转换逻辑
         let mut key = flow_ip_trie_key_v6::default();
-        match cidr.ip {
-            std::net::IpAddr::V4(_) => {
-                continue;
-            }
-            std::net::IpAddr::V6(ipv6_addr) => {
-                key.addr.bytes = ipv6_addr.to_bits().to_be_bytes();
-            }
-        };
+        key.addr.bytes = ipv6_addr.to_bits().to_be_bytes();
         key.prefixlen = cidr.prefix;
 
         keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
