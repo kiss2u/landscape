@@ -258,7 +258,12 @@ function quickBind(ip: string, mac?: string, hostname?: string | null) {
 
         <tr v-for="item in not_current_round_ips">
           <td class="not-assign-item">
-            {{ t("dhcp_editor.assigned.unknown") }}
+            {{
+              enrolledDeviceStore.GET_NAME_WITH_FALLBACK(
+                Array.from(arp_ip_map.get(item.ip)?.macs || [])[0],
+                t("dhcp_editor.assigned.unknown"),
+              )
+            }}
           </td>
           <td class="not-assign-item">
             <DHCPMacExhibit :macs="arp_ip_map.get(item.ip)?.macs">
