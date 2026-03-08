@@ -47,8 +47,10 @@ export default {
     query_ip: "IP query",
     domain_placeholder: "Enter a domain, e.g. www.example.com",
     resolve_and_query: "Resolve DNS and query",
-    target_ip_placeholder: "Enter destination IP (IPv4 or IPv6)",
+    target_ip_placeholder:
+      "Enter destination IP(s), separated by commas or spaces",
     query_btn: "Query",
+    invalid_ip: "Invalid IP address: {ip}",
     domain_resolved_count: "Domain {domain} resolved to {count} IP(s)",
     reset_route_cache: "Clear route cache",
     ip_rule: "IP Rule",

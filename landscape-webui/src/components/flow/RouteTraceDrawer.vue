@@ -72,7 +72,7 @@ async function doFlowMatch() {
       src_ipv4: srcIpv4.value || undefined,
       src_ipv6: srcIpv6.value || undefined,
       src_mac: srcMac.value || null,
-    } as any);
+    });
   } finally {
     matchLoading.value = false;
   }
@@ -107,7 +107,7 @@ async function doVerdictByDomain() {
     const dnsResultA = await check_domain({
       flow_id: matchResult.value.effective_flow_id,
       domain,
-      record_type: "A" as any,
+      record_type: "A",
     });
     if (dnsResultA.records) {
       for (const r of dnsResultA.records) {
@@ -123,7 +123,7 @@ async function doVerdictByDomain() {
         const dnsResultAAAA = await check_domain({
           flow_id: matchResult.value.effective_flow_id,
           domain,
-          record_type: "AAAA" as any,
+          record_type: "AAAA",
         });
         if (dnsResultAAAA.records) {
           for (const r of dnsResultAAAA.records) {
@@ -147,14 +147,45 @@ async function doVerdictByDomain() {
       src_ipv4: srcIpv4.value || undefined,
       src_ipv6: srcIpv6.value || undefined,
       dst_ips: ips,
-    } as any);
+    });
   } finally {
     verdictLoading.value = false;
   }
 }
 
+function parseIpList(input: string): string[] {
+  return input
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function isValidIp(ip: string): boolean {
+  // IPv4
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+    return ip.split(".").every((n) => {
+      const num = Number(n);
+      return num >= 0 && num <= 255;
+    });
+  }
+  // IPv6 (simplified: colons with hex digits, allows ::)
+  if (/^[0-9a-fA-F:]+$/.test(ip) && ip.includes(":")) {
+    return true;
+  }
+  return false;
+}
+
 async function doVerdictByIp() {
   if (!ipInput.value || !matchResult.value) return;
+  const ips = parseIpList(ipInput.value);
+  if (ips.length === 0) return;
+  const invalid = ips.filter((ip) => !isValidIp(ip));
+  if (invalid.length > 0) {
+    window.$message?.error(
+      t("flow.trace.invalid_ip", { ip: invalid.join(", ") }),
+    );
+    return;
+  }
   verdictLoading.value = true;
   verdictResult.value = null;
   resolvedDomain.value = "";
@@ -163,8 +194,8 @@ async function doVerdictByIp() {
       flow_id: matchResult.value.effective_flow_id,
       src_ipv4: srcIpv4.value || undefined,
       src_ipv6: srcIpv6.value || undefined,
-      dst_ips: [ipInput.value],
-    } as any);
+      dst_ips: ips,
+    });
   } finally {
     verdictLoading.value = false;
   }
