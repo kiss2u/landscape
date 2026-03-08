@@ -9,6 +9,7 @@ import { useFrontEndStore } from "@/stores/front_end_config";
 import FlowExhibit from "@/components/flow/FlowExhibit.vue";
 import type { FlowMatchResult } from "@/api/route/trace";
 import type { FlowVerdictResult } from "@/api/route/trace";
+import type { SingleVerdictResult } from "@landscape-router/types/api/schemas";
 import { useI18n } from "vue-i18n";
 
 const show = defineModel<boolean>("show", { required: true });
@@ -213,6 +214,20 @@ async function doResetCache() {
 
 function onOpen() {
   enrolledDeviceStore.UPDATE_INFO();
+}
+
+function isCacheConsistent(v: SingleVerdictResult): boolean {
+  if (v.cache_consistent) return true;
+  if (!v.has_cache || v.cached_mark == null || !matchResult.value) return true;
+  // When effective action is KeepGoing, BPF writes the matched flow_id into
+  // the mark's lower 8 bits (replace_flow_id). The backend comparison doesn't
+  // account for this, causing a false "inconsistent". Check that the cached
+  // mark's flow_id matches the client's matched flow_id instead.
+  if (v.effective_mark.action.t === "keep_going") {
+    const cachedFlowId = v.cached_mark & 0xff;
+    return cachedFlowId === (matchResult.value.effective_flow_id & 0xff);
+  }
+  return false;
 }
 
 function formatAction(mark: { action: { t: string }; flow_id: number }) {
@@ -432,8 +447,8 @@ function actionTagType(
 
         <!-- Verdict results -->
         <template v-if="verdictResult">
-          <n-flex v-if="resolvedDomain" align="center" justify="space-between">
-            <n-text depth="3" style="font-size: 12px">
+          <n-flex align="center" justify="space-between">
+            <n-text v-if="resolvedDomain" depth="3" style="font-size: 12px">
               {{
                 t("flow.trace.domain_resolved_count", {
                   domain: resolvedDomain,
@@ -441,6 +456,7 @@ function actionTagType(
                 })
               }}
             </n-text>
+            <span v-else />
             <n-button
               size="tiny"
               tertiary
@@ -509,14 +525,6 @@ function actionTagType(
               </n-descriptions-item>
               <n-descriptions-item :label="t('flow.trace.final_action')">
                 <n-tag
-                  v-if="!v.ip_rule_match && !v.dns_rule_match && !v.has_cache"
-                  type="default"
-                  size="small"
-                >
-                  {{ t("flow.trace.visit_first") }}
-                </n-tag>
-                <n-tag
-                  v-else
                   :type="actionTagType(v.effective_mark as any)"
                   size="small"
                 >
@@ -531,11 +539,11 @@ function actionTagType(
                 </template>
                 <template v-else>
                   <n-tag
-                    :type="v.cache_consistent ? 'success' : 'warning'"
+                    :type="isCacheConsistent(v) ? 'success' : 'warning'"
                     size="small"
                   >
                     {{
-                      v.cache_consistent
+                      isCacheConsistent(v)
                         ? t("flow.trace.cache_consistent")
                         : t("flow.trace.cache_inconsistent")
                     }}
@@ -544,7 +552,7 @@ function actionTagType(
               </n-descriptions-item>
             </n-descriptions>
             <n-alert
-              v-if="v.has_cache && !v.cache_consistent"
+              v-if="v.has_cache && !isCacheConsistent(v)"
               type="warning"
               style="margin-top: 8px"
             >
