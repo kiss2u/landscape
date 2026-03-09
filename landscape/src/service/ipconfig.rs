@@ -5,8 +5,8 @@ use landscape_common::route::{LanRouteInfo, LanRouteMode, RouteTargetInfo};
 use landscape_common::LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT;
 use landscape_common::{
     args::LAND_HOSTNAME,
-    config::iface_ip::{IfaceIpModelConfig, IfaceIpServiceConfig},
     global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS},
+    iface::ip_config::{IfaceIpModelConfig, IfaceIpServiceConfig},
     observer::IfaceObserverAction,
     service::{
         controller::ControllerService,

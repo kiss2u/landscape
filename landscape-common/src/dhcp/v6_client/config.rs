@@ -42,14 +42,14 @@ impl LandscapeStore for IPV6PDServiceConfig {
     }
 }
 
-impl crate::config::iface::ZoneAwareConfig for IPV6PDServiceConfig {
+impl crate::iface::config::ZoneAwareConfig for IPV6PDServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> crate::config::iface::ZoneRequirement {
-        crate::config::iface::ZoneRequirement::WanOrPpp
+    fn zone_requirement() -> crate::iface::config::ZoneRequirement {
+        crate::iface::config::ZoneRequirement::WanOrPpp
     }
-    fn service_kind() -> crate::config::iface::ServiceKind {
-        crate::config::iface::ServiceKind::Ipv6Pd
+    fn service_kind() -> crate::iface::config::ServiceKind {
+        crate::iface::config::ServiceKind::Ipv6Pd
     }
 }

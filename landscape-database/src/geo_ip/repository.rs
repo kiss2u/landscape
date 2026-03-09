@@ -1,4 +1,4 @@
-use landscape_common::{config::geo::GeoIpSourceConfig, error::LdError};
+use landscape_common::{error::LdError, geo::GeoIpSourceConfig};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::DBId;

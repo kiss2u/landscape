@@ -1,4 +1,4 @@
-use landscape_common::config::flow::FlowWanServiceConfig;
+use landscape_common::flow::service::FlowWanServiceConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{

@@ -1,6 +1,6 @@
 use bytes::BytesMut;
-use landscape_common::config::ra::RouterFlags;
 use landscape_common::error::LdResult;
+use landscape_common::ipv6::ra::RouterFlags;
 use landscape_common::lan_services::ipv6_ra::{IPv6NAInfo, IPv6NAInfoItem};
 use landscape_common::net::MacAddr;
 use landscape_common::net_proto::icmpv6::messages::{Icmpv6Message, RouterAdvertisement};

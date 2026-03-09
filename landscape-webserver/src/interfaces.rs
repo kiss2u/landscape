@@ -2,11 +2,11 @@ use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::iface::{IfaceTopology, IfacesInfo};
 use landscape_common::{
-    config::iface::WifiMode,
+    iface::config::WifiMode,
     iface::{AddController, ChangeZone},
 };
 use landscape_common::{
-    config::iface::{IfaceCpuSoftBalance, NetworkIfaceConfig},
+    iface::config::{IfaceCpuSoftBalance, NetworkIfaceConfig},
     iface::BridgeCreate,
 };
 use utoipa_axum::router::OpenApiRouter;

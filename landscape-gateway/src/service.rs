@@ -1,5 +1,5 @@
 use crate::{GatewayManager, GatewayTlsConfig};
-use landscape_common::config::gateway::config::GatewayRuntimeConfig;
+use landscape_common::gateway::settings::GatewayRuntimeConfig;
 use landscape_common::service::{ServiceStatus, WatchService};
 use landscape_database::gateway::repository::GatewayHttpUpstreamRepository;
 use landscape_database::repository::Repository;

@@ -1,4 +1,4 @@
-use landscape_common::config::wifi::WifiServiceConfig;
+use landscape_common::iface::wifi::WifiServiceConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{

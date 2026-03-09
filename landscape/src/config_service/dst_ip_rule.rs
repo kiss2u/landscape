@@ -115,7 +115,7 @@ mod tests {
     use std::path::PathBuf;
 
     use landscape_common::{
-        config::geo::{GeoFileCacheKey, GeoIpConfig},
+        geo::{GeoFileCacheKey, GeoIpConfig},
         store::storev4::StoreFileManager,
         LANDSCAPE_GEO_CACHE_TMP_DIR,
     };

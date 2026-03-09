@@ -1,7 +1,7 @@
 use crate::netlink::convert::{DeviceKind, DeviceType, LandscapeInterface};
 use landscape_common::{
-    config::iface::{CreateDevType, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     dev::DevState,
+    iface::config::{CreateDevType, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     utils::time::get_f64_timestamp,
 };
 

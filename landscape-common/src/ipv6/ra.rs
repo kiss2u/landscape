@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
 use crate::dhcp::v6_server::config::DHCPv6ServerConfig;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -45,16 +46,10 @@ pub enum IPV6RaConfigSource {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct IPv6RaStaticConfig {
-    /// Base Prefix
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub base_prefix: Ipv6Addr,
-
-    /// subnet prefix length default 64
     pub sub_prefix_len: u8,
-
-    /// index of subnet
     pub sub_index: u32,
-
     pub ra_preferred_lifetime: u32,
     pub ra_valid_lifetime: u32,
 }
@@ -63,11 +58,8 @@ pub struct IPv6RaStaticConfig {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct IPv6RaPdConfig {
     pub depend_iface: String,
-
-    // default 64
     pub prefix_len: u8,
     pub subnet_index: u32,
-
     pub ra_preferred_lifetime: u32,
     pub ra_valid_lifetime: u32,
 }
@@ -75,15 +67,11 @@ pub struct IPv6RaPdConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct IPV6RAConfig {
-    /// Router Advertisement Interval
     pub ad_interval: u32,
-    /// Router Advertisement Flag
     #[serde(default = "ra_flag_default")]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub ra_flag: RouterFlags,
-    /// Ip Source
     pub source: Vec<IPV6RaConfigSource>,
-    /// DHCPv6 server config (nested within RA)
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub dhcpv6: Option<DHCPv6ServerConfig>,
@@ -132,7 +120,6 @@ impl IPV6RAConfig {
             }
         }
 
-        // Validate DHCPv6 config if present
         if let Some(dhcpv6) = &self.dhcpv6 {
             dhcpv6.validate()?;
         }
@@ -144,15 +131,14 @@ impl IPV6RAConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct RouterFlags {
-    pub managed_address_config: bool, // 0b1000_0000
-    pub other_config: bool,           // 0b0100_0000
-    pub home_agent: bool,             // 0b0010_0000
-    pub prf: u8,                      // 0b0001_1000 (Default Router Preference)
-    pub nd_proxy: bool,               // 0b0000_0100
-    pub reserved: u8,                 // 0b0000_0011
+    pub managed_address_config: bool,
+    pub other_config: bool,
+    pub home_agent: bool,
+    pub prf: u8,
+    pub nd_proxy: bool,
+    pub reserved: u8,
 }
 
-// 实现 From<u8>，用于从字节转换为结构体
 impl From<u8> for RouterFlags {
     fn from(byte: u8) -> Self {
         Self {
@@ -166,7 +152,6 @@ impl From<u8> for RouterFlags {
     }
 }
 
-// 实现 Into<u8>，用于将结构体转换回字节
 impl Into<u8> for RouterFlags {
     fn into(self) -> u8 {
         (self.managed_address_config as u8) << 7
@@ -206,14 +191,14 @@ impl LandscapeStore for IPV6RAServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for IPV6RAServiceConfig {
+impl ZoneAwareConfig for IPV6RAServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::LanOnly
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::LanOnly
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::Icmpv6Ra
+    fn service_kind() -> ServiceKind {
+        ServiceKind::Icmpv6Ra
     }
 }

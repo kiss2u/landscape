@@ -1,5 +1,5 @@
 use crate::repository::{FlowFilterExpr, UpdateActiveModel};
-use landscape_common::config::dns::DNSRuleConfig;
+use landscape_common::dns::rule::DNSRuleConfig;
 use migration::SimpleExpr;
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};

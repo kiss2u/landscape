@@ -1,7 +1,7 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::{
     args::LAND_HOME_PATH,
-    config::wifi::WifiServiceConfig,
+    iface::wifi::WifiServiceConfig,
     service::{
         controller::ControllerService,
         manager::{ServiceManager, ServiceStarterTrait},

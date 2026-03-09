@@ -13,7 +13,7 @@ use landscape::{
     dhcp_client::v6::dhcp_v6_pd_client, icmp::v6::icmp_ra_server, iface::get_iface_by_name,
 };
 use landscape_common::{
-    config::ra::RouterFlags, ipv6_pd::IAPrefixMap, lan_services::ipv6_ra::IPv6NAInfo, net::MacAddr,
+    ipv6::ra::RouterFlags, ipv6_pd::IAPrefixMap, lan_services::ipv6_ra::IPv6NAInfo, net::MacAddr,
     route::RouteTargetInfo,
 };
 use landscape_common::{

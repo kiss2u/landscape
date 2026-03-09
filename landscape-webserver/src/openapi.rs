@@ -100,10 +100,10 @@ impl Modify for SecurityAddon {
         (name = "Gateway", description = "HTTP/HTTPS reverse proxy gateway"),
     ),
     components(schemas(
-        landscape_common::config::geo::GeoFileCacheKey,
-        landscape_common::config::geo::QueryGeoKey,
-        landscape_common::config::geo::GeoDomainConfig,
-        landscape_common::config::geo::GeoIpConfig,
+        landscape_common::geo::GeoFileCacheKey,
+        landscape_common::geo::QueryGeoKey,
+        landscape_common::geo::GeoDomainConfig,
+        landscape_common::geo::GeoIpConfig,
         // Auth types
         landscape_common::auth::LoginResult,
         // Schemas referenced by IntoParams but not auto-registered
@@ -111,7 +111,7 @@ impl Modify for SecurityAddon {
         landscape_common::metric::connect::SortOrder,
         landscape_common::metric::dns::DnsSortKey,
         landscape_common::metric::dns::DnsResultStatus,
-        landscape_common::config::dns::LandscapeDnsRecordType,
+        landscape_common::dns::rule::LandscapeDnsRecordType,
         // WebSocket types (no endpoint, registered for ORVAL codegen)
         landscape_common::docker::image::ImgPullEvent,
         landscape_common::pty::SessionStatus,

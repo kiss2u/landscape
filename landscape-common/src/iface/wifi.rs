@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -10,7 +11,6 @@ use crate::utils::time::get_f64_timestamp;
 pub struct WifiServiceConfig {
     pub iface_name: String,
     pub enable: bool,
-    /// hostapd config file
     pub config: String,
     #[serde(default = "get_f64_timestamp")]
     #[cfg_attr(feature = "openapi", schema(required = true))]
@@ -51,14 +51,14 @@ impl WifiServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for WifiServiceConfig {
+impl ZoneAwareConfig for WifiServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::LanOrUndefined
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::LanOrUndefined
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::WiFi
+    fn service_kind() -> ServiceKind {
+        ServiceKind::WiFi
     }
 }

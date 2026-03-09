@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use landscape_common::dns::redirect::DNSRedirectRuntimeRule;
 use landscape_common::{
-    config::dns::{DNSRuntimeRule, FilterResult},
+    dns::rule::{DNSRuntimeRule, FilterResult},
     flow::DnsRuntimeMarkInfo,
 };
 

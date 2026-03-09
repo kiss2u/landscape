@@ -29,7 +29,8 @@ use crate::{
     CacheDNSItem, CheckChainDnsResult, DNSCache,
 };
 use landscape_common::{
-    config::{dns::FilterResult, DnsRuntimeConfig},
+    config::DnsRuntimeConfig,
+    dns::rule::FilterResult,
     dns::ChainDnsServerInitInfo,
     event::DnsMetricMessage,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},

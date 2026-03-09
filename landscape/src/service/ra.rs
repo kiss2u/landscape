@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::sync::Arc;
 
-use landscape_common::config::ra::IPV6RAConfig;
+use landscape_common::ipv6::ra::IPV6RAConfig;
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::ipv6_pd::IAPrefixMap;
@@ -15,7 +15,7 @@ use landscape_common::service::controller::ControllerService;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::service::manager::ServiceStarterTrait;
 use landscape_common::store::storev2::LandscapeStore;
-use landscape_common::{config::ra::IPV6RAServiceConfig, service::WatchService};
+use landscape_common::{ipv6::ra::IPV6RAServiceConfig, service::WatchService};
 use landscape_database::enrolled_device::repository::EnrolledDeviceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::ra::repository::IPV6RAServiceRepository;

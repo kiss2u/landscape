@@ -1,4 +1,4 @@
-use landscape_common::config::nat::StaticNatMappingConfig;
+use landscape_common::iface::nat::StaticNatMappingConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{

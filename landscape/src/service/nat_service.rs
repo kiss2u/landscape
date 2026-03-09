@@ -3,7 +3,7 @@ use landscape_common::observer::IfaceObserverAction;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::{
-    config::nat::{NatConfig, NatServiceConfig},
+    iface::nat::{NatConfig, NatServiceConfig},
     service::{manager::ServiceStarterTrait, ServiceStatus, WatchService},
 };
 use landscape_database::nat::repository::NatServiceRepository;

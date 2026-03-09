@@ -1,4 +1,4 @@
-use landscape_common::config::gateway::HttpUpstreamRuleConfig;
+use landscape_common::gateway::HttpUpstreamRuleConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{

@@ -6,7 +6,7 @@ use crate::utils::time::get_f64_timestamp;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct FirewallServiceConfig {
+pub struct FlowWanServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     #[serde(default = "get_f64_timestamp")]
@@ -14,13 +14,13 @@ pub struct FirewallServiceConfig {
     pub update_at: f64,
 }
 
-impl LandscapeStore for FirewallServiceConfig {
+impl LandscapeStore for FlowWanServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }
 }
 
-impl LandscapeDBStore<String> for FirewallServiceConfig {
+impl LandscapeDBStore<String> for FlowWanServiceConfig {
     fn get_id(&self) -> String {
         self.iface_name.clone()
     }
@@ -29,17 +29,5 @@ impl LandscapeDBStore<String> for FirewallServiceConfig {
     }
     fn set_update_at(&mut self, ts: f64) {
         self.update_at = ts;
-    }
-}
-
-impl super::iface::ZoneAwareConfig for FirewallServiceConfig {
-    fn iface_name(&self) -> &str {
-        &self.iface_name
-    }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::WanOrPpp
-    }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::Firewall
     }
 }

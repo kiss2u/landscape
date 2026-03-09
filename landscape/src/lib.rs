@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use futures::stream::TryStreamExt;
 use iface::get_iface_by_name;
-use landscape_common::config::iface::{CreateDevType, NetworkIfaceConfig, WifiMode};
 use landscape_common::dev::{DevState, LandscapeInterface};
+use landscape_common::iface::config::{CreateDevType, NetworkIfaceConfig, WifiMode};
 
 pub mod boot;
 

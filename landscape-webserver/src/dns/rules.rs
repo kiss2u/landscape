@@ -1,12 +1,13 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
-use landscape_common::config::{dns::DNSRuleConfig, ConfigId, FlowId};
+use landscape_common::config::{ConfigId, FlowId};
+use landscape_common::dns::rule::DNSRuleConfig;
 use landscape_common::service::controller::ConfigController;
 use landscape_common::service::controller::FlowConfigController;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use landscape_common::config::dns::DnsRuleError;
+use landscape_common::dns::rule::DnsRuleError;
 
 use crate::api::JsonBody;
 use crate::LandscapeApp;

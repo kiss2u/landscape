@@ -1,7 +1,7 @@
 use landscape_common::store::storev4::LandscapeStoreTrait;
 use landscape_common::{
-    config::geo::{GeoFileCacheKey, GeoIpConfig, GeoIpError, GeoIpSource, GeoIpSourceConfig},
     database::LandscapeStore,
+    geo::{GeoFileCacheKey, GeoIpConfig, GeoIpError, GeoIpSource, GeoIpSourceConfig},
     ip_mark::{IpMarkInfo, WanIPRuleSource, WanIpRuleConfig},
     service::controller::ConfigController,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
@@ -66,7 +66,7 @@ impl GeoIpService {
 
     pub async fn resolve_geo_key_to_ips(
         &self,
-        geo_key: &landscape_common::config::geo::GeoConfigKey,
+        geo_key: &landscape_common::geo::GeoConfigKey,
     ) -> Vec<landscape_common::ip_mark::IpConfig> {
         let mut lock = self.file_cache.lock().await;
         if let Some(geo_ip_config) = lock.get(&geo_key.get_file_cache_key()) {
@@ -213,7 +213,7 @@ impl GeoIpService {
     async fn write_direct_to_cache(
         &self,
         name: &str,
-        data: &[landscape_common::config::geo::GeoIpDirectItem],
+        data: &[landscape_common::geo::GeoIpDirectItem],
     ) {
         let mut file_cache_lock = self.file_cache.lock().await;
 
@@ -282,7 +282,7 @@ impl GeoIpService {
                     txt_key.as_deref(),
                 )
                 .await?;
-                if matches!(format, landscape_common::config::geo::GeoIpFileFormat::Txt) {
+                if matches!(format, landscape_common::geo::GeoIpFileFormat::Txt) {
                     tracing::info!(
                         "parsed geo ip txt with {} valid lines and {} skipped lines",
                         result.valid_lines,
@@ -366,7 +366,7 @@ impl ConfigController for GeoIpService {
 mod tests {
 
     use landscape_common::{
-        config::geo::{GeoFileCacheKey, GeoIpConfig},
+        geo::{GeoFileCacheKey, GeoIpConfig},
         store::storev4::StoreFileManager,
         LANDSCAPE_GEO_CACHE_TMP_DIR,
     };

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -10,7 +11,6 @@ use crate::utils::time::get_f64_timestamp;
 pub struct MSSClampServiceConfig {
     pub iface_name: String,
     pub enable: bool,
-
     #[serde(default = "default_clamp_size")]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub clamp_size: u16,
@@ -37,15 +37,15 @@ impl LandscapeDBStore<String> for MSSClampServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for MSSClampServiceConfig {
+impl ZoneAwareConfig for MSSClampServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::WanOrPpp
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::WanOrPpp
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::MssClamp
+    fn service_kind() -> ServiceKind {
+        ServiceKind::MssClamp
     }
 }
 
@@ -60,7 +60,6 @@ impl MSSClampServiceConfig {
     }
 }
 
-/// PPPoE: 1500 - 8 = 1492
 const fn default_clamp_size() -> u16 {
     1492
 }

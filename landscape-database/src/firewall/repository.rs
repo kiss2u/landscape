@@ -1,4 +1,4 @@
-use landscape_common::config::firewall::FirewallServiceConfig;
+use landscape_common::firewall::service::FirewallServiceConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{

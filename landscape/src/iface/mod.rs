@@ -4,8 +4,8 @@ use config::from_phy_dev;
 pub use landscape_common::iface::{IfaceInfo, IfaceTopology, IfacesInfo, RawIfaceInfo};
 use landscape_common::service::controller::ConfigController;
 use landscape_common::{
-    config::iface::{IfaceCpuSoftBalance, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     error::LdResult,
+    iface::config::{IfaceCpuSoftBalance, IfaceZoneType, NetworkIfaceConfig, WifiMode},
     iface::{AddController, BridgeCreate, ChangeZone},
 };
 use landscape_database::iface::repository::NetIfaceRepository;
@@ -318,7 +318,7 @@ pub fn cpu_nums() -> usize {
 #[cfg(test)]
 mod tests {
 
-    use landscape_common::config::iface::IfaceCpuSoftBalance;
+    use landscape_common::iface::config::IfaceCpuSoftBalance;
 
     use super::setting_iface_balance;
 

@@ -57,15 +57,15 @@ impl LandscapeDBStore<String> for DHCPv4ServiceConfig {
     }
 }
 
-impl crate::config::iface::ZoneAwareConfig for DHCPv4ServiceConfig {
+impl crate::iface::config::ZoneAwareConfig for DHCPv4ServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> crate::config::iface::ZoneRequirement {
-        crate::config::iface::ZoneRequirement::LanOnly
+    fn zone_requirement() -> crate::iface::config::ZoneRequirement {
+        crate::iface::config::ZoneRequirement::LanOnly
     }
-    fn service_kind() -> crate::config::iface::ServiceKind {
-        crate::config::iface::ServiceKind::DhcpV4
+    fn service_kind() -> crate::iface::config::ServiceKind {
+        crate::iface::config::ServiceKind::DhcpV4
     }
 }
 

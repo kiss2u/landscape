@@ -1,5 +1,5 @@
 use arc_swap::ArcSwap;
-use landscape_common::config::lan_ipv6::{LanIPv6SourceConfig, SourceServiceKind};
+use landscape_common::ipv6::lan::{LanIPv6SourceConfig, SourceServiceKind};
 use landscape_common::ipv6_pd::{IAPrefixMap, LDIAPrefix};
 use landscape_common::route::{LanIPv6RouteKey, LanRouteInfo};
 use std::collections::HashMap;

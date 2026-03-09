@@ -1,5 +1,5 @@
 use crate::repository::UpdateActiveModel;
-use landscape_common::config::lan_ipv6::LanIPv6ServiceConfig;
+use landscape_common::ipv6::lan::LanIPv6ServiceConfig;
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 

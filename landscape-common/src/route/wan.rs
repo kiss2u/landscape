@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+use crate::database::repository::LandscapeDBStore;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
+use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
-use crate::{database::repository::LandscapeDBStore, store::storev2::LandscapeStore};
 
-/// 可移除
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct FlowWanServiceConfig {
+pub struct RouteWanServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     #[serde(default = "get_f64_timestamp")]
@@ -14,13 +15,13 @@ pub struct FlowWanServiceConfig {
     pub update_at: f64,
 }
 
-impl LandscapeStore for FlowWanServiceConfig {
+impl LandscapeStore for RouteWanServiceConfig {
     fn get_store_key(&self) -> String {
         self.iface_name.clone()
     }
 }
 
-impl LandscapeDBStore<String> for FlowWanServiceConfig {
+impl LandscapeDBStore<String> for RouteWanServiceConfig {
     fn get_id(&self) -> String {
         self.iface_name.clone()
     }
@@ -29,5 +30,17 @@ impl LandscapeDBStore<String> for FlowWanServiceConfig {
     }
     fn set_update_at(&mut self, ts: f64) {
         self.update_at = ts;
+    }
+}
+
+impl ZoneAwareConfig for RouteWanServiceConfig {
+    fn iface_name(&self) -> &str {
+        &self.iface_name
+    }
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::WanOrPpp
+    }
+    fn service_kind() -> ServiceKind {
+        ServiceKind::RouteWan
     }
 }

@@ -1,5 +1,5 @@
 use crate::repository::UpdateActiveModel;
-use landscape_common::config::wifi::WifiServiceConfig;
+use landscape_common::iface::wifi::WifiServiceConfig;
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 

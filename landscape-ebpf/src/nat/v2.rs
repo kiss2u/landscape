@@ -1,7 +1,7 @@
 use std::mem::MaybeUninit;
 
 use land_nat_v2::*;
-use landscape_common::config::nat::NatConfig;
+use landscape_common::iface::nat::NatConfig;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     TC_EGRESS, TC_INGRESS,

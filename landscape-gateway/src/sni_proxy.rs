@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use landscape_common::config::gateway::{
+use landscape_common::gateway::{
     HttpUpstreamMatchRule, HttpUpstreamRuleConfig, HttpUpstreamTarget, LoadBalanceMethod,
 };
 use tokio::io::{self, AsyncWriteExt};
@@ -316,7 +316,7 @@ mod tests {
     use arc_swap::ArcSwap;
     use std::sync::Arc;
 
-    use landscape_common::config::gateway::HttpUpstreamConfig;
+    use landscape_common::gateway::HttpUpstreamConfig;
 
     fn target(address: &str, port: u16, weight: u32) -> HttpUpstreamTarget {
         HttpUpstreamTarget {

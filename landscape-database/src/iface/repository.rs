@@ -1,6 +1,6 @@
 use landscape_common::{
-    config::iface::{IfaceZoneType, NetworkIfaceConfig},
     error::LdError,
+    iface::config::{IfaceZoneType, NetworkIfaceConfig},
 };
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 

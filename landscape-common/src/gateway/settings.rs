@@ -4,7 +4,6 @@ const DEFAULT_ENABLE: bool = false;
 const DEFAULT_HTTP_PORT: u16 = 80;
 const DEFAULT_HTTPS_PORT: u16 = 443;
 
-/// TOML [gateway] section
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct LandscapeGatewayConfig {
@@ -19,7 +18,6 @@ pub struct LandscapeGatewayConfig {
     pub https_port: Option<u16>,
 }
 
-/// Parsed runtime config
 #[derive(Debug, Clone)]
 pub struct GatewayRuntimeConfig {
     pub enable: bool,

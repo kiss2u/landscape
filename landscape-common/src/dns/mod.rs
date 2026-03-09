@@ -1,12 +1,13 @@
-use crate::config::dns::{default_flow_id, DNSRuleConfig, DNSRuntimeRule, FilterResult};
 use crate::dns::config::{DnsBindConfig, DnsUpstreamConfig};
 use crate::dns::redirect::DNSRedirectRuntimeRule;
+use crate::dns::rule::{default_flow_id, DNSRuleConfig, DNSRuntimeRule, FilterResult};
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 
 pub mod check;
 pub mod config;
 pub mod redirect;
+pub mod rule;
 pub mod upstream;
 
 #[derive(Default, Debug)]

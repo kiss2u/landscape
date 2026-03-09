@@ -3,11 +3,11 @@ use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::sync::Arc;
 
-use landscape_common::config::lan_ipv6::{
-    IPv6ServiceMode, LanIPv6Config, LanIPv6ServiceConfig, LanIPv6SourceConfig, SourceServiceKind,
-};
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
+use landscape_common::ipv6::lan::{
+    IPv6ServiceMode, LanIPv6Config, LanIPv6ServiceConfig, LanIPv6SourceConfig, SourceServiceKind,
+};
 use landscape_common::ipv6_pd::IAPrefixMap;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::observer::IfaceObserverAction;
@@ -199,8 +199,8 @@ impl ServiceStarterTrait for LanIPv6Service {
     }
 }
 
-use landscape_common::config::ra::RouterFlags;
 use landscape_common::dhcp::v6_server::config::DHCPv6ServerConfig;
+use landscape_common::ipv6::ra::RouterFlags;
 use landscape_common::net::MacAddr;
 
 /// Mode 1 (Slaac): RA with prefix info, no DHCPv6

@@ -1,5 +1,5 @@
 use aho_corasick::AhoCorasick;
-use landscape_common::config::dns::{DomainConfig, DomainMatchType};
+use landscape_common::dns::rule::{DomainConfig, DomainMatchType};
 use regex::Regex;
 use std::{collections::HashSet, time::Instant};
 use tracing::debug;
@@ -119,8 +119,8 @@ mod tests {
     use jemalloc_ctl::{epoch, stats};
 
     use landscape_common::{
-        config::dns::{DomainConfig, DomainMatchType},
-        config::geo::{GeoDomainConfig, GeoFileCacheKey},
+        dns::rule::{DomainConfig, DomainMatchType},
+        geo::{GeoDomainConfig, GeoFileCacheKey},
         store::storev4::StoreFileManager,
         LANDSCAPE_GEO_CACHE_TMP_DIR,
     };

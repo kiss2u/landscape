@@ -1,5 +1,5 @@
-use landscape_common::config::route_wan::RouteWanServiceConfig;
 use landscape_common::database::LandscapeStore;
+use landscape_common::route::wan::RouteWanServiceConfig;
 use landscape_common::{
     observer::IfaceObserverAction,
     service::{

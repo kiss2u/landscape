@@ -8,6 +8,7 @@ use crate::{flow::mark::FlowMark, net::MacAddr};
 
 pub mod config;
 pub mod mark;
+pub mod service;
 pub mod target;
 
 #[derive(thiserror::Error, Debug, LdApiError)]

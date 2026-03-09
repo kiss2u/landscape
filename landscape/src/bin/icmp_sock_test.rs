@@ -10,7 +10,7 @@ use clap::Parser;
 use landscape::ipv6::prefix::IPv6PrefixRuntime;
 use landscape::{icmp::v6::icmp_ra_server, iface::get_iface_by_name};
 use landscape_common::{
-    config::ra::RouterFlags,
+    ipv6::ra::RouterFlags,
     lan_services::ipv6_ra::IPv6NAInfo,
     service::{ServiceStatus, WatchService},
 };

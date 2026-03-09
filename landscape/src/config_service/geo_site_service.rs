@@ -1,14 +1,12 @@
 use landscape_common::{
-    config::{
-        dns::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
-        geo::{GeoDomainConfig, GeoFileCacheKey, GeoSiteFileConfig, GeoSiteSource},
-    },
     database::LandscapeStore,
     dns::{
         config::DnsUpstreamConfig,
         redirect::{DNSRedirectRule, DNSRedirectRuntimeRule},
+        rule::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
         ChainDnsServerInitInfo,
     },
+    geo::{GeoDomainConfig, GeoFileCacheKey, GeoSiteFileConfig, GeoSiteSource},
     service::controller::ConfigController,
     store::storev4::LandscapeStoreTrait,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
@@ -22,7 +20,7 @@ use std::{
 };
 
 use landscape_common::{
-    args::LAND_HOME_PATH, config::geo::GeoSiteSourceConfig, event::dns::DnsEvent,
+    args::LAND_HOME_PATH, event::dns::DnsEvent, geo::GeoSiteSourceConfig,
     store::storev4::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
@@ -380,7 +378,7 @@ impl GeoSiteService {
     async fn write_direct_to_cache(
         &self,
         name: &str,
-        data: &[landscape_common::config::geo::GeoSiteDirectItem],
+        data: &[landscape_common::geo::GeoSiteDirectItem],
     ) {
         let mut file_cache_lock = self.file_cache.lock().await;
 

@@ -1,7 +1,7 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::{
-    config::firewall::FirewallServiceConfig,
+    firewall::service::FirewallServiceConfig,
     observer::IfaceObserverAction,
     service::{
         controller::ControllerService, manager::ServiceStarterTrait, ServiceStatus, WatchService,

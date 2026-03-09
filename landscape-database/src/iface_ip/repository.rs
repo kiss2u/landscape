@@ -1,4 +1,4 @@
-use landscape_common::config::iface_ip::IfaceIpServiceConfig;
+use landscape_common::iface::ip_config::IfaceIpServiceConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{

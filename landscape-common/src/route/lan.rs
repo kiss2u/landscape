@@ -2,10 +2,12 @@ use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::database::repository::LandscapeDBStore;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::net::MacAddr;
 use crate::route::{LanRouteInfo, LanRouteMode};
+use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
-use crate::{database::repository::LandscapeDBStore, store::storev2::LandscapeStore};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -15,8 +17,6 @@ pub struct RouteLanServiceConfig {
     #[serde(default = "get_f64_timestamp")]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub update_at: f64,
-
-    /// static route in lan
     pub static_routes: Option<Vec<StaticRouteConfig>>,
 }
 
@@ -38,28 +38,25 @@ impl LandscapeDBStore<String> for RouteLanServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for RouteLanServiceConfig {
+impl ZoneAwareConfig for RouteLanServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::LanOnly
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::LanOnly
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::RouteLan
+    fn service_kind() -> ServiceKind {
+        ServiceKind::RouteLan
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct StaticRouteConfig {
-    /// Next hop gateway address
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub next_hop: IpAddr,
-    /// handle subnet
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub subnet: IpAddr,
-    /// prefix
     pub sub_prefix: u8,
 }
 

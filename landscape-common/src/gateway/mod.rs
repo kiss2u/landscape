@@ -1,15 +1,14 @@
-pub mod config;
+pub mod settings;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::config::ConfigId;
 use crate::database::repository::LandscapeDBStore;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 use crate::LdApiError;
-
-use super::ConfigId;
 
 #[derive(thiserror::Error, Debug, LdApiError)]
 #[api_error(crate_path = "crate")]
@@ -17,17 +16,14 @@ pub enum GatewayError {
     #[error("Gateway rule '{0}' not found")]
     #[api_error(id = "gateway.rule_not_found", status = 404)]
     NotFound(ConfigId),
-
     #[error("Host domain conflict: domain '{domain}' already used by rule '{rule_name}'")]
     #[api_error(id = "gateway.host_conflict", status = 409)]
     HostConflict { domain: String, rule_name: String },
-
     #[error(
         "Wildcard domain '{wildcard}' covers specific domain '{domain}' in rule '{rule_name}'"
     )]
     #[api_error(id = "gateway.wildcard_covers_domain", status = 409)]
     WildcardCoversDomain { wildcard: String, domain: String, rule_name: String },
-
     #[error("Path prefix '{new_prefix}' overlaps with '{existing_prefix}' in rule '{rule_name}'")]
     #[api_error(id = "gateway.path_prefix_overlap", status = 409)]
     PathPrefixOverlap { new_prefix: String, existing_prefix: String, rule_name: String },

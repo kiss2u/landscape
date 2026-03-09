@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::config::ConfigId;
 use crate::database::repository::LandscapeDBStore;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::id::gen_database_uuid;
@@ -50,15 +51,15 @@ impl LandscapeDBStore<String> for NatServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for NatServiceConfig {
+impl ZoneAwareConfig for NatServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::WanOrPpp
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::WanOrPpp
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::NAT
+    fn service_kind() -> ServiceKind {
+        ServiceKind::NAT
     }
 }
 
@@ -127,13 +128,10 @@ pub struct StaticNatMappingConfig {
     #[cfg_attr(feature = "openapi", schema(required = true, nullable = true))]
     pub wan_iface_name: Option<String>,
     pub mapping_pair_ports: Vec<StaticMapPair>,
-    /// If set to `UNSPECIFIED` (e.g., 0.0.0.0 or ::), the mapping targets
-    /// the router's own address instead of an internal host.
     #[cfg_attr(feature = "openapi", schema(required = true, value_type = Option<String>))]
     pub lan_ipv4: Option<Ipv4Addr>,
     #[cfg_attr(feature = "openapi", schema(required = true, value_type = Option<String>))]
     pub lan_ipv6: Option<Ipv6Addr>,
-    /// TCP / UDP
     pub ipv4_l4_protocol: Vec<u8>,
     pub ipv6_l4_protocol: Vec<u8>,
     #[serde(default = "get_f64_timestamp")]
@@ -162,7 +160,6 @@ impl StaticNatMappingConfig {
             }
         }
 
-        // L4 protocol: only TCP (6) or UDP (17) allowed
         for (i, &proto) in self.ipv4_l4_protocol.iter().enumerate() {
             if proto != 6 && proto != 17 {
                 return Err(ServiceConfigError::InvalidConfig {
@@ -183,7 +180,7 @@ impl StaticNatMappingConfig {
 
     pub fn convert_to_item(&self) -> Vec<StaticNatMappingItem> {
         let mut result = Vec::with_capacity(4);
-        for l4_protocol in self.ipv4_l4_protocol.iter() {
+        for l4_protocol in &self.ipv4_l4_protocol {
             if let Some(ipv4) = self.lan_ipv4 {
                 let items = self.mapping_pair_ports.iter().map(|pair_port| StaticNatMappingItem {
                     wan_port: pair_port.wan_port,
@@ -196,7 +193,7 @@ impl StaticNatMappingConfig {
             }
         }
 
-        for l4_protocol in self.ipv6_l4_protocol.iter() {
+        for l4_protocol in &self.ipv6_l4_protocol {
             if let Some(ipv6) = self.lan_ipv6 {
                 let items = self.mapping_pair_ports.iter().map(|pair_port| StaticNatMappingItem {
                     wan_port: pair_port.wan_port,

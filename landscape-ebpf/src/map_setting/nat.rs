@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use landscape_common::config::nat::StaticNatMappingItem;
+use landscape_common::iface::nat::StaticNatMappingItem;
 use libbpf_rs::{MapCore, MapFlags};
 
 use crate::{

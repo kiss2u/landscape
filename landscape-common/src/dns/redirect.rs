@@ -16,11 +16,9 @@ pub enum DnsRedirectError {
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 use crate::{
-    config::{
-        dns::{DomainConfig, RuleSource},
-        FlowId,
-    },
+    config::FlowId,
     database::repository::LandscapeDBStore,
+    dns::rule::{DomainConfig, RuleSource},
 };
 
 /// 用于定义 DNS 重定向的单元配置

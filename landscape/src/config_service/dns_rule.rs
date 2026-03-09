@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use landscape_common::{
-    config::dns::DNSRuleConfig,
+    dns::rule::DNSRuleConfig,
     event::dns::DnsEvent,
     service::controller::{ConfigController, FlowConfigController},
 };

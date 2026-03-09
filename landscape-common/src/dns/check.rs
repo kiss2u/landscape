@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::config::{dns::DNSRuntimeRule, dns::LandscapeDnsRecordType, FlowId};
+use crate::config::FlowId;
+use crate::dns::rule::{DNSRuntimeRule, LandscapeDnsRecordType};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

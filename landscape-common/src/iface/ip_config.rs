@@ -2,8 +2,9 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use serde::{Deserialize, Serialize};
 
-use super::iface::NetworkIfaceConfig;
-use crate::config::iface::IfaceZoneType;
+use super::config::{
+    IfaceZoneType, NetworkIfaceConfig, ServiceKind, ZoneAwareConfig, ZoneRequirement,
+};
 use crate::database::repository::LandscapeDBStore;
 use crate::net_proto::udp::dhcp::DhcpV4Options;
 use crate::store::storev2::LandscapeStore;
@@ -38,15 +39,15 @@ impl LandscapeDBStore<String> for IfaceIpServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for IfaceIpServiceConfig {
+impl ZoneAwareConfig for IfaceIpServiceConfig {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::WanOnly
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::WanOnly
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::IpConfig
+    fn service_kind() -> ServiceKind {
+        ServiceKind::IpConfig
     }
 }
 
@@ -87,7 +88,6 @@ pub enum IfaceIpModelConfig {
         #[cfg_attr(feature = "openapi", schema(required = true))]
         default_router: bool,
         hostname: Option<String>,
-        /// Custome Options
         #[serde(default)]
         #[cfg_attr(feature = "openapi", schema(required = true, value_type = Vec<serde_json::Value>))]
         custome_opts: Vec<DhcpV4Options>,
@@ -95,13 +95,9 @@ pub enum IfaceIpModelConfig {
 }
 
 impl IfaceIpModelConfig {
-    /// 检查当前的 zone 设置是否满足 IP 配置的要求
     pub fn check_iface_status(&self, iface_config: &NetworkIfaceConfig) -> bool {
         match self {
-            IfaceIpModelConfig::PPPoE { .. } => {
-                matches!(iface_config.zone_type, IfaceZoneType::Wan)
-            }
-            IfaceIpModelConfig::DhcpClient { .. } => {
+            IfaceIpModelConfig::PPPoE { .. } | IfaceIpModelConfig::DhcpClient { .. } => {
                 matches!(iface_config.zone_type, IfaceZoneType::Wan)
             }
             _ => true,

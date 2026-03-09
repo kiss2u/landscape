@@ -1,6 +1,6 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::{
-    config::mss_clamp::MSSClampServiceConfig,
+    iface::mss_clamp::MSSClampServiceConfig,
     observer::IfaceObserverAction,
     service::{
         controller::ControllerService,

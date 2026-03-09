@@ -1,6 +1,5 @@
 use landscape_common::{
-    config::{dns::DNSRuntimeRule, DnsRuntimeConfig},
-    dns::ChainDnsServerInitInfo,
+    config::DnsRuntimeConfig, dns::rule::DNSRuntimeRule, dns::ChainDnsServerInitInfo,
 };
 use landscape_dns::server::LandscapeDnsServer;
 

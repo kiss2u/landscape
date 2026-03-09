@@ -12,8 +12,8 @@ use std::os::unix::io::AsRawFd;
 use std::os::windows::io::AsRawSocket;
 
 use arc_swap::ArcSwap;
-use landscape_common::config::gateway::config::GatewayRuntimeConfig;
-use landscape_common::config::gateway::HttpUpstreamRuleConfig;
+use landscape_common::gateway::settings::GatewayRuntimeConfig;
+use landscape_common::gateway::HttpUpstreamRuleConfig;
 
 use landscape_common::service::{ServiceStatus, WatchService};
 use pingora::apps::ServerApp;

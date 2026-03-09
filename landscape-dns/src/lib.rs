@@ -2,9 +2,9 @@ use hickory_proto::{
     op::ResponseCode,
     rr::{rdata::svcb::SvcParamValue, RData, Record, RecordType},
 };
-use landscape_common::config::dns::LandscapeDnsRecordType;
+use landscape_common::dns::rule::LandscapeDnsRecordType;
 use landscape_common::{
-    config::dns::FilterResult,
+    dns::rule::FilterResult,
     flow::{DnsRuntimeMarkInfo, FlowMarkInfo},
 };
 

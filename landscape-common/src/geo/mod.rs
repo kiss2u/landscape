@@ -4,13 +4,11 @@ use landscape_macro::LdApiError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    config::dns::{DomainConfig, DomainMatchType},
-    config::ConfigId,
-    database::repository::LandscapeDBStore,
-    ip_mark::IpConfig,
-    store::storev4::LandscapeStoreTrait,
-};
+use crate::config::ConfigId;
+use crate::database::repository::LandscapeDBStore;
+use crate::dns::rule::{DomainConfig, DomainMatchType};
+use crate::ip_mark::IpConfig;
+use crate::store::storev4::LandscapeStoreTrait;
 
 #[derive(thiserror::Error, Debug, LdApiError)]
 #[api_error(crate_path = "crate")]
@@ -18,15 +16,12 @@ pub enum GeoSiteError {
     #[error("Geo site '{0}' not found")]
     #[api_error(id = "geo_site.not_found", status = 404)]
     NotFound(ConfigId),
-
     #[error("Geo site cache key '{0}' not found")]
     #[api_error(id = "geo_site.cache_not_found", status = 404)]
     CacheNotFound(String),
-
     #[error("Geo site file not found in upload")]
     #[api_error(id = "geo_site.file_not_found", status = 400)]
     FileNotFound,
-
     #[error("Geo site file read error")]
     #[api_error(id = "geo_site.file_read_error", status = 400)]
     FileReadError,
@@ -38,27 +33,21 @@ pub enum GeoIpError {
     #[error("Geo IP '{0}' not found")]
     #[api_error(id = "geo_ip.not_found", status = 404)]
     NotFound(ConfigId),
-
     #[error("Geo IP cache key '{0}' not found")]
     #[api_error(id = "geo_ip.cache_not_found", status = 404)]
     CacheNotFound(String),
-
     #[error("Geo IP file not found in upload")]
     #[api_error(id = "geo_ip.file_not_found", status = 400)]
     FileNotFound,
-
     #[error("Geo IP file read error")]
     #[api_error(id = "geo_ip.file_read_error", status = 400)]
     FileReadError,
-
     #[error("Geo IP config '{0}' not found")]
     #[api_error(id = "geo_ip.config_not_found", status = 404)]
     ConfigNotFound(String),
-
     #[error("Geo IP DAT decode error")]
     #[api_error(id = "geo_ip.dat_decode_error", status = 400)]
     DatDecodeError,
-
     #[error("Geo IP TXT file contains no valid CIDR entries")]
     #[api_error(id = "geo_ip.no_valid_cidr", status = 400)]
     NoValidCidrFound,
@@ -76,16 +65,11 @@ pub enum GeoIpFileFormat {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GeoSiteSourceConfig {
-    /// 用这个 ID 作为文件名称
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub id: Option<Uuid>,
-    /// 记录更新时间
     pub update_at: f64,
-    /// 展示名称
     pub name: String,
-    /// 启用状态
     pub enable: bool,
-    /// 来源配置
     pub source: GeoSiteSource,
 }
 
@@ -116,7 +100,6 @@ impl LandscapeDBStore<Uuid> for GeoSiteSourceConfig {
     }
 }
 
-/// 存储在 file cache 中
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GeoDomainConfig {
@@ -142,9 +125,9 @@ pub struct GeoSiteFileConfig {
     pub attributes: HashSet<String>,
 }
 
-impl Into<DomainConfig> for GeoSiteFileConfig {
-    fn into(self) -> DomainConfig {
-        DomainConfig { match_type: self.match_type, value: self.value }
+impl From<GeoSiteFileConfig> for DomainConfig {
+    fn from(value: GeoSiteFileConfig) -> DomainConfig {
+        DomainConfig { match_type: value.match_type, value: value.value }
     }
 }
 
@@ -187,20 +170,14 @@ pub struct QueryGeoDomainConfig {
     pub name: Option<String>,
 }
 
-/// Geo IP
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GeoIpSourceConfig {
-    /// 用这个 ID 作为文件名称
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub id: Option<Uuid>,
-    /// 记录更新时间
     pub update_at: f64,
-    /// 展示名称
     pub name: String,
-    /// 启用状态
     pub enable: bool,
-    /// 来源配置
     pub source: GeoIpSource,
 }
 

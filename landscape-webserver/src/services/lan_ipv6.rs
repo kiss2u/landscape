@@ -2,16 +2,16 @@ use std::collections::HashMap;
 
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
-use landscape_common::config::lan_ipv6::LanIPv6ServiceConfig;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
+use landscape_common::ipv6::lan::LanIPv6ServiceConfig;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::{ServiceStatus, WatchService};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use landscape_common::config::lan_ipv6::validate_cross_interface;
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
+use landscape_common::ipv6::lan::validate_cross_interface;
 use landscape_common::service::ServiceConfigError;
 
 use crate::api::JsonBody;

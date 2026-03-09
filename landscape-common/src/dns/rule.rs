@@ -9,6 +9,8 @@ use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 use crate::{flow::mark::FlowMark, store::storev2::LandscapeStore};
 
+use crate::geo::GeoConfigKey;
+
 #[derive(thiserror::Error, Debug, LdApiError)]
 #[api_error(crate_path = "crate")]
 pub enum DnsRuleError {
@@ -17,44 +19,31 @@ pub enum DnsRuleError {
     NotFound(ConfigId),
 }
 
-use super::geo::GeoConfigKey;
-
-/// DNS 配置
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DNSRuleConfig {
     #[serde(default = "gen_database_uuid")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
-    /// 名称
     pub name: String,
-    /// 优先级
     pub index: u32,
-    /// 是否启用
     pub enable: bool,
-    /// 过滤模式
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub filter: FilterResult,
-    /// 上游配置 ID
     pub upstream_id: Uuid,
-    /// 源 IP 绑定配置
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub bind_config: DnsBindConfig,
-    /// 流量标记
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub mark: FlowMark,
-    /// 匹配规则列表
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub source: Vec<RuleSource>,
-    /// 关联 Flow ID
     #[serde(default = "default_flow_id")]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub flow_id: u32,
-    /// 最近一次更新时间
     #[serde(default = "get_f64_timestamp")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
@@ -68,21 +57,13 @@ pub fn default_flow_id() -> u32 {
 pub struct DNSRuntimeRule {
     pub id: Uuid,
     pub name: String,
-    /// 优先级
     pub index: u32,
-    /// 是否启用
     pub enable: bool,
-    /// 过滤模式
     pub filter: FilterResult,
-    /// 解析模式
     pub resolve_mode: DnsUpstreamConfig,
-    /// 源 IP 绑定配置
     pub bind_config: DnsBindConfig,
-    /// 流量标记
     pub mark: FlowMark,
-    /// 匹配规则列表
     pub source: Vec<DomainConfig>,
-
     pub flow_id: u32,
 }
 
@@ -124,13 +105,9 @@ pub struct DomainConfig {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DomainMatchType {
-    /// The value is used as is.
     Plain = 0,
-    /// The value is used as a regular expression.
     Regex = 1,
-    /// 域名匹配， 前缀匹配
     Domain = 2,
-    /// The value is a domain.
     Full = 3,
 }
 

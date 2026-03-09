@@ -1,10 +1,8 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
-use landscape_common::config::gateway::{
-    GatewayError, HttpUpstreamMatchRule, HttpUpstreamRuleConfig,
-};
 use landscape_common::config::ConfigId;
 use landscape_common::database::LandscapeStore;
+use landscape_common::gateway::{GatewayError, HttpUpstreamMatchRule, HttpUpstreamRuleConfig};
 use serde::Serialize;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -289,9 +287,7 @@ fn normalize_prefix(prefix: &str) -> String {
 mod tests {
     use super::*;
 
-    use landscape_common::config::gateway::{
-        HttpUpstreamConfig, HttpUpstreamTarget, LoadBalanceMethod,
-    };
+    use landscape_common::gateway::{HttpUpstreamConfig, HttpUpstreamTarget, LoadBalanceMethod};
 
     fn upstream_target() -> HttpUpstreamTarget {
         HttpUpstreamTarget {

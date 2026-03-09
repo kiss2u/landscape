@@ -1,10 +1,16 @@
 use serde::{Deserialize, Serialize};
 
-use crate::config::iface::{IfaceZoneType, NetworkIfaceConfig};
 use crate::dev::LandscapeInterface;
+use crate::iface::config::{IfaceZoneType, NetworkIfaceConfig};
 use dev_wifi::LandscapeWifiInterface;
 
+pub mod config;
 pub mod dev_wifi;
+pub mod ip_config;
+pub mod mss_clamp;
+pub mod nat;
+pub mod ppp;
+pub mod wifi;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

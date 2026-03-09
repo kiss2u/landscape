@@ -1,4 +1,4 @@
-use landscape_common::config::nat::NatServiceConfig;
+use landscape_common::iface::nat::NatServiceConfig;
 use sea_orm::DatabaseConnection;
 
 use super::entity::{NatServiceConfigActiveModel, NatServiceConfigEntity, NatServiceConfigModel};

@@ -1,4 +1,6 @@
+pub mod lan;
 pub mod trace;
+pub mod wan;
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 

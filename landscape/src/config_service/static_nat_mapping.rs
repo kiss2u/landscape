@@ -4,7 +4,7 @@ use std::{
 };
 
 use landscape_common::{
-    config::nat::{StaticMapPair, StaticNatMappingConfig, StaticNatMappingItem},
+    iface::nat::{StaticMapPair, StaticNatMappingConfig, StaticNatMappingItem},
     service::controller::ConfigController,
     utils::time::get_f64_timestamp,
     LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,

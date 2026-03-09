@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
-use landscape_common::config::mss_clamp::MSSClampServiceConfig;
+use landscape_common::iface::mss_clamp::MSSClampServiceConfig;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::{ServiceStatus, WatchService};
 use utoipa_axum::router::OpenApiRouter;

@@ -11,16 +11,16 @@ use landscape_common::SYSCTL_IPV6_RA_ACCEPT_PATTERN;
 use sysctl::Sysctl as _;
 use tokio::sync::{oneshot, watch};
 
-use landscape_common::config::ppp::PPPDConfig;
 use landscape_common::database::LandscapeStore;
 use landscape_common::global_const::default_router::RouteInfo;
 use landscape_common::global_const::default_router::RouteType;
 use landscape_common::global_const::default_router::LD_ALL_ROUTERS;
+use landscape_common::iface::ppp::PPPDConfig;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::service::ServiceStatus;
 use landscape_common::{
-    config::ppp::PPPDServiceConfig,
+    iface::ppp::PPPDServiceConfig,
     service::{manager::ServiceStarterTrait, WatchService},
 };
 use landscape_database::pppd::repository::PPPDServiceRepository;

@@ -5,6 +5,7 @@ use std::{fs::OpenOptions, io::Write};
 use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
+use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -57,15 +58,15 @@ impl LandscapeDBStore<String> for PPPDServiceConfig {
     }
 }
 
-impl super::iface::ZoneAwareConfig for PPPDServiceConfig {
+impl ZoneAwareConfig for PPPDServiceConfig {
     fn iface_name(&self) -> &str {
         &self.attach_iface_name
     }
-    fn zone_requirement() -> super::iface::ZoneRequirement {
-        super::iface::ZoneRequirement::WanOnly
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::WanOnly
     }
-    fn service_kind() -> super::iface::ServiceKind {
-        super::iface::ServiceKind::PPPoE
+    fn service_kind() -> ServiceKind {
+        ServiceKind::PPPoE
     }
 }
 
@@ -115,18 +116,16 @@ impl PPPDConfig {
     }
 
     pub fn write_config(&self, attach_iface_name: &str, ppp_iface_name: &str) -> Result<(), ()> {
-        // 检查 PPP 文件目录是否存在, 不存在提示用户安装 ppp
         let path = PathBuf::from("/etc/ppp/peers");
         if !path.exists() {
             tracing::error!("The directory /etc/ppp/peers does not exist, please check whether ppp is installed");
             return Err(());
         }
 
-        // 打开文件（如果文件不存在则创建）
         let Ok(mut file) = OpenOptions::new()
-            .write(true) // 打开文件以进行写入
-            .truncate(true) // 文件存在时会被截断
-            .create(true) // 如果文件不存在，则会创建
+            .write(true)
+            .truncate(true)
+            .create(true)
             .open(format!("/etc/ppp/peers/{}", ppp_iface_name))
         else {
             tracing::error!("Error opening file handle");

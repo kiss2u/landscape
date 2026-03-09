@@ -41,8 +41,8 @@ use landscape::{
     },
     wifi::WifiServiceManagerService,
 };
-use landscape_common::config::route_lan::RouteLanServiceConfig;
 use landscape_common::dhcp::v4_server::config::DHCPv4ServiceConfig;
+use landscape_common::route::lan::RouteLanServiceConfig;
 use landscape_common::{
     args::{LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
     config::RuntimeConfig,
@@ -149,11 +149,11 @@ pub struct LandscapeApp {
 }
 
 impl LandscapeApp {
-    pub(crate) async fn validate_zone<C: landscape_common::config::iface::ZoneAwareConfig>(
+    pub(crate) async fn validate_zone<C: landscape_common::iface::config::ZoneAwareConfig>(
         &self,
         config: &C,
     ) -> Result<(), landscape_common::service::ServiceConfigError> {
-        use landscape_common::config::iface::{IfaceZoneType, ZoneRequirement};
+        use landscape_common::iface::config::{IfaceZoneType, ZoneRequirement};
         use landscape_common::service::ServiceConfigError;
 
         let iface_name = config.iface_name();

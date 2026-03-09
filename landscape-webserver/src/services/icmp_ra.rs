@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
-use landscape_common::config::ra::IPV6RAServiceConfig;
+use landscape_common::ipv6::ra::IPV6RAServiceConfig;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::service::controller::ControllerService;
