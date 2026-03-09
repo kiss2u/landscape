@@ -26,6 +26,10 @@ const sourceType = ref<"url" | "direct">("url");
 async function enter() {
   if (props.id !== null) {
     rule.value = await get_geo_ip_config(props.id);
+    if (rule.value.source.t === "url") {
+      rule.value.source.format = rule.value.source.format || "dat";
+      rule.value.source.txt_key = rule.value.source.txt_key || null;
+    }
     sourceType.value = rule.value.source.t;
   } else {
     sourceType.value = "url";
@@ -34,7 +38,13 @@ async function enter() {
       update_at: new Date().getTime(),
       name: "",
       enable: true,
-      source: { t: "url", url: "", next_update_at: 0 },
+      source: {
+        t: "url",
+        url: "",
+        next_update_at: 0,
+        format: "dat",
+        txt_key: null,
+      },
     };
   }
   rule_json.value = JSON.stringify(rule.value);
@@ -43,7 +53,13 @@ async function enter() {
 function switchSourceType(t: "url" | "direct") {
   if (!rule.value) return;
   if (t === "url") {
-    rule.value.source = { t: "url", url: "", next_update_at: 0 };
+    rule.value.source = {
+      t: "url",
+      url: "",
+      next_update_at: 0,
+      format: "dat",
+      txt_key: null,
+    };
   } else {
     rule.value.source = { t: "direct", data: [] };
   }
@@ -172,6 +188,26 @@ const rules: FormRules = {
         <template v-if="rule.source.t === 'url'">
           <n-form-item-gi :label="t('geo_editor.common.source_url')" :span="5">
             <n-input v-model:value="rule.source.url" clearable />
+          </n-form-item-gi>
+          <n-form-item-gi
+            :label="t('geo_editor.common.source_format')"
+            :span="5"
+          >
+            <n-radio-group v-model:value="rule.source.format">
+              <n-radio value="dat">DAT</n-radio>
+              <n-radio value="txt">TXT</n-radio>
+            </n-radio-group>
+          </n-form-item-gi>
+          <n-form-item-gi
+            v-if="rule.source.format === 'txt'"
+            :label="t('geo_editor.common.txt_key')"
+            :span="5"
+          >
+            <n-input
+              v-model:value="rule.source.txt_key"
+              clearable
+              :placeholder="t('geo_editor.common.txt_key_placeholder')"
+            />
           </n-form-item-gi>
         </template>
 

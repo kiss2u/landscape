@@ -50,6 +50,27 @@ pub enum GeoIpError {
     #[error("Geo IP file read error")]
     #[api_error(id = "geo_ip.file_read_error", status = 400)]
     FileReadError,
+
+    #[error("Geo IP config '{0}' not found")]
+    #[api_error(id = "geo_ip.config_not_found", status = 404)]
+    ConfigNotFound(String),
+
+    #[error("Geo IP DAT decode error")]
+    #[api_error(id = "geo_ip.dat_decode_error", status = 400)]
+    DatDecodeError,
+
+    #[error("Geo IP TXT file contains no valid CIDR entries")]
+    #[api_error(id = "geo_ip.no_valid_cidr", status = 400)]
+    NoValidCidrFound,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum GeoIpFileFormat {
+    #[default]
+    Dat,
+    Txt,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -187,8 +208,17 @@ pub struct GeoIpSourceConfig {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum GeoIpSource {
-    Url { url: String, next_update_at: f64 },
-    Direct { data: Vec<GeoIpDirectItem> },
+    Url {
+        url: String,
+        next_update_at: f64,
+        #[serde(default)]
+        format: GeoIpFileFormat,
+        #[serde(default)]
+        txt_key: Option<String>,
+    },
+    Direct {
+        data: Vec<GeoIpDirectItem>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -4,6 +4,9 @@ export default {
     source_url: "下载 URL",
     source_url_mode: "URL 下载",
     source_direct_mode: "直接定义",
+    source_format: "文件格式",
+    txt_key: "TXT Key",
+    txt_key_placeholder: "留空则使用 DEFAULT",
     name_unique: "名称 (与其他配置区分， 需要唯一)",
     name_required: "名称不能为空",
     name_invalid: "名称只能包含字母、数字、点、下划线和中划线",
@@ -34,8 +37,10 @@ export default {
   },
   item_card: {
     source_type: "来源类型",
+    source_format: "文件格式",
     next_update_time: "下次更新时间",
     key_count: "Key 数量",
+    txt_key: "TXT Key",
     update_with_file: "使用文件更新",
   },
   detail_drawer: {

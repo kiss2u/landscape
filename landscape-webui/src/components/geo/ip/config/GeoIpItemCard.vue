@@ -56,6 +56,19 @@ const onGeoUpload = async (formData: FormData) => {
           </n-tag>
         </n-descriptions-item>
         <template v-if="geo_ip_source.source.t === 'url'">
+          <n-descriptions-item :label="t('geo_editor.item_card.source_format')">
+            <n-tag
+              :bordered="false"
+              :type="
+                (geo_ip_source.source.format || 'dat') === 'txt'
+                  ? 'warning'
+                  : 'info'
+              "
+              size="small"
+            >
+              {{ (geo_ip_source.source.format || "dat").toUpperCase() }}
+            </n-tag>
+          </n-descriptions-item>
           <n-descriptions-item label="URL">
             <n-ellipsis style="max-width: 200px">
               {{
@@ -73,6 +86,12 @@ const onGeoUpload = async (formData: FormData) => {
               format="yyyy-MM-dd hh:mm:ss"
               :time-zone="prefStore.timezone"
             />
+          </n-descriptions-item>
+          <n-descriptions-item
+            v-if="(geo_ip_source.source.format || 'dat') === 'txt'"
+            :label="t('geo_editor.item_card.txt_key')"
+          >
+            {{ (geo_ip_source.source.txt_key || "DEFAULT").toUpperCase() }}
           </n-descriptions-item>
         </template>
         <template v-if="geo_ip_source.source.t === 'direct'">

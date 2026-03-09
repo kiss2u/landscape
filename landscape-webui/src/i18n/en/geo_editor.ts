@@ -4,6 +4,9 @@ export default {
     source_url: "Download URL",
     source_url_mode: "Download from URL",
     source_direct_mode: "Define Directly",
+    source_format: "File Format",
+    txt_key: "TXT Key",
+    txt_key_placeholder: "Defaults to DEFAULT",
     name_unique: "Name (must be unique for config distinction)",
     name_required: "Name is required",
     name_invalid:
@@ -35,8 +38,10 @@ export default {
   },
   item_card: {
     source_type: "Source Type",
+    source_format: "File Format",
     next_update_time: "Next Update Time",
     key_count: "Key Count",
+    txt_key: "TXT Key",
     update_with_file: "Update Using File",
   },
   detail_drawer: {

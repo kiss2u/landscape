@@ -222,7 +222,7 @@ async fn update_by_upload(
         return Err(GeoIpError::FileReadError)?;
     };
 
-    state.geo_ip_service.update_geo_config_by_bytes(name, bytes).await;
+    state.geo_ip_service.update_geo_config_by_bytes(name, bytes).await?;
 
     LandscapeApiResp::success(())
 }

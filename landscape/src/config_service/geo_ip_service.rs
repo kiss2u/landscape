@@ -1,6 +1,6 @@
 use landscape_common::store::storev4::LandscapeStoreTrait;
 use landscape_common::{
-    config::geo::{GeoFileCacheKey, GeoIpConfig, GeoIpSource, GeoIpSourceConfig},
+    config::geo::{GeoFileCacheKey, GeoIpConfig, GeoIpError, GeoIpSource, GeoIpSourceConfig},
     database::LandscapeStore,
     ip_mark::{IpMarkInfo, WanIPRuleSource, WanIpRuleConfig},
     service::controller::ConfigController,
@@ -9,6 +9,7 @@ use landscape_common::{
 use uuid::Uuid;
 
 use std::{
+    collections::HashMap,
     collections::HashSet,
     sync::Arc,
     time::{Duration, Instant},
@@ -143,45 +144,37 @@ impl GeoIpService {
                     match client.get(&url).send().await {
                         Ok(resp) if resp.status().is_success() => match resp.bytes().await {
                             Ok(bytes) => {
-                                let result =
-                                    landscape_protobuf::read_geo_ips_from_bytes(bytes).await;
+                                let parse_result =
+                                    self.parse_source_bytes(&config.source, bytes).await;
 
-                                let mut file_cache_lock = self.file_cache.lock().await;
-                                let mut exist_keys = file_cache_lock
-                                    .keys()
-                                    .into_iter()
-                                    .filter(|k| k.name == config.name)
-                                    .collect::<HashSet<GeoFileCacheKey>>();
+                                match parse_result {
+                                    Ok(result) => {
+                                        self.replace_cache_by_name(&config.name, result).await;
 
-                                for (key, values) in result {
-                                    let info = GeoIpConfig {
-                                        name: config.name.clone(),
-                                        key: key.to_ascii_uppercase(),
-                                        values,
-                                    };
-                                    exist_keys.remove(&info.get_store_key());
-                                    file_cache_lock.set(info);
+                                        // Update next_update_at in the source
+                                        if let GeoIpSource::Url { next_update_at, .. } =
+                                            &mut config.source
+                                        {
+                                            *next_update_at =
+                                                get_f64_timestamp() + MILL_A_DAY as f64;
+                                        }
+                                        let _ = self.store.set(config).await;
+
+                                        tracing::debug!(
+                                            "handle file done: {}, time: {}s",
+                                            url,
+                                            time.elapsed().as_secs()
+                                        );
+                                        self.notify_dst_ip_updated();
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "parse geo ip source {} error: {}",
+                                            config.name,
+                                            e
+                                        );
+                                    }
                                 }
-
-                                for key in exist_keys {
-                                    file_cache_lock.del(&key);
-                                }
-
-                                drop(file_cache_lock);
-
-                                // Update next_update_at in the source
-                                if let GeoIpSource::Url { next_update_at, .. } = &mut config.source
-                                {
-                                    *next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
-                                }
-                                let _ = self.store.set(config).await;
-
-                                tracing::debug!(
-                                    "handle file done: {}, time: {}s",
-                                    url,
-                                    time.elapsed().as_secs()
-                                );
-                                self.notify_dst_ip_updated();
                             }
                             Err(e) => tracing::error!("read {} response error: {}", url, e),
                         },
@@ -247,6 +240,66 @@ impl GeoIpService {
             }
         }
     }
+
+    async fn replace_cache_by_name(
+        &self,
+        name: &str,
+        result: HashMap<String, Vec<landscape_common::ip_mark::IpConfig>>,
+    ) {
+        let mut file_cache_lock = self.file_cache.lock().await;
+        let mut exist_keys = file_cache_lock
+            .keys()
+            .into_iter()
+            .filter(|k| k.name == name)
+            .collect::<HashSet<GeoFileCacheKey>>();
+
+        for (key, values) in result {
+            let info = GeoIpConfig {
+                name: name.to_string(),
+                key: key.to_ascii_uppercase(),
+                values,
+            };
+            exist_keys.remove(&info.get_store_key());
+            file_cache_lock.set(info);
+        }
+
+        for key in exist_keys {
+            file_cache_lock.del(&key);
+        }
+    }
+
+    async fn parse_source_bytes(
+        &self,
+        source: &GeoIpSource,
+        bytes: impl Into<Vec<u8>>,
+    ) -> Result<HashMap<String, Vec<landscape_common::ip_mark::IpConfig>>, GeoIpError> {
+        let bytes = bytes.into();
+        match source {
+            GeoIpSource::Url { format, txt_key, .. } => {
+                let result = landscape_protobuf::read_geo_ips_from_bytes_by_format(
+                    bytes,
+                    format,
+                    txt_key.as_deref(),
+                )
+                .await?;
+                if matches!(format, landscape_common::config::geo::GeoIpFileFormat::Txt) {
+                    tracing::info!(
+                        "parsed geo ip txt with {} valid lines and {} skipped lines",
+                        result.valid_lines,
+                        result.skipped_lines
+                    );
+                }
+                Ok(result.entries)
+            }
+            GeoIpSource::Direct { data } => {
+                let mut result = HashMap::new();
+                for item in data {
+                    result.insert(item.key.to_ascii_uppercase(), item.values.clone());
+                }
+                Ok(result)
+            }
+        }
+    }
 }
 
 impl GeoIpService {
@@ -264,20 +317,21 @@ impl GeoIpService {
         self.store.query_by_name(name).await.unwrap()
     }
 
-    pub async fn update_geo_config_by_bytes(&self, name: String, file_bytes: impl Into<Vec<u8>>) {
-        let result = landscape_protobuf::read_geo_ips_from_bytes(file_bytes).await;
-        {
-            let mut file_cache_lock = self.file_cache.lock().await;
-            for (key, values) in result {
-                let info = GeoIpConfig {
-                    name: name.clone(),
-                    key: key.to_ascii_uppercase(),
-                    values,
-                };
-                file_cache_lock.set(info);
-            }
-        }
+    pub async fn update_geo_config_by_bytes(
+        &self,
+        name: String,
+        file_bytes: impl Into<Vec<u8>>,
+    ) -> Result<(), GeoIpError> {
+        let config = self
+            .query_geo_by_name(Some(name.clone()))
+            .await
+            .into_iter()
+            .find(|config| config.name == name)
+            .ok_or_else(|| GeoIpError::ConfigNotFound(name.clone()))?;
+        let result = self.parse_source_bytes(&config.source, file_bytes).await?;
+        self.replace_cache_by_name(&name, result).await;
         self.notify_dst_ip_updated();
+        Ok(())
     }
 }
 
