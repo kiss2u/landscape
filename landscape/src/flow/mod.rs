@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use landscape_common::flow::{config::FlowConfig, FlowEbpfMatchPair, FlowEntryRule};
 
+pub mod dst_ip_rule_service;
+pub mod rule_service;
+
 fn convert_mark_map_to_vec_mark(value: HashMap<FlowEntryRule, u32>) -> Vec<FlowEbpfMatchPair> {
     let mut result = Vec::with_capacity(value.len());
     for (match_rule, flow_id) in value.into_iter() {

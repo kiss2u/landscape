@@ -22,8 +22,8 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use super::account_service::CertAccountService;
 use super::dns_provider;
-use super::CertAccountService;
 
 #[derive(Clone)]
 pub struct CertService {

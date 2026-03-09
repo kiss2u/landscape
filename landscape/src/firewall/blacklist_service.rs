@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::firewall::blacklist::resolve_and_sync_blacklist;
 
-use super::geo_ip_service::GeoIpService;
+use crate::geo::ip_service::GeoIpService;
 
 #[derive(Clone)]
 pub struct FirewallBlacklistService {

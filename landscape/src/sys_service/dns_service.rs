@@ -20,12 +20,11 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-use crate::config_service::{
-    cert::order::CertService,
-    dns::{redirect::DNSRedirectService, upstream::DnsUpstreamService},
-    dns_rule::DNSRuleService,
-    geo_site_service::GeoSiteService,
+use crate::dns::{
+    redirect_service::DNSRedirectService, rule_service::DNSRuleService,
+    upstream_service::DnsUpstreamService,
 };
+use crate::{cert::order_service::CertService, geo::site_service::GeoSiteService};
 
 #[derive(Clone)]
 #[allow(dead_code)]

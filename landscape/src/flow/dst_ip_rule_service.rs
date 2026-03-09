@@ -11,7 +11,7 @@ use landscape_database::{
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use super::geo_ip_service::GeoIpService;
+use crate::geo::ip_service::GeoIpService;
 
 #[derive(Clone)]
 pub struct DstIpRuleService {

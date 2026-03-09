@@ -3,7 +3,7 @@ use landscape_common::{
     ip_mark::IpConfig,
 };
 
-use crate::config_service::geo_ip_service::GeoIpService;
+use crate::geo::ip_service::GeoIpService;
 
 pub async fn resolve_and_sync_blacklist(
     geo_ip_service: &GeoIpService,

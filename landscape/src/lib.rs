@@ -9,13 +9,15 @@ pub mod boot;
 
 pub mod arp;
 pub mod cert;
-pub mod config_service;
 pub mod dhcp_client;
 pub mod dhcp_server;
+pub mod dns;
 pub mod docker;
 pub mod dump;
+pub mod enrolled_device;
 pub mod firewall;
 pub mod flow;
+pub mod geo;
 pub mod icmp;
 pub mod iface;
 pub mod ipv6;
@@ -24,7 +26,6 @@ pub mod netlink;
 pub mod observer;
 pub mod pppoe_client;
 pub mod route;
-pub mod service;
 pub mod sys_service;
 pub mod wifi;
 

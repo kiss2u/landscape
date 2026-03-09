@@ -11,7 +11,7 @@ use landscape_database::{
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::config_service::dns::upstream::DnsUpstreamService;
+use crate::dns::upstream_service::DnsUpstreamService;
 
 #[derive(Clone)]
 pub struct DNSRuleService {
