@@ -129,6 +129,26 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
         &mut landscape_open.maps.nat4_mapping_timer,
         &paths.nat4_mapping_timer,
     );
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.nat4_dynamic_state_v3,
+        &paths.nat4_dynamic_state_v3,
+    );
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.nat4_mapping_timer_v3,
+        &paths.nat4_mapping_timer_v3,
+    );
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.nat4_tcp_free_ports_v3,
+        &paths.nat4_tcp_free_ports_v3,
+    );
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.nat4_udp_free_ports_v3,
+        &paths.nat4_udp_free_ports_v3,
+    );
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.nat4_icmp_free_ports_v3,
+        &paths.nat4_icmp_free_ports_v3,
+    );
 
     // firewall
     reuse_pinned_map_or_recreate(
@@ -187,6 +207,7 @@ pub fn cleanup_pinned_maps() {
         // nat4_mapping_timer contains bpf_timer entries whose callbacks hold
         // refcounts on nat_v4 programs, preventing kernel cleanup.
         &MAP_PATHS.nat4_mapping_timer,
+        &MAP_PATHS.nat4_mapping_timer_v3,
     ];
     for path in maps_to_unpin {
         match std::fs::remove_file(path) {

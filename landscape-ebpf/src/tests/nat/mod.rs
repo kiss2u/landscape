@@ -11,6 +11,8 @@ use libbpf_rs::{
 
 use crate::nat::v2::land_nat_v2::LandNatV2SkelBuilder;
 
+pub(crate) static NAT_V3_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 mod v4;
 mod v6;
 
