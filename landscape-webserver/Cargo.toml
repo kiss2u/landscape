@@ -9,7 +9,7 @@ landscape-dns = { path = "../landscape-dns" }
 landscape-common = { path = "../landscape-common", features = ["openapi"] }
 landscape-database = { path = "../landscape-database" }
 landscape-ebpf = { path = "../landscape-ebpf" }
-landscape-gateway = { path = "../landscape-gateway" }
+landscape-gateway = { path = "../landscape-gateway", optional = true }
 
 
 rustls = { workspace = true }
@@ -62,7 +62,8 @@ utoipa-scalar = { workspace = true }
 tracing = { workspace = true }
 
 [features]
-default = []
+default = ["gateway"]
+gateway = ["dep:landscape-gateway"]
 static = ["landscape-ebpf/static"]
 metric-duckdb = ["landscape/metric-duckdb"]
 duckdb-bundled = ["landscape/duckdb-bundled"]

@@ -1,7 +1,6 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
-use landscape_common::database::LandscapeStore;
 use landscape_common::gateway::{GatewayError, HttpUpstreamMatchRule, HttpUpstreamRuleConfig};
 use serde::Serialize;
 use utoipa_axum::router::OpenApiRouter;
@@ -9,7 +8,10 @@ use utoipa_axum::routes;
 
 use crate::api::JsonBody;
 use crate::LandscapeApp;
-use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
+use crate::{
+    api::LandscapeApiResp,
+    error::{LandscapeApiError, LandscapeApiResult},
+};
 
 pub fn get_gateway_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
@@ -20,6 +22,7 @@ pub fn get_gateway_paths() -> OpenApiRouter<LandscapeApp> {
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayStatus {
+    pub supported: bool,
     pub running: bool,
     pub http_port: u16,
     pub https_port: u16,
@@ -36,7 +39,8 @@ pub struct GatewayStatus {
 async fn list_gateway_rules(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<Vec<HttpUpstreamRuleConfig>> {
-    let result = state.gateway_service.store().list().await.unwrap_or_default();
+    ensure_gateway_supported(&state)?;
+    let result = state.gateway_service.list_rules().await.unwrap_or_default();
     LandscapeApiResp::success(result)
 }
 
@@ -51,13 +55,13 @@ async fn create_gateway_rule(
     State(state): State<LandscapeApp>,
     JsonBody(config): JsonBody<HttpUpstreamRuleConfig>,
 ) -> LandscapeApiResult<HttpUpstreamRuleConfig> {
+    ensure_gateway_supported(&state)?;
     // Host conflict detection
     check_host_conflicts(&state, &config).await?;
 
     let saved = state
         .gateway_service
-        .store()
-        .set(config)
+        .save_rule(config)
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
 
@@ -81,10 +85,10 @@ async fn get_gateway_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
 ) -> LandscapeApiResult<HttpUpstreamRuleConfig> {
+    ensure_gateway_supported(&state)?;
     let result = state
         .gateway_service
-        .store()
-        .find_by_id(id)
+        .find_rule(id)
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
     if let Some(config) = result {
@@ -108,10 +112,10 @@ async fn delete_gateway_rule(
     State(state): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
 ) -> LandscapeApiResult<()> {
+    ensure_gateway_supported(&state)?;
     state
         .gateway_service
-        .store()
-        .delete(id)
+        .delete_rule(id)
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
 
@@ -130,13 +134,13 @@ async fn delete_gateway_rule(
 async fn get_gateway_status(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<GatewayStatus> {
-    let rules = state.gateway_service.store().list().await.unwrap_or_default();
     let status = GatewayStatus {
+        supported: state.gateway_service.is_supported(),
         running: state.gateway_service.is_running(),
         http_port: state.gateway_service.config().http_port,
         https_port: state.gateway_service.config().https_port,
         https_ready: state.gateway_service.has_https_listener(),
-        rule_count: rules.len(),
+        rule_count: state.gateway_service.stored_rule_count().await,
     };
     LandscapeApiResp::success(status)
 }
@@ -149,7 +153,7 @@ async fn check_host_conflicts(
     state: &LandscapeApp,
     config: &HttpUpstreamRuleConfig,
 ) -> Result<(), GatewayError> {
-    let existing_rules = state.gateway_service.store().list().await.unwrap_or_default();
+    let existing_rules = state.gateway_service.list_rules().await.unwrap_or_default();
 
     match &config.match_rule {
         HttpUpstreamMatchRule::Host { domains } => {
@@ -164,6 +168,14 @@ async fn check_host_conflicts(
     }
 
     Ok(())
+}
+
+fn ensure_gateway_supported(state: &LandscapeApp) -> Result<(), LandscapeApiError> {
+    if state.gateway_service.is_supported() {
+        Ok(())
+    } else {
+        Err(LandscapeApiError::GatewayUnsupportedTarget)
+    }
 }
 
 /// Check domain conflicts for Host and SniProxy rules.

@@ -24,12 +24,14 @@ jobs:
             target: x86_64-unknown-linux-gnu
             toolchain: stable
             bindgen: false
+            gateway: true
 
           - host: ubuntu-22.04-arm
             architecture: aarch64
             target: aarch64-unknown-linux-gnu
             toolchain: stable
             bindgen: false
+            gateway: true
 
     steps:
       - name: Checkout code
@@ -66,7 +68,11 @@ jobs:
             if [ "${{ matrix.settings.bindgen }}" = "true" ]; then
               cargo install --force --locked bindgen-cli
             fi
-            cargo build --release --target ${{ matrix.settings.target }} --features duckdb-bundled
+            if [ "${{ matrix.settings.gateway }}" = "true" ]; then
+              cargo build --release --target ${{ matrix.settings.target }} --features duckdb-bundled
+            else
+              cargo build --release --target ${{ matrix.settings.target }} --no-default-features --features duckdb-bundled
+            fi
             cargo build --release --package landscape-ebpf --bin redirect_pkg_handler --target ${{ matrix.settings.target }}
             mkdir -p output
             cp target/${{ matrix.settings.target }}/release/landscape-webserver output/landscape-webserver-${{ matrix.settings.architecture }}
@@ -113,18 +119,21 @@ jobs:
             target: riscv64gc-unknown-linux-gnu
             toolchain: stable
             bindgen: false
+            gateway: true
 
           - host: ubuntu-24.04
             architecture: s390x
             target: s390x-unknown-linux-gnu
             toolchain: stable
             bindgen: true
+            gateway: true
 
           - host: ubuntu-24.04
             architecture: loongarch64
             target: loongarch64-unknown-linux-gnu
             toolchain: stable
             bindgen: true
+            gateway: false
 
     steps:
       - name: Checkout code
@@ -210,7 +219,11 @@ jobs:
             if [ "${{ matrix.settings.bindgen }}" = "true" ]; then
               cargo install --force --locked bindgen-cli
             fi
-            cargo build --release --target ${{ matrix.settings.target }} --features duckdb-bundled
+            if [ "${{ matrix.settings.gateway }}" = "true" ]; then
+              cargo build --release --target ${{ matrix.settings.target }} --features duckdb-bundled
+            else
+              cargo build --release --target ${{ matrix.settings.target }} --no-default-features --features duckdb-bundled
+            fi
             cargo build --release --package landscape-ebpf --bin redirect_pkg_handler --target ${{ matrix.settings.target }}
             mkdir -p output
             cp target/${{ matrix.settings.target }}/release/landscape-webserver output/landscape-webserver-${{ matrix.settings.architecture }}
@@ -234,6 +247,7 @@ jobs:
             target: x86_64-unknown-linux-musl
             toolchain: stable
             bindgen: false
+            gateway: false
 
     container: 
       image: thisseanzhang/landscape:build_base_musl
@@ -262,7 +276,11 @@ jobs:
       - name: Build Rust binaries
         run: |
           mkdir -p output
-          cargo build --release --features duckdb-bundled
+          if [ "${{ matrix.settings.gateway }}" = "true" ]; then
+            cargo build --release --features duckdb-bundled
+          else
+            cargo build --release --no-default-features --features duckdb-bundled
+          fi
           cp target/release/landscape-webserver output/landscape-webserver-${{ matrix.settings.architecture }}-musl
           # redirect_pkg_handler
           cargo build --package landscape-ebpf --bin redirect_pkg_handler --release

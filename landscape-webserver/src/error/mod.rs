@@ -60,6 +60,8 @@ pub enum LandscapeApiError {
     Docker(#[from] DockerError),
     #[error(transparent)]
     Gateway(#[from] GatewayError),
+    #[error("gateway is not supported on this target architecture")]
+    GatewayUnsupportedTarget,
 
     // Generic errors
     #[error("Internal error: {0}")]
@@ -90,6 +92,7 @@ impl LandscapeApiError {
             Self::Auth(e) => e.error_id(),
             Self::Docker(e) => e.error_id(),
             Self::Gateway(e) => e.error_id(),
+            Self::GatewayUnsupportedTarget => "gateway.unsupported_target",
             Self::Internal(e) => match e {
                 LdError::ConfigConflict => "config.conflict",
                 _ => "internal.error",
@@ -118,6 +121,7 @@ impl LandscapeApiError {
             Self::Auth(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::Docker(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::Gateway(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
+            Self::GatewayUnsupportedTarget => StatusCode::NOT_IMPLEMENTED,
             Self::Internal(e) => match e {
                 LdError::ConfigConflict => StatusCode::CONFLICT,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
@@ -146,7 +150,10 @@ impl LandscapeApiError {
             Self::Auth(e) => e.error_args(),
             Self::Docker(e) => e.error_args(),
             Self::Gateway(e) => e.error_args(),
-            Self::Internal(_) | Self::JsonError(_) | Self::JsonRejection(_) => {
+            Self::GatewayUnsupportedTarget
+            | Self::Internal(_)
+            | Self::JsonError(_)
+            | Self::JsonRejection(_) => {
                 serde_json::json!({})
             }
         }
