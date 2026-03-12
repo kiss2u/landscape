@@ -3,6 +3,7 @@ use std::net::IpAddr;
 use std::net::Ipv6Addr;
 use std::sync::Arc;
 
+use landscape_common::client::{CallerLookupMatch, CallerLookupSource};
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::ipv6::lan::{
@@ -599,5 +600,35 @@ impl LanIPv6ManagerService {
         }
 
         result
+    }
+
+    pub async fn resolve_client_match_by_ipv6(&self, ip: Ipv6Addr) -> Option<CallerLookupMatch> {
+        for (iface_name, assigned_ips) in self.get_assigned_ips().await {
+            for item in assigned_ips.offered_ips.into_values() {
+                if item.ip == ip {
+                    return Some(CallerLookupMatch {
+                        iface_name,
+                        mac: Some(item.mac),
+                        hostname: None,
+                        source: CallerLookupSource::Ipv6Ra,
+                    });
+                }
+            }
+        }
+
+        for (iface_name, assigned_ips) in self.get_dhcpv6_assigned().await {
+            for item in assigned_ips.offered_addresses {
+                if item.ip == ip {
+                    return Some(CallerLookupMatch {
+                        iface_name,
+                        mac: item.mac,
+                        hostname: item.hostname,
+                        source: CallerLookupSource::DhcpV6,
+                    });
+                }
+            }
+        }
+
+        None
     }
 }

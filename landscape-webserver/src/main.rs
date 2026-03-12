@@ -622,7 +622,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let server_handle = axum_server::Handle::new();
     let server = axum_server::bind_rustls(addr, RustlsConfig::from_config(tls_config.into()))
         .handle(server_handle.clone())
-        .serve(app.into_make_service());
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>());
 
     tokio::select! {
         result = server => {

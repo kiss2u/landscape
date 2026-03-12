@@ -31,6 +31,7 @@ pub mod service;
 
 pub mod auth;
 pub mod cert;
+pub mod client;
 pub mod dns;
 pub mod enrolled_device;
 

@@ -1,3 +1,4 @@
+pub mod client;
 pub mod dhcp_v4;
 pub mod firewall;
 pub mod ip;

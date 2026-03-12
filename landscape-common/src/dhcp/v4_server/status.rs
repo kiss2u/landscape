@@ -57,6 +57,10 @@ impl ArpScanInfo {
     pub fn new(infos: Vec<ArpScanInfoItem>) -> Self {
         Self { infos }
     }
+
+    pub fn infos(&self) -> &[ArpScanInfoItem] {
+        &self.infos
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

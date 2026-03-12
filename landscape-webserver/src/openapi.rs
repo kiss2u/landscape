@@ -21,6 +21,7 @@ use crate::geo::sites::get_geo_site_config_paths;
 use crate::interfaces::get_iface_paths;
 use crate::metrics::get_metric_paths;
 use crate::nat::static_mappings::get_static_nat_mapping_config_paths;
+use crate::services::client::get_client_paths;
 use crate::services::dhcp_v4::get_dhcp_v4_service_paths;
 use crate::services::firewall::get_firewall_service_paths;
 use crate::services::ip::get_iface_ipconfig_paths;
@@ -74,6 +75,7 @@ impl Modify for SecurityAddon {
         (name = "MSS Clamp", description = "MSS clamping service"),
         (name = "Firewall Service", description = "Interface firewall service"),
         (name = "IP Config", description = "Interface IP configuration service"),
+        (name = "Client", description = "Current API caller identity lookup"),
         (name = "DHCPv4", description = "DHCPv4 server service"),
         (name = "PPPoE", description = "PPPoE service"),
         (name = "WiFi", description = "WiFi service"),
@@ -141,6 +143,7 @@ pub fn build_services_openapi_router() -> OpenApiRouter<LandscapeApp> {
         .merge(get_route_paths())
         .merge(get_route_wan_paths())
         .merge(get_route_lan_paths())
+        .merge(get_client_paths())
         .merge(get_mss_clamp_service_paths())
         .merge(get_firewall_service_paths())
         .merge(get_iface_ipconfig_paths())
@@ -322,6 +325,7 @@ pub fn build_full_openapi_spec() -> utoipa::openapi::OpenApi {
                 "Route",
                 "Route WAN",
                 "Route LAN",
+                "Client",
                 "MSS Clamp",
                 "Firewall Service",
                 "IP Config",
