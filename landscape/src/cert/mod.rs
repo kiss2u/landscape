@@ -252,6 +252,7 @@ fn build_certified_key_from_pem(
         .find_map(|p| match p.tag() {
             "PRIVATE KEY" => Some(PrivateKeyDer::Pkcs8(p.contents().to_vec().into())),
             "RSA PRIVATE KEY" => Some(PrivateKeyDer::Pkcs1(p.contents().to_vec().into())),
+            "EC PRIVATE KEY" => Some(PrivateKeyDer::Sec1(p.contents().to_vec().into())),
             _ => None,
         })
         .ok_or_else(|| "no valid private key found".to_string())?;
