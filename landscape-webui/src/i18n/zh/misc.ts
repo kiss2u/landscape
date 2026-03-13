@@ -58,6 +58,19 @@ export default {
     cpu_balance: "CPU 平衡",
     edit_balance: "修改平衡设置",
   },
+  iface_risk_guard: {
+    title: "确认对当前连接网卡进行操作",
+    warning:
+      "检测到你当前正通过这张网卡访问管理界面，执行操作后可能会立即断开连接。",
+    current_iface: "当前访问归属网卡: {iface}",
+    current_ip: "当前访问 IP: {ip}",
+    current_source: "识别来源: {source}",
+    current_hostname: "主机名: {hostname}",
+    input_label: "请输入网卡名称 {iface} 以确认操作",
+    input_placeholder: "输入 {iface}",
+    input_hint: "只有输入内容与网卡名称完全一致时，才允许继续操作。",
+    confirm_button: "确认继续",
+  },
   terminal: {
     connected: "已连接",
     disconnected: "未连接",

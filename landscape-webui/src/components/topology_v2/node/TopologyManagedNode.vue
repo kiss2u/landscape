@@ -17,6 +17,7 @@ import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
 import DHCPv4ServiceEditModal from "@/components/dhcp_v4/DHCPv4ServiceEditModal.vue";
 
 import IfaceChangeZone from "@/components/iface/IfaceChangeZone.vue";
+import IfaceDisableGuardModal from "@/components/iface/IfaceDisableGuardModal.vue";
 import { AreaCustom, Power, Link, DotMark } from "@vicons/carbon";
 import { PlugDisconnected20Regular } from "@vicons/fluent";
 import { computed, ref } from "vue";
@@ -57,6 +58,9 @@ const iface_nat_edit_show = ref(false);
 const iface_service_edit_show = ref(false);
 const show_zone_change = ref(false);
 const show_pppd_drawer = ref(false);
+const disable_guard_modal = ref<InstanceType<
+  typeof IfaceDisableGuardModal
+> | null>(null);
 function handleUpdateShow(show: boolean) {
   if (show) {
   }
@@ -71,11 +75,19 @@ async function change_dev_status() {
   //   return;
   // }
   if (props.status.dev_status.t == DevStateType.Up) {
-    await change_iface_status(props.config.name, false);
+    if (disable_guard_modal.value) {
+      await disable_guard_modal.value.check_and_execute(async () => {
+        await change_iface_status(props.config.name, false);
+        await refresh();
+      });
+    } else {
+      await change_iface_status(props.config.name, false);
+      await refresh();
+    }
   } else {
     await change_iface_status(props.config.name, true);
+    await refresh();
   }
-  await refresh();
 }
 
 async function remove_controller() {
@@ -432,6 +444,11 @@ function has_source_hook() {
     :zone="config.zone_type"
     :iface_name="config.name"
     :mac="status.mac"
+    @refresh="refresh"
+  />
+  <IfaceDisableGuardModal
+    ref="disable_guard_modal"
+    :iface_name="config.name"
     @refresh="refresh"
   />
 </template>

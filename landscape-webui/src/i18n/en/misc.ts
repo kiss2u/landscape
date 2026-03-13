@@ -58,6 +58,20 @@ export default {
     cpu_balance: "CPU Balance",
     edit_balance: "Edit Balance Settings",
   },
+  iface_risk_guard: {
+    title: "Confirm action on current access interface",
+    warning:
+      "You are currently connected through this interface. This operation may immediately disconnect this management session.",
+    current_iface: "Current access interface: {iface}",
+    current_ip: "Current IP: {ip}",
+    current_source: "Lookup source: {source}",
+    current_hostname: "Hostname: {hostname}",
+    input_label: "Type interface name {iface} to confirm action",
+    input_placeholder: "Enter {iface}",
+    input_hint:
+      "The action is only enabled when the input exactly matches the interface name.",
+    confirm_button: "Confirm and continue",
+  },
   terminal: {
     connected: "Connected",
     disconnected: "Disconnected",

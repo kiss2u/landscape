@@ -11,6 +11,7 @@ import { stop_and_del_iface_nat } from "@/api/service_nat";
 import { delete_and_stop_iface_pppd_by_attach_iface_name } from "@/api/service_pppd";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
+import IfaceDisableGuardModal from "@/components/iface/IfaceDisableGuardModal.vue";
 import { ref } from "vue";
 
 const showModal = defineModel<boolean>("show", { required: true });
@@ -23,20 +24,31 @@ const iface_info = defineProps<{
 
 const spin = ref(false);
 const temp_zone = ref(iface_info.zone);
+const disable_guard_modal = ref<InstanceType<
+  typeof IfaceDisableGuardModal
+> | null>(null);
 
 async function chageIfaceZone() {
-  spin.value = true;
-  try {
-    await change_zone({
-      iface_name: iface_info.iface_name,
-      zone: temp_zone.value,
-    });
-    // TODO 调用 拓扑刷新
-    emit("refresh");
-    showModal.value = false;
-  } catch (error) {
-  } finally {
-    spin.value = false;
+  const action = async () => {
+    spin.value = true;
+    try {
+      await change_zone({
+        iface_name: iface_info.iface_name,
+        zone: temp_zone.value,
+      });
+      // TODO 调用 拓扑刷新
+      emit("refresh");
+      showModal.value = false;
+    } catch (error) {
+    } finally {
+      spin.value = false;
+    }
+  };
+
+  if (disable_guard_modal.value) {
+    await disable_guard_modal.value.check_and_execute(action);
+  } else {
+    await action();
   }
 }
 
@@ -83,4 +95,10 @@ function reflush_zone() {
       </n-card>
     </n-spin>
   </n-modal>
+
+  <IfaceDisableGuardModal
+    ref="disable_guard_modal"
+    :iface_name="iface_name"
+    @refresh="emit('refresh')"
+  />
 </template>
