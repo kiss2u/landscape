@@ -19,8 +19,12 @@ async function refresh_status() {
   status.value = await get_gateway_status();
 }
 
-onMounted(async () => {
+async function refreshAll() {
   await Promise.all([refresh_rules(), refresh_status()]);
+}
+
+onMounted(async () => {
+  await refreshAll();
 });
 
 const show_edit_modal = ref(false);
@@ -49,13 +53,13 @@ const show_edit_modal = ref(false);
     <n-flex>
       <n-grid x-gap="12" y-gap="10" cols="1 600:2 1200:3 1600:3">
         <n-grid-item v-for="rule in rules" :key="rule.id">
-          <GatewayRuleCard @refresh="refresh_rules()" :rule="rule" />
+          <GatewayRuleCard @refresh="refreshAll" :rule="rule" />
         </n-grid-item>
       </n-grid>
     </n-flex>
 
     <GatewayRuleEditModal
-      @refresh="refresh_rules"
+      @refresh="refreshAll"
       v-model:show="show_edit_modal"
     />
   </n-flex>

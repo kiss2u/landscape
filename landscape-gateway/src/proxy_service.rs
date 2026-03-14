@@ -1,8 +1,11 @@
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use landscape_common::gateway::{
-    HttpUpstreamMatchRule, HttpUpstreamRuleConfig, HttpUpstreamTarget, LoadBalanceMethod,
+    ClientIpHeaderPolicy, HttpPathGroup, HttpUpstreamConfig, HttpUpstreamMatchRule,
+    HttpUpstreamRuleConfig, HttpUpstreamTarget, LoadBalanceMethod, PathRewriteMode,
+    ProxyHeaderConflictMode, ProxyRequestHeader,
 };
 use pingora::http::RequestHeader;
 use pingora::proxy::{ProxyHttp, Session};
@@ -21,8 +24,37 @@ impl LandscapeReverseProxy {
     }
 }
 
+#[derive(Debug, Clone)]
+struct MatchedHttpRoute {
+    request_headers: Vec<ProxyRequestHeader>,
+    header_conflict_mode: ProxyHeaderConflictMode,
+    client_ip_headers: ClientIpHeaderPolicy,
+    rewrite_mode: PathRewriteMode,
+    matched_prefix: Option<String>,
+}
+
+impl MatchedHttpRoute {
+    fn from_resolved(route: &ResolvedHttpRoute<'_>) -> Self {
+        Self {
+            request_headers: route.upstream.request_headers.clone(),
+            header_conflict_mode: route.upstream.header_conflict_mode.clone(),
+            client_ip_headers: route.upstream.client_ip_headers.clone(),
+            rewrite_mode: route.rewrite_mode.clone(),
+            matched_prefix: route.matched_prefix.map(str::to_string),
+        }
+    }
+}
+
+struct ResolvedHttpRoute<'a> {
+    rule_name: &'a str,
+    upstream: &'a HttpUpstreamConfig,
+    rewrite_mode: PathRewriteMode,
+    matched_prefix: Option<&'a str>,
+}
+
 pub struct ProxyCtx {
     pub matched_rule_name: Option<String>,
+    matched_route: Option<MatchedHttpRoute>,
 }
 
 #[async_trait]
@@ -30,7 +62,7 @@ impl ProxyHttp for LandscapeReverseProxy {
     type CTX = ProxyCtx;
 
     fn new_ctx(&self) -> Self::CTX {
-        ProxyCtx { matched_rule_name: None }
+        ProxyCtx { matched_rule_name: None, matched_route: None }
     }
 
     async fn upstream_peer(
@@ -39,90 +71,220 @@ impl ProxyHttp for LandscapeReverseProxy {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         let rules = self.rules.load();
-
         let req = session.req_header();
         let host = extract_host(req);
         let path = req.uri.path();
 
-        // Phase 1: exact Host match + PathPrefix
-        for rule in rules.iter() {
-            if !rule.enable {
-                continue;
-            }
-            match &rule.match_rule {
-                HttpUpstreamMatchRule::Host { domains } => {
-                    if let Some(h) = &host {
-                        for domain in domains {
-                            if domain.starts_with("*.") {
-                                continue; // skip wildcards in first pass
-                            }
-                            if domain.eq_ignore_ascii_case(h) {
-                                ctx.matched_rule_name = Some(rule.name.clone());
-                                return make_peer(rule, &self.round_robin_counter, h, path);
-                            }
-                        }
-                    }
-                }
-                HttpUpstreamMatchRule::PathPrefix { prefix } => {
-                    if path.starts_with(prefix.as_str()) {
-                        ctx.matched_rule_name = Some(rule.name.clone());
-                        let h = host.as_deref().unwrap_or("");
-                        return make_peer(rule, &self.round_robin_counter, h, path);
-                    }
-                }
-                HttpUpstreamMatchRule::SniProxy { .. } => {
-                    // SNI proxy rules handled by sni_proxy module, skip here
-                    continue;
-                }
+        let matched_route = match_http_route(&rules, host.as_deref(), path)
+            .ok_or_else(|| pingora::Error::new_str("No matching upstream rule found"))?;
+
+        ctx.matched_rule_name = Some(matched_route.rule_name.to_string());
+        ctx.matched_route = Some(MatchedHttpRoute::from_resolved(&matched_route));
+
+        make_peer(
+            matched_route.upstream,
+            &self.round_robin_counter,
+            host.as_deref().unwrap_or(""),
+            path,
+        )
+    }
+
+    async fn upstream_request_filter(
+        &self,
+        session: &mut Session,
+        upstream_request: &mut RequestHeader,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<()> {
+        let Some(matched_route) = ctx.matched_route.as_ref() else {
+            return Ok(());
+        };
+
+        apply_path_rewrite(upstream_request, matched_route)?;
+
+        if matches!(matched_route.client_ip_headers, ClientIpHeaderPolicy::Standard) {
+            if let Some(client_addr) = session.client_addr().and_then(|addr| addr.as_inet()) {
+                apply_client_ip_headers(upstream_request, client_addr.ip())?;
             }
         }
 
-        // Phase 2: wildcard Host match
-        if let Some(h) = &host {
-            for rule in rules.iter() {
-                if !rule.enable {
-                    continue;
-                }
-                if let HttpUpstreamMatchRule::Host { domains } = &rule.match_rule {
-                    for domain in domains {
-                        if domain.starts_with("*.") && match_wildcard(domain, h) {
-                            ctx.matched_rule_name = Some(rule.name.clone());
-                            return make_peer(rule, &self.round_robin_counter, h, path);
-                        }
-                    }
-                }
-            }
+        apply_configured_headers(
+            upstream_request,
+            &matched_route.request_headers,
+            &matched_route.header_conflict_mode,
+        )?;
+
+        Ok(())
+    }
+}
+
+fn match_http_route<'a>(
+    rules: &'a [HttpUpstreamRuleConfig],
+    host: Option<&str>,
+    path: &str,
+) -> Option<ResolvedHttpRoute<'a>> {
+    if let Some(host) = host {
+        if let Some(rule) = match_host_rule(rules, host, false) {
+            return Some(resolve_host_route(rule, path));
+        }
+        if let Some(rule) = match_host_rule(rules, host, true) {
+            return Some(resolve_host_route(rule, path));
         }
 
-        Err(pingora::Error::new_str("No matching upstream rule found"))
+        if let Some(rule) = match_legacy_path_rule(rules, host, path, false) {
+            return Some(resolve_legacy_route(rule));
+        }
+        if let Some(rule) = match_legacy_path_rule(rules, host, path, true) {
+            return Some(resolve_legacy_route(rule));
+        }
+    }
+
+    match_legacy_fallback_rule(rules, path).map(resolve_legacy_route)
+}
+
+fn resolve_host_route<'a>(rule: &'a HttpUpstreamRuleConfig, path: &str) -> ResolvedHttpRoute<'a> {
+    let path_groups = match &rule.match_rule {
+        HttpUpstreamMatchRule::Host { path_groups } => path_groups,
+        _ => unreachable!("resolve_host_route called with non-host rule"),
+    };
+
+    if let Some(group) = match_path_group(path_groups, path) {
+        return ResolvedHttpRoute {
+            rule_name: &rule.name,
+            upstream: &group.upstream,
+            rewrite_mode: group.rewrite_mode.clone(),
+            matched_prefix: Some(group.prefix.as_str()),
+        };
+    }
+
+    ResolvedHttpRoute {
+        rule_name: &rule.name,
+        upstream: &rule.upstream,
+        rewrite_mode: PathRewriteMode::Preserve,
+        matched_prefix: None,
+    }
+}
+
+fn resolve_legacy_route(rule: &HttpUpstreamRuleConfig) -> ResolvedHttpRoute<'_> {
+    ResolvedHttpRoute {
+        rule_name: &rule.name,
+        upstream: &rule.upstream,
+        rewrite_mode: PathRewriteMode::Preserve,
+        matched_prefix: None,
+    }
+}
+
+fn match_host_rule<'a>(
+    rules: &'a [HttpUpstreamRuleConfig],
+    host: &str,
+    wildcard_only: bool,
+) -> Option<&'a HttpUpstreamRuleConfig> {
+    rules.iter().find(|rule| {
+        rule.enable
+            && matches!(rule.match_rule, HttpUpstreamMatchRule::Host { .. })
+            && domain_matches(&rule.domains, host, wildcard_only)
+    })
+}
+
+fn match_legacy_path_rule<'a>(
+    rules: &'a [HttpUpstreamRuleConfig],
+    host: &str,
+    path: &str,
+    wildcard_domains: bool,
+) -> Option<&'a HttpUpstreamRuleConfig> {
+    rules.iter().find(|rule| {
+        rule.enable
+            && matches!(rule.match_rule, HttpUpstreamMatchRule::LegacyPathPrefix { .. })
+            && !rule.domains.is_empty()
+            && domain_matches(&rule.domains, host, wildcard_domains)
+            && legacy_path_matches(rule, path)
+    })
+}
+
+fn match_legacy_fallback_rule<'a>(
+    rules: &'a [HttpUpstreamRuleConfig],
+    path: &str,
+) -> Option<&'a HttpUpstreamRuleConfig> {
+    rules.iter().find(|rule| {
+        rule.enable
+            && matches!(rule.match_rule, HttpUpstreamMatchRule::LegacyPathPrefix { .. })
+            && rule.domains.is_empty()
+            && legacy_path_matches(rule, path)
+    })
+}
+
+fn legacy_path_matches(rule: &HttpUpstreamRuleConfig, path: &str) -> bool {
+    match &rule.match_rule {
+        HttpUpstreamMatchRule::LegacyPathPrefix { prefix } => path_matches_prefix(path, prefix),
+        _ => false,
+    }
+}
+
+fn domain_matches(domains: &[String], host: &str, wildcard_only: bool) -> bool {
+    domains.iter().any(|domain| {
+        if wildcard_only {
+            domain.starts_with("*.") && match_wildcard(domain, host)
+        } else {
+            !domain.starts_with("*.") && domain.eq_ignore_ascii_case(host)
+        }
+    })
+}
+
+fn match_path_group<'a>(path_groups: &'a [HttpPathGroup], path: &str) -> Option<&'a HttpPathGroup> {
+    path_groups
+        .iter()
+        .filter(|group| path_matches_prefix(path, &group.prefix))
+        .max_by_key(|group| normalized_prefix_len(&group.prefix))
+}
+
+fn normalized_prefix_len(prefix: &str) -> usize {
+    normalize_prefix(prefix).len()
+}
+
+fn path_matches_prefix(path: &str, prefix: &str) -> bool {
+    let normalized = normalize_prefix(prefix);
+    if normalized == "/" {
+        return path.starts_with('/');
+    }
+
+    if path == normalized {
+        return true;
+    }
+
+    path.strip_prefix(&normalized)
+        .map(|rest| rest.is_empty() || rest.starts_with('/'))
+        .unwrap_or(false)
+}
+
+fn normalize_prefix(prefix: &str) -> String {
+    let trimmed = prefix.trim();
+    if trimmed == "/" {
+        "/".to_string()
+    } else {
+        trimmed.trim_end_matches('/').to_string()
     }
 }
 
 fn extract_host(req: &RequestHeader) -> Option<String> {
-    // Try Host header first
     if let Some(host) = req.headers.get("host") {
         if let Ok(h) = host.to_str() {
-            // Strip port if present
             let h = h.split(':').next().unwrap_or(h);
             return Some(h.to_ascii_lowercase());
         }
     }
-    // Fallback to URI authority
+
     if let Some(authority) = req.uri.authority() {
-        let h = authority.host();
-        return Some(h.to_ascii_lowercase());
+        return Some(authority.host().to_ascii_lowercase());
     }
+
     None
 }
 
 fn match_wildcard(pattern: &str, host: &str) -> bool {
-    // pattern: "*.example.com" matches "foo.example.com"
     if let Some(suffix) = pattern.strip_prefix("*.") {
         let suffix_lower = suffix.to_ascii_lowercase();
         let host_lower = host.to_ascii_lowercase();
         if host_lower.ends_with(&suffix_lower) {
             let prefix_len = host_lower.len() - suffix_lower.len();
-            // Must have at least one char before the suffix, and it must end with '.'
             if prefix_len > 0 && host_lower.as_bytes()[prefix_len - 1] == b'.' {
                 return true;
             }
@@ -131,18 +293,135 @@ fn match_wildcard(pattern: &str, host: &str) -> bool {
     false
 }
 
+fn apply_path_rewrite(
+    upstream_request: &mut RequestHeader,
+    matched_route: &MatchedHttpRoute,
+) -> pingora::Result<()> {
+    if !matches!(matched_route.rewrite_mode, PathRewriteMode::StripPrefix) {
+        return Ok(());
+    }
+
+    let Some(prefix) = matched_route.matched_prefix.as_deref() else {
+        return Ok(());
+    };
+
+    let path_and_query = upstream_request
+        .uri
+        .path_and_query()
+        .map(|value| value.as_str())
+        .unwrap_or_else(|| upstream_request.uri.path());
+
+    let rewritten = rewrite_path_and_query(path_and_query, prefix);
+    if rewritten == path_and_query {
+        return Ok(());
+    }
+
+    upstream_request
+        .set_raw_path(rewritten.as_bytes())
+        .map_err(|_| pingora::Error::new_str("Failed to rewrite upstream request path"))?;
+
+    Ok(())
+}
+
+fn rewrite_path_and_query(path_and_query: &str, prefix: &str) -> String {
+    let (path, query) = split_path_and_query(path_and_query);
+    if !path_matches_prefix(path, prefix) {
+        return path_and_query.to_string();
+    }
+
+    let normalized_prefix = normalize_prefix(prefix);
+    let stripped_path = if normalized_prefix == "/" {
+        path.to_string()
+    } else if path == normalized_prefix {
+        "/".to_string()
+    } else {
+        let remainder = path.strip_prefix(&normalized_prefix).unwrap_or(path);
+        if remainder.is_empty() {
+            "/".to_string()
+        } else if remainder.starts_with('/') {
+            remainder.to_string()
+        } else {
+            format!("/{remainder}")
+        }
+    };
+
+    if let Some(query) = query {
+        format!("{stripped_path}?{query}")
+    } else {
+        stripped_path
+    }
+}
+
+fn split_path_and_query(path_and_query: &str) -> (&str, Option<&str>) {
+    match path_and_query.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (path_and_query, None),
+    }
+}
+
+fn apply_client_ip_headers(
+    upstream_request: &mut RequestHeader,
+    client_ip: IpAddr,
+) -> pingora::Result<()> {
+    let client_ip = client_ip.to_string();
+    let forwarded = format!("for={}", forwarded_for_value(client_ip.as_str()));
+
+    upstream_request
+        .append_header("X-Forwarded-For", client_ip.as_str())
+        .map_err(|_| pingora::Error::new_str("Failed to append X-Forwarded-For"))?;
+    upstream_request
+        .insert_header("X-Real-IP", client_ip.as_str())
+        .map_err(|_| pingora::Error::new_str("Failed to insert X-Real-IP"))?;
+    upstream_request
+        .append_header("Forwarded", forwarded.as_str())
+        .map_err(|_| pingora::Error::new_str("Failed to append Forwarded"))?;
+
+    Ok(())
+}
+
+fn forwarded_for_value(client_ip: &str) -> String {
+    if client_ip.contains(':') {
+        format!("\"[{client_ip}]\"")
+    } else {
+        client_ip.to_string()
+    }
+}
+
+fn apply_configured_headers(
+    upstream_request: &mut RequestHeader,
+    headers: &[ProxyRequestHeader],
+    mode: &ProxyHeaderConflictMode,
+) -> pingora::Result<()> {
+    for header in headers {
+        match mode {
+            ProxyHeaderConflictMode::Set => {
+                upstream_request
+                    .insert_header(header.name.clone(), header.value.clone())
+                    .map_err(|_| pingora::Error::new_str("Failed to insert configured header"))?;
+            }
+            ProxyHeaderConflictMode::Append => {
+                upstream_request
+                    .append_header(header.name.clone(), header.value.clone())
+                    .map_err(|_| pingora::Error::new_str("Failed to append configured header"))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn make_peer(
-    rule: &HttpUpstreamRuleConfig,
+    upstream: &HttpUpstreamConfig,
     counter: &AtomicUsize,
     host: &str,
     path: &str,
 ) -> pingora::Result<Box<HttpPeer>> {
-    let targets = &rule.upstream.targets;
+    let targets = &upstream.targets;
     if targets.is_empty() {
         return Err(pingora::Error::new_str("No upstream targets configured"));
     }
 
-    let target = select_target(targets, &rule.upstream.load_balance, counter, host, path);
+    let target = select_target(targets, &upstream.load_balance, counter, host, path);
     let mut peer =
         HttpPeer::new((target.address.as_str(), target.port), target.tls, target.address.clone());
     peer.options.connection_timeout = Some(std::time::Duration::from_secs(10));
@@ -169,10 +448,7 @@ fn select_target<'a>(
             let idx = fnv1a_hash(host, path) % targets.len();
             &targets[idx]
         }
-        LoadBalanceMethod::Consistent => {
-            // Weighted consistent hashing by host
-            weighted_select(targets, fnv1a_hash(host, ""))
-        }
+        LoadBalanceMethod::Consistent => weighted_select(targets, fnv1a_hash(host, "")),
     }
 }
 
@@ -201,4 +477,193 @@ fn fnv1a_hash(host: &str, path: &str) -> usize {
         hash = hash.wrapping_mul(FNV_PRIME);
     }
     hash as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use landscape_common::gateway::{
+        ClientIpHeaderPolicy, HttpUpstreamConfig, ProxyHeaderConflictMode,
+    };
+
+    fn target(address: &str, port: u16, weight: u32) -> HttpUpstreamTarget {
+        HttpUpstreamTarget {
+            address: address.to_string(),
+            port,
+            weight,
+            tls: false,
+        }
+    }
+
+    fn upstream_config() -> HttpUpstreamConfig {
+        HttpUpstreamConfig {
+            targets: vec![target("127.0.0.1", 8080, 1)],
+            load_balance: LoadBalanceMethod::RoundRobin,
+            health_check: None,
+            request_headers: vec![],
+            header_conflict_mode: ProxyHeaderConflictMode::Set,
+            client_ip_headers: ClientIpHeaderPolicy::Standard,
+        }
+    }
+
+    fn rule(
+        name: &str,
+        domains: &[&str],
+        match_rule: HttpUpstreamMatchRule,
+    ) -> HttpUpstreamRuleConfig {
+        HttpUpstreamRuleConfig {
+            id: uuid::Uuid::new_v4(),
+            enable: true,
+            name: name.to_string(),
+            domains: domains.iter().map(|domain| domain.to_string()).collect(),
+            match_rule,
+            upstream: upstream_config(),
+            update_at: 0.0,
+        }
+    }
+
+    #[test]
+    fn match_http_route_prefers_exact_host_before_wildcard() {
+        let rules = vec![
+            rule(
+                "wildcard",
+                &["*.example.com"],
+                HttpUpstreamMatchRule::Host { path_groups: vec![] },
+            ),
+            rule(
+                "exact",
+                &["api.example.com"],
+                HttpUpstreamMatchRule::Host { path_groups: vec![] },
+            ),
+        ];
+
+        let matched = match_http_route(&rules, Some("api.example.com"), "/api/v1").unwrap();
+        assert_eq!(matched.rule_name, "exact");
+    }
+
+    #[test]
+    fn match_http_route_prefers_longest_path_group() {
+        let rules = vec![rule(
+            "host",
+            &["api.example.com"],
+            HttpUpstreamMatchRule::Host {
+                path_groups: vec![
+                    HttpPathGroup {
+                        prefix: "/api".to_string(),
+                        rewrite_mode: PathRewriteMode::Preserve,
+                        upstream: upstream_config(),
+                    },
+                    HttpPathGroup {
+                        prefix: "/api/v1".to_string(),
+                        rewrite_mode: PathRewriteMode::StripPrefix,
+                        upstream: upstream_config(),
+                    },
+                ],
+            },
+        )];
+
+        let matched = match_http_route(&rules, Some("api.example.com"), "/api/v1/users").unwrap();
+        assert_eq!(matched.matched_prefix, Some("/api/v1"));
+        assert!(matches!(matched.rewrite_mode, PathRewriteMode::StripPrefix));
+    }
+
+    #[test]
+    fn match_http_route_falls_back_to_default_upstream_when_no_group_matches() {
+        let rules = vec![rule(
+            "host",
+            &["api.example.com"],
+            HttpUpstreamMatchRule::Host {
+                path_groups: vec![HttpPathGroup {
+                    prefix: "/api".to_string(),
+                    rewrite_mode: PathRewriteMode::Preserve,
+                    upstream: upstream_config(),
+                }],
+            },
+        )];
+
+        let matched = match_http_route(&rules, Some("api.example.com"), "/about").unwrap();
+        assert!(matched.matched_prefix.is_none());
+        assert!(matches!(matched.rewrite_mode, PathRewriteMode::Preserve));
+    }
+
+    #[test]
+    fn match_http_route_uses_legacy_fallback_without_host() {
+        let rules = vec![rule(
+            "legacy",
+            &[],
+            HttpUpstreamMatchRule::LegacyPathPrefix { prefix: "/api".to_string() },
+        )];
+
+        let matched = match_http_route(&rules, None, "/api/v1").unwrap();
+        assert_eq!(matched.rule_name, "legacy");
+    }
+
+    #[test]
+    fn path_matches_prefix_uses_segment_boundaries() {
+        assert!(path_matches_prefix("/api", "/api"));
+        assert!(path_matches_prefix("/api/users", "/api"));
+        assert!(!path_matches_prefix("/apix", "/api"));
+    }
+
+    #[test]
+    fn rewrite_path_and_query_strips_prefix_and_keeps_query() {
+        assert_eq!(rewrite_path_and_query("/api/users?id=1", "/api"), "/users?id=1");
+        assert_eq!(rewrite_path_and_query("/api", "/api"), "/");
+        assert_eq!(rewrite_path_and_query("/foo", "/"), "/foo");
+    }
+
+    #[test]
+    fn apply_client_ip_headers_sets_standard_proxy_headers() {
+        let mut request = RequestHeader::build("GET", b"/", None).unwrap();
+
+        apply_client_ip_headers(&mut request, "203.0.113.5".parse().unwrap()).unwrap();
+
+        let xff: Vec<_> = request.headers.get_all("x-forwarded-for").iter().collect();
+        let forwarded: Vec<_> = request.headers.get_all("forwarded").iter().collect();
+
+        assert_eq!(xff.len(), 1);
+        assert_eq!(xff[0], "203.0.113.5");
+        assert_eq!(request.headers.get("x-real-ip").unwrap(), "203.0.113.5");
+        assert_eq!(forwarded.len(), 1);
+        assert_eq!(forwarded[0], "for=203.0.113.5");
+    }
+
+    #[test]
+    fn apply_configured_headers_set_overrides_existing_value() {
+        let mut request = RequestHeader::build("GET", b"/", None).unwrap();
+        request.insert_header("X-Test", "old").unwrap();
+
+        apply_configured_headers(
+            &mut request,
+            &[ProxyRequestHeader {
+                name: "X-Test".to_string(),
+                value: "new".to_string(),
+            }],
+            &ProxyHeaderConflictMode::Set,
+        )
+        .unwrap();
+
+        let values: Vec<_> = request.headers.get_all("x-test").iter().collect();
+        assert_eq!(values, vec!["new"]);
+    }
+
+    #[test]
+    fn apply_configured_headers_append_keeps_existing_value() {
+        let mut request = RequestHeader::build("GET", b"/", None).unwrap();
+        request.insert_header("X-Test", "old").unwrap();
+
+        apply_configured_headers(
+            &mut request,
+            &[ProxyRequestHeader {
+                name: "X-Test".to_string(),
+                value: "new".to_string(),
+            }],
+            &ProxyHeaderConflictMode::Append,
+        )
+        .unwrap();
+
+        let values: Vec<_> = request.headers.get_all("x-test").iter().collect();
+        assert_eq!(values, vec!["old", "new"]);
+    }
 }

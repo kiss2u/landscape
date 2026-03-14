@@ -1,7 +1,13 @@
+use std::collections::HashSet;
+
 use axum::extract::{Path, State};
+use axum::http::{header::HeaderName, HeaderValue};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
-use landscape_common::gateway::{GatewayError, HttpUpstreamMatchRule, HttpUpstreamRuleConfig};
+use landscape_common::gateway::{
+    ClientIpHeaderPolicy, GatewayError, HttpPathGroup, HttpUpstreamConfig, HttpUpstreamMatchRule,
+    HttpUpstreamRuleConfig,
+};
 use serde::Serialize;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -56,8 +62,7 @@ async fn create_gateway_rule(
     JsonBody(config): JsonBody<HttpUpstreamRuleConfig>,
 ) -> LandscapeApiResult<HttpUpstreamRuleConfig> {
     ensure_gateway_supported(&state)?;
-    // Host conflict detection
-    check_host_conflicts(&state, &config).await?;
+    validate_gateway_rule(&state, &config).await?;
 
     let saved = state
         .gateway_service
@@ -65,7 +70,6 @@ async fn create_gateway_rule(
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
 
-    // Reload gateway rules
     reload_gateway_rules(&state).await;
 
     LandscapeApiResp::success(saved)
@@ -119,7 +123,6 @@ async fn delete_gateway_rule(
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
 
-    // Reload gateway rules
     reload_gateway_rules(&state).await;
 
     LandscapeApiResp::success(())
@@ -149,21 +152,20 @@ async fn reload_gateway_rules(state: &LandscapeApp) {
     state.gateway_service.reload_rules().await;
 }
 
-async fn check_host_conflicts(
+async fn validate_gateway_rule(
     state: &LandscapeApp,
     config: &HttpUpstreamRuleConfig,
 ) -> Result<(), GatewayError> {
     let existing_rules = state.gateway_service.list_rules().await.unwrap_or_default();
 
+    validate_rule_shape(config)?;
+
     match &config.match_rule {
-        HttpUpstreamMatchRule::Host { domains } => {
-            check_domain_conflicts(domains, config, &existing_rules)?;
+        HttpUpstreamMatchRule::Host { .. } | HttpUpstreamMatchRule::SniProxy => {
+            check_domain_conflicts(&config.domains, config, &existing_rules)?;
         }
-        HttpUpstreamMatchRule::SniProxy { domains } => {
-            check_domain_conflicts(domains, config, &existing_rules)?;
-        }
-        HttpUpstreamMatchRule::PathPrefix { prefix } => {
-            check_path_prefix_conflicts(prefix, config, &existing_rules)?;
+        HttpUpstreamMatchRule::LegacyPathPrefix { .. } => {
+            return Err(GatewayError::LegacyPathPrefixUnsupported);
         }
     }
 
@@ -178,8 +180,78 @@ fn ensure_gateway_supported(state: &LandscapeApp) -> Result<(), LandscapeApiErro
     }
 }
 
-/// Check domain conflicts for Host and SniProxy rules.
-/// Detects: exact duplicates, wildcard-covers-specific, specific-covers-wildcard.
+fn validate_rule_shape(config: &HttpUpstreamRuleConfig) -> Result<(), GatewayError> {
+    match &config.match_rule {
+        HttpUpstreamMatchRule::Host { path_groups } => {
+            validate_domains(config)?;
+            validate_http_upstream(&config.upstream)?;
+            validate_path_groups(&config.name, path_groups)?;
+        }
+        HttpUpstreamMatchRule::SniProxy => {
+            validate_domains(config)?;
+            validate_sni_upstream(&config.upstream)?;
+        }
+        HttpUpstreamMatchRule::LegacyPathPrefix { .. } => {
+            return Err(GatewayError::LegacyPathPrefixUnsupported);
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_domains(config: &HttpUpstreamRuleConfig) -> Result<(), GatewayError> {
+    if config.domains.iter().any(|domain| !domain.trim().is_empty()) {
+        Ok(())
+    } else {
+        Err(GatewayError::DomainsRequired { rule_name: config.name.clone() })
+    }
+}
+
+fn validate_http_upstream(upstream: &HttpUpstreamConfig) -> Result<(), GatewayError> {
+    validate_header_block(upstream)
+}
+
+fn validate_sni_upstream(upstream: &HttpUpstreamConfig) -> Result<(), GatewayError> {
+    if !upstream.request_headers.is_empty()
+        || !matches!(upstream.client_ip_headers, ClientIpHeaderPolicy::None)
+    {
+        return Err(GatewayError::SniProxyHeaderUnsupported);
+    }
+
+    validate_header_block(upstream)
+}
+
+fn validate_header_block(upstream: &HttpUpstreamConfig) -> Result<(), GatewayError> {
+    for header in &upstream.request_headers {
+        HeaderName::from_bytes(header.name.as_bytes())
+            .map_err(|_| GatewayError::InvalidHeaderName { name: header.name.clone() })?;
+        HeaderValue::from_str(&header.value)
+            .map_err(|_| GatewayError::InvalidHeaderValue { name: header.name.clone() })?;
+    }
+
+    Ok(())
+}
+
+fn validate_path_groups(
+    rule_name: &str,
+    path_groups: &[HttpPathGroup],
+) -> Result<(), GatewayError> {
+    let mut seen = HashSet::new();
+
+    for group in path_groups {
+        let normalized = normalize_prefix(&group.prefix)?;
+        if !seen.insert(normalized.clone()) {
+            return Err(GatewayError::DuplicatePathGroupPrefix {
+                prefix: group.prefix.clone(),
+                rule_name: rule_name.to_string(),
+            });
+        }
+        validate_http_upstream(&group.upstream)?;
+    }
+
+    Ok(())
+}
+
 fn check_domain_conflicts(
     new_domains: &[String],
     config: &HttpUpstreamRuleConfig,
@@ -194,21 +266,21 @@ fn check_domain_conflicts(
             continue;
         }
 
-        let existing_domains = match &existing.match_rule {
-            HttpUpstreamMatchRule::Host { domains }
-            | HttpUpstreamMatchRule::SniProxy { domains } => domains,
-            _ => continue,
-        };
+        if !matches!(
+            existing.match_rule,
+            HttpUpstreamMatchRule::Host { .. } | HttpUpstreamMatchRule::SniProxy
+        ) {
+            continue;
+        }
 
         for new_domain in new_domains {
             let new_lower = new_domain.to_ascii_lowercase();
             let new_is_wildcard = new_lower.starts_with("*.");
 
-            for existing_domain in existing_domains {
+            for existing_domain in &existing.domains {
                 let existing_lower = existing_domain.to_ascii_lowercase();
                 let existing_is_wildcard = existing_lower.starts_with("*.");
 
-                // Exact match (including wildcard == wildcard)
                 if new_lower == existing_lower {
                     return Err(GatewayError::HostConflict {
                         domain: new_domain.clone(),
@@ -216,34 +288,37 @@ fn check_domain_conflicts(
                     });
                 }
 
-                // New wildcard covers existing specific domain
-                // e.g., new = *.example.com, existing = foo.example.com
-                if new_is_wildcard && !existing_is_wildcard {
-                    let suffix = &new_lower[1..]; // ".example.com"
-                    if existing_lower.ends_with(suffix)
-                        && !existing_lower[..existing_lower.len() - suffix.len()].contains('.')
-                    {
-                        return Err(GatewayError::WildcardCoversDomain {
-                            wildcard: new_domain.clone(),
-                            domain: existing_domain.clone(),
-                            rule_name: existing.name.clone(),
-                        });
-                    }
+                if new_is_wildcard
+                    && !existing_is_wildcard
+                    && wildcard_matches(new_domain, existing_domain)
+                {
+                    return Err(GatewayError::WildcardCoversDomain {
+                        wildcard: new_domain.clone(),
+                        domain: existing_domain.clone(),
+                        rule_name: existing.name.clone(),
+                    });
                 }
 
-                // Existing wildcard covers new specific domain
-                // e.g., existing = *.example.com, new = foo.example.com
-                if existing_is_wildcard && !new_is_wildcard {
-                    let suffix = &existing_lower[1..]; // ".example.com"
-                    if new_lower.ends_with(suffix)
-                        && !new_lower[..new_lower.len() - suffix.len()].contains('.')
-                    {
-                        return Err(GatewayError::WildcardCoversDomain {
-                            wildcard: existing_domain.clone(),
-                            domain: new_domain.clone(),
-                            rule_name: existing.name.clone(),
-                        });
-                    }
+                if existing_is_wildcard
+                    && !new_is_wildcard
+                    && wildcard_matches(existing_domain, new_domain)
+                {
+                    return Err(GatewayError::WildcardCoversDomain {
+                        wildcard: existing_domain.clone(),
+                        domain: new_domain.clone(),
+                        rule_name: existing.name.clone(),
+                    });
+                }
+
+                if new_is_wildcard
+                    && existing_is_wildcard
+                    && wildcard_patterns_overlap(new_domain, existing_domain)
+                {
+                    return Err(GatewayError::DomainPatternOverlap {
+                        domain: new_domain.clone(),
+                        other_domain: existing_domain.clone(),
+                        rule_name: existing.name.clone(),
+                    });
                 }
             }
         }
@@ -252,46 +327,47 @@ fn check_domain_conflicts(
     Ok(())
 }
 
-/// Check path prefix overlap.
-/// Two prefixes conflict if one is a prefix of the other.
-fn check_path_prefix_conflicts(
-    new_prefix: &str,
-    config: &HttpUpstreamRuleConfig,
-    existing_rules: &[HttpUpstreamRuleConfig],
-) -> Result<(), GatewayError> {
-    let new_normalized = normalize_prefix(new_prefix);
-
-    for existing in existing_rules {
-        if existing.id == config.id {
-            continue;
-        }
-
-        if let HttpUpstreamMatchRule::PathPrefix { prefix: existing_prefix } = &existing.match_rule
-        {
-            let existing_normalized = normalize_prefix(existing_prefix);
-
-            if new_normalized.starts_with(&existing_normalized)
-                || existing_normalized.starts_with(&new_normalized)
-            {
-                return Err(GatewayError::PathPrefixOverlap {
-                    new_prefix: new_prefix.to_string(),
-                    existing_prefix: existing_prefix.clone(),
-                    rule_name: existing.name.clone(),
-                });
-            }
-        }
-    }
-
-    Ok(())
+fn wildcard_matches(pattern: &str, host: &str) -> bool {
+    pattern
+        .strip_prefix("*.")
+        .map(|suffix| {
+            let suffix_lower = suffix.to_ascii_lowercase();
+            let host_lower = host.to_ascii_lowercase();
+            host_lower.ends_with(&suffix_lower)
+                && host_lower.len() > suffix_lower.len()
+                && host_lower.as_bytes()[host_lower.len() - suffix_lower.len() - 1] == b'.'
+        })
+        .unwrap_or(false)
 }
 
-/// Normalize a path prefix for comparison: ensure trailing slash.
-/// "/api" -> "/api/", "/api/" -> "/api/"
-fn normalize_prefix(prefix: &str) -> String {
-    if prefix.ends_with('/') {
-        prefix.to_string()
+fn wildcard_patterns_overlap(left: &str, right: &str) -> bool {
+    let Some(left_suffix) = left.strip_prefix("*.").map(|s| s.to_ascii_lowercase()) else {
+        return false;
+    };
+    let Some(right_suffix) = right.strip_prefix("*.").map(|s| s.to_ascii_lowercase()) else {
+        return false;
+    };
+
+    left_suffix == right_suffix
+        || left_suffix.ends_with(&format!(".{right_suffix}"))
+        || right_suffix.ends_with(&format!(".{left_suffix}"))
+}
+
+fn normalize_prefix(prefix: &str) -> Result<String, GatewayError> {
+    let trimmed = prefix.trim();
+    if trimmed.is_empty() || !trimmed.starts_with('/') {
+        return Err(GatewayError::InvalidPathPrefix { prefix: prefix.to_string() });
+    }
+
+    if trimmed == "/" {
+        return Ok("/".to_string());
+    }
+
+    let normalized = trimmed.trim_end_matches('/');
+    if normalized.is_empty() {
+        Ok("/".to_string())
     } else {
-        format!("{prefix}/")
+        Ok(normalized.to_string())
     }
 }
 
@@ -299,7 +375,10 @@ fn normalize_prefix(prefix: &str) -> String {
 mod tests {
     use super::*;
 
-    use landscape_common::gateway::{HttpUpstreamConfig, HttpUpstreamTarget, LoadBalanceMethod};
+    use landscape_common::gateway::{
+        ClientIpHeaderPolicy, HttpUpstreamConfig, HttpUpstreamTarget, LoadBalanceMethod,
+        ProxyHeaderConflictMode, ProxyRequestHeader,
+    };
 
     fn upstream_target() -> HttpUpstreamTarget {
         HttpUpstreamTarget {
@@ -310,17 +389,29 @@ mod tests {
         }
     }
 
-    fn rule(name: &str, match_rule: HttpUpstreamMatchRule) -> HttpUpstreamRuleConfig {
+    fn upstream() -> HttpUpstreamConfig {
+        HttpUpstreamConfig {
+            targets: vec![upstream_target()],
+            load_balance: LoadBalanceMethod::RoundRobin,
+            health_check: None,
+            request_headers: vec![],
+            header_conflict_mode: ProxyHeaderConflictMode::Set,
+            client_ip_headers: ClientIpHeaderPolicy::Standard,
+        }
+    }
+
+    fn rule(
+        name: &str,
+        domains: &[&str],
+        match_rule: HttpUpstreamMatchRule,
+    ) -> HttpUpstreamRuleConfig {
         HttpUpstreamRuleConfig {
             id: uuid::Uuid::new_v4(),
             enable: true,
             name: name.to_string(),
+            domains: domains.iter().map(|domain| domain.to_string()).collect(),
             match_rule,
-            upstream: HttpUpstreamConfig {
-                targets: vec![upstream_target()],
-                load_balance: LoadBalanceMethod::RoundRobin,
-                health_check: None,
-            },
+            upstream: upstream(),
             update_at: 0.0,
         }
     }
@@ -329,12 +420,10 @@ mod tests {
     fn domain_conflicts_detect_cross_type_exact_match() {
         let existing = rule(
             "host-rule",
-            HttpUpstreamMatchRule::Host { domains: vec!["api.example.com".to_string()] },
+            &["api.example.com"],
+            HttpUpstreamMatchRule::Host { path_groups: vec![] },
         );
-        let new_rule = rule(
-            "sni-rule",
-            HttpUpstreamMatchRule::SniProxy { domains: vec!["api.example.com".to_string()] },
-        );
+        let new_rule = rule("sni-rule", &["api.example.com"], HttpUpstreamMatchRule::SniProxy);
 
         let err = check_domain_conflicts(&["api.example.com".to_string()], &new_rule, &[existing])
             .unwrap_err();
@@ -346,12 +435,10 @@ mod tests {
     fn domain_conflicts_detect_existing_wildcard_covering_specific_domain() {
         let existing = rule(
             "wildcard-host",
-            HttpUpstreamMatchRule::Host { domains: vec!["*.example.com".to_string()] },
+            &["*.example.com"],
+            HttpUpstreamMatchRule::Host { path_groups: vec![] },
         );
-        let new_rule = rule(
-            "sni-specific",
-            HttpUpstreamMatchRule::SniProxy { domains: vec!["api.example.com".to_string()] },
-        );
+        let new_rule = rule("sni-specific", &["api.example.com"], HttpUpstreamMatchRule::SniProxy);
 
         let err = check_domain_conflicts(&["api.example.com".to_string()], &new_rule, &[existing])
             .unwrap_err();
@@ -363,12 +450,10 @@ mod tests {
     fn domain_conflicts_allow_distinct_domains() {
         let existing = rule(
             "host-rule",
-            HttpUpstreamMatchRule::Host { domains: vec!["api.example.com".to_string()] },
+            &["api.example.com"],
+            HttpUpstreamMatchRule::Host { path_groups: vec![] },
         );
-        let new_rule = rule(
-            "sni-rule",
-            HttpUpstreamMatchRule::SniProxy { domains: vec!["static.example.com".to_string()] },
-        );
+        let new_rule = rule("sni-rule", &["static.example.com"], HttpUpstreamMatchRule::SniProxy);
 
         let result =
             check_domain_conflicts(&["static.example.com".to_string()], &new_rule, &[existing]);
@@ -376,19 +461,118 @@ mod tests {
     }
 
     #[test]
-    fn path_prefix_conflicts_detect_overlap() {
-        let existing =
-            rule("api-root", HttpUpstreamMatchRule::PathPrefix { prefix: "/api".to_string() });
+    fn domain_conflicts_detect_overlapping_wildcards() {
+        let existing = rule(
+            "wildcard-host",
+            &["*.example.com"],
+            HttpUpstreamMatchRule::Host { path_groups: vec![] },
+        );
         let new_rule =
-            rule("api-v1", HttpUpstreamMatchRule::PathPrefix { prefix: "/api/v1".to_string() });
+            rule("nested-wildcard", &["*.api.example.com"], HttpUpstreamMatchRule::SniProxy);
 
-        let err = check_path_prefix_conflicts("/api/v1", &new_rule, &[existing]).unwrap_err();
-        assert!(matches!(err, GatewayError::PathPrefixOverlap { .. }));
+        let err =
+            check_domain_conflicts(&["*.api.example.com".to_string()], &new_rule, &[existing])
+                .unwrap_err();
+
+        assert!(matches!(err, GatewayError::DomainPatternOverlap { .. }));
     }
 
     #[test]
-    fn normalize_prefix_adds_trailing_slash() {
-        assert_eq!(normalize_prefix("/api"), "/api/");
-        assert_eq!(normalize_prefix("/api/"), "/api/");
+    fn validate_path_groups_rejects_duplicate_normalized_prefixes() {
+        let path_groups = vec![
+            HttpPathGroup {
+                prefix: "/api".to_string(),
+                rewrite_mode: Default::default(),
+                upstream: upstream(),
+            },
+            HttpPathGroup {
+                prefix: "/api/".to_string(),
+                rewrite_mode: Default::default(),
+                upstream: upstream(),
+            },
+        ];
+
+        let err = validate_path_groups("api-host", &path_groups).unwrap_err();
+        assert!(matches!(err, GatewayError::DuplicatePathGroupPrefix { .. }));
+    }
+
+    #[test]
+    fn validate_path_groups_allows_nested_prefixes() {
+        let path_groups = vec![
+            HttpPathGroup {
+                prefix: "/api".to_string(),
+                rewrite_mode: Default::default(),
+                upstream: upstream(),
+            },
+            HttpPathGroup {
+                prefix: "/api/v1".to_string(),
+                rewrite_mode: Default::default(),
+                upstream: upstream(),
+            },
+        ];
+
+        assert!(validate_path_groups("api-host", &path_groups).is_ok());
+    }
+
+    #[test]
+    fn validate_rule_shape_rejects_missing_domains() {
+        let rule =
+            rule("host-without-domain", &[], HttpUpstreamMatchRule::Host { path_groups: vec![] });
+
+        let err = validate_rule_shape(&rule).unwrap_err();
+        assert!(matches!(err, GatewayError::DomainsRequired { .. }));
+    }
+
+    #[test]
+    fn validate_rule_shape_rejects_sni_proxy_headers() {
+        let mut rule =
+            rule("sni-with-headers", &["api.example.com"], HttpUpstreamMatchRule::SniProxy);
+        rule.upstream.request_headers =
+            vec![ProxyRequestHeader { name: "X-Test".to_string(), value: "1".to_string() }];
+
+        let err = validate_rule_shape(&rule).unwrap_err();
+        assert!(matches!(err, GatewayError::SniProxyHeaderUnsupported));
+    }
+
+    #[test]
+    fn validate_rule_shape_rejects_invalid_header_name() {
+        let mut rule = rule(
+            "host-with-invalid-header",
+            &["api.example.com"],
+            HttpUpstreamMatchRule::Host { path_groups: vec![] },
+        );
+        rule.upstream.request_headers = vec![ProxyRequestHeader {
+            name: "bad header".to_string(),
+            value: "1".to_string(),
+        }];
+        rule.upstream.client_ip_headers = ClientIpHeaderPolicy::None;
+
+        let err = validate_rule_shape(&rule).unwrap_err();
+        assert!(matches!(err, GatewayError::InvalidHeaderName { .. }));
+    }
+
+    #[test]
+    fn validate_rule_shape_rejects_legacy_path_prefix_updates() {
+        let rule = rule(
+            "legacy-path",
+            &["api.example.com"],
+            HttpUpstreamMatchRule::LegacyPathPrefix { prefix: "/api".to_string() },
+        );
+
+        let err = validate_rule_shape(&rule).unwrap_err();
+        assert!(matches!(err, GatewayError::LegacyPathPrefixUnsupported));
+    }
+
+    #[test]
+    fn normalize_prefix_trims_trailing_slash() {
+        assert_eq!(normalize_prefix("/api").unwrap(), "/api");
+        assert_eq!(normalize_prefix("/api/").unwrap(), "/api");
+        assert_eq!(normalize_prefix("/").unwrap(), "/");
+    }
+
+    #[test]
+    fn normalize_prefix_rejects_missing_leading_slash() {
+        let err = normalize_prefix("api").unwrap_err();
+        assert!(matches!(err, GatewayError::InvalidPathPrefix { .. }));
     }
 }

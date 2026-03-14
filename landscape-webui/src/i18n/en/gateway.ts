@@ -5,8 +5,8 @@ export default {
   enabled: "Enabled",
   match_type: "Match Type",
   type_host: "Host Match",
-  type_path_prefix: "Path Prefix",
   type_sni_proxy: "SNI Proxy",
+  type_legacy_path_prefix: "Legacy Path Prefix",
   domains: "Domains",
   domains_required: "At least one domain is required",
   domain_placeholder: "Enter domain, e.g. example.com or *.example.com",
@@ -14,6 +14,17 @@ export default {
   path_prefix: "Path Prefix",
   path_prefix_required: "Path prefix is required",
   path_prefix_placeholder: "Enter path prefix, e.g. /api",
+  path_groups: "Path Groups",
+  no_path_groups:
+    "No path groups configured; requests fall back to the default upstream",
+  add_path_group: "Add Path Group",
+  path_group_editor: "Edit Path Group",
+  default_upstream: "Default Upstream",
+  rewrite_mode: "Path Forwarding",
+  rewrite_preserve: "Preserve Path",
+  rewrite_strip_prefix: "Strip Matched Prefix",
+  legacy_read_only:
+    "Legacy path-prefix rules are read-only; they can be viewed and deleted but not edited",
 
   // Upstream
   upstream: "Upstream",
@@ -31,6 +42,19 @@ export default {
   lb_round_robin: "Round Robin",
   lb_random: "Random",
   lb_consistent: "Consistent Hash",
+
+  // Request headers
+  client_ip_headers: "Client IP Forwarding",
+  client_ip_standard: "Use Standard Proxy Headers",
+  client_ip_disabled: "Disabled",
+  request_headers: "Custom Request Headers",
+  add_header: "Add Header",
+  header_name: "Header Name",
+  header_value: "Header Value",
+  header_name_required: "Header name is required",
+  header_mode: "Duplicate Header Handling",
+  header_mode_set: "Set",
+  header_mode_append: "Append",
 
   // Health check
   health_check: "Health Check",

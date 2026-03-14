@@ -20,9 +20,10 @@ impl SniProxyRouter {
     }
 
     pub fn has_sni_proxy_rules(&self) -> bool {
-        self.rules.load().iter().any(|rule| {
-            rule.enable && matches!(rule.match_rule, HttpUpstreamMatchRule::SniProxy { .. })
-        })
+        self.rules
+            .load()
+            .iter()
+            .any(|rule| rule.enable && matches!(rule.match_rule, HttpUpstreamMatchRule::SniProxy))
     }
 
     pub fn match_target(&self, sni: &str) -> Option<MatchedSniTarget> {
@@ -33,8 +34,8 @@ impl SniProxyRouter {
                 continue;
             }
 
-            if let HttpUpstreamMatchRule::SniProxy { domains } = &rule.match_rule {
-                for domain in domains {
+            if let HttpUpstreamMatchRule::SniProxy = &rule.match_rule {
+                for domain in &rule.domains {
                     if domain.starts_with("*.") {
                         continue;
                     }
@@ -50,8 +51,8 @@ impl SniProxyRouter {
                 continue;
             }
 
-            if let HttpUpstreamMatchRule::SniProxy { domains } = &rule.match_rule {
-                for domain in domains {
+            if let HttpUpstreamMatchRule::SniProxy = &rule.match_rule {
+                for domain in &rule.domains {
                     if domain.starts_with("*.") && match_wildcard(domain, sni) {
                         return MatchedSniTarget::new(rule, &self.round_robin_counter, sni);
                     }
@@ -316,7 +317,9 @@ mod tests {
     use arc_swap::ArcSwap;
     use std::sync::Arc;
 
-    use landscape_common::gateway::HttpUpstreamConfig;
+    use landscape_common::gateway::{
+        ClientIpHeaderPolicy, HttpUpstreamConfig, ProxyHeaderConflictMode,
+    };
 
     fn target(address: &str, port: u16, weight: u32) -> HttpUpstreamTarget {
         HttpUpstreamTarget {
@@ -336,13 +339,15 @@ mod tests {
             id: uuid::Uuid::new_v4(),
             enable: true,
             name: name.to_string(),
-            match_rule: HttpUpstreamMatchRule::SniProxy {
-                domains: domains.iter().map(|d| d.to_string()).collect(),
-            },
+            domains: domains.iter().map(|d| d.to_string()).collect(),
+            match_rule: HttpUpstreamMatchRule::SniProxy,
             upstream: HttpUpstreamConfig {
                 targets,
                 load_balance: LoadBalanceMethod::RoundRobin,
                 health_check: None,
+                request_headers: vec![],
+                header_conflict_mode: ProxyHeaderConflictMode::Set,
+                client_ip_headers: ClientIpHeaderPolicy::None,
             },
             update_at: 0.0,
         }

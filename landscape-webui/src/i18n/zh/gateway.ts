@@ -5,8 +5,8 @@ export default {
   enabled: "启用",
   match_type: "匹配类型",
   type_host: "域名匹配",
-  type_path_prefix: "路径前缀",
   type_sni_proxy: "SNI 透传",
+  type_legacy_path_prefix: "旧版路径前缀",
   domains: "域名列表",
   domains_required: "至少需要一个域名",
   domain_placeholder: "输入域名, 如 example.com 或 *.example.com",
@@ -14,6 +14,15 @@ export default {
   path_prefix: "路径前缀",
   path_prefix_required: "路径前缀不能为空",
   path_prefix_placeholder: "输入路径前缀, 如 /api",
+  path_groups: "路径分组",
+  no_path_groups: "未配置路径分组, 将直接使用默认上游",
+  add_path_group: "添加路径分组",
+  path_group_editor: "编辑路径分组",
+  default_upstream: "默认上游",
+  rewrite_mode: "路径转发方式",
+  rewrite_preserve: "保留原路径",
+  rewrite_strip_prefix: "去掉匹配前缀",
+  legacy_read_only: "旧版路径前缀规则仅支持查看和删除, 不能再编辑或新建",
 
   // Upstream
   upstream: "上游配置",
@@ -31,6 +40,19 @@ export default {
   lb_round_robin: "轮询",
   lb_random: "随机",
   lb_consistent: "一致性哈希",
+
+  // Request headers
+  client_ip_headers: "客户端 IP 透传",
+  client_ip_standard: "启用标准代理头",
+  client_ip_disabled: "关闭",
+  request_headers: "自定义请求头",
+  add_header: "添加请求头",
+  header_name: "Header 名称",
+  header_value: "Header 值",
+  header_name_required: "请求头名称不能为空",
+  header_mode: "同名 Header 处理方式",
+  header_mode_set: "覆盖",
+  header_mode_append: "追加",
 
   // Health check
   health_check: "健康检查",

@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { delete_gateway_rule } from "@/api/gateway";
-import type { HttpUpstreamRuleConfig } from "@landscape-router/types/api/schemas";
+import type {
+  HttpPathGroup,
+  HttpUpstreamConfig,
+  HttpUpstreamRuleConfig,
+} from "@landscape-router/types/api/schemas";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePreferenceStore } from "@/stores/preference";
+import { useMessage } from "naive-ui";
 
 const prefStore = usePreferenceStore();
+const message = useMessage();
 const { t } = useI18n();
 const rule = defineModel<HttpUpstreamRuleConfig>("rule", { required: true });
 
@@ -16,6 +22,10 @@ const emit = defineEmits(["refresh"]);
 function openEditModal() {
   const selection = window.getSelection();
   if (selection && selection.toString().length > 0) {
+    return;
+  }
+  if (rule.value.match_rule.t === "legacy_path_prefix") {
+    message.warning(t("gateway.legacy_read_only"));
     return;
   }
   show_edit_modal.value = true;
@@ -31,8 +41,9 @@ async function del() {
 function matchTypeLabel(): string {
   const mr = rule.value.match_rule;
   if (mr.t === "host") return t("gateway.type_host");
-  if (mr.t === "path_prefix") return t("gateway.type_path_prefix");
   if (mr.t === "sni_proxy") return t("gateway.type_sni_proxy");
+  if (mr.t === "legacy_path_prefix")
+    return t("gateway.type_legacy_path_prefix");
   return t("common.unknown");
 }
 
@@ -43,25 +54,19 @@ function matchTypeTag(): "success" | "info" | "warning" {
   return "info";
 }
 
-function matchSummary(): string {
-  const mr = rule.value.match_rule;
-  if (mr.t === "host" || mr.t === "sni_proxy") {
-    return mr.domains.join(", ");
-  }
-  if (mr.t === "path_prefix") {
-    return mr.prefix;
-  }
-  return "";
-}
-
-function upstreamSummary(): string {
-  const targets = rule.value.upstream.targets;
+function upstreamSummary(upstream: HttpUpstreamConfig): string {
+  const targets = upstream.targets;
   if (targets.length === 0) return "-";
   if (targets.length === 1) {
-    const t = targets[0];
-    return `${t.address}:${t.port}${t.tls ? " (TLS)" : ""}`;
+    const target = targets[0];
+    return `${target.address}:${target.port}${target.tls ? " (TLS)" : ""}`;
   }
   return `${targets.length} targets`;
+}
+
+function pathGroups(): HttpPathGroup[] {
+  if (rule.value.match_rule.t !== "host") return [];
+  return rule.value.match_rule.path_groups ?? [];
 }
 </script>
 
@@ -83,6 +88,7 @@ function upstreamSummary(): string {
       <template #header-extra>
         <n-flex size="small">
           <n-button
+            v-if="rule.match_rule.t !== 'legacy_path_prefix'"
             secondary
             size="small"
             type="warning"
@@ -115,10 +121,19 @@ function upstreamSummary(): string {
         </n-gi>
         <n-gi>
           <div class="stat-box">
-            <div class="stat-label">{{ t("gateway.upstream") }}</div>
+            <div class="stat-label">
+              {{
+                rule.match_rule.t === "host"
+                  ? t("gateway.default_upstream")
+                  : t("gateway.upstream")
+              }}
+            </div>
             <div class="stat-value-row">
-              <div class="stat-value mono" :title="upstreamSummary()">
-                {{ upstreamSummary() }}
+              <div
+                class="stat-value mono"
+                :title="upstreamSummary(rule.upstream)"
+              >
+                {{ upstreamSummary(rule.upstream) }}
               </div>
             </div>
           </div>
@@ -129,40 +144,70 @@ function upstreamSummary(): string {
 
       <div class="match-container">
         <div class="section-label">
-          <template v-if="rule.match_rule.t === 'path_prefix'">
-            {{ t("gateway.path_prefix") }}
-          </template>
-          <template v-else>
-            {{ t("gateway.domains") }}
-            ({{
-              rule.match_rule.t === "host" || rule.match_rule.t === "sni_proxy"
-                ? rule.match_rule.domains.length
-                : 0
-            }})
-          </template>
+          {{ t("gateway.domains") }} ({{ (rule.domains ?? []).length }})
         </div>
         <n-scrollbar style="max-height: 80px; padding-right: 4px">
-          <template
-            v-if="
-              rule.match_rule.t === 'host' || rule.match_rule.t === 'sni_proxy'
-            "
-          >
-            <n-flex :size="4" style="padding: 2px">
-              <n-tag
-                v-for="domain in rule.match_rule.domains"
-                :key="domain"
-                size="small"
-                :bordered="false"
-              >
-                {{ domain }}
-              </n-tag>
-            </n-flex>
-          </template>
-          <template v-else-if="rule.match_rule.t === 'path_prefix'">
-            <n-text code>{{ rule.match_rule.prefix }}</n-text>
-          </template>
+          <n-flex :size="4" style="padding: 2px">
+            <n-tag
+              v-for="domain in rule.domains ?? []"
+              :key="domain"
+              size="small"
+              :bordered="false"
+            >
+              {{ domain }}
+            </n-tag>
+          </n-flex>
         </n-scrollbar>
       </div>
+
+      <template v-if="rule.match_rule.t === 'host'">
+        <n-divider style="margin: 8px 0 12px 0" />
+
+        <div class="match-container">
+          <div class="section-label">
+            {{ t("gateway.path_groups") }} ({{ pathGroups().length }})
+          </div>
+          <n-scrollbar style="max-height: 100px; padding-right: 4px">
+            <n-flex v-if="pathGroups().length > 0" vertical :size="6">
+              <n-flex
+                v-for="(group, index) in pathGroups()"
+                :key="`${group.prefix}-${index}`"
+                justify="space-between"
+                align="center"
+                style="padding: 2px 0"
+              >
+                <n-flex align="center" size="small">
+                  <n-tag size="small" :bordered="false">
+                    {{ group.prefix }}
+                  </n-tag>
+                  <n-text depth="3" style="font-size: 12px">
+                    {{
+                      group.rewrite_mode === "strip_prefix"
+                        ? t("gateway.rewrite_strip_prefix")
+                        : t("gateway.rewrite_preserve")
+                    }}
+                  </n-text>
+                </n-flex>
+                <n-text depth="3" style="font-size: 12px">
+                  {{ upstreamSummary(group.upstream) }}
+                </n-text>
+              </n-flex>
+            </n-flex>
+            <n-text v-else depth="3" style="font-size: 12px">
+              {{ t("gateway.no_path_groups") }}
+            </n-text>
+          </n-scrollbar>
+        </div>
+      </template>
+
+      <template v-else-if="rule.match_rule.t === 'legacy_path_prefix'">
+        <n-divider style="margin: 8px 0 12px 0" />
+
+        <div class="match-container">
+          <div class="section-label">{{ t("gateway.path_prefix") }}</div>
+          <n-text code>{{ rule.match_rule.prefix }}</n-text>
+        </div>
+      </template>
 
       <div class="card-footer">
         <n-text depth="3" style="font-size: 12px">
@@ -240,17 +285,17 @@ function upstreamSummary(): string {
 .match-container {
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
 .section-label {
   font-size: 12px;
   color: var(--n-text-color-3);
-  margin-bottom: 8px;
 }
 
 .card-footer {
-  margin-top: auto;
-  padding-top: 12px;
-  text-align: right;
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

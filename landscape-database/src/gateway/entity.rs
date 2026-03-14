@@ -1,7 +1,8 @@
 use crate::repository::UpdateActiveModel;
-use landscape_common::gateway::HttpUpstreamRuleConfig;
+use landscape_common::gateway::{HttpUpstreamMatchRule, HttpUpstreamRuleConfig};
 use sea_orm::{entity::prelude::*, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::{DBId, DBJson, DBTimestamp};
 
@@ -39,14 +40,15 @@ impl ActiveModelBehavior for ActiveModel {
 
 impl From<Model> for HttpUpstreamRuleConfig {
     fn from(entity: Model) -> Self {
-        HttpUpstreamRuleConfig {
-            id: entity.id,
-            name: entity.name,
-            enable: entity.enable,
-            match_rule: serde_json::from_value(entity.match_rule).unwrap(),
-            upstream: serde_json::from_value(entity.upstream).unwrap(),
-            update_at: entity.update_at,
-        }
+        serde_json::from_value(json!({
+            "id": entity.id,
+            "name": entity.name,
+            "enable": entity.enable,
+            "match_rule": entity.match_rule,
+            "upstream": entity.upstream,
+            "update_at": entity.update_at,
+        }))
+        .unwrap()
     }
 }
 
@@ -60,9 +62,21 @@ impl Into<ActiveModel> for HttpUpstreamRuleConfig {
 
 impl UpdateActiveModel<ActiveModel> for HttpUpstreamRuleConfig {
     fn update(self, active: &mut ActiveModel) {
+        let match_rule = match &self.match_rule {
+            HttpUpstreamMatchRule::Host { path_groups } => {
+                json!({ "t": "host", "domains": self.domains, "path_groups": path_groups })
+            }
+            HttpUpstreamMatchRule::SniProxy => {
+                json!({ "t": "sni_proxy", "domains": self.domains })
+            }
+            HttpUpstreamMatchRule::LegacyPathPrefix { prefix } => {
+                json!({ "t": "path_prefix", "domains": self.domains, "prefix": prefix })
+            }
+        };
+
         active.name = Set(self.name);
         active.enable = Set(self.enable);
-        active.match_rule = Set(serde_json::to_value(&self.match_rule).unwrap());
+        active.match_rule = Set(match_rule);
         active.upstream = Set(serde_json::to_value(&self.upstream).unwrap());
         active.update_at = Set(self.update_at);
     }
