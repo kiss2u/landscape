@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use crate::repository::Repository;
-use landscape_common::config::{InitConfig, StoreRuntimeConfig};
+use landscape_common::{
+    config::{InitConfig, StoreRuntimeConfig},
+    error::LdResult,
+};
 use sea_orm::{Database, DatabaseConnection};
 
 use migration::{Migrator, MigratorTrait};
@@ -29,15 +32,21 @@ use crate::{
     wifi::repository::WifiServiceRepository,
 };
 
-pub async fn db_action(config: &StoreRuntimeConfig, rollback: &bool, steps: &u32) {
+pub async fn db_action(config: &StoreRuntimeConfig, rollback: &bool, steps: &u32) -> LdResult<()> {
     let opt: migration::sea_orm::ConnectOptions = config.database_path.clone().into();
-    let database = Database::connect(opt).await.expect("Database connection failed");
+    let database = Database::connect(opt).await?;
 
     if *rollback {
-        Migrator::down(&database, Some(*steps)).await.unwrap();
+        Migrator::down(&database, Some(*steps)).await?;
     } else {
-        Migrator::up(&database, Some(*steps)).await.unwrap();
+        Migrator::up(&database, Some(*steps)).await?;
     }
+
+    Ok(())
+}
+
+pub async fn rollback_interactive(config: &StoreRuntimeConfig) -> LdResult<()> {
+    crate::rollback::interactive_rollback(config).await
 }
 
 /// 存储提供者

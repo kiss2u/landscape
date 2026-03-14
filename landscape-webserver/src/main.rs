@@ -45,7 +45,7 @@ use landscape::{
 use landscape_common::dhcp::v4_server::config::DHCPv4ServiceConfig;
 use landscape_common::route::lan::RouteLanServiceConfig;
 use landscape_common::{
-    args::{LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
+    args::{DbAction, LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
     config::RuntimeConfig,
     error::LdResult,
     ipv6_pd::IAPrefixMap,
@@ -690,10 +690,28 @@ async fn main() -> LdResult<()> {
     let args = &LAND_ARGS;
     if let Some(action) = &args.action {
         match action {
-            LandscapeAction::Db { rollback, times } => {
-                landscape_database::provider::db_action(&config.store, rollback, times).await;
-                Ok(())
-            }
+            LandscapeAction::Db { action, rollback, times } => match action {
+                Some(DbAction::Rollback) => {
+                    landscape_database::provider::rollback_interactive(&config.store).await
+                }
+                None if *rollback || times.is_some() => {
+                    tracing::warn!(
+                        "Using deprecated step-based database action. Prefer `landscape db rollback`."
+                    );
+                    landscape_database::provider::db_action(
+                        &config.store,
+                        rollback,
+                        &times.unwrap_or(1),
+                    )
+                    .await
+                }
+                None => {
+                    eprintln!(
+                        "No database action selected. Use `landscape db rollback` for interactive rollback."
+                    );
+                    Ok(())
+                }
+            },
         }
     } else {
         run(home_path, config).await

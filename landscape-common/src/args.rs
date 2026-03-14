@@ -101,12 +101,22 @@ pub struct WebCommArgs {
 pub enum LandscapeAction {
     /// Database-related operations
     Db {
-        #[arg(short, long)]
+        #[command(subcommand)]
+        action: Option<DbAction>,
+
+        #[arg(short, long, hide = true)]
         rollback: bool,
 
-        #[clap(short = 't', long, default_value_t = 1)]
-        times: u32,
+        #[clap(short = 't', long, hide = true)]
+        times: Option<u32>,
     },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DbAction {
+    /// Interactively roll back the database to a registered release boundary
+    #[command(visible_alias = "rb")]
+    Rollback,
 }
 
 #[derive(Debug, Clone)]
