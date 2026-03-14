@@ -9,7 +9,7 @@ use landscape_common::{
     },
 };
 use landscape_dns::{
-    server::{DohListenerConfig, LandscapeDnsServer},
+    server::{DohListenerConfig, LandscapeDnsServer, LocalDnsAnswerProvider},
     CheckChainDnsResult, CheckDnsReq,
 };
 use rustls::server::ResolvesServerCert;
@@ -24,7 +24,9 @@ use crate::dns::{
     redirect_service::DNSRedirectService, rule_service::DNSRuleService,
     upstream_service::DnsUpstreamService,
 };
-use crate::{cert::order_service::CertService, geo::site_service::GeoSiteService};
+use crate::{
+    cert::order_service::CertService, geo::site_service::GeoSiteService, route::IpRouteService,
+};
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -44,6 +46,7 @@ impl LandscapeDnsService {
         dns_redirect_rule_service: DNSRedirectService,
         geo_site_service: GeoSiteService,
         dns_upstream_service: DnsUpstreamService,
+        route_service: IpRouteService,
         dns_config: DnsRuntimeConfig,
         cert_service: CertService,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
@@ -61,7 +64,12 @@ impl LandscapeDnsService {
             dns_hostname: None,
             http_endpoint: dns_config.doh_http_endpoint.clone(),
         });
-        let dns_service = LandscapeDnsServer::new(53, msg_tx, doh);
+        let dns_service = LandscapeDnsServer::new(
+            53,
+            msg_tx,
+            doh,
+            Some(Arc::new(route_service) as Arc<dyn LocalDnsAnswerProvider>),
+        );
 
         // dns_service.restart(53).await;
         // dns_service.update_flow_map(&flow_rule_service.list().await).await;
@@ -135,13 +143,20 @@ impl LandscapeDnsService {
             // Read All Redirect Rule
             let dns_redirect_rules =
                 self.dns_redirect_rule_service.list_flow_configs(flow_id).await;
+            let dynamic_dns_redirects =
+                self.dns_redirect_rule_service.list_flow_dynamic_batches(flow_id).await;
 
             tracing::info!("load rule: {:?}ms", time.elapsed().as_millis());
 
             // convert init
             let dns_rules = self
                 .geo_site_service
-                .convert_to_chain_init_config(flow_dns_rules, dns_redirect_rules, upstream_configs)
+                .convert_to_chain_init_config(
+                    flow_dns_rules,
+                    dns_redirect_rules,
+                    dynamic_dns_redirects,
+                    upstream_configs,
+                )
                 .await;
 
             tracing::info!("convert rule: {:?}ms", time.elapsed().as_millis());
@@ -161,12 +176,15 @@ impl LandscapeDnsService {
 
                 let dns_redirect_rules =
                     self.dns_redirect_rule_service.list_flow_configs(flow_id).await;
+                let dynamic_dns_redirects =
+                    self.dns_redirect_rule_service.list_flow_dynamic_batches(flow_id).await;
 
                 let dns_rules = self
                     .geo_site_service
                     .convert_to_chain_init_config(
                         flow_dns_rules,
                         dns_redirect_rules,
+                        dynamic_dns_redirects,
                         upstream_configs,
                     )
                     .await;

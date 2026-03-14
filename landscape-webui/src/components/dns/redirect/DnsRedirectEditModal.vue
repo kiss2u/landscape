@@ -35,6 +35,21 @@ const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
+const answerModeOptions = computed(() => [
+  {
+    label: t("dns_editor.redirect_edit.answer_mode_static_ips"),
+    value: "static_ips",
+  },
+  {
+    label: t("dns_editor.redirect_edit.answer_mode_all_local_ips"),
+    value: "all_local_ips",
+  },
+]);
+
+const isAllLocalIpsMode = computed(
+  () => rule.value?.answer_mode === "all_local_ips",
+);
+
 onMounted(async () => {
   await search_flows();
 });
@@ -47,6 +62,7 @@ async function enter() {
       enable: true,
       remark: "",
       match_rules: [],
+      answer_mode: "static_ips",
       result_info: [],
       apply_flows: [],
     };
@@ -195,29 +211,45 @@ async function append_import_rules() {
 
         <n-form-item-gi
           :span="2"
+          :label="t('dns_editor.redirect_edit.answer_mode')"
+        >
+          <n-select
+            v-model:value="rule.answer_mode"
+            :options="answerModeOptions"
+          />
+        </n-form-item-gi>
+
+        <n-form-item-gi
+          :span="2"
           :label="t('dns_editor.redirect_edit.redirect_result')"
           path="result_info"
         >
-          <n-dynamic-input
-            v-model:value="rule.result_info"
-            :placeholder="t('dns_editor.redirect_edit.enter_ip')"
-            #="{ index }"
-          >
-            <n-form-item
-              :path="`result_info[${index}]`"
-              :rule="ipRule"
-              ignore-path-change
-              :show-label="false"
-              :show-feedback="false"
-              style="margin-bottom: 0; flex: 1"
+          <n-flex vertical style="width: 100%">
+            <n-text v-if="isAllLocalIpsMode" depth="3">
+              {{ t("dns_editor.redirect_edit.all_local_ips_desc") }}
+            </n-text>
+            <n-dynamic-input
+              v-else
+              v-model:value="rule.result_info"
+              :placeholder="t('dns_editor.redirect_edit.enter_ip')"
+              #="{ index }"
             >
-              <n-input
-                v-model:value="rule.result_info[index]"
-                :placeholder="t('dns_editor.redirect_edit.enter_ip_v46')"
-                @keydown.enter.prevent
-              />
-            </n-form-item>
-          </n-dynamic-input>
+              <n-form-item
+                :path="`result_info[${index}]`"
+                :rule="ipRule"
+                ignore-path-change
+                :show-label="false"
+                :show-feedback="false"
+                style="margin-bottom: 0; flex: 1"
+              >
+                <n-input
+                  v-model:value="rule.result_info[index]"
+                  :placeholder="t('dns_editor.redirect_edit.enter_ip_v46')"
+                  @keydown.enter.prevent
+                />
+              </n-form-item>
+            </n-dynamic-input>
+          </n-flex>
         </n-form-item-gi>
 
         <n-form-item-gi

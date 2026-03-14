@@ -6,7 +6,7 @@ use hickory_proto::rr::{
 };
 use uuid::Uuid;
 
-use landscape_common::dns::redirect::DNSRedirectRuntimeRule;
+use landscape_common::dns::redirect::{DNSRedirectRuntimeRule, DnsRedirectAnswerMode};
 use landscape_common::{
     dns::rule::{DNSRuntimeRule, FilterResult},
     flow::DnsRuntimeMarkInfo,
@@ -18,18 +18,32 @@ use crate::DEFAULT_ENABLE_IP_VALIDATION;
 
 #[derive(Debug)]
 pub struct RedirectSolution {
-    pub id: Uuid,
+    pub redirect_id: Option<Uuid>,
+    pub dynamic_redirect_source: Option<String>,
+    pub answer_mode: DnsRedirectAnswerMode,
     matcher: DomainMatcher,
     result_info: Vec<IpAddr>,
+    ttl_secs: u32,
 }
 
 impl RedirectSolution {
     pub fn new(rule: DNSRedirectRuntimeRule) -> Self {
-        let matcher = DomainMatcher::new(rule.match_rules);
+        let DNSRedirectRuntimeRule {
+            redirect_id,
+            dynamic_redirect_source,
+            answer_mode,
+            match_rules,
+            result_info,
+            ttl_secs,
+        } = rule;
+        let matcher = DomainMatcher::new(match_rules);
         Self {
             matcher,
-            id: rule.id,
-            result_info: rule.result_info,
+            redirect_id,
+            dynamic_redirect_source,
+            answer_mode,
+            result_info,
+            ttl_secs,
         }
     }
 
@@ -39,8 +53,17 @@ impl RedirectSolution {
     }
 
     pub fn lookup(&self, domain: &str, query_type: RecordType) -> Vec<Record> {
+        self.lookup_with_addrs(domain, query_type, &self.result_info)
+    }
+
+    pub fn lookup_with_addrs(
+        &self,
+        domain: &str,
+        query_type: RecordType,
+        addrs: &[IpAddr],
+    ) -> Vec<Record> {
         let mut result = vec![];
-        for ip in &self.result_info {
+        for ip in addrs {
             let rdata_ip = match (ip, &query_type) {
                 (IpAddr::V4(ip), RecordType::A) => Some(RData::A(A(*ip))),
                 (IpAddr::V6(ip), RecordType::AAAA) => Some(RData::AAAA(AAAA(*ip))),
@@ -50,7 +73,7 @@ impl RedirectSolution {
             if let Some(rdata) = rdata_ip {
                 result.push(Record::from_rdata(
                     hickory_resolver::Name::from_str(domain).unwrap(),
-                    10,
+                    self.ttl_secs,
                     rdata,
                 ));
             }
@@ -60,7 +83,11 @@ impl RedirectSolution {
     }
 
     pub fn is_block(&self) -> bool {
-        self.result_info.is_empty()
+        matches!(self.answer_mode, DnsRedirectAnswerMode::StaticIps) && self.result_info.is_empty()
+    }
+
+    pub fn uses_local_answer_provider(&self) -> bool {
+        matches!(self.answer_mode, DnsRedirectAnswerMode::AllLocalIps)
     }
 }
 
@@ -222,4 +249,39 @@ fn is_global_ipv6(addr: &std::net::Ipv6Addr) -> bool {
             || matches!(addr.segments(), [0x5f00, ..])
             || addr.is_unique_local()
             || addr.is_unicast_link_local())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+
+    use landscape_common::dns::{
+        redirect::{DNSRedirectRuntimeRule, DnsRedirectAnswerMode},
+        rule::{DomainConfig, DomainMatchType},
+    };
+
+    use super::*;
+
+    #[test]
+    fn dynamic_redirect_solution_preserves_source_and_ttl() {
+        let solution = RedirectSolution::new(DNSRedirectRuntimeRule {
+            redirect_id: None,
+            dynamic_redirect_source: Some("docker:test".to_string()),
+            answer_mode: DnsRedirectAnswerMode::StaticIps,
+            match_rules: vec![DomainConfig {
+                match_type: DomainMatchType::Full,
+                value: "example.com".to_string(),
+            }],
+            result_info: vec![IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2))],
+            ttl_secs: 42,
+        });
+
+        assert!(solution.is_match("example.com."));
+        assert!(solution.redirect_id.is_none());
+        assert_eq!(solution.dynamic_redirect_source.as_deref(), Some("docker:test"));
+
+        let records = solution.lookup("example.com.", RecordType::A);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].ttl(), 42);
+    }
 }

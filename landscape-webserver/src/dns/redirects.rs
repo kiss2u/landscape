@@ -1,7 +1,7 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
-use landscape_common::dns::redirect::DNSRedirectRule;
+use landscape_common::dns::redirect::{DNSRedirectRule, DynamicDnsRedirectBatch};
 use landscape_common::service::controller::ConfigController;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -16,6 +16,7 @@ pub fn get_dns_redirect_config_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .routes(routes!(get_dns_redirects, add_dns_redirects))
         .routes(routes!(add_many_dns_redirects))
+        .routes(routes!(get_dynamic_dns_redirects, set_dynamic_dns_redirect_batch))
         .routes(routes!(get_dns_redirect, del_dns_redirects))
 }
 
@@ -67,6 +68,34 @@ async fn add_many_dns_redirects(
 ) -> LandscapeApiResult<()> {
     state.dns_redirect_service.checked_set_list(dns_redirects).await?;
     LandscapeApiResp::success(())
+}
+
+#[utoipa::path(
+    get,
+    path = "/redirects/dynamic",
+    tag = "DNS Redirects",
+    responses((status = 200, body = CommonApiResp<Vec<DynamicDnsRedirectBatch>>))
+)]
+async fn get_dynamic_dns_redirects(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<DynamicDnsRedirectBatch>> {
+    let result = state.dns_redirect_service.list_dynamic_batches().await;
+    LandscapeApiResp::success(result)
+}
+
+#[utoipa::path(
+    post,
+    path = "/redirects/dynamic",
+    tag = "DNS Redirects",
+    request_body = DynamicDnsRedirectBatch,
+    responses((status = 200, body = CommonApiResp<DynamicDnsRedirectBatch>))
+)]
+async fn set_dynamic_dns_redirect_batch(
+    State(state): State<LandscapeApp>,
+    JsonBody(batch): JsonBody<DynamicDnsRedirectBatch>,
+) -> LandscapeApiResult<DynamicDnsRedirectBatch> {
+    let result = state.dns_redirect_service.set_dynamic_batch(batch).await;
+    LandscapeApiResp::success(result)
 }
 
 #[utoipa::path(

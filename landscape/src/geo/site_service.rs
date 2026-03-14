@@ -2,7 +2,10 @@ use landscape_common::{
     database::LandscapeStore,
     dns::{
         config::DnsUpstreamConfig,
-        redirect::{DNSRedirectRule, DNSRedirectRuntimeRule},
+        redirect::{
+            DNSRedirectRule, DNSRedirectRuntimeRule, DnsRedirectAnswerMode,
+            DynamicDnsRedirectBatch, DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+        },
         rule::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
         ChainDnsServerInitInfo,
     },
@@ -70,6 +73,7 @@ impl GeoSiteService {
         &self,
         mut rules: Vec<DNSRuleConfig>,
         redirects: Vec<DNSRedirectRule>,
+        dynamic_redirects: Vec<DynamicDnsRedirectBatch>,
         upstream_configs: Vec<DnsUpstreamConfig>,
     ) -> ChainDnsServerInitInfo {
         let upstream_dict: HashMap<Uuid, DnsUpstreamConfig> =
@@ -90,12 +94,30 @@ impl GeoSiteService {
                     self.get_geo_key_rules_v2(redirect.match_rules, &mut applied_config).await;
 
                 redirect_rules.push(DNSRedirectRuntimeRule {
-                    id: redirect.id,
+                    redirect_id: Some(redirect.id),
+                    dynamic_redirect_source: None,
+                    answer_mode: redirect.answer_mode,
                     match_rules: source,
                     result_info: redirect.result_info,
+                    ttl_secs: DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
                 });
             }
         }
+
+        for dynamic_batch in dynamic_redirects {
+            let source_id = dynamic_batch.source_id;
+            for record in dynamic_batch.records {
+                redirect_rules.push(DNSRedirectRuntimeRule {
+                    redirect_id: None,
+                    dynamic_redirect_source: Some(source_id.clone()),
+                    answer_mode: DnsRedirectAnswerMode::StaticIps,
+                    match_rules: vec![record.match_rule.into()],
+                    result_info: record.result_info,
+                    ttl_secs: record.ttl_secs,
+                });
+            }
+        }
+
         let mut dns_rules = Vec::with_capacity(rules.len());
 
         rules.sort_by(|a, b| a.index.cmp(&b.index));

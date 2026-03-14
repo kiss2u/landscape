@@ -1,18 +1,22 @@
+use std::{collections::HashMap, sync::Arc};
+
 use landscape_common::{
-    dns::redirect::DNSRedirectRule,
+    dns::redirect::{DNSRedirectRule, DynamicDnsRedirectBatch, DynamicDnsRedirectScope},
     event::dns::DnsEvent,
     service::controller::{ConfigController, FlowConfigController},
 };
 use landscape_database::{
     dns_redirect::repository::DNSRedirectRuleRepository, provider::LandscapeDBServiceProvider,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct DNSRedirectService {
     store: DNSRedirectRuleRepository,
     dns_events_tx: mpsc::Sender<DnsEvent>,
+    dynamic_batches:
+        Arc<RwLock<HashMap<DynamicDnsRedirectScope, HashMap<String, DynamicDnsRedirectBatch>>>>,
 }
 
 impl DNSRedirectService {
@@ -21,9 +25,88 @@ impl DNSRedirectService {
         dns_events_tx: mpsc::Sender<DnsEvent>,
     ) -> Self {
         let store = store.dns_redirect_rule_store();
-        let dns_rule_service = Self { store, dns_events_tx };
+        let dns_rule_service = Self {
+            store,
+            dns_events_tx,
+            dynamic_batches: Arc::new(RwLock::new(HashMap::new())),
+        };
 
         dns_rule_service
+    }
+
+    pub async fn set_dynamic_batch(
+        &self,
+        batch: DynamicDnsRedirectBatch,
+    ) -> DynamicDnsRedirectBatch {
+        let scope = batch.scope.clone();
+        let source_id = batch.source_id.clone();
+        let mut dynamic_batches = self.dynamic_batches.write().await;
+
+        let scope_batches = dynamic_batches.entry(scope.clone()).or_default();
+        if batch.records.is_empty() {
+            scope_batches.remove(&source_id);
+            if scope_batches.is_empty() {
+                dynamic_batches.remove(&scope);
+            }
+        } else {
+            scope_batches.insert(source_id, batch.clone());
+        }
+
+        drop(dynamic_batches);
+        self.notify_dynamic_batch_change(&scope).await;
+        batch
+    }
+
+    pub async fn list_dynamic_batches(&self) -> Vec<DynamicDnsRedirectBatch> {
+        let dynamic_batches = self.dynamic_batches.read().await;
+        let mut result: Vec<_> = dynamic_batches
+            .values()
+            .flat_map(|scope_batches| scope_batches.values().cloned())
+            .collect();
+        sort_dynamic_batches(&mut result);
+        result
+    }
+
+    pub async fn list_flow_dynamic_batches(&self, flow_id: u32) -> Vec<DynamicDnsRedirectBatch> {
+        let dynamic_batches = self.dynamic_batches.read().await;
+        let mut result: Vec<_> = dynamic_batches
+            .iter()
+            .filter(|(scope, _)| scope.applies_to_flow(flow_id))
+            .flat_map(|(_, scope_batches)| scope_batches.values().cloned())
+            .collect();
+        sort_dynamic_batches(&mut result);
+        result
+    }
+
+    async fn notify_dynamic_batch_change(&self, scope: &DynamicDnsRedirectScope) {
+        let flow_id = match scope {
+            DynamicDnsRedirectScope::Global => None,
+            DynamicDnsRedirectScope::Flow(flow_id) => Some(*flow_id),
+        };
+        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id }).await;
+    }
+}
+
+fn sort_dynamic_batches(batches: &mut [DynamicDnsRedirectBatch]) {
+    batches.sort_by(|a, b| {
+        scope_sort_rank(&a.scope)
+            .cmp(&scope_sort_rank(&b.scope))
+            .then_with(|| scope_flow_id(&a.scope).cmp(&scope_flow_id(&b.scope)))
+            .then_with(|| a.source_id.cmp(&b.source_id))
+    });
+}
+
+fn scope_sort_rank(scope: &DynamicDnsRedirectScope) -> u8 {
+    match scope {
+        DynamicDnsRedirectScope::Global => 0,
+        DynamicDnsRedirectScope::Flow(_) => 1,
+    }
+}
+
+fn scope_flow_id(scope: &DynamicDnsRedirectScope) -> u32 {
+    match scope {
+        DynamicDnsRedirectScope::Global => 0,
+        DynamicDnsRedirectScope::Flow(flow_id) => *flow_id,
     }
 }
 

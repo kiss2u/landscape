@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    net::IpAddr,
     net::{Ipv6Addr, SocketAddr, SocketAddrV6},
     sync::Arc,
     time::Duration,
@@ -23,6 +24,14 @@ pub(crate) mod handler;
 pub(crate) mod matcher;
 pub(crate) mod rule;
 
+#[async_trait::async_trait]
+pub trait LocalDnsAnswerProvider: Send + Sync {
+    async fn list_local_answer_addrs(
+        &self,
+        query_type: hickory_proto::rr::RecordType,
+    ) -> Vec<IpAddr>;
+}
+
 #[derive(Clone)]
 pub struct LandscapeDnsServer {
     pub status: WatchService,
@@ -30,6 +39,7 @@ pub struct LandscapeDnsServer {
     pub addr: SocketAddr,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     pub doh: Option<DohListenerConfig>,
+    pub local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
 }
 
 #[derive(Clone)]
@@ -65,6 +75,7 @@ impl LandscapeDnsServer {
         listen_port: u16,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
         doh: Option<DohListenerConfig>,
+        local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
     ) -> Self {
         crate::check_resolver_conf();
         let status = WatchService::new();
@@ -74,6 +85,7 @@ impl LandscapeDnsServer {
             addr: SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, listen_port, 0, 0)),
             msg_tx,
             doh,
+            local_answer_provider,
         }
     }
 
@@ -98,7 +110,13 @@ impl LandscapeDnsServer {
             return;
         }
 
-        let handler = DnsRequestHandler::new(info, dns_config, flow_id, self.msg_tx.clone());
+        let handler = DnsRequestHandler::new(
+            info,
+            dns_config,
+            flow_id,
+            self.msg_tx.clone(),
+            self.local_answer_provider.clone(),
+        );
         let token = start_dns_server(flow_id, self.addr, self.doh.clone(), handler.clone()).await;
         if token.is_cancelled() {
             tracing::error!("[flow: {flow_id}]: DNS server start failed, runtime not registered");
@@ -203,6 +221,7 @@ mod tests {
                 ChainDnsServerInitInfo::default(),
                 test_dns_config(),
                 7,
+                None,
                 None,
             );
             entry.runtime.store(Some(Arc::new(FlowServerRuntime {

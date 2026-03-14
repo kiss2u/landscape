@@ -28,6 +28,7 @@ use uuid::Uuid;
 
 use crate::{
     server::rule::{RedirectSolution, ResolutionRule},
+    server::LocalDnsAnswerProvider,
     CacheDNSItem, CheckChainDnsResult, DNSCache,
 };
 use landscape_common::{
@@ -41,7 +42,7 @@ use landscape_common::{
 
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DnsRequestHandler {
     redirect_solution: Arc<ArcSwap<Vec<RedirectSolution>>>,
     resolves: Arc<ArcSwap<BTreeMap<u32, ResolutionRule>>>,
@@ -49,6 +50,7 @@ pub struct DnsRequestHandler {
     pub flow_id: u32,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     pub negative_cache_ttl: Arc<AtomicU32>,
+    pub local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
 }
 
 impl DnsRequestHandler {
@@ -57,6 +59,7 @@ impl DnsRequestHandler {
         dns_config: DnsRuntimeConfig,
         flow_id: u32,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+        local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
     ) -> DnsRequestHandler {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
@@ -77,6 +80,7 @@ impl DnsRequestHandler {
             redirect_solution: Arc::new(ArcSwap::from_pointee(redirect_solution)),
             msg_tx,
             negative_cache_ttl: Arc::new(AtomicU32::new(dns_config.negative_cache_ttl)),
+            local_answer_provider,
         }
     }
 
@@ -154,18 +158,36 @@ impl DnsRequestHandler {
         update_dns_mark_list
     }
 
-    pub fn lookup_redirects(
+    pub async fn lookup_redirects(
         &self,
         domain: &str,
         query_type: RecordType,
-    ) -> Option<(Vec<Record>, DnsResultStatus, Option<Uuid>)> {
+    ) -> Option<(Vec<Record>, DnsResultStatus, Option<Uuid>, Option<String>)> {
         let redirect_list = self.redirect_solution.load();
         for each in redirect_list.iter() {
             if each.is_match(domain) {
-                let records = each.lookup(domain, query_type);
+                let records = if each.uses_local_answer_provider() {
+                    let Some(provider) = self.local_answer_provider.as_ref() else {
+                        continue;
+                    };
+                    let addrs = provider.list_local_answer_addrs(query_type).await;
+                    each.lookup_with_addrs(domain, query_type, &addrs)
+                } else {
+                    each.lookup(domain, query_type)
+                };
+
+                if each.uses_local_answer_provider() && records.is_empty() {
+                    continue;
+                }
+
                 let status =
                     if each.is_block() { DnsResultStatus::Block } else { DnsResultStatus::Local };
-                return Some((records, status, Some(each.id)));
+                return Some((
+                    records,
+                    status,
+                    each.redirect_id,
+                    each.dynamic_redirect_source.clone(),
+                ));
             }
         }
         None
@@ -174,8 +196,11 @@ impl DnsRequestHandler {
     pub async fn check_domain(&self, domain: &str, query_type: RecordType) -> CheckChainDnsResult {
         let mut result = CheckChainDnsResult::default();
 
-        if let Some((records, _status, id)) = self.lookup_redirects(domain, query_type) {
+        if let Some((records, _status, id, dynamic_source)) =
+            self.lookup_redirects(domain, query_type).await
+        {
             result.redirect_id = id;
+            result.dynamic_redirect_source = dynamic_source;
             result.records = Some(crate::to_common_records(records));
         } else {
             let resolves = self.resolves.load();
@@ -366,8 +391,8 @@ impl RequestHandler for DnsRequestHandler {
         let mut status = DnsResultStatus::Normal;
 
         // 1. Redirects
-        if let Some((redirect_records, redirect_status, _)) =
-            self.lookup_redirects(&domain, query_type)
+        if let Some((redirect_records, redirect_status, _, _)) =
+            self.lookup_redirects(&domain, query_type).await
         {
             records = redirect_records;
             status = redirect_status;
@@ -569,10 +594,40 @@ mod tests {
     use hickory_proto::rr::rdata::{A, AAAA};
     use hickory_proto::rr::{RData, Record, RecordType};
     use landscape_common::{
-        config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo, flow::mark::FlowMark,
+        config::DnsRuntimeConfig,
+        dns::ChainDnsServerInitInfo,
+        dns::{
+            redirect::{DNSRedirectRuntimeRule, DnsRedirectAnswerMode},
+            rule::{DomainConfig, DomainMatchType},
+        },
+        flow::mark::FlowMark,
     };
-    use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
+    use std::{
+        net::{IpAddr, Ipv4Addr, Ipv6Addr},
+        sync::Arc,
+    };
+    use uuid::Uuid;
+
+    struct MockLocalAnswerProvider {
+        addrs: Vec<IpAddr>,
+    }
+
+    #[async_trait::async_trait]
+    impl LocalDnsAnswerProvider for MockLocalAnswerProvider {
+        async fn list_local_answer_addrs(&self, query_type: RecordType) -> Vec<IpAddr> {
+            self.addrs
+                .iter()
+                .copied()
+                .filter(|addr| {
+                    matches!(
+                        (addr, query_type),
+                        (IpAddr::V4(_), RecordType::A) | (IpAddr::V6(_), RecordType::AAAA)
+                    )
+                })
+                .collect()
+        }
+    }
 
     fn run_async_test(test: impl std::future::Future<Output = ()>) {
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(test);
@@ -669,8 +724,13 @@ mod tests {
     fn test_negative_cache_ttl_updates_are_shared_across_clones() {
         run_async_test(async {
             let initial_config = test_dns_config(7);
-            let handler =
-                DnsRequestHandler::new(ChainDnsServerInitInfo::default(), initial_config, 9, None);
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo::default(),
+                initial_config,
+                9,
+                None,
+                None,
+            );
             let handler_clone = handler.clone();
 
             let updated_config = test_dns_config(33);
@@ -698,6 +758,113 @@ mod tests {
             assert_eq!(cache_item.response_code, ResponseCode::NXDomain);
             assert!(cache_item.rdatas.is_empty());
             assert_eq!(cache_item.mark.priority, 0);
+        });
+    }
+
+    #[test]
+    fn all_local_ips_redirect_uses_provider_records() {
+        run_async_test(async {
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo {
+                    dns_rules: vec![],
+                    redirect_rules: vec![DNSRedirectRuntimeRule {
+                        redirect_id: Some(Uuid::nil()),
+                        dynamic_redirect_source: None,
+                        answer_mode: DnsRedirectAnswerMode::AllLocalIps,
+                        match_rules: vec![DomainConfig {
+                            match_type: DomainMatchType::Full,
+                            value: "example.com".to_string(),
+                        }],
+                        result_info: vec![],
+                        ttl_secs: 17,
+                    }],
+                },
+                test_dns_config(5),
+                1,
+                None,
+                Some(Arc::new(MockLocalAnswerProvider {
+                    addrs: vec![
+                        IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+                        IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    ],
+                })),
+            );
+
+            let (records, status, redirect_id, _) =
+                handler.lookup_redirects("example.com.", RecordType::A).await.unwrap();
+
+            assert_eq!(status, DnsResultStatus::Local);
+            assert_eq!(redirect_id, Some(Uuid::nil()));
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].record_type(), RecordType::A);
+            assert_eq!(records[0].ttl(), 17);
+            assert!(matches!(
+                records[0].data(),
+                RData::A(A(ip)) if *ip == Ipv4Addr::new(192, 168, 1, 1)
+            ));
+        });
+    }
+
+    #[test]
+    fn all_local_ips_redirect_without_family_candidates_falls_through() {
+        run_async_test(async {
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo {
+                    dns_rules: vec![],
+                    redirect_rules: vec![DNSRedirectRuntimeRule {
+                        redirect_id: Some(Uuid::nil()),
+                        dynamic_redirect_source: None,
+                        answer_mode: DnsRedirectAnswerMode::AllLocalIps,
+                        match_rules: vec![DomainConfig {
+                            match_type: DomainMatchType::Full,
+                            value: "example.com".to_string(),
+                        }],
+                        result_info: vec![],
+                        ttl_secs: 17,
+                    }],
+                },
+                test_dns_config(5),
+                1,
+                None,
+                Some(Arc::new(MockLocalAnswerProvider {
+                    addrs: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))],
+                })),
+            );
+
+            assert!(handler.lookup_redirects("example.com.", RecordType::AAAA).await.is_none());
+        });
+    }
+
+    #[test]
+    fn static_redirect_without_matching_family_keeps_existing_no_record_behavior() {
+        run_async_test(async {
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo {
+                    dns_rules: vec![],
+                    redirect_rules: vec![DNSRedirectRuntimeRule {
+                        redirect_id: Some(Uuid::nil()),
+                        dynamic_redirect_source: None,
+                        answer_mode: DnsRedirectAnswerMode::StaticIps,
+                        match_rules: vec![DomainConfig {
+                            match_type: DomainMatchType::Full,
+                            value: "example.com".to_string(),
+                        }],
+                        result_info: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))],
+                        ttl_secs: 17,
+                    }],
+                },
+                test_dns_config(5),
+                1,
+                None,
+                None,
+            );
+
+            let (records, status, redirect_id, _) =
+                handler.lookup_redirects("example.com.", RecordType::AAAA).await.unwrap();
+
+            assert!(records.is_empty());
+            assert_eq!(status, DnsResultStatus::Local);
+            assert_eq!(redirect_id, Some(Uuid::nil()));
         });
     }
 }

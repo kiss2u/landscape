@@ -24,6 +24,7 @@ pub enum DNSRedirectRuleConfigs {
     Remark,
     Enable,
     MatchRules,
+    AnswerMode,
     ResultInfo,
     ApplyFlows,
     UpdateAt,

@@ -1,16 +1,22 @@
 use core::mem::drop;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::Arc,
+};
 
 pub mod lan_service;
 pub mod wan_service;
 
+use hickory_proto::rr::RecordType;
 use landscape_common::{
     config::FlowId,
     event::route::RouteEvent,
     flow::{config::FlowConfig, FlowTarget},
-    route::{LanIPv6RouteKey, LanRouteInfo, RouteTargetInfo},
+    route::{LanIPv6RouteKey, LanRouteInfo, LanRouteMode, RouteTargetInfo},
 };
 use landscape_database::flow_rule::repository::FlowConfigRepository;
+use landscape_dns::server::LocalDnsAnswerProvider;
 use landscape_ebpf::map_setting::route::{add_lan_route, del_lan_route};
 use tokio::sync::{mpsc, RwLock};
 
@@ -267,6 +273,79 @@ impl IpRouteService {
 
         refresh_ipv6_target_bpf_map(&flow_configs, ipv6_wan_infos);
     }
+
+    pub async fn list_dns_answer_ipv4_addrs(&self) -> Vec<Ipv4Addr> {
+        let routes = self.ipv4_lan_ifaces.read().await;
+        let mut candidates: Vec<_> = routes
+            .values()
+            .filter_map(|info| match (&info.mode, info.iface_ip) {
+                (LanRouteMode::Reachable, IpAddr::V4(ip)) if is_valid_dns_answer_ipv4(ip) => {
+                    Some((info.iface_name.clone(), ip))
+                }
+                _ => None,
+            })
+            .collect();
+        drop(routes);
+
+        candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.octets().cmp(&b.1.octets())));
+
+        let mut seen = HashSet::new();
+        let mut result = Vec::with_capacity(candidates.len());
+        for (_, ip) in candidates {
+            if seen.insert(ip) {
+                result.push(ip);
+            }
+        }
+        result
+    }
+
+    pub async fn list_dns_answer_ipv6_addrs(&self) -> Vec<Ipv6Addr> {
+        let routes = self.ipv6_lan_ifaces.read().await;
+        let mut candidates: Vec<_> = routes
+            .values()
+            .filter_map(|info| match (&info.mode, info.iface_ip) {
+                (LanRouteMode::Reachable, IpAddr::V6(ip)) if is_valid_dns_answer_ipv6(ip) => {
+                    Some((info.iface_name.clone(), ip))
+                }
+                _ => None,
+            })
+            .collect();
+        drop(routes);
+
+        candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.octets().cmp(&b.1.octets())));
+
+        let mut seen = HashSet::new();
+        let mut result = Vec::with_capacity(candidates.len());
+        for (_, ip) in candidates {
+            if seen.insert(ip) {
+                result.push(ip);
+            }
+        }
+        result
+    }
+}
+
+#[async_trait::async_trait]
+impl LocalDnsAnswerProvider for IpRouteService {
+    async fn list_local_answer_addrs(&self, query_type: RecordType) -> Vec<IpAddr> {
+        match query_type {
+            RecordType::A => {
+                self.list_dns_answer_ipv4_addrs().await.into_iter().map(IpAddr::V4).collect()
+            }
+            RecordType::AAAA => {
+                self.list_dns_answer_ipv6_addrs().await.into_iter().map(IpAddr::V6).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+}
+
+fn is_valid_dns_answer_ipv4(ip: Ipv4Addr) -> bool {
+    !(ip.is_unspecified() || ip.is_broadcast() || ip.is_multicast() || ip.is_loopback())
+}
+
+fn is_valid_dns_answer_ipv6(ip: Ipv6Addr) -> bool {
+    !(ip.is_unspecified() || ip.is_multicast() || ip.is_loopback())
 }
 
 pub fn refresh_ipv4_target_bpf_map(
@@ -349,4 +428,155 @@ pub async fn test_used_ip_route() -> (mpsc::Sender<RouteEvent>, IpRouteService) 
     let (route_tx, route_rx) = mpsc::channel(1);
     let ip_route = IpRouteService::new(route_rx, flow_repo);
     (route_tx, ip_route)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run_async_test(test: impl std::future::Future<Output = ()>) {
+        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(test);
+    }
+
+    #[test]
+    fn list_dns_answer_ipv4_addrs_filters_invalid_entries_and_next_hop() {
+        run_async_test(async {
+            let (_tx, service) = test_used_ip_route().await;
+            let mut routes = service.ipv4_lan_ifaces.write().await;
+            routes.insert(
+                "wan0".to_string(),
+                LanRouteInfo {
+                    ifindex: 1,
+                    iface_name: "wan0".to_string(),
+                    iface_ip: IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1)),
+                    mac: None,
+                    prefix: 24,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                "lan0".to_string(),
+                LanRouteInfo {
+                    ifindex: 2,
+                    iface_name: "lan0".to_string(),
+                    iface_ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+                    mac: None,
+                    prefix: 24,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                "lan0-nexthop".to_string(),
+                LanRouteInfo {
+                    ifindex: 2,
+                    iface_name: "lan0".to_string(),
+                    iface_ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 254)),
+                    mac: None,
+                    prefix: 24,
+                    mode: LanRouteMode::NextHop {
+                        next_hop_ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2)),
+                    },
+                },
+            );
+            routes.insert(
+                "loopback".to_string(),
+                LanRouteInfo {
+                    ifindex: 3,
+                    iface_name: "lo".to_string(),
+                    iface_ip: IpAddr::V4(Ipv4Addr::LOCALHOST),
+                    mac: None,
+                    prefix: 8,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                "lan1".to_string(),
+                LanRouteInfo {
+                    ifindex: 4,
+                    iface_name: "lan1".to_string(),
+                    iface_ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+                    mac: None,
+                    prefix: 24,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            drop(routes);
+
+            assert_eq!(
+                service.list_dns_answer_ipv4_addrs().await,
+                vec![Ipv4Addr::new(192, 168, 1, 1), Ipv4Addr::new(192, 168, 2, 1)]
+            );
+        });
+    }
+
+    #[test]
+    fn list_dns_answer_ipv6_addrs_keeps_link_local_and_deduplicates() {
+        run_async_test(async {
+            let (_tx, service) = test_used_ip_route().await;
+            let mut routes = service.ipv6_lan_ifaces.write().await;
+            routes.insert(
+                LanIPv6RouteKey { iface_name: "lan0".to_string(), subnet_index: 0 },
+                LanRouteInfo {
+                    ifindex: 1,
+                    iface_name: "lan0".to_string(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)),
+                    mac: None,
+                    prefix: 64,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                LanIPv6RouteKey { iface_name: "lan1".to_string(), subnet_index: 0 },
+                LanRouteInfo {
+                    ifindex: 2,
+                    iface_name: "lan1".to_string(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)),
+                    mac: None,
+                    prefix: 64,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                LanIPv6RouteKey { iface_name: "lan2".to_string(), subnet_index: 0 },
+                LanRouteInfo {
+                    ifindex: 3,
+                    iface_name: "lan2".to_string(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                    mac: None,
+                    prefix: 64,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                LanIPv6RouteKey { iface_name: "lan3".to_string(), subnet_index: 0 },
+                LanRouteInfo {
+                    ifindex: 4,
+                    iface_name: "lan3".to_string(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    mac: None,
+                    prefix: 128,
+                    mode: LanRouteMode::Reachable,
+                },
+            );
+            routes.insert(
+                LanIPv6RouteKey { iface_name: "lan4".to_string(), subnet_index: 0 },
+                LanRouteInfo {
+                    ifindex: 5,
+                    iface_name: "lan4".to_string(),
+                    iface_ip: IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1)),
+                    mac: None,
+                    prefix: 64,
+                    mode: LanRouteMode::NextHop {
+                        next_hop_ip: IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 2)),
+                    },
+                },
+            );
+            drop(routes);
+
+            assert_eq!(
+                service.list_dns_answer_ipv6_addrs().await,
+                vec![Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)]
+            );
+        });
+    }
 }

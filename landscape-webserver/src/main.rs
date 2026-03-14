@@ -358,12 +358,14 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         GatewayService::init_service(gateway_store, config.gateway.clone(), gateway_tls_config)
             .await;
 
+    let route_service = IpRouteService::new(route_service_rx, db_store_provider.flow_rule_store());
     let dns_service = LandscapeDnsService::new(
         dns_service_rx,
         dns_rule_service.clone(),
         dns_redirect_service.clone(),
         geo_site_service.clone(),
         dns_upstream_service.clone(),
+        route_service.clone(),
         config.dns.clone(),
         cert_service.clone(),
         metric_service.get_dns_metric_channel(),
@@ -389,7 +391,6 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let config_service =
         LandscapeConfigService::new(config.clone(), db_store_provider.clone()).await;
 
-    let route_service = IpRouteService::new(route_service_rx, db_store_provider.flow_rule_store());
     let ebpf_service = LandscapeEbpfService::new();
 
     let static_nat_mapping_config_service =

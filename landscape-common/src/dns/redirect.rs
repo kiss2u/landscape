@@ -18,8 +18,35 @@ use crate::utils::time::get_f64_timestamp;
 use crate::{
     config::FlowId,
     database::repository::LandscapeDBStore,
-    dns::rule::{DomainConfig, RuleSource},
+    dns::rule::{DomainConfig, DomainMatchType, RuleSource},
 };
+
+pub const DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS: u32 = 10;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DnsRedirectAnswerMode {
+    #[default]
+    StaticIps,
+    AllLocalIps,
+}
+
+impl DnsRedirectAnswerMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::StaticIps => "static_ips",
+            Self::AllLocalIps => "all_local_ips",
+        }
+    }
+
+    pub fn from_db_value(value: &str) -> Self {
+        match value {
+            "all_local_ips" => Self::AllLocalIps,
+            _ => Self::StaticIps,
+        }
+    }
+}
 
 /// 用于定义 DNS 重定向的单元配置
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -34,6 +61,10 @@ pub struct DNSRedirectRule {
     pub enable: bool,
 
     pub match_rules: Vec<RuleSource>,
+
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub answer_mode: DnsRedirectAnswerMode,
 
     #[cfg_attr(feature = "openapi", schema(value_type = Vec<String>))]
     pub result_info: Vec<IpAddr>,
@@ -57,9 +88,68 @@ impl LandscapeDBStore<Uuid> for DNSRedirectRule {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicDnsRedirectScope {
+    Global,
+    Flow(FlowId),
+}
+
+impl DynamicDnsRedirectScope {
+    pub fn applies_to_flow(&self, flow_id: FlowId) -> bool {
+        match self {
+            Self::Global => true,
+            Self::Flow(scope_flow_id) => *scope_flow_id == flow_id,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(tag = "t")]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicDnsMatch {
+    Full(String),
+    Domain(String),
+}
+
+impl From<DynamicDnsMatch> for DomainConfig {
+    fn from(value: DynamicDnsMatch) -> Self {
+        match value {
+            DynamicDnsMatch::Full(value) => {
+                DomainConfig { match_type: DomainMatchType::Full, value }
+            }
+            DynamicDnsMatch::Domain(value) => {
+                DomainConfig { match_type: DomainMatchType::Domain, value }
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct DynamicDnsRedirectRecord {
+    pub match_rule: DynamicDnsMatch,
+    #[cfg_attr(feature = "openapi", schema(value_type = Vec<String>))]
+    pub result_info: Vec<IpAddr>,
+    pub ttl_secs: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct DynamicDnsRedirectBatch {
+    pub source_id: String,
+    pub scope: DynamicDnsRedirectScope,
+    pub records: Vec<DynamicDnsRedirectRecord>,
+}
+
 #[derive(Default, Debug)]
 pub struct DNSRedirectRuntimeRule {
-    pub id: Uuid,
+    pub redirect_id: Option<Uuid>,
+    pub dynamic_redirect_source: Option<String>,
+    pub answer_mode: DnsRedirectAnswerMode,
     pub match_rules: Vec<DomainConfig>,
     pub result_info: Vec<IpAddr>,
+    pub ttl_secs: u32,
 }

@@ -26,6 +26,8 @@ pub struct CheckChainDnsResult {
     #[cfg_attr(feature = "openapi", schema(nullable = false))]
     pub redirect_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(nullable = false))]
+    pub dynamic_redirect_source: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(nullable = false))]
     pub rule_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(nullable = false))]
     pub records: Option<Vec<LandscapeRecord>>,
