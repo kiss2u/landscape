@@ -158,7 +158,7 @@ impl DnsRequestHandler {
         update_dns_mark_list
     }
 
-    pub async fn lookup_redirects(
+    pub fn lookup_redirects(
         &self,
         domain: &str,
         query_type: RecordType,
@@ -170,7 +170,7 @@ impl DnsRequestHandler {
                     let Some(provider) = self.local_answer_provider.as_ref() else {
                         continue;
                     };
-                    let addrs = provider.list_local_answer_addrs(query_type).await;
+                    let addrs = provider.load_local_answer_addrs(query_type);
                     each.lookup_with_addrs(domain, query_type, &addrs)
                 } else {
                     each.lookup(domain, query_type)
@@ -197,7 +197,7 @@ impl DnsRequestHandler {
         let mut result = CheckChainDnsResult::default();
 
         if let Some((records, _status, id, dynamic_source)) =
-            self.lookup_redirects(domain, query_type).await
+            self.lookup_redirects(domain, query_type)
         {
             result.redirect_id = id;
             result.dynamic_redirect_source = dynamic_source;
@@ -392,7 +392,7 @@ impl RequestHandler for DnsRequestHandler {
 
         // 1. Redirects
         if let Some((redirect_records, redirect_status, _, _)) =
-            self.lookup_redirects(&domain, query_type).await
+            self.lookup_redirects(&domain, query_type)
         {
             records = redirect_records;
             status = redirect_status;
@@ -613,10 +613,10 @@ mod tests {
         addrs: Vec<IpAddr>,
     }
 
-    #[async_trait::async_trait]
     impl LocalDnsAnswerProvider for MockLocalAnswerProvider {
-        async fn list_local_answer_addrs(&self, query_type: RecordType) -> Vec<IpAddr> {
-            self.addrs
+        fn load_local_answer_addrs(&self, query_type: RecordType) -> Arc<Vec<IpAddr>> {
+            let addrs = self
+                .addrs
                 .iter()
                 .copied()
                 .filter(|addr| {
@@ -625,7 +625,8 @@ mod tests {
                         (IpAddr::V4(_), RecordType::A) | (IpAddr::V6(_), RecordType::AAAA)
                     )
                 })
-                .collect()
+                .collect();
+            Arc::new(addrs)
         }
     }
 
@@ -791,7 +792,7 @@ mod tests {
             );
 
             let (records, status, redirect_id, _) =
-                handler.lookup_redirects("example.com.", RecordType::A).await.unwrap();
+                handler.lookup_redirects("example.com.", RecordType::A).unwrap();
 
             assert_eq!(status, DnsResultStatus::Local);
             assert_eq!(redirect_id, Some(Uuid::nil()));
@@ -831,7 +832,7 @@ mod tests {
                 })),
             );
 
-            assert!(handler.lookup_redirects("example.com.", RecordType::AAAA).await.is_none());
+            assert!(handler.lookup_redirects("example.com.", RecordType::AAAA).is_none());
         });
     }
 
@@ -860,7 +861,7 @@ mod tests {
             );
 
             let (records, status, redirect_id, _) =
-                handler.lookup_redirects("example.com.", RecordType::AAAA).await.unwrap();
+                handler.lookup_redirects("example.com.", RecordType::AAAA).unwrap();
 
             assert!(records.is_empty());
             assert_eq!(status, DnsResultStatus::Local);

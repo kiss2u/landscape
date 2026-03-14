@@ -24,12 +24,11 @@ pub(crate) mod handler;
 pub(crate) mod matcher;
 pub(crate) mod rule;
 
-#[async_trait::async_trait]
 pub trait LocalDnsAnswerProvider: Send + Sync {
-    async fn list_local_answer_addrs(
+    fn load_local_answer_addrs(
         &self,
         query_type: hickory_proto::rr::RecordType,
-    ) -> Vec<IpAddr>;
+    ) -> Arc<Vec<IpAddr>>;
 }
 
 #[derive(Clone)]
