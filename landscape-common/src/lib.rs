@@ -77,6 +77,7 @@ pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
 pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 10;
 
 // Metric Retention Defaults
+pub const DEFAULT_METRIC_ENABLE: bool = true;
 pub const DEFAULT_METRIC_RAW_RETENTION_MINUTES: u64 = 5;
 pub const DEFAULT_METRIC_ROLLUP_1M_RETENTION_DAYS: u64 = 1;
 pub const DEFAULT_METRIC_ROLLUP_1H_RETENTION_DAYS: u64 = 7;

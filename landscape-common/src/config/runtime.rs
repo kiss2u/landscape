@@ -50,6 +50,7 @@ pub struct StoreRuntimeConfig {
 
 #[derive(Clone, Debug)]
 pub struct MetricRuntimeConfig {
+    pub enable: bool,
     pub raw_retention_minutes: u64,
     pub rollup_1m_retention_days: u64,
     pub rollup_1h_retention_days: u64,
@@ -107,6 +108,7 @@ impl RuntimeConfig {
          Database Connect: {}\n\
          \n\
           [Metric]\n\
+         Enabled: {}\n\
          Raw Retention: {} mins\n\
          Rollup 1m Retention: {} days\n\
          Rollup 1h Retention: {} days\n\
@@ -131,6 +133,7 @@ impl RuntimeConfig {
             address_http_str,
             address_https_str,
             self.store.database_path,
+            self.metric.enable,
             self.metric.raw_retention_minutes,
             self.metric.rollup_1m_retention_days,
             self.metric.rollup_1h_retention_days,
@@ -150,6 +153,9 @@ impl RuntimeConfig {
 
 impl MetricRuntimeConfig {
     pub fn update_from_file_config(&mut self, config: &LandscapeMetricConfig) {
+        if let Some(v) = config.enable {
+            self.enable = v;
+        }
         if let Some(v) = config.raw_retention_minutes {
             self.raw_retention_minutes = v;
         }

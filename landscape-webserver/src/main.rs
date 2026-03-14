@@ -366,7 +366,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         dns_upstream_service.clone(),
         config.dns.clone(),
         cert_service.clone(),
-        Some(metric_service.data.dns_metric.get_msg_channel()),
+        metric_service.get_dns_metric_channel(),
     )
     .await;
     let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;

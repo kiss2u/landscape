@@ -9,6 +9,10 @@ export default {
   save_dns: "Save DNS Config",
   save_metric: "Save Metric Config",
 
+  metric_enabled: "Enable Metric Service",
+  metric_enabled_desc:
+    "When disabled, new connection and DNS metric data will no longer be collected",
+
   language: "Language",
   theme: "Theme",
   theme_placeholder: "Light mode is under development",

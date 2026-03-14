@@ -51,6 +51,9 @@ pub struct LandscapeStoreConfig {
 pub struct LandscapeMetricConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub enable: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub raw_retention_minutes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]

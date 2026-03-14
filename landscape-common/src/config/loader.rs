@@ -95,6 +95,7 @@ impl RuntimeConfig {
         };
 
         let metric = MetricRuntimeConfig {
+            enable: config.metric.enable.unwrap_or(crate::DEFAULT_METRIC_ENABLE),
             raw_retention_minutes: config
                 .metric
                 .raw_retention_minutes

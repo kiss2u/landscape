@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
 use landscape_common::{
+    event::DnsMetricMessage,
     service::{ServiceStatus, WatchService},
     LANDSCAPE_METRIC_DIR_NAME,
 };
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
 pub mod connect_manager;
@@ -41,6 +43,7 @@ impl MetricData {
 
 #[derive(Clone)]
 pub struct MetricService {
+    pub enabled: bool,
     pub status: WatchService,
     pub data: MetricData,
 }
@@ -55,12 +58,18 @@ impl MetricService {
         }
         let status = WatchService::new();
         MetricService {
+            enabled: config.enable,
             data: MetricData::new(metric_path, config).await,
             status,
         }
     }
 
     pub async fn start_service(&self) {
+        if !self.enabled {
+            tracing::info!("Metric service disabled by config");
+            return;
+        }
+
         let status = self.status.clone();
         if status.is_stop() {
             let metric_service = self.data.clone();
@@ -74,6 +83,10 @@ impl MetricService {
 
     pub async fn stop_service(&self) {
         self.status.wait_stop().await;
+    }
+
+    pub fn get_dns_metric_channel(&self) -> Option<mpsc::Sender<DnsMetricMessage>> {
+        self.enabled.then(|| self.data.dns_metric.get_msg_channel())
     }
 }
 

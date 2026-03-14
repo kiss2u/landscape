@@ -9,6 +9,9 @@ export default {
   save_dns: "保存 DNS 配置",
   save_metric: "保存指标配置",
 
+  metric_enabled: "启用指标服务",
+  metric_enabled_desc: "关闭后不再采集新的连接与 DNS 指标数据",
+
   language: "语言设定",
   theme: "外观主题",
   theme_placeholder: "浅色模式适配中，暂不可用",

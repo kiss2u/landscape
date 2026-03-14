@@ -29,6 +29,13 @@ async function handleSaveMetric() {
       </n-button>
     </template>
     <n-form label-placement="left" label-width="120">
+      <n-form-item :label="t('config.metric_enabled')">
+        <n-switch v-model:value="metricStore.enabled" />
+        <template #feedback>
+          {{ t("config.metric_enabled_desc") }}
+        </template>
+      </n-form-item>
+
       <n-divider title-placement="left">
         {{ t("config.conn_retention_mins") }}
       </n-divider>
@@ -48,20 +55,18 @@ async function handleSaveMetric() {
           </n-form-item>
         </n-gi>
         <n-gi>
-          <n-gi>
-            <n-form-item :label="t('config.conn_retention_minute_days')">
-              <n-input-number
-                v-model:value="metricStore.rollup1mRetentionDays"
-                :min="1"
-                :max="365"
-                placeholder="1"
-                style="width: 100%"
-              />
-              <template #feedback>
-                {{ t("config.conn_retention_minute_days_desc") }}
-              </template>
-            </n-form-item>
-          </n-gi>
+          <n-form-item :label="t('config.conn_retention_minute_days')">
+            <n-input-number
+              v-model:value="metricStore.rollup1mRetentionDays"
+              :min="1"
+              :max="365"
+              placeholder="1"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.conn_retention_minute_days_desc") }}
+            </template>
+          </n-form-item>
         </n-gi>
         <n-gi>
           <n-form-item :label="t('config.conn_retention_hour_days')">

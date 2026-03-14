@@ -4,6 +4,7 @@ import type { LandscapeMetricConfig } from "@landscape-router/types/api/schemas"
 import { get_metric_config_edit, update_metric_config } from "@/api/sys/config";
 
 export const useMetricConfigStore = defineStore("metric_config", () => {
+  const enabled = ref<boolean>(true);
   const rawRetentionMinutes = ref<number | undefined>(undefined);
   const rollup1mRetentionDays = ref<number | undefined>(undefined);
   const rollup1hRetentionDays = ref<number | undefined>(undefined);
@@ -21,6 +22,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
 
   async function loadMetricConfig() {
     const { metric, hash } = await get_metric_config_edit();
+    enabled.value = metric.enable ?? true;
     rawRetentionMinutes.value = metric.raw_retention_minutes ?? undefined;
     rollup1mRetentionDays.value = metric.rollup_1m_retention_days ?? undefined;
     rollup1hRetentionDays.value = metric.rollup_1h_retention_days ?? undefined;
@@ -41,6 +43,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
 
   async function saveMetricConfig() {
     const new_metric: LandscapeMetricConfig = {
+      enable: enabled.value,
       raw_retention_minutes: rawRetentionMinutes.value,
       rollup_1m_retention_days: rollup1mRetentionDays.value,
       rollup_1h_retention_days: rollup1hRetentionDays.value,
@@ -66,6 +69,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
   }
 
   return {
+    enabled,
     rawRetentionMinutes,
     rollup1mRetentionDays,
     rollup1hRetentionDays,
