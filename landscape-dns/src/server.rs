@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use arc_swap::ArcSwapOption;
 use hickory_server::ServerFuture;
 use landscape_common::{
     config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo, event::DnsMetricMessage,
@@ -25,7 +26,7 @@ pub(crate) mod rule;
 #[derive(Clone)]
 pub struct LandscapeDnsServer {
     pub status: WatchService,
-    flow_dns_server: Arc<Mutex<HashMap<u32, (DnsRequestHandler, CancellationToken)>>>,
+    flow_dns_server: Arc<Mutex<HashMap<u32, Arc<FlowServerEntry>>>>,
     pub addr: SocketAddr,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
     pub doh: Option<DohListenerConfig>,
@@ -38,6 +39,25 @@ pub struct DohListenerConfig {
     pub server_cert_resolver: Arc<dyn ResolvesServerCert>,
     pub dns_hostname: Option<String>,
     pub http_endpoint: String,
+}
+
+struct FlowServerRuntime {
+    handler: DnsRequestHandler,
+    _token: CancellationToken,
+}
+
+struct FlowServerEntry {
+    refresh_lock: Mutex<()>,
+    runtime: Arc<ArcSwapOption<FlowServerRuntime>>,
+}
+
+impl FlowServerEntry {
+    fn new() -> Self {
+        Self {
+            refresh_lock: Mutex::new(()),
+            runtime: Arc::new(ArcSwapOption::new(None)),
+        }
+    }
 }
 
 impl LandscapeDnsServer {
@@ -67,33 +87,35 @@ impl LandscapeDnsServer {
         info: ChainDnsServerInitInfo,
         dns_config: DnsRuntimeConfig,
     ) {
-        {
+        let entry = {
             let mut lock = self.flow_dns_server.lock().await;
-            if let Some((old_handler, _)) = lock.get_mut(&flow_id) {
-                old_handler.renew_rules(info, dns_config).await;
-                return;
-            }
+            lock.entry(flow_id).or_insert_with(|| Arc::new(FlowServerEntry::new())).clone()
+        };
+
+        let _refresh_guard = entry.refresh_lock.lock().await;
+        if let Some(runtime) = entry.runtime.load_full() {
+            runtime.handler.renew_rules(info, dns_config).await;
+            return;
         }
 
         let handler = DnsRequestHandler::new(info, dns_config, flow_id, self.msg_tx.clone());
         let token = start_dns_server(flow_id, self.addr, self.doh.clone(), handler.clone()).await;
-
-        {
-            let mut lock = self.flow_dns_server.lock().await;
-            lock.insert(flow_id, (handler, token));
+        if token.is_cancelled() {
+            tracing::error!("[flow: {flow_id}]: DNS server start failed, runtime not registered");
+            return;
         }
+
+        entry.runtime.store(Some(Arc::new(FlowServerRuntime { handler, _token: token })));
     }
 
     pub async fn check_domain(&self, req: CheckDnsReq) -> CheckChainDnsResult {
-        let handler = {
+        let entry = {
             let flow_server = self.flow_dns_server.lock().await;
-            if let Some((handler, _)) = flow_server.get(&req.flow_id) {
-                Some(handler.clone())
-            } else {
-                None
-            }
+            flow_server.get(&req.flow_id).cloned()
         };
 
+        let handler = entry
+            .and_then(|entry| entry.runtime.load_full().map(|runtime| runtime.handler.clone()));
         if let Some(handler) = handler {
             handler.check_domain(&req.get_domain(), convert_record_type(req.record_type)).await
         } else {
@@ -152,4 +174,57 @@ pub async fn start_dns_server(
     });
 
     token
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use landscape_common::{config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo};
+
+    fn run_async_test(test: impl std::future::Future<Output = ()>) {
+        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(test);
+    }
+
+    fn test_dns_config() -> DnsRuntimeConfig {
+        DnsRuntimeConfig {
+            cache_capacity: 16,
+            cache_ttl: 60,
+            negative_cache_ttl: 10,
+            doh_listen_port: 0,
+            doh_http_endpoint: String::new(),
+        }
+    }
+
+    #[test]
+    fn flow_server_entry_runtime_reads_do_not_wait_on_refresh_lock() {
+        run_async_test(async {
+            let entry = FlowServerEntry::new();
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo::default(),
+                test_dns_config(),
+                7,
+                None,
+            );
+            entry.runtime.store(Some(Arc::new(FlowServerRuntime {
+                handler,
+                _token: CancellationToken::new(),
+            })));
+
+            let _guard = entry.refresh_lock.lock().await;
+            let runtime = entry.runtime.load_full();
+
+            assert!(runtime.is_some());
+            assert_eq!(runtime.unwrap().handler.flow_id, 7);
+        });
+    }
+
+    #[test]
+    fn flow_server_entry_allows_empty_runtime_while_refreshing() {
+        run_async_test(async {
+            let entry = FlowServerEntry::new();
+            let _guard = entry.refresh_lock.lock().await;
+
+            assert!(entry.runtime.load_full().is_none());
+        });
+    }
 }

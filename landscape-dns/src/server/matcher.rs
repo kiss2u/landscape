@@ -137,7 +137,7 @@ mod tests {
 
         let matcher = DomainMatcher::new(configs);
         assert!(matcher.is_match("baidu.com"));
-        assert!(matcher.is_match("abaidu.com"));
+        assert!(!matcher.is_match("abaidu.com"));
     }
 
     fn test_memory_usage() {

@@ -1,5 +1,7 @@
 use std::{
     collections::{BTreeMap, HashSet},
+    future::Future,
+    sync::atomic::{AtomicU32, Ordering},
     sync::Arc,
     time::{Duration, Instant},
     vec,
@@ -37,6 +39,8 @@ use landscape_common::{
     metric::dns::{DnsMetric, DnsResultStatus},
 };
 
+const LOOKUP_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Debug)]
 pub struct DnsRequestHandler {
     redirect_solution: Arc<ArcSwap<Vec<RedirectSolution>>>,
@@ -44,7 +48,7 @@ pub struct DnsRequestHandler {
     pub cache: Arc<ArcSwap<DNSCache>>,
     pub flow_id: u32,
     pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
-    pub negative_cache_ttl: u32,
+    pub negative_cache_ttl: Arc<AtomicU32>,
 }
 
 impl DnsRequestHandler {
@@ -72,15 +76,11 @@ impl DnsRequestHandler {
             flow_id,
             redirect_solution: Arc::new(ArcSwap::from_pointee(redirect_solution)),
             msg_tx,
-            negative_cache_ttl: dns_config.negative_cache_ttl,
+            negative_cache_ttl: Arc::new(AtomicU32::new(dns_config.negative_cache_ttl)),
         }
     }
 
-    pub async fn renew_rules(
-        &mut self,
-        info: ChainDnsServerInitInfo,
-        dns_config: DnsRuntimeConfig,
-    ) {
+    pub async fn renew_rules(&self, info: ChainDnsServerInitInfo, dns_config: DnsRuntimeConfig) {
         let mut resolves = BTreeMap::new();
         for rule in info.dns_rules.into_iter() {
             resolves.insert(rule.index, ResolutionRule::new(rule, self.flow_id));
@@ -108,7 +108,7 @@ impl DnsRequestHandler {
         let redirect_solution: Vec<_> =
             info.redirect_rules.into_iter().map(RedirectSolution::new).collect();
         self.redirect_solution.store(Arc::new(redirect_solution));
-        self.negative_cache_ttl = dns_config.negative_cache_ttl;
+        self.negative_cache_ttl.store(dns_config.negative_cache_ttl, Ordering::Relaxed);
 
         landscape_ebpf::map_setting::route::cache::recreate_route_lan_cache_inner_map();
     }
@@ -183,11 +183,9 @@ impl DnsRequestHandler {
                 if resolver.is_match(domain) {
                     result.rule_id = Some(resolver.get_config_id());
 
-                    if let Ok(Ok(rdata_vec)) = tokio::time::timeout(
-                        Duration::from_secs(5),
-                        resolver.lookup(domain, query_type),
-                    )
-                    .await
+                    if let Ok(rdata_vec) =
+                        with_lookup_timeout(resolver.lookup(domain, query_type), LOOKUP_TIMEOUT)
+                            .await
                     {
                         result.records = Some(crate::to_common_records(rdata_vec));
                     }
@@ -254,8 +252,11 @@ impl DnsRequestHandler {
         mark: &DnsRuntimeMarkInfo,
         filter: FilterResult,
     ) {
-        let min_ttl =
-            rdata_ttl_vec.iter().map(|r| r.ttl()).min().unwrap_or(self.negative_cache_ttl);
+        let min_ttl = rdata_ttl_vec
+            .iter()
+            .map(|r| r.ttl())
+            .min()
+            .unwrap_or_else(|| self.negative_cache_ttl.load(Ordering::Relaxed));
 
         if min_ttl == 0 {
             return;
@@ -398,7 +399,9 @@ impl RequestHandler for DnsRequestHandler {
                         break;
                     }
 
-                    match resolver.lookup(&domain, query_type).await {
+                    match with_lookup_timeout(resolver.lookup(&domain, query_type), LOOKUP_TIMEOUT)
+                        .await
+                    {
                         Ok(rdata_vec) => {
                             self.insert(
                                 &domain,
@@ -496,6 +499,16 @@ fn serve_failed(req_header: &Header) -> ResponseInfo {
     header.into()
 }
 
+async fn with_lookup_timeout<F, T>(future: F, timeout: Duration) -> crate::error::DnsResult<T>
+where
+    F: Future<Output = crate::error::DnsResult<T>>,
+{
+    match tokio::time::timeout(timeout, future).await {
+        Ok(result) => result,
+        Err(_) => Err(crate::error::DnsError::Timeout),
+    }
+}
+
 fn filter_result(un_filter_records: Vec<Record>, filter: &FilterResult) -> Vec<Record> {
     if matches!(filter, FilterResult::Unfilter) {
         return un_filter_records;
@@ -555,8 +568,25 @@ mod tests {
     use hickory_proto::op::{Header, ResponseCode};
     use hickory_proto::rr::rdata::{A, AAAA};
     use hickory_proto::rr::{RData, Record, RecordType};
+    use landscape_common::{
+        config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo, flow::mark::FlowMark,
+    };
     use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
+
+    fn run_async_test(test: impl std::future::Future<Output = ()>) {
+        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(test);
+    }
+
+    fn test_dns_config(negative_cache_ttl: u32) -> DnsRuntimeConfig {
+        DnsRuntimeConfig {
+            cache_capacity: 16,
+            cache_ttl: 60,
+            negative_cache_ttl,
+            doh_listen_port: 0,
+            doh_http_endpoint: String::new(),
+        }
+    }
 
     #[test]
     fn test_serve_failed_flags() {
@@ -604,5 +634,70 @@ mod tests {
 
         let filtered_none = filter_result(records.clone(), &FilterResult::Unfilter);
         assert_eq!(filtered_none.len(), 2);
+    }
+
+    #[test]
+    fn test_with_lookup_timeout_returns_timeout_error() {
+        run_async_test(async {
+            let result = with_lookup_timeout(
+                async {
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    Ok::<_, crate::error::DnsError>(vec![1_u8])
+                },
+                Duration::from_millis(5),
+            )
+            .await;
+
+            assert!(matches!(result, Err(crate::error::DnsError::Timeout)));
+        });
+    }
+
+    #[test]
+    fn test_with_lookup_timeout_returns_inner_result() {
+        run_async_test(async {
+            let result = with_lookup_timeout(
+                async { Ok::<_, crate::error::DnsError>(vec![1_u8, 2_u8]) },
+                Duration::from_millis(50),
+            )
+            .await;
+
+            assert_eq!(result.unwrap(), vec![1_u8, 2_u8]);
+        });
+    }
+
+    #[test]
+    fn test_negative_cache_ttl_updates_are_shared_across_clones() {
+        run_async_test(async {
+            let initial_config = test_dns_config(7);
+            let handler =
+                DnsRequestHandler::new(ChainDnsServerInitInfo::default(), initial_config, 9, None);
+            let handler_clone = handler.clone();
+
+            let updated_config = test_dns_config(33);
+            handler.renew_rules(ChainDnsServerInitInfo::default(), updated_config).await;
+
+            handler_clone
+                .insert(
+                    "negative-cache.example.",
+                    RecordType::A,
+                    vec![],
+                    ResponseCode::NXDomain,
+                    &DnsRuntimeMarkInfo { mark: FlowMark::default(), priority: 0 },
+                    FilterResult::Unfilter,
+                )
+                .await;
+
+            let cache_item = handler_clone
+                .cache
+                .load()
+                .get(&("negative-cache.example.".to_string(), RecordType::A))
+                .await
+                .expect("cache item must exist");
+
+            assert_eq!(cache_item.min_ttl, 33);
+            assert_eq!(cache_item.response_code, ResponseCode::NXDomain);
+            assert!(cache_item.rdatas.is_empty());
+            assert_eq!(cache_item.mark.priority, 0);
+        });
     }
 }
