@@ -14,13 +14,17 @@ use libbpf_rs::{
     AsRawLibbpf, MapCore, MapFlags, OpenMapMut,
 };
 
-/// Try to reuse a pinned map. If the pinned map is incompatible (e.g. struct
-/// layout changed), remove the stale pin file so `load()` creates a fresh one.
-///
-/// NOTE: libbpf's `bpf_map__reuse_fd` silently overwrites the map definition
-/// with the reused fd's sizes, so we must check key/value sizes explicitly
-/// before calling `reuse_pinned_map`.
-pub fn reuse_pinned_map_or_recreate(map: &mut OpenMapMut, path: &(impl AsRef<Path> + ?Sized)) {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PinnedMapReuseStatus {
+    Compatible,
+    Missing,
+    Incompatible,
+}
+
+pub fn probe_pinned_map_reuse(
+    map: &mut OpenMapMut,
+    path: &(impl AsRef<Path> + ?Sized),
+) -> PinnedMapReuseStatus {
     let ptr = map.as_libbpf_object().as_ptr();
     let expected_ty = unsafe { libbpf_rs::libbpf_sys::bpf_map__type(ptr) };
     let expected_ks = unsafe { libbpf_rs::libbpf_sys::bpf_map__key_size(ptr) };
@@ -29,65 +33,81 @@ pub fn reuse_pinned_map_or_recreate(map: &mut OpenMapMut, path: &(impl AsRef<Pat
     let expected_flags = unsafe { libbpf_rs::libbpf_sys::bpf_map__map_flags(ptr) };
     map.set_pin_path(path).unwrap();
     if !path.as_ref().exists() {
-        return;
+        return PinnedMapReuseStatus::Missing;
     }
-    match libbpf_rs::MapHandle::from_pinned_path(path) {
-        Ok(pinned) => {
-            let pinned_info = match pinned.info() {
-                Ok(info) => info,
-                Err(e) => {
-                    tracing::warn!(
-                        "Cannot inspect pinned map {} info: {e}, will recreate",
-                        path.as_ref().display(),
-                    );
-                    drop(pinned);
-                    let _ = std::fs::remove_file(path);
-                    return;
-                }
-            };
-            let actual_ty = pinned.map_type() as u32;
-            let actual_ks = pinned.key_size();
-            let actual_vs = pinned.value_size();
-            let actual_me = pinned.max_entries();
-            let actual_flags = pinned_info.info.map_flags;
-
-            if actual_ty != expected_ty
-                || actual_ks != expected_ks
-                || actual_vs != expected_vs
-                || actual_me != expected_me
-                || actual_flags != expected_flags
-            {
-                tracing::warn!(
-                    "Pinned map {} layout changed (type {}->{}, ks {}->{}, vs {}->{}, max_entries {}->{}, flags {:#x}->{:#x}), will recreate",
-                    path.as_ref().display(),
-                    actual_ty,
-                    expected_ty,
-                    actual_ks,
-                    expected_ks,
-                    actual_vs,
-                    expected_vs,
-                    actual_me,
-                    expected_me,
-                    actual_flags,
-                    expected_flags,
-                );
-                drop(pinned);
-                let _ = std::fs::remove_file(path);
-                return;
-            }
-        }
+    let pinned = match libbpf_rs::MapHandle::from_pinned_path(path) {
+        Ok(pinned) => pinned,
         Err(e) => {
             tracing::warn!(
                 "Cannot inspect pinned map {}: {e}, will recreate",
                 path.as_ref().display(),
             );
-            let _ = std::fs::remove_file(path);
-            return;
+            return PinnedMapReuseStatus::Incompatible;
         }
+    };
+    let pinned_info = match pinned.info() {
+        Ok(info) => info,
+        Err(e) => {
+            tracing::warn!(
+                "Cannot inspect pinned map {} info: {e}, will recreate",
+                path.as_ref().display(),
+            );
+            return PinnedMapReuseStatus::Incompatible;
+        }
+    };
+    let actual_ty = pinned.map_type() as u32;
+    let actual_ks = pinned.key_size();
+    let actual_vs = pinned.value_size();
+    let actual_me = pinned.max_entries();
+    let actual_flags = pinned_info.info.map_flags;
+
+    if actual_ty != expected_ty
+        || actual_ks != expected_ks
+        || actual_vs != expected_vs
+        || actual_me != expected_me
+        || actual_flags != expected_flags
+    {
+        tracing::warn!(
+            "Pinned map {} layout changed (type {}->{}, ks {}->{}, vs {}->{}, max_entries {}->{}, flags {:#x}->{:#x}), will recreate",
+            path.as_ref().display(),
+            actual_ty,
+            expected_ty,
+            actual_ks,
+            expected_ks,
+            actual_vs,
+            expected_vs,
+            actual_me,
+            expected_me,
+            actual_flags,
+            expected_flags,
+        );
+        return PinnedMapReuseStatus::Incompatible;
     }
-    if let Err(e) = map.reuse_pinned_map(path) {
-        tracing::warn!("Pinned map {} reuse failed: {e}, will recreate", path.as_ref().display());
-        let _ = std::fs::remove_file(path);
+
+    PinnedMapReuseStatus::Compatible
+}
+
+/// Try to reuse a pinned map. If the pinned map is incompatible (e.g. struct
+/// layout changed), remove the stale pin file so `load()` creates a fresh one.
+///
+/// NOTE: libbpf's `bpf_map__reuse_fd` silently overwrites the map definition
+/// with the reused fd's sizes, so we must check key/value sizes explicitly
+/// before calling `reuse_pinned_map`.
+pub fn reuse_pinned_map_or_recreate(map: &mut OpenMapMut, path: &(impl AsRef<Path> + ?Sized)) {
+    match probe_pinned_map_reuse(map, path) {
+        PinnedMapReuseStatus::Compatible => {
+            if let Err(e) = map.reuse_pinned_map(path) {
+                tracing::warn!(
+                    "Pinned map {} reuse failed: {e}, will recreate",
+                    path.as_ref().display(),
+                );
+                let _ = std::fs::remove_file(path);
+            }
+        }
+        PinnedMapReuseStatus::Missing => {}
+        PinnedMapReuseStatus::Incompatible => {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -124,30 +144,18 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
         &mut landscape_open.maps.nat6_static_mappings,
         &paths.nat6_static_mappings,
     );
-    reuse_pinned_map_or_recreate(&mut landscape_open.maps.nat4_mappings, &paths.nat4_mappings);
     reuse_pinned_map_or_recreate(
         &mut landscape_open.maps.nat4_mapping_timer,
         &paths.nat4_mapping_timer,
     );
-    reuse_pinned_map_or_recreate(
+    crate::nat::v3::configure_runtime_bundle_maps(
+        &mut landscape_open.maps.nat4_mappings,
         &mut landscape_open.maps.nat4_dynamic_state_v3,
-        &paths.nat4_dynamic_state_v3,
-    );
-    reuse_pinned_map_or_recreate(
         &mut landscape_open.maps.nat4_mapping_timer_v3,
-        &paths.nat4_mapping_timer_v3,
-    );
-    reuse_pinned_map_or_recreate(
         &mut landscape_open.maps.nat4_tcp_free_ports_v3,
-        &paths.nat4_tcp_free_ports_v3,
-    );
-    reuse_pinned_map_or_recreate(
         &mut landscape_open.maps.nat4_udp_free_ports_v3,
-        &paths.nat4_udp_free_ports_v3,
-    );
-    reuse_pinned_map_or_recreate(
         &mut landscape_open.maps.nat4_icmp_free_ports_v3,
-        &paths.nat4_icmp_free_ports_v3,
+        paths,
     );
 
     // firewall
@@ -207,7 +215,6 @@ pub fn cleanup_pinned_maps() {
         // nat4_mapping_timer contains bpf_timer entries whose callbacks hold
         // refcounts on nat_v4 programs, preventing kernel cleanup.
         &MAP_PATHS.nat4_mapping_timer,
-        &MAP_PATHS.nat4_mapping_timer_v3,
     ];
     for path in maps_to_unpin {
         match std::fs::remove_file(path) {

@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn release_generation_mismatch_deletes_only_ct() {
-        let _guard = NAT_V3_TEST_LOCK.lock().unwrap();
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let builder = TestNatV3TimerSkelBuilder::default();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn release_active_two_decrements_ref() {
-        let _guard = NAT_V3_TEST_LOCK.lock().unwrap();
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let builder = TestNatV3TimerSkelBuilder::default();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn timeout2_transitions_to_release_and_closes_last() {
-        let _guard = NAT_V3_TEST_LOCK.lock().unwrap();
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let builder = TestNatV3TimerSkelBuilder::default();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn release_closed_queue_fail_enters_pending() {
-        let _guard = NAT_V3_TEST_LOCK.lock().unwrap();
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let builder = TestNatV3TimerSkelBuilder::default();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn pending_queue_retry_success_deletes_ct() {
-        let _guard = NAT_V3_TEST_LOCK.lock().unwrap();
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let builder = TestNatV3TimerSkelBuilder::default();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
