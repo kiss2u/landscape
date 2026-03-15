@@ -48,5 +48,7 @@ pub async fn update_dns_config(
 ) -> LandscapeApiResult<String> {
     let request: UpdateDnsConfigRequest = serde_json::from_value(payload)?;
     state.config_service.update_dns_config(request.new_dns, request.expected_hash).await?;
+    let dns_runtime = state.config_service.get_dns_runtime_config();
+    state.dns_service.apply_runtime_config(dns_runtime).await;
     LandscapeApiResp::success("success".to_string())
 }

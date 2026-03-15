@@ -68,13 +68,13 @@ impl ConfigController for DNSRuleService {
 
     async fn update_one_config(&self, config: Self::Config) {
         let _ =
-            self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: Some(config.flow_id) }).await;
+            self.dns_events_tx.send(DnsEvent::RulesChanged { flow_id: Some(config.flow_id) }).await;
     }
     async fn delete_one_config(&self, config: Self::Config) {
         let _ =
-            self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: Some(config.flow_id) }).await;
+            self.dns_events_tx.send(DnsEvent::RulesChanged { flow_id: Some(config.flow_id) }).await;
     }
     async fn update_many_config(&self, _configs: Vec<Self::Config>) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+        let _ = self.dns_events_tx.send(DnsEvent::RulesChanged { flow_id: None }).await;
     }
 }

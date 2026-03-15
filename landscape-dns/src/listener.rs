@@ -1,8 +1,101 @@
-use socket2::{Domain, Protocol, Socket, Type};
+use arc_swap::ArcSwapOption;
 use std::net::SocketAddr;
 use std::os::fd::AsRawFd;
+use std::sync::Arc;
+use std::time::Duration;
 
+use hickory_server::ServerFuture;
+use rustls::server::ResolvesServerCert;
 use tokio::net::UdpSocket;
+use tokio_util::sync::CancellationToken;
+
+use crate::server::handler::DnsRequestHandler;
+use landscape_common::dns::DohRuntimeConfig;
+use socket2::{Domain, Protocol, Socket, Type};
+
+#[derive(Clone)]
+pub struct EffectiveDohListenerConfig {
+    pub addr: SocketAddr,
+    pub handshake_timeout: Duration,
+    pub server_cert_resolver: Arc<dyn ResolvesServerCert>,
+    pub dns_hostname: Option<String>,
+    pub http_endpoint: String,
+}
+
+#[derive(Clone)]
+pub(crate) struct DohListenerStaticConfig {
+    handshake_timeout: Duration,
+    server_cert_resolver: Arc<dyn ResolvesServerCert>,
+    dns_hostname: Option<String>,
+}
+
+#[derive(Clone)]
+pub(crate) struct DohListenerState {
+    pub(crate) static_config: DohListenerStaticConfig,
+    pub(crate) live_config: Arc<ArcSwapOption<DohRuntimeConfig>>,
+}
+
+impl DohListenerStaticConfig {
+    pub(crate) fn build_effective_config(
+        &self,
+        doh_runtime: &DohRuntimeConfig,
+    ) -> EffectiveDohListenerConfig {
+        EffectiveDohListenerConfig {
+            addr: SocketAddr::new(self.bind_addr(), doh_runtime.listen_port),
+            handshake_timeout: self.handshake_timeout,
+            server_cert_resolver: self.server_cert_resolver.clone(),
+            dns_hostname: self.dns_hostname.clone(),
+            http_endpoint: doh_runtime.http_endpoint.clone(),
+        }
+    }
+
+    fn bind_addr(&self) -> std::net::IpAddr {
+        std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
+    }
+}
+
+impl DohListenerState {
+    pub(crate) fn from_effective_config(value: EffectiveDohListenerConfig) -> Self {
+        let live_config = Some(Arc::new(DohRuntimeConfig::from(&value)));
+        Self {
+            static_config: DohListenerStaticConfig::from(value),
+            live_config: Arc::new(ArcSwapOption::new(live_config)),
+        }
+    }
+
+    pub(crate) fn update_live_config(&self, doh_runtime: Option<DohRuntimeConfig>) {
+        self.live_config.store(doh_runtime.map(Arc::new));
+    }
+
+    pub(crate) fn build_effective_config(
+        &self,
+        desired_live_config: Option<&DohRuntimeConfig>,
+    ) -> Option<EffectiveDohListenerConfig> {
+        let live_config = desired_live_config
+            .map(|runtime| Arc::new(runtime.clone()))
+            .or_else(|| self.live_config.load_full());
+        live_config.as_deref().map(|runtime| self.static_config.build_effective_config(runtime))
+    }
+}
+
+impl From<EffectiveDohListenerConfig> for DohListenerStaticConfig {
+    fn from(value: EffectiveDohListenerConfig) -> Self {
+        Self {
+            handshake_timeout: value.handshake_timeout,
+            server_cert_resolver: value.server_cert_resolver,
+            dns_hostname: value.dns_hostname,
+        }
+    }
+}
+
+impl From<&EffectiveDohListenerConfig> for DohRuntimeConfig {
+    fn from(value: &EffectiveDohListenerConfig) -> Self {
+        Self {
+            listen_port: value.addr.port(),
+            http_endpoint: value.http_endpoint.clone(),
+        }
+    }
+}
 
 pub async fn create_udp_socket(address: SocketAddr) -> std::io::Result<(UdpSocket, i32)> {
     let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
@@ -28,4 +121,76 @@ pub fn create_tcp_listener(address: SocketAddr) -> std::io::Result<(tokio::net::
     let listener: std::net::TcpListener = socket.into();
     let listener = tokio::net::TcpListener::from_std(listener)?;
     Ok((listener, fd))
+}
+
+pub async fn start_flow_dns_listener(
+    flow_id: u32,
+    addr: SocketAddr,
+    doh: Option<EffectiveDohListenerConfig>,
+    handler: DnsRequestHandler,
+) -> CancellationToken {
+    let Ok((udp, sock_fd)) = create_udp_socket(addr).await else {
+        tracing::error!("[flow: {flow_id}]: create udp socket error");
+        return cancelled_token();
+    };
+
+    attach_dns_socket(flow_id, sock_fd, false);
+
+    let mut server = ServerFuture::new(handler);
+    server.register_socket(udp);
+
+    if let Some(doh) = doh {
+        register_doh_listener(&mut server, flow_id, doh);
+    }
+
+    let token = server.shutdown_token().clone();
+
+    tokio::spawn(async move {
+        if let Err(e) = server.block_until_done().await {
+            tracing::error!("[flow: {flow_id}]: server down, error: {e:?}");
+        } else {
+            tracing::info!("[flow: {flow_id}]: server down");
+        }
+    });
+
+    token
+}
+
+fn register_doh_listener(
+    server: &mut ServerFuture<DnsRequestHandler>,
+    flow_id: u32,
+    doh: EffectiveDohListenerConfig,
+) {
+    match create_tcp_listener(doh.addr) {
+        Ok((listener, sock_fd)) => {
+            attach_dns_socket(flow_id, sock_fd, true);
+            if let Err(e) = server.register_https_listener(
+                listener,
+                doh.handshake_timeout,
+                doh.server_cert_resolver.clone(),
+                doh.dns_hostname.clone(),
+                doh.http_endpoint,
+            ) {
+                tracing::error!("[flow: {flow_id}]: register DoH listener error: {e}");
+            }
+        }
+        Err(e) => {
+            tracing::error!("[flow: {flow_id}]: create DoH listener error: {e}");
+        }
+    }
+}
+
+fn attach_dns_socket(flow_id: u32, sock_fd: i32, is_tcp: bool) {
+    if is_tcp {
+        landscape_ebpf::map_setting::dns::setting_dns_sock_map_tcp(sock_fd, flow_id);
+    } else {
+        landscape_ebpf::map_setting::dns::setting_dns_sock_map(sock_fd, flow_id);
+    }
+    landscape_ebpf::dns_dispatcher::attach_reuseport_ebpf(sock_fd).unwrap();
+}
+
+fn cancelled_token() -> CancellationToken {
+    let token = CancellationToken::new();
+    token.cancel();
+    token
 }

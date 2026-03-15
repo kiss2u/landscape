@@ -33,15 +33,22 @@ impl ConfigController for DnsUpstreamService {
         &self.store
     }
 
-    async fn update_one_config(&self, _: Self::Config) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+    async fn update_one_config(&self, config: Self::Config) {
+        let _ = self
+            .dns_events_tx
+            .send(DnsEvent::UpstreamsChanged { upstream_ids: vec![config.id] })
+            .await;
     }
 
-    async fn delete_one_config(&self, _: Self::Config) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+    async fn delete_one_config(&self, config: Self::Config) {
+        let _ = self
+            .dns_events_tx
+            .send(DnsEvent::UpstreamsChanged { upstream_ids: vec![config.id] })
+            .await;
     }
 
-    async fn update_many_config(&self, _configs: Vec<Self::Config>) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+    async fn update_many_config(&self, configs: Vec<Self::Config>) {
+        let upstream_ids = configs.into_iter().map(|config| config.id).collect();
+        let _ = self.dns_events_tx.send(DnsEvent::UpstreamsChanged { upstream_ids }).await;
     }
 }

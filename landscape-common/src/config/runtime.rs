@@ -66,7 +66,7 @@ pub struct MetricRuntimeConfig {
     pub aggregate_interval_secs: u64,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DnsRuntimeConfig {
     pub cache_capacity: u32,
     pub cache_ttl: u32,

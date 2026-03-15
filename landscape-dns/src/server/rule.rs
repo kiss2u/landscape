@@ -6,15 +6,15 @@ use hickory_proto::rr::{
 };
 use uuid::Uuid;
 
-use landscape_common::dns::redirect::{DNSRedirectRuntimeRule, DnsRedirectAnswerMode};
+use landscape_common::dns::redirect::DnsRedirectAnswerMode;
 use landscape_common::{
-    dns::rule::{DNSRuntimeRule, FilterResult},
+    dns::rule::FilterResult,
+    dns::{RuntimeDnsRule, RuntimeRedirectRule},
     flow::DnsRuntimeMarkInfo,
 };
 
 use crate::connection::LandscapeMarkDNSResolver;
 use crate::server::matcher::DomainMatcher;
-use crate::DEFAULT_ENABLE_IP_VALIDATION;
 
 #[derive(Debug)]
 pub struct RedirectSolution {
@@ -27,22 +27,23 @@ pub struct RedirectSolution {
 }
 
 impl RedirectSolution {
-    pub fn new(rule: DNSRedirectRuntimeRule) -> Self {
-        let DNSRedirectRuntimeRule {
+    pub fn new(rule: RuntimeRedirectRule) -> Self {
+        let RuntimeRedirectRule {
             redirect_id,
-            dynamic_redirect_source,
+            dynamic_source_id,
+            order: _,
             answer_mode,
             match_rules,
-            result_info,
+            result_ips,
             ttl_secs,
         } = rule;
         let matcher = DomainMatcher::new(match_rules);
         Self {
             matcher,
             redirect_id,
-            dynamic_redirect_source,
+            dynamic_redirect_source: dynamic_source_id,
             answer_mode,
-            result_info,
+            result_info: result_ips,
             ttl_secs,
         }
     }
@@ -94,7 +95,8 @@ impl RedirectSolution {
 #[derive(Debug)]
 pub struct ResolutionRule {
     matcher: DomainMatcher,
-    config: DNSRuntimeRule,
+    config: RuntimeDnsRule,
+    flow_id: u32,
     mark: DnsRuntimeMarkInfo,
     resolver: LandscapeMarkDNSResolver,
 
@@ -102,28 +104,28 @@ pub struct ResolutionRule {
 }
 
 impl ResolutionRule {
-    pub fn new(config: DNSRuntimeRule, flow_id: u32) -> Self {
+    pub fn new(config: RuntimeDnsRule, flow_id: u32) -> Self {
         let span = tracing::info_span!("dns_rule", flow_id = flow_id);
         let _ = span.enter();
 
-        let matcher = DomainMatcher::new(config.source.clone());
+        let matcher = DomainMatcher::new(config.sources.clone());
 
-        let enable_ip_validation =
-            config.resolve_mode.enable_ip_validation.unwrap_or(DEFAULT_ENABLE_IP_VALIDATION);
+        let enable_ip_validation = config.upstream.enable_ip_validation;
         let resolver = crate::connection::create_resolver(
             flow_id,
             config.mark,
             config.bind_config.clone(),
-            config.resolve_mode.clone(),
+            config.upstream.clone(),
         );
 
         let mark = DnsRuntimeMarkInfo {
             mark: config.mark.clone(),
-            priority: config.index as u16,
+            priority: config.order as u16,
         };
         ResolutionRule {
             matcher,
             config,
+            flow_id,
             resolver,
             mark,
             enable_ip_validation,
@@ -139,12 +141,16 @@ impl ResolutionRule {
     }
 
     pub fn get_config_id(&self) -> Uuid {
-        self.config.id
+        self.config.rule_id
+    }
+
+    pub fn order(&self) -> u32 {
+        self.config.order
     }
 
     /// 确定是不是当前规则进行处理
     pub fn is_match(&self, domain: &str) -> bool {
-        let match_result = if self.config.source.is_empty() {
+        let match_result = if self.config.sources.is_empty() {
             true
         } else {
             let domain =
@@ -190,9 +196,9 @@ impl ResolutionRule {
                     }
                 }
                 tracing::error!(
-                    "[flow_id: {:?}, config: {}] DNS resolution failed for {}: {}",
-                    self.config.flow_id,
-                    self.config.resolve_mode.id,
+                    "[flow_id: {}, rule: {}] DNS resolution failed for {}: {}",
+                    self.flow_id,
+                    self.config.rule_id,
                     domain,
                     e
                 );
@@ -264,17 +270,20 @@ mod tests {
 
     #[test]
     fn dynamic_redirect_solution_preserves_source_and_ttl() {
-        let solution = RedirectSolution::new(DNSRedirectRuntimeRule {
-            redirect_id: None,
-            dynamic_redirect_source: Some("docker:test".to_string()),
-            answer_mode: DnsRedirectAnswerMode::StaticIps,
-            match_rules: vec![DomainConfig {
-                match_type: DomainMatchType::Full,
-                value: "example.com".to_string(),
-            }],
-            result_info: vec![IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2))],
-            ttl_secs: 42,
-        });
+        let solution = RedirectSolution::new(
+            DNSRedirectRuntimeRule {
+                redirect_id: None,
+                dynamic_redirect_source: Some("docker:test".to_string()),
+                answer_mode: DnsRedirectAnswerMode::StaticIps,
+                match_rules: vec![DomainConfig {
+                    match_type: DomainMatchType::Full,
+                    value: "example.com".to_string(),
+                }],
+                result_info: vec![IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2))],
+                ttl_secs: 42,
+            }
+            .into(),
+        );
 
         assert!(solution.is_match("example.com."));
         assert!(solution.redirect_id.is_none());

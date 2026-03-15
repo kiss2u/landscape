@@ -35,8 +35,6 @@ pub mod error;
 pub mod listener;
 pub mod server;
 
-const DEFAULT_ENABLE_IP_VALIDATION: bool = false;
-
 static RESOLVER_CONF: &'static str = "/etc/resolv.conf";
 static RESOLVER_CONF_LD_BACK: &'static str = "/etc/resolv.conf.ld_back";
 
@@ -66,6 +64,10 @@ fn check_resolver_conf() {
 
     // 写入新内容到 /etc/resolv.conf
     std::fs::write(&resolver_file, new_content).unwrap();
+}
+
+pub fn prepare_system_dns() {
+    check_resolver_conf();
 }
 
 /// 停止时恢复 /etc/resolv.conf
@@ -101,6 +103,8 @@ pub struct CacheDNSItem {
     pub min_ttl: u32,
     pub mark: DnsRuntimeMarkInfo,
     pub filter: FilterResult,
+    pub matched_rule_id: Option<uuid::Uuid>,
+    pub matched_rule_order: Option<u32>,
 }
 
 impl CacheDNSItem {

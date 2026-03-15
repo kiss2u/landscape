@@ -49,11 +49,11 @@ impl DNSRedirectService {
                 dynamic_batches.remove(&scope);
             }
         } else {
-            scope_batches.insert(source_id, batch.clone());
+            scope_batches.insert(source_id.clone(), batch.clone());
         }
 
         drop(dynamic_batches);
-        self.notify_dynamic_batch_change(&scope).await;
+        self.notify_dynamic_batch_change(&scope, source_id).await;
         batch
     }
 
@@ -78,12 +78,17 @@ impl DNSRedirectService {
         result
     }
 
-    async fn notify_dynamic_batch_change(&self, scope: &DynamicDnsRedirectScope) {
+    async fn notify_dynamic_batch_change(
+        &self,
+        scope: &DynamicDnsRedirectScope,
+        source_id: String,
+    ) {
         let flow_id = match scope {
             DynamicDnsRedirectScope::Global => None,
             DynamicDnsRedirectScope::Flow(flow_id) => Some(*flow_id),
         };
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id }).await;
+        let _ =
+            self.dns_events_tx.send(DnsEvent::DynamicRedirectsChanged { flow_id, source_id }).await;
     }
 }
 
@@ -125,21 +130,23 @@ impl ConfigController for DNSRedirectService {
     }
 
     async fn update_one_config(&self, _: Self::Config) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+        let _ = self.dns_events_tx.send(DnsEvent::RedirectsChanged { flow_id: None }).await;
     }
 
     async fn delete_one_config(&self, config: Self::Config) {
         if config.apply_flows.is_empty() {
-            let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+            let _ = self.dns_events_tx.send(DnsEvent::RedirectsChanged { flow_id: None }).await;
         } else {
             for flow_id in config.apply_flows {
-                let _ =
-                    self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: Some(flow_id) }).await;
+                let _ = self
+                    .dns_events_tx
+                    .send(DnsEvent::RedirectsChanged { flow_id: Some(flow_id) })
+                    .await;
             }
         }
     }
 
     async fn update_many_config(&self, _configs: Vec<Self::Config>) {
-        let _ = self.dns_events_tx.send(DnsEvent::RuleUpdated { flow_id: None }).await;
+        let _ = self.dns_events_tx.send(DnsEvent::RedirectsChanged { flow_id: None }).await;
     }
 }

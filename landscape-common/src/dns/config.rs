@@ -59,7 +59,7 @@ impl Default for DnsUpstreamConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DnsBindConfig {
     /// 绑定地址 v4 (可选)

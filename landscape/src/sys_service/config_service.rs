@@ -81,6 +81,10 @@ impl LandscapeConfigService {
         (dns, hash)
     }
 
+    pub fn get_dns_runtime_config(&self) -> landscape_common::config::DnsRuntimeConfig {
+        self.config.load().dns.clone()
+    }
+
     pub async fn get_dns_config_from_file(&self) -> (LandscapeDnsConfig, String) {
         let (config, hash) = self.get_config_with_hash().await.unwrap_or_default();
         (config.dns, hash)

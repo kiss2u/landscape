@@ -36,6 +36,12 @@ const A_DAY: u64 = 60 * 60 * 24;
 
 pub type GeoDomainCacheStore = Arc<Mutex<StoreFileManager<GeoFileCacheKey, GeoDomainConfig>>>;
 
+#[derive(Debug, Default)]
+pub struct ExpandedRuleSources {
+    pub domains: Vec<DomainConfig>,
+    pub used_geo_keys: HashSet<GeoFileCacheKey>,
+}
+
 #[derive(Clone)]
 pub struct GeoSiteService {
     store: GeoSiteConfigRepository,
@@ -91,13 +97,13 @@ impl GeoSiteService {
 
             if redirect.match_rules.len() > 0 {
                 let source =
-                    self.get_geo_key_rules_v2(redirect.match_rules, &mut applied_config).await;
+                    self.expand_rule_sources(redirect.match_rules, &mut applied_config).await;
 
                 redirect_rules.push(DNSRedirectRuntimeRule {
                     redirect_id: Some(redirect.id),
                     dynamic_redirect_source: None,
                     answer_mode: redirect.answer_mode,
-                    match_rules: source,
+                    match_rules: source.domains,
                     result_info: redirect.result_info,
                     ttl_secs: DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
                 });
@@ -128,8 +134,8 @@ impl GeoSiteService {
             }
 
             let insert_source = if config.source.len() > 0 {
-                let source = self.get_geo_key_rules_v2(config.source, &mut applied_config).await;
-                if source.len() == 0 {
+                let source = self.expand_rule_sources(config.source, &mut applied_config).await;
+                if source.domains.is_empty() {
                     // 去重后匹配的规则为空 不设置
                     tracing::info!("[{}:{}] final DNS match rule is: 0", config.index, config.name);
                     None
@@ -138,9 +144,9 @@ impl GeoSiteService {
                         "[{}:{}] match rule size is: {}",
                         config.index,
                         config.name,
-                        source.len()
+                        source.domains.len()
                     );
-                    Some(source)
+                    Some(source.domains)
                 }
             } else {
                 Some(vec![])
@@ -232,14 +238,15 @@ impl GeoSiteService {
     //     result
     // }
 
-    async fn get_geo_key_rules_v2(
+    pub async fn expand_rule_sources(
         &self,
         rule_source: Vec<RuleSource>,
         applied_config: &mut HashSet<GeoFileCacheKey>,
-    ) -> Vec<DomainConfig> {
+    ) -> ExpandedRuleSources {
         let mut lock = self.file_cache.lock().await;
 
         let mut source = vec![];
+        let mut used_geo_keys = HashSet::new();
 
         let mut inverse_keys: HashMap<String, HashSet<String>> = HashMap::new();
         for each in rule_source.into_iter() {
@@ -253,7 +260,7 @@ impl GeoSiteService {
                         continue;
                     }
                     let predicate: Box<dyn Fn(&GeoSiteFileConfig) -> bool> =
-                        if let Some(attr) = k.attribute_key {
+                        if let Some(ref attr) = k.attribute_key {
                             let attr = attr.clone();
                             Box::new(move |config: &GeoSiteFileConfig| {
                                 config.attributes.contains(&attr)
@@ -265,6 +272,7 @@ impl GeoSiteService {
                         source.extend(domains.values.into_iter().filter(predicate).map(Into::into));
                     }
                     applied_config.insert(file_cache_key);
+                    used_geo_keys.insert(k.get_file_cache_key());
                 }
                 RuleSource::Config(c) => {
                     source.push(c);
@@ -283,6 +291,7 @@ impl GeoSiteService {
                         if !applied_config.contains(key) {
                             if let Some(domains) = lock.get(key) {
                                 applied_config.insert(key.clone());
+                                used_geo_keys.insert(key.clone());
                                 source.extend(domains.values.into_iter().map(Into::into));
                             }
                         }
@@ -294,7 +303,42 @@ impl GeoSiteService {
             tracing::debug!("inverse insert time: {}ms", time.elapsed().as_millis());
         }
 
-        source
+        ExpandedRuleSources { domains: source, used_geo_keys }
+    }
+
+    async fn snapshot_key_hashes_for_name(&self, name: &str) -> HashMap<GeoFileCacheKey, String> {
+        let mut lock = self.file_cache.lock().await;
+        let keys: Vec<_> = lock.keys().into_iter().filter(|key| key.name == name).collect();
+        let mut result = HashMap::with_capacity(keys.len());
+        for key in keys {
+            if let Some(config) = lock.get(&key) {
+                let hash = serde_json::to_string(&config.values).unwrap_or_default();
+                result.insert(key, hash);
+            }
+        }
+        result
+    }
+
+    fn diff_key_hashes(
+        before: &HashMap<GeoFileCacheKey, String>,
+        after: &HashMap<GeoFileCacheKey, String>,
+    ) -> HashSet<GeoFileCacheKey> {
+        before
+            .keys()
+            .chain(after.keys())
+            .filter(|key| before.get(*key) != after.get(*key))
+            .cloned()
+            .collect()
+    }
+
+    async fn notify_geo_changes(&self, changed_keys: HashSet<GeoFileCacheKey>) {
+        if changed_keys.is_empty() {
+            return;
+        }
+        let _ = self
+            .dns_events_tx
+            .send(DnsEvent::GeoSitesChanged { changed_keys: Some(changed_keys) })
+            .await;
     }
 
     pub async fn refresh(&self, force: bool) {
@@ -317,6 +361,7 @@ impl GeoSiteService {
                     let url = url.clone();
                     tracing::debug!("download file: {}", url);
                     let time = Instant::now();
+                    let before_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
 
                     match client.get(&url).send().await {
                         Ok(resp) if resp.status().is_success() => match resp.bytes().await {
@@ -353,7 +398,7 @@ impl GeoSiteService {
                                 {
                                     *next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
                                 }
-                                let _ = self.store.set(config).await;
+                                let _ = self.store.set(config.clone()).await;
 
                                 tracing::debug!(
                                     "handle file done: {}, time: {}s",
@@ -361,7 +406,11 @@ impl GeoSiteService {
                                     time.elapsed().as_secs()
                                 );
 
-                                let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+                                let after_hashes =
+                                    self.snapshot_key_hashes_for_name(&config.name).await;
+                                let changed_keys =
+                                    Self::diff_key_hashes(&before_hashes, &after_hashes);
+                                self.notify_geo_changes(changed_keys).await;
                             }
                             Err(e) => tracing::error!("read {} response error: {}", url, e),
                         },
@@ -378,8 +427,11 @@ impl GeoSiteService {
                     }
                 }
                 GeoSiteSource::Direct { data } => {
+                    let before_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
                     self.write_direct_to_cache(&config.name, data).await;
-                    let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+                    let after_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
+                    let changed_keys = Self::diff_key_hashes(&before_hashes, &after_hashes);
+                    self.notify_geo_changes(changed_keys).await;
                 }
             }
         }
@@ -391,9 +443,11 @@ impl GeoSiteService {
                 .into_iter()
                 .filter(|k| !config_names.contains(&k.name))
                 .collect::<HashSet<GeoFileCacheKey>>();
-            for key in need_to_remove {
+            for key in &need_to_remove {
                 file_cache_lock.del(&key);
             }
+            drop(file_cache_lock);
+            self.notify_geo_changes(need_to_remove).await;
         }
     }
 
@@ -446,6 +500,7 @@ impl GeoSiteService {
     }
 
     pub async fn update_geo_config_by_bytes(&self, name: String, file_bytes: impl Into<Vec<u8>>) {
+        let before_hashes = self.snapshot_key_hashes_for_name(&name).await;
         let result = landscape_protobuf::read_geo_sites_from_bytes(file_bytes).await;
         {
             let mut file_cache_lock = self.file_cache.lock().await;
@@ -458,7 +513,9 @@ impl GeoSiteService {
                 file_cache_lock.set(info);
             }
         }
-        let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+        let after_hashes = self.snapshot_key_hashes_for_name(&name).await;
+        let changed_keys = Self::diff_key_hashes(&before_hashes, &after_hashes);
+        self.notify_geo_changes(changed_keys).await;
     }
 }
 
@@ -482,8 +539,11 @@ impl ConfigController for GeoSiteService {
         // Refresh Direct configs immediately when updated
         for config in new_configs {
             if let GeoSiteSource::Direct { ref data } = config.source {
+                let before_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
                 self.write_direct_to_cache(&config.name, data).await;
-                let _ = self.dns_events_tx.send(DnsEvent::GeositeUpdated).await;
+                let after_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
+                let changed_keys = Self::diff_key_hashes(&before_hashes, &after_hashes);
+                self.notify_geo_changes(changed_keys).await;
             }
         }
     }

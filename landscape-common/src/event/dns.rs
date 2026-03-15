@@ -1,6 +1,17 @@
+use std::collections::HashSet;
+
+use uuid::Uuid;
+
+use crate::geo::GeoFileCacheKey;
+
+#[derive(Clone, Debug)]
 pub enum DnsEvent {
-    RuleUpdated { flow_id: Option<u32> },
-    GeositeUpdated,
+    RulesChanged { flow_id: Option<u32> },
+    RedirectsChanged { flow_id: Option<u32> },
+    DynamicRedirectsChanged { flow_id: Option<u32>, source_id: String },
+    UpstreamsChanged { upstream_ids: Vec<Uuid> },
+    GeoSitesChanged { changed_keys: Option<HashSet<GeoFileCacheKey>> },
+    RuntimeConfigChanged,
     FlowUpdated,
 }
 

@@ -3,26 +3,30 @@ use std::{
     net::IpAddr,
     net::{Ipv6Addr, SocketAddr, SocketAddrV6},
     sync::Arc,
-    time::Duration,
 };
 
-use arc_swap::ArcSwapOption;
-use hickory_server::ServerFuture;
-use landscape_common::{
-    config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo, event::DnsMetricMessage,
-    service::WatchService,
-};
-use rustls::server::ResolvesServerCert;
+use arc_swap::{ArcSwap, ArcSwapOption};
+use landscape_common::{dns::FlowDnsDesiredState, event::DnsMetricMessage, service::WatchService};
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    convert_record_type, server::handler::DnsRequestHandler, CheckChainDnsResult, CheckDnsReq,
+    convert_record_type,
+    listener::{start_flow_dns_listener, DohListenerState},
+    server::{
+        handler::DnsRequestHandler,
+        planner::{DnsRefreshPlan, DnsRefreshPlanner, FlowDnsAppliedState, HandlerRefreshPlan},
+    },
+    CheckChainDnsResult, CheckDnsReq,
 };
 
 pub(crate) mod handler;
 pub(crate) mod matcher;
+pub(crate) mod planner;
 pub(crate) mod rule;
+
+pub use crate::listener::EffectiveDohListenerConfig;
+pub use landscape_common::dns::{CacheRuntimeConfig, DohRuntimeConfig};
 
 pub trait LocalDnsAnswerProvider: Send + Sync {
     fn load_local_answer_addrs(
@@ -31,33 +35,32 @@ pub trait LocalDnsAnswerProvider: Send + Sync {
     ) -> Arc<Vec<IpAddr>>;
 }
 
+// 系统 DNS 服务
 #[derive(Clone)]
 pub struct LandscapeDnsServer {
+    // 服务状态
     pub status: WatchService,
+    // 内部处理
     flow_dns_server: Arc<Mutex<HashMap<u32, Arc<FlowServerEntry>>>>,
-    pub addr: SocketAddr,
-    pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
-    pub doh: Option<DohListenerConfig>,
+    // 用于重定向的动态更新
     pub local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
-}
-
-#[derive(Clone)]
-pub struct DohListenerConfig {
-    pub addr: SocketAddr,
-    pub handshake_timeout: Duration,
-    pub server_cert_resolver: Arc<dyn ResolvesServerCert>,
-    pub dns_hostname: Option<String>,
-    pub http_endpoint: String,
+    // DNS 事件
+    pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+    // 监听 UDP DNS 地址
+    pub udp_listener_addr: SocketAddr,
+    cache_live_config: Arc<ArcSwap<CacheRuntimeConfig>>,
+    doh_listener: Option<DohListenerState>,
 }
 
 struct FlowServerRuntime {
     handler: DnsRequestHandler,
-    _token: CancellationToken,
+    token: CancellationToken,
 }
 
 struct FlowServerEntry {
     refresh_lock: Mutex<()>,
     runtime: Arc<ArcSwapOption<FlowServerRuntime>>,
+    applied_state: Arc<ArcSwapOption<FlowDnsAppliedState>>,
 }
 
 impl FlowServerEntry {
@@ -65,6 +68,7 @@ impl FlowServerEntry {
         Self {
             refresh_lock: Mutex::new(()),
             runtime: Arc::new(ArcSwapOption::new(None)),
+            applied_state: Arc::new(ArcSwapOption::new(None)),
         }
     }
 }
@@ -73,17 +77,23 @@ impl LandscapeDnsServer {
     pub fn new(
         listen_port: u16,
         msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
-        doh: Option<DohListenerConfig>,
+        cache_runtime: CacheRuntimeConfig,
+        doh: Option<EffectiveDohListenerConfig>,
         local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
     ) -> Self {
-        crate::check_resolver_conf();
         let status = WatchService::new();
         Self {
             status,
             flow_dns_server: Arc::new(Mutex::new(HashMap::new())),
-            addr: SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, listen_port, 0, 0)),
+            udp_listener_addr: SocketAddr::V6(SocketAddrV6::new(
+                Ipv6Addr::UNSPECIFIED,
+                listen_port,
+                0,
+                0,
+            )),
             msg_tx,
-            doh,
+            cache_live_config: Arc::new(ArcSwap::from_pointee(cache_runtime)),
+            doh_listener: doh.map(DohListenerState::from_effective_config),
             local_answer_provider,
         }
     }
@@ -92,37 +102,96 @@ impl LandscapeDnsServer {
         &self.status
     }
 
-    pub async fn refresh_flow_server(
+    pub fn update_runtime_config(
         &self,
-        flow_id: u32,
-        info: ChainDnsServerInitInfo,
-        dns_config: DnsRuntimeConfig,
+        cache_runtime: CacheRuntimeConfig,
+        doh_runtime: Option<DohRuntimeConfig>,
     ) {
-        let entry = {
-            let mut lock = self.flow_dns_server.lock().await;
-            lock.entry(flow_id).or_insert_with(|| Arc::new(FlowServerEntry::new())).clone()
-        };
+        self.cache_live_config.store(Arc::new(cache_runtime));
+        if let Some(doh_listener) = self.doh_listener.as_ref() {
+            doh_listener.update_live_config(doh_runtime);
+        }
+    }
+
+    pub fn current_live_runtime_config(&self) -> (CacheRuntimeConfig, Option<DohRuntimeConfig>) {
+        let cache_runtime = self.cache_live_config.load();
+        let doh_runtime = self
+            .doh_listener
+            .as_ref()
+            .and_then(|doh_listener| doh_listener.live_config.load_full())
+            .map(|runtime| (*runtime).clone());
+
+        (cache_runtime.as_ref().clone(), doh_runtime)
+    }
+
+    pub async fn refresh_flow_server(&self, desired_state: FlowDnsDesiredState) {
+        let flow_id = desired_state.flow_id;
+        let entry = self.get_or_create_entry(flow_id).await;
 
         let _refresh_guard = entry.refresh_lock.lock().await;
         if let Some(runtime) = entry.runtime.load_full() {
-            runtime.handler.renew_rules(info, dns_config).await;
+            let previous_state = entry.applied_state.load_full();
+            let plan = DnsRefreshPlanner::build(previous_state.as_deref(), &desired_state);
+            if matches!(plan, DnsRefreshPlan::Noop) {
+                return;
+            }
+
+            self.apply_handler_plan(runtime.handler.clone(), &desired_state, &plan).await;
+
+            if matches!(plan, DnsRefreshPlan::RestartListener { .. }) {
+                let token = self
+                    .start_runtime_listener(
+                        flow_id,
+                        desired_state.doh_runtime.as_ref(),
+                        runtime.handler.clone(),
+                    )
+                    .await;
+
+                if token.is_cancelled() {
+                    tracing::error!(
+                        "[flow: {flow_id}]: DNS server restart failed, keep current listener"
+                    );
+                    if let Some(applied_state) = DnsRefreshPlanner::applied_after_failure(
+                        previous_state.as_deref(),
+                        &desired_state,
+                        &plan,
+                    ) {
+                        entry.applied_state.store(Some(Arc::new(applied_state)));
+                    }
+                    return;
+                }
+
+                runtime.token.cancel();
+                entry.runtime.store(Some(Arc::new(FlowServerRuntime {
+                    handler: runtime.handler.clone(),
+                    token,
+                })));
+            }
+
+            entry
+                .applied_state
+                .store(Some(Arc::new(FlowDnsAppliedState::from_desired_state(&desired_state))));
             return;
         }
 
         let handler = DnsRequestHandler::new(
-            info,
-            dns_config,
+            desired_state.clone(),
+            self.cache_live_config.clone(),
             flow_id,
             self.msg_tx.clone(),
             self.local_answer_provider.clone(),
         );
-        let token = start_dns_server(flow_id, self.addr, self.doh.clone(), handler.clone()).await;
-        if token.is_cancelled() {
+        let Some(runtime) =
+            self.build_flow_runtime(flow_id, handler, desired_state.doh_runtime.as_ref()).await
+        else {
             tracing::error!("[flow: {flow_id}]: DNS server start failed, runtime not registered");
             return;
-        }
+        };
 
-        entry.runtime.store(Some(Arc::new(FlowServerRuntime { handler, _token: token })));
+        entry.runtime.store(Some(Arc::new(runtime)));
+        entry
+            .applied_state
+            .store(Some(Arc::new(FlowDnsAppliedState::from_desired_state(&desired_state))));
     }
 
     pub async fn check_domain(&self, req: CheckDnsReq) -> CheckChainDnsResult {
@@ -139,76 +208,97 @@ impl LandscapeDnsServer {
             CheckChainDnsResult::default()
         }
     }
-}
 
-pub async fn start_dns_server(
-    flow_id: u32,
-    addr: SocketAddr,
-    doh: Option<DohListenerConfig>,
-    handler: DnsRequestHandler,
-) -> CancellationToken {
-    let Ok((udp, sock_fd)) = crate::listener::create_udp_socket(addr).await else {
-        tracing::error!("[flow: {flow_id}]: create udp socket error");
-        let result = CancellationToken::new();
-        result.cancel();
-        return result;
-    };
+    async fn get_or_create_entry(&self, flow_id: u32) -> Arc<FlowServerEntry> {
+        let mut lock = self.flow_dns_server.lock().await;
+        lock.entry(flow_id).or_insert_with(|| Arc::new(FlowServerEntry::new())).clone()
+    }
 
-    landscape_ebpf::map_setting::dns::setting_dns_sock_map(sock_fd, flow_id);
-    landscape_ebpf::dns_dispatcher::attach_reuseport_ebpf(sock_fd).unwrap();
-    let mut server = ServerFuture::new(handler);
-    server.register_socket(udp);
-    if let Some(doh) = doh {
-        // DoH follows the same model as UDP: one reuseport listener per flow + eBPF selection.
-        match crate::listener::create_tcp_listener(doh.addr) {
-            Ok((listener, sock_fd)) => {
-                landscape_ebpf::map_setting::dns::setting_dns_sock_map_tcp(sock_fd, flow_id);
-                landscape_ebpf::dns_dispatcher::attach_reuseport_ebpf(sock_fd).unwrap();
-                if let Err(e) = server.register_https_listener(
-                    listener,
-                    doh.handshake_timeout,
-                    doh.server_cert_resolver.clone(),
-                    doh.dns_hostname.clone(),
-                    doh.http_endpoint,
-                ) {
-                    tracing::error!("[flow: {flow_id}]: register DoH listener error: {e}");
+    async fn build_flow_runtime(
+        &self,
+        flow_id: u32,
+        handler: DnsRequestHandler,
+        desired_doh_runtime: Option<&DohRuntimeConfig>,
+    ) -> Option<FlowServerRuntime> {
+        let token =
+            self.start_runtime_listener(flow_id, desired_doh_runtime, handler.clone()).await;
+        if token.is_cancelled() {
+            return None;
+        }
+
+        Some(FlowServerRuntime { handler, token })
+    }
+
+    async fn start_runtime_listener(
+        &self,
+        flow_id: u32,
+        desired_doh_runtime: Option<&DohRuntimeConfig>,
+        handler: DnsRequestHandler,
+    ) -> CancellationToken {
+        start_flow_dns_listener(
+            flow_id,
+            self.udp_listener_addr,
+            self.build_effective_doh_listener_config(desired_doh_runtime),
+            handler,
+        )
+        .await
+    }
+
+    async fn apply_handler_plan(
+        &self,
+        handler: DnsRequestHandler,
+        desired_state: &FlowDnsDesiredState,
+        plan: &DnsRefreshPlan,
+    ) {
+        let Some(handler_plan) = (match plan {
+            DnsRefreshPlan::ApplyHandler(handler_plan) => Some(handler_plan),
+            DnsRefreshPlan::RestartListener { handler_plan } => handler_plan.as_ref(),
+            DnsRefreshPlan::Noop => None,
+        }) else {
+            return;
+        };
+
+        match handler_plan {
+            HandlerRefreshPlan::ReplaceRules { include_redirects } => {
+                handler.renew_dns_rules(desired_state.dns_rules.clone()).await;
+                if *include_redirects {
+                    handler.renew_redirect_rules(desired_state.redirect_rules.clone()).await;
                 }
             }
-            Err(e) => {
-                tracing::error!("[flow: {flow_id}]: create DoH listener error: {e}");
+            HandlerRefreshPlan::ReplaceRedirects => {
+                handler.renew_redirect_rules(desired_state.redirect_rules.clone()).await;
+            }
+            HandlerRefreshPlan::ApplyCacheRuntime { rebuild_cache } => {
+                handler.renew_runtime_config(*rebuild_cache).await;
             }
         }
     }
 
-    let token = server.shutdown_token().clone();
-
-    tokio::spawn(async move {
-        if let Err(e) = server.block_until_done().await {
-            tracing::error!("[flow: {flow_id}]: server down, error: {e:?}");
-        } else {
-            tracing::info!("[flow: {flow_id}]: server down");
-        }
-    });
-
-    token
+    fn build_effective_doh_listener_config(
+        &self,
+        desired_runtime: Option<&DohRuntimeConfig>,
+    ) -> Option<EffectiveDohListenerConfig> {
+        self.doh_listener
+            .as_ref()
+            .and_then(|doh_listener| doh_listener.build_effective_config(desired_runtime))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use landscape_common::{config::DnsRuntimeConfig, dns::ChainDnsServerInitInfo};
+    use arc_swap::ArcSwap;
+    use landscape_common::dns::{CacheRuntimeConfig, FlowDnsDesiredState};
 
     fn run_async_test(test: impl std::future::Future<Output = ()>) {
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(test);
     }
 
-    fn test_dns_config() -> DnsRuntimeConfig {
-        DnsRuntimeConfig {
+    fn test_cache_runtime_config() -> CacheRuntimeConfig {
+        CacheRuntimeConfig {
             cache_capacity: 16,
             cache_ttl: 60,
             negative_cache_ttl: 10,
-            doh_listen_port: 0,
-            doh_http_endpoint: String::new(),
         }
     }
 
@@ -217,15 +307,15 @@ mod tests {
         run_async_test(async {
             let entry = FlowServerEntry::new();
             let handler = DnsRequestHandler::new(
-                ChainDnsServerInitInfo::default(),
-                test_dns_config(),
+                FlowDnsDesiredState::default(),
+                Arc::new(ArcSwap::from_pointee(test_cache_runtime_config())),
                 7,
                 None,
                 None,
             );
             entry.runtime.store(Some(Arc::new(FlowServerRuntime {
                 handler,
-                _token: CancellationToken::new(),
+                token: CancellationToken::new(),
             })));
 
             let _guard = entry.refresh_lock.lock().await;
@@ -243,6 +333,7 @@ mod tests {
             let _guard = entry.refresh_lock.lock().await;
 
             assert!(entry.runtime.load_full().is_none());
+            assert!(entry.applied_state.load_full().is_none());
         });
     }
 }
