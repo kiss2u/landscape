@@ -109,7 +109,9 @@ mod tests {
     // Expected: dst prefix → fd00:1234:5678:abc5, port unchanged, ret=-1
     #[test]
     fn tcp_ingress_lan_host() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-lan");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -192,7 +194,9 @@ mod tests {
     // Expected: src prefix → 2409:8888:6666:4f25 (via NPT), port unchanged, ret=-1
     #[test]
     fn tcp_egress_lan_host() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-lan");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();

@@ -79,12 +79,14 @@ int nat_v4_timer_step_test(struct __sk_buff *skb) {
     struct nat_mapping_key_v4 ingress_key = {
         .gress = NAT_MAPPING_INGRESS,
         .l4proto = input->key.l4proto,
+        .wan_ifindex = input->key.wan_ifindex,
         .from_addr = nat_addr,
         .from_port = nat_port,
     };
     struct nat_mapping_key_v4 egress_key = {
         .gress = NAT_MAPPING_EGRESS,
         .l4proto = input->key.l4proto,
+        .wan_ifindex = input->key.wan_ifindex,
         .from_addr = client_addr,
         .from_port = client_port,
     };

@@ -26,7 +26,9 @@ fn ipv4_tcp_syn() -> Vec<u8> {
 }
 
 pub fn handle_ipv4_egress(mut payload: Vec<u8>) {
-    let landscape_builder = LandNatV2SkelBuilder::default();
+    let mut landscape_builder = LandNatV2SkelBuilder::default();
+    let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-egress");
+    landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
     let mut open_object = MaybeUninit::uninit();
     let landscape_open = landscape_builder.open(&mut open_object).unwrap();
 

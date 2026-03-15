@@ -101,7 +101,9 @@ mod tests {
     // Expected: src prefix → 2409:8888:6666:4f25 (NPT), ret=-1
     #[test]
     fn tcp_egress_dynamic() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-dynamic");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();

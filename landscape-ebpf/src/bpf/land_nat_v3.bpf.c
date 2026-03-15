@@ -131,7 +131,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
                                    lookup.created || lookup.is_static, lookup.state, &ct_value);
     if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
         if (lookup.created && !lookup.is_static) {
-            nat4_v3_delete_mapping_and_state(pkg_offset.l4_protocol, nat_addr.addr,
+            nat4_v3_delete_mapping_and_state(pkg_offset.l4_protocol, skb->ifindex, nat_addr.addr,
                                              lookup.egress->port, ip_pair.src_addr.addr,
                                              ip_pair.src_port);
             (void)nat4_v3_queue_push(pkg_offset.l4_protocol, &lookup.alloc_item);
@@ -181,7 +181,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 
     bool is_icmpx_error = is_icmp_error_pkt(&pkg_offset);
 
-    ret = nat4_v3_ingress_lookup_mapping(pkg_offset.l4_protocol, &ip_pair, &nat_ingress_value,
+    ret = nat4_v3_ingress_lookup_mapping(skb, pkg_offset.l4_protocol, &ip_pair, &nat_ingress_value,
                                          &state);
     if (ret != TC_ACT_OK || !nat_ingress_value) {
         return TC_ACT_SHOT;

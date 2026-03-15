@@ -112,7 +112,9 @@ mod tests {
     // Expected: dst unchanged, ret=-1
     #[test]
     fn tcp_ingress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -187,7 +189,9 @@ mod tests {
     // Expected: src unchanged (NPT identity for local router), ret=-1
     #[test]
     fn tcp_egress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -263,7 +267,9 @@ mod tests {
     // Expected: dst unchanged, ret=-1
     #[test]
     fn udp_ingress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -338,7 +344,9 @@ mod tests {
     // Expected: src unchanged, ret=-1
     #[test]
     fn udp_egress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -413,7 +421,9 @@ mod tests {
     // Expected: ret = TC_ACT_SHOT(2)
     #[test]
     fn tcp_ingress_no_match_drop() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v6-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();

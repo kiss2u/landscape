@@ -132,6 +132,26 @@ pub mod route;
 
 pub mod event;
 
+fn cleanup_obsolete_nat_v3_runtime_pins(paths: &LandscapeMapPath) {
+    let obsolete_paths = [
+        &paths.nat4_dynamic_state_v3,
+        &paths.nat4_mapping_timer_v3,
+        &paths.nat4_tcp_free_ports_v3,
+        &paths.nat4_udp_free_ports_v3,
+        &paths.nat4_icmp_free_ports_v3,
+    ];
+    for path in obsolete_paths {
+        match std::fs::remove_file(path) {
+            Ok(()) => tracing::info!("Removed obsolete NAT v3 runtime pin: {}", path.display()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => tracing::warn!(
+                "Failed to remove obsolete NAT v3 runtime pin {}: {e}",
+                path.display()
+            ),
+        }
+    }
+}
+
 pub(crate) fn init_path(paths: &LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
     // landscape_builder.obj_builder.debug(true);
@@ -148,15 +168,8 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
         &mut landscape_open.maps.nat4_mapping_timer,
         &paths.nat4_mapping_timer,
     );
-    crate::nat::v3::configure_runtime_bundle_maps(
-        &mut landscape_open.maps.nat4_mappings,
-        &mut landscape_open.maps.nat4_dynamic_state_v3,
-        &mut landscape_open.maps.nat4_mapping_timer_v3,
-        &mut landscape_open.maps.nat4_tcp_free_ports_v3,
-        &mut landscape_open.maps.nat4_udp_free_ports_v3,
-        &mut landscape_open.maps.nat4_icmp_free_ports_v3,
-        paths,
-    );
+    reuse_pinned_map_or_recreate(&mut landscape_open.maps.nat4_mappings, &paths.nat4_mappings);
+    cleanup_obsolete_nat_v3_runtime_pins(paths);
 
     // firewall
     reuse_pinned_map_or_recreate(
@@ -215,10 +228,16 @@ pub fn cleanup_pinned_maps() {
         // nat4_mapping_timer contains bpf_timer entries whose callbacks hold
         // refcounts on nat_v4 programs, preventing kernel cleanup.
         &MAP_PATHS.nat4_mapping_timer,
+        &MAP_PATHS.nat4_dynamic_state_v3,
+        &MAP_PATHS.nat4_mapping_timer_v3,
+        &MAP_PATHS.nat4_tcp_free_ports_v3,
+        &MAP_PATHS.nat4_udp_free_ports_v3,
+        &MAP_PATHS.nat4_icmp_free_ports_v3,
     ];
     for path in maps_to_unpin {
         match std::fs::remove_file(path) {
             Ok(()) => tracing::info!("Unpinned map: {}", path.display()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => tracing::warn!("Failed to unpin {}: {e}", path.display()),
         }
     }

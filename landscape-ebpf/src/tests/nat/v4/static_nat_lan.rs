@@ -52,6 +52,7 @@ fn add_ct_entry<T: MapCore>(
     let key = nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
+        wan_ifindex: IFINDEX,
         pair_ip: inet4_pair {
             src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
             dst_addr: inet4_addr { addr: dst_addr.to_bits().to_be() },
@@ -80,7 +81,9 @@ mod tests {
     // Expected: dst changed to 192.168.1.100:80, ret = TC_ACT_UNSPEC(-1)
     #[test]
     fn tcp_ingress_lan_host() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-lan");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -97,6 +100,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: LAN_HOST,
@@ -147,7 +151,9 @@ mod tests {
     // Expected: src changed to 203.0.113.1:8080, ret = TC_ACT_UNSPEC(-1)
     #[test]
     fn tcp_egress_lan_host() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-lan");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -164,6 +170,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: LAN_HOST,

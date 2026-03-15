@@ -51,6 +51,7 @@ fn add_ct_entry<T: MapCore>(
     let key = nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
+        wan_ifindex: IFINDEX,
         pair_ip: inet4_pair {
             src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
             dst_addr: inet4_addr { addr: dst_addr.to_bits().to_be() },
@@ -84,7 +85,9 @@ mod tests {
     // to exercise the existing-mapping egress path instead.
     #[test]
     fn tcp_egress_dynamic() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -108,6 +111,7 @@ mod tests {
                 gress: NAT_MAPPING_EGRESS,
                 l4proto: 6,
                 from_port: 56186u16.to_be(),
+                wan_ifindex: IFINDEX,
                 from_addr: LAN_HOST.to_bits().to_be(),
             };
             let egress_val = nat_mapping_value_v4 {
@@ -124,6 +128,7 @@ mod tests {
                 gress: NAT_MAPPING_INGRESS,
                 l4proto: 6,
                 from_port: 56186u16.to_be(),
+                wan_ifindex: IFINDEX,
                 from_addr: WAN_IP.to_bits().to_be(),
             };
             let ingress_val = nat_mapping_value_v4 {

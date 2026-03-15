@@ -93,6 +93,7 @@ struct nat_conn_metric_event {
     u8 flow_id;
     u8 trace_id;
     u32 cpu_id;
+    u32 ifindex;
     u8 status;
     u8 gress;
 } __nat_conn_metric_event;

@@ -1,6 +1,8 @@
 use std::{
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use landscape_common::net::MacAddr;
@@ -12,9 +14,20 @@ use libbpf_rs::{
 use crate::nat::v2::land_nat_v2::LandNatV2SkelBuilder;
 
 pub(crate) static NAT_V3_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static NAT_TEST_PIN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 mod v4;
 mod v6;
+
+pub(crate) fn isolated_pin_root(prefix: &str) -> PathBuf {
+    let unique = NAT_TEST_PIN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = PathBuf::from(format!(
+        "/sys/fs/bpf/landscape-test/{prefix}-{}-{unique}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&path).expect("create isolated bpf pin root");
+    path
+}
 
 /// IPv4 TCP SYN: 192.168.101.201:56186 -> 50.18.88.205:443
 fn ipv4_tcp_syn() -> Vec<u8> {
@@ -54,7 +67,9 @@ fn ipv4_tcp_data() -> Vec<u8> {
 }
 
 pub fn test_nat_v2(mut syn_data: Vec<u8>, tcp_data: Vec<u8>) {
-    let landscape_builder = LandNatV2SkelBuilder::default();
+    let mut landscape_builder = LandNatV2SkelBuilder::default();
+    let pin_root = isolated_pin_root("nat-v2-smoke");
+    landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
     let mut open_object = MaybeUninit::uninit();
     let landscape_open = landscape_builder.open(&mut open_object).unwrap();
 

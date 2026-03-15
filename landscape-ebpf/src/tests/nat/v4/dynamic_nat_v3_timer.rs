@@ -26,6 +26,7 @@ const STEP_RESTART: u32 = 2;
 const WAN_IP: Ipv4Addr = Ipv4Addr::new(203, 0, 113, 1);
 const LAN_HOST: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 100);
 const REMOTE_IP: Ipv4Addr = Ipv4Addr::new(50, 18, 88, 205);
+const IFINDEX: u32 = 6;
 const LAN_PORT: u16 = 56186;
 const NAT_PORT: u16 = 40000;
 const GENERATION: u16 = 7;
@@ -48,6 +49,7 @@ fn timer_key() -> types::nat_timer_key_v4 {
     types::nat_timer_key_v4 {
         l4proto: 6,
         _pad: [0; 3],
+        wan_ifindex: IFINDEX,
         pair_ip: types::inet4_pair {
             src_addr: types::inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
             dst_addr: types::inet4_addr { addr: WAN_IP.to_bits().to_be() },
@@ -62,6 +64,7 @@ fn ingress_key() -> types::nat_mapping_key_v4 {
         gress: NAT_MAPPING_INGRESS,
         l4proto: 6,
         from_port: NAT_PORT.to_be(),
+        wan_ifindex: IFINDEX,
         from_addr: WAN_IP.to_bits().to_be(),
     }
 }
@@ -71,6 +74,7 @@ fn egress_key() -> types::nat_mapping_key_v4 {
         gress: NAT_MAPPING_EGRESS,
         l4proto: 6,
         from_port: LAN_PORT.to_be(),
+        wan_ifindex: IFINDEX,
         from_addr: LAN_HOST.to_bits().to_be(),
     }
 }
@@ -174,7 +178,9 @@ mod tests {
     #[test]
     fn release_generation_mismatch_deletes_only_ct() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let builder = TestNatV3TimerSkelBuilder::default();
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
@@ -196,7 +202,9 @@ mod tests {
     #[test]
     fn release_active_two_decrements_ref() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let builder = TestNatV3TimerSkelBuilder::default();
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
@@ -217,7 +225,9 @@ mod tests {
     #[test]
     fn timeout2_transitions_to_release_and_closes_last() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let builder = TestNatV3TimerSkelBuilder::default();
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
@@ -237,7 +247,9 @@ mod tests {
     #[test]
     fn release_closed_queue_fail_enters_pending() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let builder = TestNatV3TimerSkelBuilder::default();
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
@@ -259,7 +271,9 @@ mod tests {
     #[test]
     fn pending_queue_retry_success_deletes_ct() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let builder = TestNatV3TimerSkelBuilder::default();
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();

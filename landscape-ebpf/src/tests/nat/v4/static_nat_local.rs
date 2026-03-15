@@ -24,6 +24,7 @@ use crate::{
 const WAN_IP: Ipv4Addr = Ipv4Addr::new(203, 0, 113, 1);
 const REMOTE_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 0, 1);
 const IFINDEX: u32 = 6;
+const SECOND_IFINDEX: u32 = 7;
 
 fn build_ipv4_tcp(src: Ipv4Addr, dst: Ipv4Addr, src_port: u16, dst_port: u16) -> Vec<u8> {
     let builder = PacketBuilder::ethernet2(
@@ -67,6 +68,7 @@ fn add_ct_entry<T: MapCore>(
     let key = nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
+        wan_ifindex: IFINDEX,
         pair_ip: inet4_pair {
             src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
             dst_addr: inet4_addr { addr: dst_addr.to_bits().to_be() },
@@ -97,7 +99,9 @@ mod tests {
     // Expected: dst_port → 80, ret = TC_ACT_UNSPEC(-1)
     #[test]
     fn tcp_ingress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -114,6 +118,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: Ipv4Addr::UNSPECIFIED, // 0.0.0.0 = local router
@@ -158,7 +163,9 @@ mod tests {
     // Expected: src_port → 8080, ret = TC_ACT_UNSPEC(-1)
     #[test]
     fn tcp_egress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -175,6 +182,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: Ipv4Addr::UNSPECIFIED,
@@ -221,7 +229,9 @@ mod tests {
     // Expected: dst_port → 53, ret = TC_ACT_UNSPEC(-1)
     #[test]
     fn udp_ingress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -238,6 +248,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 5353,
                 lan_port: 53,
                 lan_ip: Ipv4Addr::UNSPECIFIED,
@@ -282,7 +293,9 @@ mod tests {
     // Expected: src_port → 5353, ret = TC_ACT_UNSPEC(-1)
     #[test]
     fn udp_egress_local_router() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -299,6 +312,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 5353,
                 lan_port: 53,
                 lan_ip: Ipv4Addr::UNSPECIFIED,
@@ -344,7 +358,9 @@ mod tests {
     // Expected: ret = TC_ACT_SHOT(2)
     #[test]
     fn tcp_ingress_no_match_drop() {
-        let landscape_builder = LandNatV2SkelBuilder::default();
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
         let mut open_object = MaybeUninit::uninit();
         let landscape_open = landscape_builder.open(&mut open_object).unwrap();
         let landscape_skel = landscape_open.load().unwrap();
@@ -361,6 +377,7 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
+                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: Ipv4Addr::UNSPECIFIED,
@@ -389,6 +406,45 @@ mod tests {
         assert_eq!(
             ret, TC_ACT_SHOT,
             "ingress with no matching mapping should return TC_ACT_SHOT(2)"
+        );
+    }
+
+    #[test]
+    fn tcp_ingress_static_exact_wan_ifindex_mismatch_drops() {
+        let mut landscape_builder = LandNatV2SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-static-local");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let landscape_open = landscape_builder.open(&mut open_object).unwrap();
+        let landscape_skel = landscape_open.load().unwrap();
+
+        add_static_nat4_mapping(
+            &landscape_skel.maps.nat4_mappings,
+            vec![StaticNatMappingV4Item {
+                wan_ifindex: IFINDEX,
+                wan_port: 8080,
+                lan_port: 80,
+                lan_ip: Ipv4Addr::UNSPECIFIED,
+                l4_protocol: 6,
+            }],
+        );
+
+        let mut pkt = build_ipv4_tcp(REMOTE_IP, WAN_IP, 9999, 8080);
+        let mut ctx = TestSkb::default();
+        ctx.ifindex = SECOND_IFINDEX;
+
+        let input = ProgramInput {
+            data_in: Some(&mut pkt),
+            context_in: Some(ctx.as_mut_bytes()),
+            context_out: None,
+            data_out: None,
+            ..Default::default()
+        };
+
+        let result = landscape_skel.progs.nat_v4_ingress.test_run(input).expect("test_run failed");
+        assert_eq!(
+            result.return_value as i32, TC_ACT_SHOT,
+            "static IPv4 mapping should not match a different WAN ifindex"
         );
     }
 }
