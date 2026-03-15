@@ -38,6 +38,7 @@ struct nat_timer_value_v4_v3 {
     u64 egress_bytes;
     u64 egress_packets;
     u32 cpu_id;
+    u32 ifindex;
     u16 generation_snapshot;
     u8 is_final_releaser;
     u8 _pad0;
@@ -46,9 +47,15 @@ struct nat_timer_value_v4_v3 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_mapping_key_v4);
+    __type(value, struct nat_mapping_value_v4);
+    __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
+} nat4_dyn_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct nat_mapping_key_v4);
     __type(value, struct nat4_mapping_state_v3);
     __uint(max_entries, NAT4_V3_DYNAMIC_STATE_SIZE);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_dynamic_state_v3 SEC(".maps");
 
 struct {
@@ -57,28 +64,24 @@ struct {
     __type(value, struct nat_timer_value_v4_v3);
     __uint(max_entries, NAT4_V3_TIMER_SIZE);
     __uint(map_flags, BPF_F_NO_PREALLOC);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_mapping_timer_v3 SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_QUEUE);
     __type(value, struct nat4_port_queue_value_v3);
     __uint(max_entries, NAT4_V3_PORT_QUEUE_SIZE);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_tcp_free_ports_v3 SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_QUEUE);
     __type(value, struct nat4_port_queue_value_v3);
     __uint(max_entries, NAT4_V3_PORT_QUEUE_SIZE);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_udp_free_ports_v3 SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_QUEUE);
     __type(value, struct nat4_port_queue_value_v3);
     __uint(max_entries, NAT4_V3_PORT_QUEUE_SIZE);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_icmp_free_ports_v3 SEC(".maps");
 
 #endif /* __LD_NAT_V3_MAPS_H__ */

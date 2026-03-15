@@ -64,19 +64,14 @@ struct nat_mapping_key_v4 {
     // egress: Cp
     // ingress: Np
     __be16 from_port;
-    // 0 means wildcard across WAN interfaces.
-    u32 wan_ifindex;
     // egress: Ca
     // ingress: Na
     __be32 from_addr;
 };
 
-//
 struct nat_timer_key_v4 {
     u8 l4proto;
     u8 _pad[3];
-    // 0 means wildcard across WAN interfaces.
-    u32 wan_ifindex;
     // As:Ps_An:Pn
     struct inet4_pair pair_ip;
 };
@@ -100,6 +95,7 @@ struct nat_timer_value_v4 {
     u64 egress_bytes;
     u64 egress_packets;
     u32 cpu_id;
+    u32 ifindex;
 };
 
 //

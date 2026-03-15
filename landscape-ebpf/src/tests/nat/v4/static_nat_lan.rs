@@ -52,7 +52,6 @@ fn add_ct_entry<T: MapCore>(
     let key = nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
-        wan_ifindex: IFINDEX,
         pair_ip: inet4_pair {
             src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
             dst_addr: inet4_addr { addr: dst_addr.to_bits().to_be() },
@@ -100,7 +99,6 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
-                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: LAN_HOST,
@@ -170,7 +168,6 @@ mod tests {
         add_static_nat4_mapping(
             &landscape_skel.maps.nat4_mappings,
             vec![StaticNatMappingV4Item {
-                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: LAN_HOST,

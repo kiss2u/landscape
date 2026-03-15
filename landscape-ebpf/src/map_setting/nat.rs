@@ -1,6 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use landscape_common::dev::get_interface_index_by_name;
 use landscape_common::iface::nat::StaticNatMappingItem;
 use libbpf_rs::{MapCore, MapFlags};
 
@@ -17,15 +16,13 @@ pub(crate) struct NatMappingKeyV4 {
     pub gress: u8,
     pub l4proto: u8,
     pub from_port: u16,
-    pub wan_ifindex: u32,
     pub from_addr: u32,
 }
 
 unsafe impl plain::Plain for NatMappingKeyV4 {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct StaticNatMappingV4Item {
-    pub wan_ifindex: u32,
     pub wan_port: u16,
     pub lan_port: u16,
     pub lan_ip: Ipv4Addr,
@@ -40,17 +37,7 @@ pub(crate) struct StaticNatMappingV6Item {
     pub l4_protocol: u8,
 }
 
-fn resolve_wan_ifindex(wan_iface_name: Option<&str>) -> Option<u32> {
-    match wan_iface_name {
-        Some(iface_name) => get_interface_index_by_name(iface_name).or_else(|| {
-            tracing::error!("skip static nat rule for missing wan iface: {iface_name}");
-            None
-        }),
-        None => Some(0),
-    }
-}
-
-pub(crate) fn add_static_nat4_mapping<'obj, T, I>(nat4_mappings: &T, mappings: I)
+pub(crate) fn add_static_nat4_mapping<'obj, T, I>(nat4_st_map: &T, mappings: I)
 where
     T: MapCore,
     I: IntoIterator<Item = StaticNatMappingV4Item>,
@@ -71,7 +58,6 @@ where
             gress: NAT_MAPPING_INGRESS,
             l4proto: static_mapping.l4_protocol,
             from_port: static_mapping.wan_port.to_be(),
-            wan_ifindex: static_mapping.wan_ifindex,
             from_addr: 0, // addr=0 for static ingress
         };
 
@@ -80,7 +66,6 @@ where
             gress: NAT_MAPPING_EGRESS,
             l4proto: static_mapping.l4_protocol,
             from_port: static_mapping.lan_port.to_be(),
-            wan_ifindex: static_mapping.wan_ifindex,
             from_addr: static_mapping.lan_ip.to_bits().to_be(),
         };
 
@@ -106,9 +91,8 @@ where
         return;
     }
 
-    if let Err(e) = nat4_mappings.update_batch(&keys, &values, counts, MapFlags::ANY, MapFlags::ANY)
-    {
-        tracing::error!("counts: {counts:?}, update nat4_mappings error:{e:?}");
+    if let Err(e) = nat4_st_map.update_batch(&keys, &values, counts, MapFlags::ANY, MapFlags::ANY) {
+        tracing::error!("counts: {counts:?}, update nat4_st_map error:{e:?}");
     }
 }
 
@@ -187,15 +171,12 @@ where
     for mapping in mappings {
         match mapping.lan_ip {
             IpAddr::V4(ipv4_addr) => {
-                if let Some(wan_ifindex) = resolve_wan_ifindex(mapping.wan_iface_name.as_deref()) {
-                    v4_rules.push(StaticNatMappingV4Item {
-                        wan_ifindex,
-                        wan_port: mapping.wan_port,
-                        lan_port: mapping.lan_port,
-                        lan_ip: ipv4_addr,
-                        l4_protocol: mapping.l4_protocol,
-                    });
-                }
+                v4_rules.push(StaticNatMappingV4Item {
+                    wan_port: mapping.wan_port,
+                    lan_port: mapping.lan_port,
+                    lan_ip: ipv4_addr,
+                    l4_protocol: mapping.l4_protocol,
+                });
             }
             IpAddr::V6(ipv6_addr) => {
                 v6_rules.push(StaticNatMappingV6Item {
@@ -208,6 +189,8 @@ where
         }
     }
 
+    let nat4_st_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat4_st_map).unwrap();
+    add_static_nat4_mapping(&nat4_st_map, v4_rules.iter().copied());
     let nat4_mappings = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat4_mappings).unwrap();
     add_static_nat4_mapping(&nat4_mappings, v4_rules);
     let static_nat_mappings =
@@ -226,15 +209,12 @@ where
     for mapping in mappings {
         match mapping.lan_ip {
             IpAddr::V4(ipv4_addr) => {
-                if let Some(wan_ifindex) = resolve_wan_ifindex(mapping.wan_iface_name.as_deref()) {
-                    v4_rules.push(StaticNatMappingV4Item {
-                        wan_ifindex,
-                        wan_port: mapping.wan_port,
-                        lan_port: mapping.lan_port,
-                        lan_ip: ipv4_addr,
-                        l4_protocol: mapping.l4_protocol,
-                    });
-                }
+                v4_rules.push(StaticNatMappingV4Item {
+                    wan_port: mapping.wan_port,
+                    lan_port: mapping.lan_port,
+                    lan_ip: ipv4_addr,
+                    l4_protocol: mapping.l4_protocol,
+                });
             }
             IpAddr::V6(ipv6_addr) => {
                 v6_rules.push(StaticNatMappingV6Item {
@@ -246,6 +226,8 @@ where
             }
         }
     }
+    let nat4_st_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat4_st_map).unwrap();
+    del_static_nat4_mapping(&nat4_st_map, v4_rules.iter().copied());
     let nat4_mappings = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat4_mappings).unwrap();
     del_static_nat4_mapping(&nat4_mappings, v4_rules);
     let static_nat_mappings =
@@ -253,7 +235,7 @@ where
     del_static_nat6_mapping(&static_nat_mappings, v6_rules);
 }
 
-pub(crate) fn del_static_nat4_mapping<'obj, T, I>(nat4_mappings: &T, mappings: I)
+pub(crate) fn del_static_nat4_mapping<'obj, T, I>(nat4_st_map: &T, mappings: I)
 where
     T: MapCore,
     I: IntoIterator<Item = StaticNatMappingV4Item>,
@@ -273,7 +255,6 @@ where
             gress: NAT_MAPPING_INGRESS,
             l4proto: static_mapping.l4_protocol,
             from_port: static_mapping.wan_port.to_be(),
-            wan_ifindex: static_mapping.wan_ifindex,
             from_addr: 0,
         };
 
@@ -282,7 +263,6 @@ where
             gress: NAT_MAPPING_EGRESS,
             l4proto: static_mapping.l4_protocol,
             from_port: static_mapping.lan_port.to_be(),
-            wan_ifindex: static_mapping.wan_ifindex,
             from_addr: static_mapping.lan_ip.to_bits().to_be(),
         };
 
@@ -295,8 +275,8 @@ where
         return;
     }
 
-    if let Err(e) = nat4_mappings.delete_batch(&keys, counts, MapFlags::ANY, MapFlags::ANY) {
-        tracing::error!("delete nat4_mappings error:{e:?}");
+    if let Err(e) = nat4_st_map.delete_batch(&keys, counts, MapFlags::ANY, MapFlags::ANY) {
+        tracing::error!("delete nat4_st_map error:{e:?}");
     }
 }
 

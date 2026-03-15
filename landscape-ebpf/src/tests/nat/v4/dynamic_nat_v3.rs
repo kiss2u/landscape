@@ -17,10 +17,9 @@ use crate::{
         add_wan_ip,
         nat::NatMappingKeyV4,
         nat::{add_static_nat4_mapping, StaticNatMappingV4Item},
-        share_map::types::{inet4_addr, inet4_pair, nat_mapping_value_v4, nat_timer_key_v4},
+        share_map::types::nat_mapping_value_v4,
     },
     nat::v3::land_nat_v3::{types, LandNatV3SkelBuilder},
-    nat::v3::reset_dynamic_nat_v3_runtime,
     tests::TestSkb,
     NAT_MAPPING_EGRESS, NAT_MAPPING_INGRESS,
 };
@@ -30,7 +29,6 @@ const LAN_HOST: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 100);
 const SECOND_LAN_HOST: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 101);
 const REMOTE_IP: Ipv4Addr = Ipv4Addr::new(50, 18, 88, 205);
 const IFINDEX: u32 = 6;
-const SECOND_IFINDEX: u32 = 7;
 const LAN_PORT: u16 = 56186;
 const SECOND_LAN_PORT: u16 = 56187;
 const NAT_PORT: u16 = 40000;
@@ -77,7 +75,6 @@ fn put_v3_state<T: MapCore>(
         gress: NAT_MAPPING_INGRESS,
         l4proto,
         from_port: nat_port.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: nat_addr.to_bits().to_be(),
     };
     let value = types::nat4_mapping_state_v3 {
@@ -105,7 +102,6 @@ fn delete_v3_state<T: MapCore>(state_map: &T, l4proto: u8, nat_addr: Ipv4Addr, n
         gress: NAT_MAPPING_INGRESS,
         l4proto,
         from_port: nat_port.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: nat_addr.to_bits().to_be(),
     };
 
@@ -123,13 +119,12 @@ fn add_v3_ct<T: MapCore>(
     client_port: u16,
     gress: u8,
 ) {
-    let key = nat_timer_key_v4 {
+    let key = types::nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
-        wan_ifindex: IFINDEX,
-        pair_ip: inet4_pair {
-            src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
-            dst_addr: inet4_addr { addr: nat_addr.to_bits().to_be() },
+        pair_ip: types::inet4_pair {
+            src_addr: types::inet4_addr { addr: src_addr.to_bits().to_be() },
+            dst_addr: types::inet4_addr { addr: nat_addr.to_bits().to_be() },
             src_port: src_port.to_be(),
             dst_port: nat_port.to_be(),
         },
@@ -142,6 +137,7 @@ fn add_v3_ct<T: MapCore>(
     value.server_status = 1;
     value.gress = gress;
     value.generation_snapshot = GENERATION;
+    value.ifindex = IFINDEX;
 
     timer_map
         .update(unsafe { plain::as_bytes(&key) }, unsafe { plain::as_bytes(&value) }, MapFlags::ANY)
@@ -156,13 +152,12 @@ fn delete_v3_ct<T: MapCore>(
     nat_addr: Ipv4Addr,
     nat_port: u16,
 ) {
-    let key = nat_timer_key_v4 {
+    let key = types::nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
-        wan_ifindex: IFINDEX,
-        pair_ip: inet4_pair {
-            src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
-            dst_addr: inet4_addr { addr: nat_addr.to_bits().to_be() },
+        pair_ip: types::inet4_pair {
+            src_addr: types::inet4_addr { addr: src_addr.to_bits().to_be() },
+            dst_addr: types::inet4_addr { addr: nat_addr.to_bits().to_be() },
             src_port: src_port.to_be(),
             dst_port: nat_port.to_be(),
         },
@@ -185,7 +180,6 @@ fn add_dynamic_mapping_pair<T: MapCore>(
         gress: NAT_MAPPING_EGRESS,
         l4proto,
         from_port: lan_port.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: lan_addr.to_bits().to_be(),
     };
     let egress_val = nat_mapping_value_v4 {
@@ -202,7 +196,6 @@ fn add_dynamic_mapping_pair<T: MapCore>(
         gress: NAT_MAPPING_INGRESS,
         l4proto,
         from_port: nat_port.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: nat_addr.to_bits().to_be(),
     };
     let ingress_val = nat_mapping_value_v4 {
@@ -241,14 +234,12 @@ fn delete_dynamic_mapping_pair<T: MapCore>(
         gress: NAT_MAPPING_EGRESS,
         l4proto,
         from_port: lan_port.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: lan_addr.to_bits().to_be(),
     };
     let ingress_key = NatMappingKeyV4 {
         gress: NAT_MAPPING_INGRESS,
         l4proto,
         from_port: nat_port.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: nat_addr.to_bits().to_be(),
     };
 
@@ -268,6 +259,48 @@ fn push_v3_free_port<T: MapCore>(queue_map: &T, port: u16, last_generation: u16)
 fn clear_v3_free_port_queue<T: MapCore>(queue_map: &T) {
     let key: [u8; 0] = [];
     while queue_map.lookup_and_delete(&key).expect("clear v3 free-port queue").is_some() {}
+}
+
+fn clear_all_v3_map_entries<T: MapCore>(map: &T) {
+    let keys: Vec<Vec<u8>> = map.keys().collect();
+    for key in keys {
+        map.delete(&key).expect("clear v3 map entry");
+    }
+}
+
+fn reset_dynamic_nat_v3_runtime_for_test<M1, M2, M3, M4, M5, M6>(
+    nat4_dyn_map: &M1,
+    dynamic_state: &M2,
+    timer_map: &M3,
+    tcp_queue: &M4,
+    udp_queue: &M5,
+    icmp_queue: &M6,
+    config: &NatConfig,
+) where
+    M1: MapCore,
+    M2: MapCore,
+    M3: MapCore,
+    M4: MapCore,
+    M5: MapCore,
+    M6: MapCore,
+{
+    clear_all_v3_map_entries(timer_map);
+    clear_all_v3_map_entries(dynamic_state);
+    clear_all_v3_map_entries(nat4_dyn_map);
+
+    clear_v3_free_port_queue(tcp_queue);
+    clear_v3_free_port_queue(udp_queue);
+    clear_v3_free_port_queue(icmp_queue);
+
+    for port in config.tcp_range.start..=config.tcp_range.end {
+        push_v3_free_port(tcp_queue, port, 0);
+    }
+    for port in config.udp_range.start..=config.udp_range.end {
+        push_v3_free_port(udp_queue, port, 0);
+    }
+    for port in config.icmp_in_range.start..=config.icmp_in_range.end {
+        push_v3_free_port(icmp_queue, port, 0);
+    }
 }
 
 fn peek_v3_free_port<T: MapCore>(queue_map: &T) -> Option<u16> {
@@ -305,7 +338,7 @@ mod tests {
 
         clear_v3_free_port_queue(&landscape_skel.maps.nat4_tcp_free_ports_v3);
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -313,7 +346,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -340,7 +373,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -414,7 +447,7 @@ mod tests {
 
         clear_v3_free_port_queue(&landscape_skel.maps.nat4_tcp_free_ports_v3);
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -422,7 +455,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -449,7 +482,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -497,7 +530,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -550,7 +583,6 @@ mod tests {
             gress: NAT_MAPPING_INGRESS,
             l4proto: 6,
             from_port: NAT_PORT.to_be(),
-            wan_ifindex: IFINDEX,
             from_addr: WAN_IP.to_bits().to_be(),
         };
         let state_bytes = landscape_skel
@@ -565,13 +597,12 @@ mod tests {
         assert_eq!(state.generation, GENERATION);
         assert_eq!(state.state_ref, ((1u64) << 56) | 2, "reuse ingress should incref state_ref");
 
-        let timer_key = nat_timer_key_v4 {
+        let timer_key = types::nat_timer_key_v4 {
             l4proto: 6,
             _pad: [0; 3],
-            wan_ifindex: IFINDEX,
-            pair_ip: inet4_pair {
-                src_addr: inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
-                dst_addr: inet4_addr { addr: WAN_IP.to_bits().to_be() },
+            pair_ip: types::inet4_pair {
+                src_addr: types::inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
+                dst_addr: types::inet4_addr { addr: WAN_IP.to_bits().to_be() },
                 src_port: 443u16.to_be(),
                 dst_port: NAT_PORT.to_be(),
             },
@@ -609,7 +640,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -654,7 +685,6 @@ mod tests {
             gress: NAT_MAPPING_INGRESS,
             l4proto: 6,
             from_port: NAT_PORT.to_be(),
-            wan_ifindex: IFINDEX,
             from_addr: WAN_IP.to_bits().to_be(),
         };
         let state_bytes = landscape_skel
@@ -689,7 +719,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -746,7 +776,6 @@ mod tests {
             gress: NAT_MAPPING_INGRESS,
             l4proto: 6,
             from_port: NAT_PORT.to_be(),
-            wan_ifindex: IFINDEX,
             from_addr: WAN_IP.to_bits().to_be(),
         };
         let state_bytes = landscape_skel
@@ -784,9 +813,8 @@ mod tests {
             Some(MacAddr::broadcast()),
         );
         add_static_nat4_mapping(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_st_map,
             vec![StaticNatMappingV4Item {
-                wan_ifindex: 0,
                 wan_port: 8080,
                 lan_port: 80,
                 lan_ip: LAN_HOST,
@@ -824,13 +852,12 @@ mod tests {
             panic!("expected TCP transport header in output");
         }
 
-        let timer_key = nat_timer_key_v4 {
+        let timer_key = types::nat_timer_key_v4 {
             l4proto: 6,
             _pad: [0; 3],
-            wan_ifindex: IFINDEX,
-            pair_ip: inet4_pair {
-                src_addr: inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
-                dst_addr: inet4_addr { addr: WAN_IP.to_bits().to_be() },
+            pair_ip: types::inet4_pair {
+                src_addr: types::inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
+                dst_addr: types::inet4_addr { addr: WAN_IP.to_bits().to_be() },
                 src_port: 443u16.to_be(),
                 dst_port: 8080u16.to_be(),
             },
@@ -868,7 +895,7 @@ mod tests {
 
         clear_v3_free_port_queue(&landscape_skel.maps.nat4_tcp_free_ports_v3);
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -876,7 +903,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -884,7 +911,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -911,7 +938,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -960,12 +987,11 @@ mod tests {
             gress: NAT_MAPPING_EGRESS,
             l4proto: 6,
             from_port: SECOND_LAN_PORT.to_be(),
-            wan_ifindex: IFINDEX,
             from_addr: SECOND_LAN_HOST.to_bits().to_be(),
         };
         let second_mapping = landscape_skel
             .maps
-            .nat4_mappings
+            .nat4_dyn_map
             .lookup(unsafe { plain::as_bytes(&second_egress_key) }, MapFlags::ANY)
             .expect("lookup second flow mapping after conflict");
         assert!(
@@ -1022,7 +1048,7 @@ mod tests {
 
         clear_v3_free_port_queue(&landscape_skel.maps.nat4_tcp_free_ports_v3);
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -1030,7 +1056,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -1038,7 +1064,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -1065,7 +1091,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -1079,13 +1105,12 @@ mod tests {
         push_v3_free_port(&landscape_skel.maps.nat4_tcp_free_ports_v3, NAT_PORT, 0);
         push_v3_free_port(&landscape_skel.maps.nat4_tcp_free_ports_v3, ALT_NAT_PORT, 0);
 
-        let stale_timer_key = nat_timer_key_v4 {
+        let stale_timer_key = types::nat_timer_key_v4 {
             l4proto: 6,
             _pad: [0; 3],
-            wan_ifindex: IFINDEX,
-            pair_ip: inet4_pair {
-                src_addr: inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
-                dst_addr: inet4_addr { addr: WAN_IP.to_bits().to_be() },
+            pair_ip: types::inet4_pair {
+                src_addr: types::inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
+                dst_addr: types::inet4_addr { addr: WAN_IP.to_bits().to_be() },
                 src_port: 443u16.to_be(),
                 dst_port: NAT_PORT.to_be(),
             },
@@ -1166,7 +1191,7 @@ mod tests {
 
         clear_v3_free_port_queue(&landscape_skel.maps.nat4_tcp_free_ports_v3);
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -1174,7 +1199,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -1182,7 +1207,7 @@ mod tests {
             NAT_PORT,
         );
         delete_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             SECOND_LAN_HOST,
             SECOND_LAN_PORT,
@@ -1209,7 +1234,7 @@ mod tests {
         );
 
         add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
+            &landscape_skel.maps.nat4_dyn_map,
             6,
             LAN_HOST,
             LAN_PORT,
@@ -1238,8 +1263,8 @@ mod tests {
             udp_range: 45000..45001,
             icmp_in_range: 46000..46001,
         };
-        reset_dynamic_nat_v3_runtime(
-            &landscape_skel.maps.nat4_mappings,
+        reset_dynamic_nat_v3_runtime_for_test(
+            &landscape_skel.maps.nat4_dyn_map,
             &landscape_skel.maps.nat4_dynamic_state_v3,
             &landscape_skel.maps.nat4_mapping_timer_v3,
             &landscape_skel.maps.nat4_tcp_free_ports_v3,
@@ -1252,12 +1277,11 @@ mod tests {
             gress: NAT_MAPPING_INGRESS,
             l4proto: 6,
             from_port: NAT_PORT.to_be(),
-            wan_ifindex: IFINDEX,
             from_addr: WAN_IP.to_bits().to_be(),
         };
         let stale_mapping = landscape_skel
             .maps
-            .nat4_mappings
+            .nat4_dyn_map
             .lookup(unsafe { plain::as_bytes(&stale_ingress_key) }, MapFlags::ANY)
             .expect("lookup stale mapping after cleanup");
         assert!(stale_mapping.is_none(), "cleanup should remove stale dynamic mappings");
@@ -1290,46 +1314,5 @@ mod tests {
         } else {
             panic!("expected TCP transport header in output");
         }
-    }
-
-    #[test]
-    fn tcp_ingress_dynamic_v3_exact_wan_ifindex_mismatch_drops() {
-        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let mut landscape_builder = LandNatV3SkelBuilder::default();
-        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3");
-        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
-        let mut open_object = MaybeUninit::uninit();
-        let landscape_open = landscape_builder.open(&mut open_object).unwrap();
-        let landscape_skel = landscape_open.load().unwrap();
-
-        add_dynamic_mapping_pair(
-            &landscape_skel.maps.nat4_mappings,
-            6,
-            LAN_HOST,
-            LAN_PORT,
-            WAN_IP,
-            NAT_PORT,
-            REMOTE_IP,
-            443,
-        );
-        add_v3_state(&landscape_skel.maps.nat4_dynamic_state_v3, 6, WAN_IP, NAT_PORT);
-
-        let mut pkt = build_ipv4_tcp_syn(REMOTE_IP, WAN_IP, 443, NAT_PORT);
-        let mut ctx = TestSkb::default();
-        ctx.ifindex = SECOND_IFINDEX;
-
-        let input = ProgramInput {
-            data_in: Some(&mut pkt),
-            context_in: Some(ctx.as_mut_bytes()),
-            context_out: None,
-            data_out: None,
-            ..Default::default()
-        };
-
-        let result = landscape_skel.progs.nat_v4_ingress.test_run(input).expect("test_run failed");
-        assert_eq!(
-            result.return_value as i32, 2,
-            "dynamic IPv4 mapping should not match a different WAN ifindex"
-        );
     }
 }

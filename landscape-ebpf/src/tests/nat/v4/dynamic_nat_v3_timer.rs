@@ -49,7 +49,6 @@ fn timer_key() -> types::nat_timer_key_v4 {
     types::nat_timer_key_v4 {
         l4proto: 6,
         _pad: [0; 3],
-        wan_ifindex: IFINDEX,
         pair_ip: types::inet4_pair {
             src_addr: types::inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
             dst_addr: types::inet4_addr { addr: WAN_IP.to_bits().to_be() },
@@ -64,7 +63,6 @@ fn ingress_key() -> types::nat_mapping_key_v4 {
         gress: NAT_MAPPING_INGRESS,
         l4proto: 6,
         from_port: NAT_PORT.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: WAN_IP.to_bits().to_be(),
     }
 }
@@ -74,7 +72,6 @@ fn egress_key() -> types::nat_mapping_key_v4 {
         gress: NAT_MAPPING_EGRESS,
         l4proto: 6,
         from_port: LAN_PORT.to_be(),
-        wan_ifindex: IFINDEX,
         from_addr: LAN_HOST.to_bits().to_be(),
     }
 }
@@ -120,25 +117,17 @@ fn put_state<T: MapCore>(map: &T, generation: u16, state_ref_: u64) {
 }
 
 fn put_timer<T: MapCore>(map: &T, status: u64, generation_snapshot: u16, is_final_releaser: u8) {
-    let value = types::nat_timer_value_v4_v3 {
-        server_status: 1,
-        client_status: 1,
-        status,
-        timer: types::bpf_timer::default(),
-        client_addr: types::inet4_addr { addr: LAN_HOST.to_bits().to_be() },
-        client_port: LAN_PORT.to_be(),
-        gress: NAT_MAPPING_EGRESS,
-        flow_id: 0,
-        create_time: 1,
-        ingress_bytes: 0,
-        ingress_packets: 0,
-        egress_bytes: 0,
-        egress_packets: 0,
-        cpu_id: 0,
-        generation_snapshot,
-        is_final_releaser,
-        _pad0: 0,
-    };
+    let mut value = types::nat_timer_value_v4_v3::default();
+    value.server_status = 1;
+    value.client_status = 1;
+    value.status = status;
+    value.client_addr = types::inet4_addr { addr: LAN_HOST.to_bits().to_be() };
+    value.client_port = LAN_PORT.to_be();
+    value.gress = NAT_MAPPING_EGRESS;
+    value.create_time = 1;
+    value.ifindex = IFINDEX;
+    value.generation_snapshot = generation_snapshot;
+    value.is_final_releaser = is_final_releaser;
     map.update(as_bytes(&timer_key()), as_bytes(&value), MapFlags::ANY).unwrap();
 }
 
@@ -184,7 +173,7 @@ mod tests {
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
-        put_mapping_pair(&skel.maps.nat4_mappings);
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION + 1, state_ref(STATE_ACTIVE, 1));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 0);
 
@@ -208,7 +197,7 @@ mod tests {
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
-        put_mapping_pair(&skel.maps.nat4_mappings);
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION, state_ref(STATE_ACTIVE, 2));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 0);
 
@@ -231,7 +220,7 @@ mod tests {
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
-        put_mapping_pair(&skel.maps.nat4_mappings);
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION, state_ref(STATE_ACTIVE, 1));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_TIMEOUT_2, GENERATION, 0);
 
@@ -253,7 +242,7 @@ mod tests {
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
-        put_mapping_pair(&skel.maps.nat4_mappings);
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION, state_ref(STATE_CLOSED, 1));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 1);
 

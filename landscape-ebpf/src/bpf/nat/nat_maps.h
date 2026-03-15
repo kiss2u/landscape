@@ -63,6 +63,14 @@ struct {
     __type(value, struct nat_mapping_value_v4);
     __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
+} nat4_st_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct nat_mapping_key_v4);
+    __type(value, struct nat_mapping_value_v4);
+    __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_mappings SEC(".maps");
 
 struct {

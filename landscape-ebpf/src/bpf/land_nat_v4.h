@@ -240,7 +240,7 @@ static __always_inline int nat_metric_try_report_v4(struct nat_timer_key_v4 *tim
     event->egress_bytes = timer_value->egress_bytes;
     event->egress_packets = timer_value->egress_packets;
     event->cpu_id = timer_value->cpu_id;
-    event->ifindex = timer_key->wan_ifindex;
+    event->ifindex = timer_value->ifindex;
     event->status = status;
     event->gress = timer_value->gress;
     bpf_ringbuf_submit(event, 0);
@@ -389,7 +389,6 @@ release:;
     egress_mapping_key.gress = NAT_MAPPING_EGRESS;
     egress_mapping_key.from_addr = value->client_addr.addr;
     egress_mapping_key.from_port = value->client_port;
-    egress_mapping_key.wan_ifindex = key->wan_ifindex;
 
     // ingress key: {INGRESS, proto, Pn, An} — from key
     struct nat_mapping_key_v4 ingress_mapping_key = {0};
@@ -397,7 +396,6 @@ release:;
     ingress_mapping_key.gress = NAT_MAPPING_INGRESS;
     ingress_mapping_key.from_addr = key->pair_ip.dst_addr.addr;
     ingress_mapping_key.from_port = key->pair_ip.dst_port;
-    ingress_mapping_key.wan_ifindex = key->wan_ifindex;
 
     // Check if static: lookup egress mapping, if is_static don't delete mapping entries
     struct nat_mapping_value_v4 *egress_val =
@@ -457,7 +455,6 @@ static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, b
     u8 flow_id = get_flow_id(skb->mark);
 
     timer_key.l4proto = l4proto;
-    timer_key.wan_ifindex = skb->ifindex;
     // CT key = {As:Ps, An:Pn}
     __builtin_memcpy(&timer_key.pair_ip, server_nat_pair, sizeof(timer_key.pair_ip));
 
@@ -479,6 +476,7 @@ static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, b
     timer_value_new.create_time = bpf_ktime_get_ns();
     timer_value_new.flow_id = flow_id;
     timer_value_new.cpu_id = bpf_get_smp_processor_id();
+    timer_value_new.ifindex = skb->ifindex;
     timer_value = insert_new_nat_timer(l4proto, &timer_key, &timer_value_new);
     if (timer_value == NULL) {
         return TIMER_ERROR;
@@ -497,7 +495,6 @@ insert_mappings_v4(const struct nat_mapping_key_v4 *key, const struct nat_mappin
     struct nat_mapping_key_v4 key_rev = {
         .gress = key->gress ^ GRESS_MASK,
         .l4proto = key->l4proto,
-        .wan_ifindex = key->wan_ifindex,
         .from_addr = val->addr,
         .from_port = val->port,
     };
@@ -550,14 +547,9 @@ static int search_port_callback_v4(u32 index, struct search_port_ctx_v4 *ctx) {
             .gress = NAT_MAPPING_INGRESS,
             .l4proto = ctx->ingress_key.l4proto,
             .from_port = ctx->ingress_key.from_port,
-            .wan_ifindex = ctx->ingress_key.wan_ifindex,
             .from_addr = 0,
         };
         struct nat_mapping_value_v4 *static_val = bpf_map_lookup_elem(&nat4_mappings, &static_key);
-        if (!static_val) {
-            static_key.wan_ifindex = 0;
-            static_val = bpf_map_lookup_elem(&nat4_mappings, &static_key);
-        }
         if (!static_val) {
             ctx->found = true;
             return BPF_LOOP_RET_BREAK;
@@ -592,7 +584,6 @@ ingress_lookup_or_new_mapping4(struct __sk_buff *skb, u8 ip_protocol,
         .gress = NAT_MAPPING_INGRESS,
         .l4proto = ip_protocol,
         .from_port = pkt_ip_pair->dst_port,
-        .wan_ifindex = skb->ifindex,
         .from_addr = pkt_ip_pair->dst_addr.addr,
     };
 
@@ -603,10 +594,6 @@ ingress_lookup_or_new_mapping4(struct __sk_buff *skb, u8 ip_protocol,
         // Fallback: try addr=0 for static mapping {INGRESS, proto, Pn, 0}
         ingress_key.from_addr = 0;
         nat_ingress_value = bpf_map_lookup_elem(&nat4_mappings, &ingress_key);
-        if (!nat_ingress_value) {
-            ingress_key.wan_ifindex = 0;
-            nat_ingress_value = bpf_map_lookup_elem(&nat4_mappings, &ingress_key);
-        }
         if (!nat_ingress_value) {
             return TC_ACT_SHOT;
         }
@@ -629,9 +616,8 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
     u64 curent_time = bpf_ktime_get_ns();
     struct nat_mapping_key_v4 egress_key = {
         .gress = NAT_MAPPING_EGRESS,
-        .l4proto = ip_protocol,              // 原有的 l4 层协议值
-        .from_port = pkt_ip_pair->src_port,  // 数据包中的 内网端口
-        .wan_ifindex = skb->ifindex,
+        .l4proto = ip_protocol,                   // 原有的 l4 层协议值
+        .from_port = pkt_ip_pair->src_port,       // 数据包中的 内网端口
         .from_addr = pkt_ip_pair->src_addr.addr,  // 内网原始地址
     };
 
@@ -640,20 +626,9 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
     struct nat_mapping_value_v4 *nat_egress_value =
         bpf_map_lookup_elem(&nat4_mappings, &egress_key);
     if (!nat_egress_value) {
-        // Support wildcard-WAN static host mappings; dynamic entries never use ifindex=0.
-        egress_key.wan_ifindex = 0;
-        nat_egress_value = bpf_map_lookup_elem(&nat4_mappings, &egress_key);
-        egress_key.wan_ifindex = skb->ifindex;
-    }
-    if (!nat_egress_value) {
         // Fallback: try addr=0 for static mapping targeting local router
         egress_key.from_addr = 0;
         nat_egress_value = bpf_map_lookup_elem(&nat4_mappings, &egress_key);
-        if (!nat_egress_value) {
-            egress_key.wan_ifindex = 0;
-            nat_egress_value = bpf_map_lookup_elem(&nat4_mappings, &egress_key);
-        }
-        egress_key.wan_ifindex = skb->ifindex;
         egress_key.from_addr = pkt_ip_pair->src_addr.addr;
     }
     if (!nat_egress_value) {
@@ -688,7 +663,6 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
                 {
                     .gress = NAT_MAPPING_INGRESS,
                     .l4proto = ip_protocol,
-                    .wan_ifindex = skb->ifindex,
                     .from_addr = new_nat_egress_value.addr,
                     .from_port = new_nat_egress_value.port,
                 },
@@ -750,8 +724,7 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
         // 已经存在就查询另外一个值 并进行刷新时间
         struct nat_mapping_key_v4 ingress_key = {
             .gress = NAT_MAPPING_INGRESS,
-            .l4proto = ip_protocol,  // 原有的 l4 层协议值
-            .wan_ifindex = egress_key.wan_ifindex,
+            .l4proto = ip_protocol,               // 原有的 l4 层协议值
             .from_port = nat_egress_value->port,  // 数据包中的 内网端口
             .from_addr = nat_egress_value->addr,  // 内网原始地址
         };

@@ -14,7 +14,9 @@ use zerocopy::IntoBytes;
 use crate::{
     map_setting::{
         add_wan_ip,
-        share_map::types::{inet4_addr, inet4_pair, nat_timer_key_v4, nat_timer_value_v4},
+        share_map::types::{
+            inet4_addr, inet4_pair, nat_mapping_key_v4, nat_timer_key_v4, nat_timer_value_v4,
+        },
     },
     nat::v2::land_nat_v2::LandNatV2SkelBuilder,
     tests::TestSkb,
@@ -51,7 +53,6 @@ fn add_ct_entry<T: MapCore>(
     let key = nat_timer_key_v4 {
         l4proto,
         _pad: [0; 3],
-        wan_ifindex: IFINDEX,
         pair_ip: inet4_pair {
             src_addr: inet4_addr { addr: src_addr.to_bits().to_be() },
             dst_addr: inet4_addr { addr: dst_addr.to_bits().to_be() },
@@ -72,7 +73,6 @@ fn add_ct_entry<T: MapCore>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map_setting::nat::NatMappingKeyV4;
     use crate::{NAT_MAPPING_EGRESS, NAT_MAPPING_INGRESS};
 
     // Test 4: Dynamic NAT — TCP egress (no static mapping)
@@ -107,11 +107,10 @@ mod tests {
         {
             use crate::map_setting::share_map::types::nat_mapping_value_v4;
 
-            let egress_key = NatMappingKeyV4 {
+            let egress_key = nat_mapping_key_v4 {
                 gress: NAT_MAPPING_EGRESS,
                 l4proto: 6,
                 from_port: 56186u16.to_be(),
-                wan_ifindex: IFINDEX,
                 from_addr: LAN_HOST.to_bits().to_be(),
             };
             let egress_val = nat_mapping_value_v4 {
@@ -124,11 +123,10 @@ mod tests {
                 ..Default::default()
             };
 
-            let ingress_key = NatMappingKeyV4 {
+            let ingress_key = nat_mapping_key_v4 {
                 gress: NAT_MAPPING_INGRESS,
                 l4proto: 6,
                 from_port: 56186u16.to_be(),
-                wan_ifindex: IFINDEX,
                 from_addr: WAN_IP.to_bits().to_be(),
             };
             let ingress_val = nat_mapping_value_v4 {

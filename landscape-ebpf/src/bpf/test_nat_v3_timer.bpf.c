@@ -79,20 +79,18 @@ int nat_v4_timer_step_test(struct __sk_buff *skb) {
     struct nat_mapping_key_v4 ingress_key = {
         .gress = NAT_MAPPING_INGRESS,
         .l4proto = input->key.l4proto,
-        .wan_ifindex = input->key.wan_ifindex,
         .from_addr = nat_addr,
         .from_port = nat_port,
     };
     struct nat_mapping_key_v4 egress_key = {
         .gress = NAT_MAPPING_EGRESS,
         .l4proto = input->key.l4proto,
-        .wan_ifindex = input->key.wan_ifindex,
         .from_addr = client_addr,
         .from_port = client_port,
     };
 
-    result->ingress_mapping_exists = bpf_map_lookup_elem(&nat4_mappings, &ingress_key) ? 1 : 0;
-    result->egress_mapping_exists = bpf_map_lookup_elem(&nat4_mappings, &egress_key) ? 1 : 0;
+    result->ingress_mapping_exists = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key) ? 1 : 0;
+    result->egress_mapping_exists = bpf_map_lookup_elem(&nat4_dyn_map, &egress_key) ? 1 : 0;
 
     struct nat4_mapping_state_v3 *state = bpf_map_lookup_elem(&nat4_dynamic_state_v3, &ingress_key);
     result->state_exists = state ? 1 : 0;

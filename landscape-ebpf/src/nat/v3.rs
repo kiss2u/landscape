@@ -5,7 +5,7 @@ use land_nat_v3::*;
 use landscape_common::iface::nat::NatConfig;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
-    MapCore, MapFlags, TC_EGRESS, TC_INGRESS,
+    MapCore, TC_EGRESS, TC_INGRESS,
 };
 use tokio::sync::oneshot;
 
@@ -52,90 +52,6 @@ fn seed_runtime_queues<M1, M2, M3>(
     seed_port_queue(icmp_queue, config.icmp_in_range.start, config.icmp_in_range.end);
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-fn clear_all_map_entries<M>(map: &M)
-where
-    M: MapCore,
-{
-    let keys: Vec<Vec<u8>> = map.keys().collect();
-    for key in keys {
-        if let Err(e) = map.delete(&key) {
-            tracing::warn!("failed to delete map entry during NAT v3 reset: {e}");
-        }
-    }
-}
-
-fn clear_port_queue<M>(map: &M)
-where
-    M: MapCore,
-{
-    let key: [u8; 0] = [];
-    loop {
-        match map.lookup_and_delete(&key) {
-            Ok(Some(_)) => {}
-            Ok(None) => break,
-            Err(e) => {
-                tracing::warn!("failed to clear NAT v3 queue: {e}");
-                break;
-            }
-        }
-    }
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn clear_dynamic_nat4_mappings<M>(map: &M)
-where
-    M: MapCore,
-{
-    let keys: Vec<Vec<u8>> = map.keys().collect();
-    for key in keys {
-        let value = match map.lookup(&key, MapFlags::ANY) {
-            Ok(Some(value)) => value,
-            Ok(None) => continue,
-            Err(e) => {
-                tracing::warn!("failed to inspect NAT v3 mapping during reset: {e}");
-                continue;
-            }
-        };
-        let value = unsafe {
-            std::ptr::read_unaligned(value.as_ptr().cast::<types::nat_mapping_value_v4>())
-        };
-        if value.is_static == 0 {
-            if let Err(e) = map.delete(&key) {
-                tracing::warn!("failed to delete dynamic NAT v3 mapping during reset: {e}");
-            }
-        }
-    }
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn reset_dynamic_nat_v3_runtime<M1, M2, M3, M4, M5, M6>(
-    nat4_mappings: &M1,
-    dynamic_state: &M2,
-    timer_map: &M3,
-    tcp_queue: &M4,
-    udp_queue: &M5,
-    icmp_queue: &M6,
-    config: &NatConfig,
-) where
-    M1: MapCore,
-    M2: MapCore,
-    M3: MapCore,
-    M4: MapCore,
-    M5: MapCore,
-    M6: MapCore,
-{
-    clear_all_map_entries(timer_map);
-    clear_all_map_entries(dynamic_state);
-    clear_dynamic_nat4_mappings(nat4_mappings);
-
-    clear_port_queue(tcp_queue);
-    clear_port_queue(udp_queue);
-    clear_port_queue(icmp_queue);
-
-    seed_runtime_queues(tcp_queue, udp_queue, icmp_queue, config);
-}
-
 pub fn init_nat(
     ifindex: i32,
     has_mac: bool,
@@ -155,6 +71,9 @@ pub fn init_nat(
         .nat6_static_mappings
         .reuse_pinned_map(&MAP_PATHS.nat6_static_mappings)
         .unwrap();
+
+    landscape_open.maps.nat4_st_map.set_pin_path(&MAP_PATHS.nat4_st_map).unwrap();
+    landscape_open.maps.nat4_st_map.reuse_pinned_map(&MAP_PATHS.nat4_st_map).unwrap();
 
     landscape_open.maps.nat4_mappings.set_pin_path(&MAP_PATHS.nat4_mappings).unwrap();
     landscape_open.maps.nat4_mappings.reuse_pinned_map(&MAP_PATHS.nat4_mappings).unwrap();
@@ -189,10 +108,7 @@ pub fn init_nat(
 
     let landscape_skel = landscape_open.load().unwrap();
 
-    reset_dynamic_nat_v3_runtime(
-        &landscape_skel.maps.nat4_mappings,
-        &landscape_skel.maps.nat4_dynamic_state_v3,
-        &landscape_skel.maps.nat4_mapping_timer_v3,
+    seed_runtime_queues(
         &landscape_skel.maps.nat4_tcp_free_ports_v3,
         &landscape_skel.maps.nat4_udp_free_ports_v3,
         &landscape_skel.maps.nat4_icmp_free_ports_v3,

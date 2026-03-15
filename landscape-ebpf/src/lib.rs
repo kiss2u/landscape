@@ -33,17 +33,10 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
     let paths = LandscapeMapPath {
         wan_ip: PathBuf::from(format!("{}/wan_ip_binding", ebpf_map_path)),
         nat6_static_mappings: PathBuf::from(format!("{}/nat_static_mapping", ebpf_map_path)),
+        nat4_st_map: PathBuf::from(format!("{}/nat4_st_map", ebpf_map_path)),
 
         nat4_mappings: PathBuf::from(format!("{}/nat4_mappings", ebpf_map_path)),
         nat4_mapping_timer: PathBuf::from(format!("{}/nat4_mapping_timer", ebpf_map_path)),
-        nat4_dynamic_state_v3: PathBuf::from(format!("{}/nat4_dynamic_state_v3", ebpf_map_path)),
-        nat4_mapping_timer_v3: PathBuf::from(format!("{}/nat4_mapping_timer_v3", ebpf_map_path)),
-        nat4_tcp_free_ports_v3: PathBuf::from(format!("{}/nat4_tcp_free_ports_v3", ebpf_map_path)),
-        nat4_udp_free_ports_v3: PathBuf::from(format!("{}/nat4_udp_free_ports_v3", ebpf_map_path)),
-        nat4_icmp_free_ports_v3: PathBuf::from(format!(
-            "{}/nat4_icmp_free_ports_v3",
-            ebpf_map_path
-        )),
 
         firewall_ipv4_block: PathBuf::from(format!("{}/firewall_block_ip4_map", ebpf_map_path)),
         firewall_ipv6_block: PathBuf::from(format!("{}/firewall_block_ip6_map", ebpf_map_path)),
@@ -94,13 +87,9 @@ pub(crate) struct LandscapeMapPath {
     pub wan_ip: PathBuf,
     // NAT
     pub nat6_static_mappings: PathBuf,
+    pub nat4_st_map: PathBuf,
     pub nat4_mappings: PathBuf,
     pub nat4_mapping_timer: PathBuf,
-    pub nat4_dynamic_state_v3: PathBuf,
-    pub nat4_mapping_timer_v3: PathBuf,
-    pub nat4_tcp_free_ports_v3: PathBuf,
-    pub nat4_udp_free_ports_v3: PathBuf,
-    pub nat4_icmp_free_ports_v3: PathBuf,
 
     // 防火墙黑名单
     pub firewall_ipv4_block: PathBuf,
