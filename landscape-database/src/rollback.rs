@@ -53,7 +53,7 @@ pub const RELEASE_BOUNDARIES: &[ReleaseBoundary] = &[
     },
     ReleaseBoundary {
         version: "0.17.1",
-        terminal_migration: "m20260308_101225_gateway_http_upstream",
+        terminal_migration: "m20260314_120000_dns_redirect_answer_mode",
     },
 ];
 
