@@ -2,6 +2,7 @@ pub mod proxy_service;
 pub mod service;
 pub mod sni_proxy;
 
+use std::io::ErrorKind;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
@@ -240,12 +241,30 @@ fn run_https_server(
         .expect("Failed to create gateway HTTPS runtime");
 
     runtime.block_on(async move {
-        if let Err(e) =
+        if let Err(error) =
             run_https_server_inner(rules, https_port, tls_config, server_conf, status, cancel).await
         {
-            tracing::error!("Gateway HTTPS listener exited with error: {e}");
+            if !error.already_logged {
+                tracing::error!(
+                    component = "gateway_https",
+                    event = "startup_failed",
+                    port = error.port,
+                    bind_addr = %error.bind_addr,
+                    error_kind = ?error.source.kind(),
+                    error = %error.source,
+                    "Gateway HTTPS listener exited with startup error"
+                );
+            }
         }
     });
+}
+
+#[derive(Debug)]
+struct GatewayHttpsRunError {
+    port: u16,
+    bind_addr: String,
+    source: std::io::Error,
+    already_logged: bool,
 }
 
 async fn run_https_server_inner(
@@ -255,10 +274,39 @@ async fn run_https_server_inner(
     server_conf: Arc<pingora::server::configuration::ServerConf>,
     status: WatchService,
     cancel: CancellationToken,
-) -> std::io::Result<()> {
+) -> Result<(), GatewayHttpsRunError> {
     use proxy_service::LandscapeReverseProxy;
 
-    let listener = TcpListener::bind(("0.0.0.0", https_port)).await?;
+    let bind_addr = gateway_https_bind_addr(https_port);
+    tracing::info!(
+        component = "gateway_https",
+        event = "startup_begin",
+        port = https_port,
+        bind_addr = %bind_addr,
+        "Starting Gateway HTTPS listener"
+    );
+
+    let listener = match TcpListener::bind(bind_addr.as_str()).await {
+        Ok(listener) => listener,
+        Err(source) => {
+            tracing::error!(
+                component = "gateway_https",
+                event = "bind_failed",
+                port = https_port,
+                bind_addr = %bind_addr,
+                error_kind = ?source.kind(),
+                error = %source,
+                diagnosis = gateway_https_bind_failure_diagnosis(source.kind()),
+                "Gateway HTTPS listener failed to bind"
+            );
+            return Err(GatewayHttpsRunError {
+                port: https_port,
+                bind_addr,
+                source,
+                already_logged: true,
+            });
+        }
+    };
     let acceptor = TlsAcceptor::from(tls_config.server_config);
     let sni_proxy_router = Arc::new(SniProxyRouter::new(rules.clone()));
     let app = Arc::new(pingora::proxy::http_proxy(&server_conf, LandscapeReverseProxy::new(rules)));
@@ -267,7 +315,13 @@ async fn run_https_server_inner(
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let mut tasks = JoinSet::new();
 
-    tracing::info!("Gateway HTTPS listener started on port {https_port}");
+    tracing::info!(
+        component = "gateway_https",
+        event = "bind_ok",
+        port = https_port,
+        bind_addr = %bind_addr,
+        "Gateway HTTPS listener bound successfully"
+    );
 
     loop {
         tokio::select! {
@@ -360,8 +414,26 @@ async fn run_https_server_inner(
     }
 
     while tasks.join_next().await.is_some() {}
-    tracing::info!("Gateway HTTPS listener stopped on port {https_port}");
+    tracing::info!(
+        component = "gateway_https",
+        event = "listener_stopped",
+        port = https_port,
+        bind_addr = %bind_addr,
+        "Gateway HTTPS listener stopped"
+    );
     Ok(())
+}
+
+fn gateway_https_bind_addr(https_port: u16) -> String {
+    format!("0.0.0.0:{https_port}")
+}
+
+fn gateway_https_bind_failure_diagnosis(kind: ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::AddrInUse => "port already in use",
+        ErrorKind::PermissionDenied => "insufficient privilege to bind low port",
+        _ => "unexpected bind failure",
+    }
 }
 
 struct GatewayTlsStream {
