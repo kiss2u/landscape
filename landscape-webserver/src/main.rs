@@ -663,6 +663,8 @@ async fn main() -> LdResult<()> {
         panic!("init log error: {e:?}");
     }
 
+    landscape_common::utils::time::start_time_sync_service(config.time.clone());
+
     if config.auto {
         if lock_exists || init_exists || db_exists {
             let mut reasons = vec![];

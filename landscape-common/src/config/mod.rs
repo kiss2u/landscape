@@ -5,17 +5,19 @@ pub mod runtime;
 pub mod settings;
 
 pub use api::{
-    GetDnsConfigResponse, GetMetricConfigResponse, GetUIConfigResponse, UpdateDnsConfigRequest,
-    UpdateMetricConfigRequest, UpdateUIConfigRequest,
+    GetDnsConfigResponse, GetMetricConfigResponse, GetTimeConfigResponse, GetUIConfigResponse,
+    UpdateDnsConfigRequest, UpdateMetricConfigRequest, UpdateTimeConfigRequest,
+    UpdateUIConfigRequest,
 };
 pub use init::InitConfig;
 pub use runtime::{
     AuthRuntimeConfig, DnsRuntimeConfig, LogRuntimeConfig, MetricRuntimeConfig, RuntimeConfig,
-    StoreRuntimeConfig, WebRuntimeConfig,
+    StoreRuntimeConfig, TimeRuntimeConfig, WebRuntimeConfig,
 };
 pub use settings::{
     LandscapeAuthConfig, LandscapeConfig, LandscapeDnsConfig, LandscapeLogConfig,
-    LandscapeMetricConfig, LandscapeStoreConfig, LandscapeUIConfig, LandscapeWebConfig,
+    LandscapeMetricConfig, LandscapeStoreConfig, LandscapeTimeConfig, LandscapeUIConfig,
+    LandscapeWebConfig,
 };
 
 use uuid::Uuid;

@@ -1,8 +1,8 @@
 use arc_swap::ArcSwap;
 use fs2::FileExt;
 use landscape_common::config::{
-    InitConfig, LandscapeConfig, LandscapeDnsConfig, LandscapeMetricConfig, LandscapeUIConfig,
-    RuntimeConfig,
+    InitConfig, LandscapeConfig, LandscapeDnsConfig, LandscapeMetricConfig, LandscapeTimeConfig,
+    LandscapeUIConfig, RuntimeConfig,
 };
 use landscape_common::database::LandscapeStore;
 use landscape_common::error::{LdError, LdResult};
@@ -83,6 +83,15 @@ impl LandscapeConfigService {
 
     pub fn get_dns_runtime_config(&self) -> landscape_common::config::DnsRuntimeConfig {
         self.config.load().dns.clone()
+    }
+
+    pub fn get_time_config_from_memory(&self) -> LandscapeTimeConfig {
+        self.config.load().file_config.time.clone()
+    }
+
+    pub async fn get_time_config_from_file(&self) -> (LandscapeTimeConfig, String) {
+        let (config, hash) = self.get_config_with_hash().await.unwrap_or_default();
+        (config.time, hash)
     }
 
     pub async fn get_dns_config_from_file(&self) -> (LandscapeDnsConfig, String) {
@@ -301,6 +310,72 @@ impl LandscapeConfigService {
             new_config.file_config.dns = new_dns.clone();
             new_config
         });
+
+        Ok(())
+    }
+
+    pub async fn update_time_config(
+        &self,
+        new_time: LandscapeTimeConfig,
+        expected_hash: String,
+    ) -> LdResult<()> {
+        let path = self.get_config_path();
+
+        let file = OpenOptions::new().read(true).write(true).create(true).open(&path)?;
+
+        file.lock_exclusive()?;
+
+        let result = {
+            let mut content = String::new();
+            let mut file_obj = &file;
+            file_obj.read_to_string(&mut content)?;
+
+            let mut hasher = Sha256::new();
+            hasher.update(content.as_bytes());
+            let current_hash = format!("{:x}", hasher.finalize());
+
+            if current_hash != expected_hash {
+                return Err(LdError::ConfigConflict);
+            }
+
+            let mut doc =
+                content.parse::<DocumentMut>().map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            let time_value =
+                toml::to_string(&new_time).map_err(|e| LdError::ConfigError(e.to_string()))?;
+            let time_doc = time_value
+                .parse::<DocumentMut>()
+                .map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            doc["time"] = time_doc.as_item().clone();
+
+            let new_content = doc.to_string();
+
+            let tmp_path = path.with_extension("toml.tmp");
+            let mut tmp_file =
+                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+
+            tmp_file.write_all(new_content.as_bytes())?;
+            tmp_file.sync_all()?;
+
+            std::fs::rename(&tmp_path, &path)?;
+
+            Ok::<(), LdError>(())
+        };
+
+        file.unlock()?;
+
+        if let Err(e) = result {
+            return Err(e);
+        }
+
+        self.config.rcu(|old| {
+            let mut new_config = (**old).clone();
+            new_config.time.update_from_file_config(&new_time);
+            new_config.file_config.time = new_time.clone();
+            new_config
+        });
+        landscape_common::utils::time::update_time_sync_config(self.config.load().time.clone());
 
         Ok(())
     }

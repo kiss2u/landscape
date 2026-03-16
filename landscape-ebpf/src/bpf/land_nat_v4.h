@@ -233,7 +233,7 @@ static __always_inline int nat_metric_try_report_v4(struct nat_timer_key_v4 *tim
     event->l3_proto = LANDSCAPE_IPV4_TYPE;
     event->flow_id = timer_value->flow_id;
     event->trace_id = 0;
-    event->time = bpf_ktime_get_ns();
+    event->time = bpf_ktime_get_tai_ns();
     event->create_time = timer_value->create_time;
     event->ingress_bytes = timer_value->ingress_bytes;
     event->ingress_packets = timer_value->ingress_packets;
@@ -473,7 +473,7 @@ static __always_inline int lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, b
     timer_value_new.server_status = CT_INIT;
     timer_value_new.gress = gress;
     timer_value_new.client_addr = *client_addr;
-    timer_value_new.create_time = bpf_ktime_get_ns();
+    timer_value_new.create_time = bpf_ktime_get_tai_ns();
     timer_value_new.flow_id = flow_id;
     timer_value_new.cpu_id = bpf_get_smp_processor_id();
     timer_value_new.ifindex = skb->ifindex;

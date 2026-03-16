@@ -15,6 +15,7 @@ mod firewall;
 mod nat;
 mod route;
 mod scanner;
+mod time;
 
 pub(crate) mod test_scanner {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_scanner.skel.rs"));

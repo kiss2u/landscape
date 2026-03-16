@@ -1,10 +1,15 @@
 use std::{net::IpAddr, path::PathBuf};
 
 use crate::config::settings::{
-    LandscapeConfig, LandscapeDnsConfig, LandscapeMetricConfig, LandscapeUIConfig,
+    LandscapeConfig, LandscapeDnsConfig, LandscapeMetricConfig, LandscapeTimeConfig,
+    LandscapeUIConfig,
 };
 use crate::gateway::settings::GatewayRuntimeConfig;
-use crate::LANDSCAPE_DB_SQLITE_NAME;
+use crate::{
+    DEFAULT_TIME_ENABLE, DEFAULT_TIME_SAMPLES_PER_SERVER, DEFAULT_TIME_SERVERS,
+    DEFAULT_TIME_STEP_THRESHOLD_MS, DEFAULT_TIME_SYNC_INTERVAL_SECS, DEFAULT_TIME_TIMEOUT_SECS,
+    LANDSCAPE_DB_SQLITE_NAME,
+};
 
 #[derive(Clone, Debug)]
 pub struct RuntimeConfig {
@@ -17,6 +22,7 @@ pub struct RuntimeConfig {
     pub metric: MetricRuntimeConfig,
     pub dns: DnsRuntimeConfig,
     pub ui: LandscapeUIConfig,
+    pub time: TimeRuntimeConfig,
     pub gateway: GatewayRuntimeConfig,
     pub auto: bool,
 }
@@ -75,6 +81,29 @@ pub struct DnsRuntimeConfig {
     pub doh_http_endpoint: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct TimeRuntimeConfig {
+    pub enabled: bool,
+    pub servers: Vec<String>,
+    pub sync_interval_secs: u64,
+    pub timeout_secs: u64,
+    pub step_threshold_ms: u64,
+    pub samples_per_server: u8,
+}
+
+impl Default for TimeRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_TIME_ENABLE,
+            servers: DEFAULT_TIME_SERVERS.iter().map(|server| (*server).to_string()).collect(),
+            sync_interval_secs: DEFAULT_TIME_SYNC_INTERVAL_SECS,
+            timeout_secs: DEFAULT_TIME_TIMEOUT_SECS,
+            step_threshold_ms: DEFAULT_TIME_STEP_THRESHOLD_MS,
+            samples_per_server: DEFAULT_TIME_SAMPLES_PER_SERVER,
+        }
+    }
+}
+
 impl RuntimeConfig {
     pub fn to_string_summary(&self) -> String {
         let address_http_str = match self.web.address {
@@ -120,8 +149,16 @@ impl RuntimeConfig {
          DB Max Threads: {}\n\
          Cleanup Interval: {}s\n\
          Cleanup Budget: {}ms\n\
-         Cleanup Slice Window: {}s\n\
-         Aggregate Interval: {}s\n",
+          Cleanup Slice Window: {}s\n\
+          Aggregate Interval: {}s\n\
+          \n\
+          [Time]\n\
+          Enabled: {}\n\
+          NTP Servers: {}\n\
+          Sync Interval: {}s\n\
+          Timeout: {}s\n\
+          Step Threshold: {}ms\n\
+          Samples Per Server: {}\n",
             self.home_path.display(),
             self.auth.admin_user,
             self.auth.admin_pass,
@@ -147,6 +184,12 @@ impl RuntimeConfig {
             self.metric.cleanup_time_budget_ms,
             self.metric.cleanup_slice_window_secs,
             self.metric.aggregate_interval_secs,
+            self.time.enabled,
+            self.time.servers.join(", "),
+            self.time.sync_interval_secs,
+            self.time.timeout_secs,
+            self.time.step_threshold_ms,
+            self.time.samples_per_server,
         )
     }
 }
@@ -214,6 +257,29 @@ impl DnsRuntimeConfig {
         }
         if let Some(v) = &config.doh_http_endpoint {
             self.doh_http_endpoint = v.clone();
+        }
+    }
+}
+
+impl TimeRuntimeConfig {
+    pub fn update_from_file_config(&mut self, config: &LandscapeTimeConfig) {
+        if let Some(v) = config.enabled {
+            self.enabled = v;
+        }
+        if let Some(v) = &config.servers {
+            self.servers = v.clone();
+        }
+        if let Some(v) = config.sync_interval_secs {
+            self.sync_interval_secs = v;
+        }
+        if let Some(v) = config.timeout_secs {
+            self.timeout_secs = v;
+        }
+        if let Some(v) = config.step_threshold_ms {
+            self.step_threshold_ms = v;
+        }
+        if let Some(v) = config.samples_per_server {
+            self.samples_per_server = v;
         }
     }
 }

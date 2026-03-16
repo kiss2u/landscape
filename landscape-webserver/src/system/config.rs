@@ -1,5 +1,6 @@
 use axum::extract::State;
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
+use landscape_common::utils::time::TimeSyncStatus;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
@@ -10,6 +11,12 @@ use crate::LandscapeApp;
 pub fn get_sys_config_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .routes(routes!(export_init_config))
+        .routes(routes!(get_time_sync_status))
+        .routes(routes!(super::time_config::get_time_config_fast))
+        .routes(routes!(
+            super::time_config::get_time_config,
+            super::time_config::update_time_config
+        ))
         .routes(routes!(super::ui_config::get_ui_config_fast))
         .routes(routes!(super::ui_config::get_ui_config, super::ui_config::update_ui_config))
         .routes(routes!(super::metric_config::get_metric_config_fast))
@@ -33,4 +40,15 @@ async fn export_init_config(State(state): State<LandscapeApp>) -> LandscapeApiRe
     let config_file_content = toml::to_string(&config).unwrap();
 
     LandscapeApiResp::success(config_file_content)
+}
+
+#[utoipa::path(
+    get,
+    path = "/time/sync_status",
+    tag = "System Config",
+    operation_id = "get_time_sync_status",
+    responses((status = 200, body = CommonApiResp<TimeSyncStatus>))
+)]
+async fn get_time_sync_status() -> LandscapeApiResult<TimeSyncStatus> {
+    LandscapeApiResp::success(landscape_common::utils::time::get_time_sync_status())
 }

@@ -99,6 +99,16 @@ pub const DEFAULT_DNS_CACHE_TTL: u32 = 24 * 60 * 60;
 pub const DEFAULT_DNS_NEGATIVE_CACHE_TTL: u32 = 120;
 pub const DEFAULT_DNS_DOH_LISTEN_PORT: u16 = 6053;
 
+// --- Time Settings ---
+pub const DEFAULT_TIME_ENABLE: bool = false;
+pub const DEFAULT_TIME_SERVERS: &[&str] =
+    &["ntp.aliyun.com:123", "time.cloudflare.com:123", "pool.ntp.org:123"];
+pub const DEFAULT_TIME_FALLBACK_SERVER: &str = "pool.ntp.org:123";
+pub const DEFAULT_TIME_SYNC_INTERVAL_SECS: u64 = 300;
+pub const DEFAULT_TIME_TIMEOUT_SECS: u64 = 3;
+pub const DEFAULT_TIME_STEP_THRESHOLD_MS: u64 = 500;
+pub const DEFAULT_TIME_SAMPLES_PER_SERVER: u8 = 3;
+
 #[cfg(debug_assertions)]
 pub const DEFAULT_METRIC_CLEANUP_INTERVAL_SECS: u64 = 60;
 #[cfg(not(debug_assertions))]

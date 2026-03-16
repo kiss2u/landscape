@@ -83,7 +83,7 @@ static __always_inline int nat_metric_try_report_v6(struct nat_timer_key_v6 *tim
     event->l3_proto = LANDSCAPE_IPV6_TYPE;
     event->flow_id = timer_value->flow_id;
     event->trace_id = 0;
-    event->time = bpf_ktime_get_ns();
+    event->time = bpf_ktime_get_tai_ns();
     event->create_time = timer_value->create_time;
     event->ingress_bytes = timer_value->ingress_bytes;
     event->ingress_packets = timer_value->ingress_packets;
@@ -322,7 +322,7 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
 
         struct nat_timer_value_v6 new_value = {};
         __builtin_memset(&new_value, 0, sizeof(new_value));
-        new_value.create_time = bpf_ktime_get_ns();
+        new_value.create_time = bpf_ktime_get_tai_ns();
         new_value.flow_id = get_flow_id(skb->mark);
         new_value.gress = NAT_MAPPING_EGRESS;
         new_value.cpu_id = bpf_get_smp_processor_id();
@@ -612,7 +612,7 @@ lookup_or_new_ct6_ingress(struct __sk_buff *skb, struct packet_offset_info *offs
 
     struct nat_timer_value_v6 new_value = {};
     __builtin_memset(&new_value, 0, sizeof(new_value));
-    new_value.create_time = bpf_ktime_get_ns();
+    new_value.create_time = bpf_ktime_get_tai_ns();
     new_value.flow_id = get_flow_id(skb->mark);
     new_value.gress = NAT_MAPPING_INGRESS;
     new_value.cpu_id = bpf_get_smp_processor_id();

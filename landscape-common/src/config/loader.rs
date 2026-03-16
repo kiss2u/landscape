@@ -6,11 +6,13 @@ use std::{
 use crate::args::WebCommArgs;
 use crate::config::runtime::{
     AuthRuntimeConfig, DnsRuntimeConfig, LogRuntimeConfig, MetricRuntimeConfig, RuntimeConfig,
-    StoreRuntimeConfig, WebRuntimeConfig,
+    StoreRuntimeConfig, TimeRuntimeConfig, WebRuntimeConfig,
 };
 use crate::config::settings::LandscapeConfig;
 use crate::gateway::settings::GatewayRuntimeConfig;
 use crate::{
+    DEFAULT_TIME_ENABLE, DEFAULT_TIME_SAMPLES_PER_SERVER, DEFAULT_TIME_SERVERS,
+    DEFAULT_TIME_STEP_THRESHOLD_MS, DEFAULT_TIME_SYNC_INTERVAL_SECS, DEFAULT_TIME_TIMEOUT_SECS,
     LANDSCAPE_CONFIG_DIR_NAME, LANDSCAPE_LOG_DIR_NAME, LANDSCAPE_WEBROOT_DIR_NAME, LAND_CONFIG,
 };
 
@@ -168,6 +170,27 @@ impl RuntimeConfig {
                 .unwrap_or_else(|| "/dns-query".to_string()),
         };
 
+        let time = TimeRuntimeConfig {
+            enabled: config.time.enabled.unwrap_or(DEFAULT_TIME_ENABLE),
+            servers: config.time.servers.clone().unwrap_or_else(|| {
+                DEFAULT_TIME_SERVERS.iter().map(|server| (*server).to_string()).collect()
+            }),
+            sync_interval_secs: config
+                .time
+                .sync_interval_secs
+                .unwrap_or(DEFAULT_TIME_SYNC_INTERVAL_SECS),
+            timeout_secs: config.time.timeout_secs.unwrap_or(DEFAULT_TIME_TIMEOUT_SECS),
+            step_threshold_ms: config
+                .time
+                .step_threshold_ms
+                .unwrap_or(DEFAULT_TIME_STEP_THRESHOLD_MS),
+            samples_per_server: config
+                .time
+                .samples_per_server
+                .unwrap_or(DEFAULT_TIME_SAMPLES_PER_SERVER)
+                .max(1),
+        };
+
         let gateway = GatewayRuntimeConfig::from_file_config(&config.gateway);
 
         RuntimeConfig {
@@ -179,6 +202,7 @@ impl RuntimeConfig {
             metric,
             dns,
             ui: config.ui.clone(),
+            time,
             gateway,
             file_config: config,
             auto: args.auto,

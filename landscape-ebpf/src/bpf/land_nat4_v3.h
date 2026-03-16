@@ -451,7 +451,7 @@ static __always_inline int nat4_v3_lookup_or_new_ct(struct __sk_buff *skb, u8 l4
     new_value.server_status = CT_INIT;
     new_value.gress = gress;
     new_value.client_addr = *client_addr;
-    new_value.create_time = bpf_ktime_get_ns();
+    new_value.create_time = bpf_ktime_get_tai_ns();
     new_value.flow_id = get_flow_id(skb->mark);
     new_value.cpu_id = bpf_get_smp_processor_id();
     new_value.ifindex = skb->ifindex;
