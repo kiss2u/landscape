@@ -32,11 +32,13 @@ static __always_inline int get_l4_checksum_offset(u32 l4_offset, u8 l4_protocol,
     return TC_ACT_OK;
 }
 
-static __always_inline bool is_same_prefix(const u8 prefix[7], const union u_inet_addr *a) {
+static __always_inline bool is_same_prefix(const u8 prefix[8], const union u_inet_addr *a,
+                                           u8 npt_id_mask) {
     const u8 *b = a->bits;
+    u8 prefix_mask = (u8)~npt_id_mask;
     return prefix[0] == b[0] && prefix[1] == b[1] && prefix[2] == b[2] && prefix[3] == b[3] &&
-           prefix[4] == b[4] && prefix[5] == b[5] && ((prefix[6] & 0xF0) == (b[6] & 0xF0));
-    ;
+           prefix[4] == b[4] && prefix[5] == b[5] && prefix[6] == b[6] &&
+           ((prefix[7] & prefix_mask) == (b[7] & prefix_mask));
 }
 
 static __always_inline int update_ipv6_cache_value(struct __sk_buff *skb, struct inet_pair *ip_pair,
@@ -312,7 +314,7 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
     struct nat_timer_value_v6 *value;
     value = bpf_map_lookup_elem(&nat6_conn_timer, &key);
     if (value) {
-        if (!is_same_prefix(value->client_prefix, ip_pair->src_addr.bits)) {
+        if (!is_same_prefix(value->client_prefix, &ip_pair->src_addr, npt_id_mask)) {
             update_ipv6_cache_value(skb, ip_pair, value);
         }
     } else {

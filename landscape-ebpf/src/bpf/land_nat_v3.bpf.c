@@ -140,8 +140,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
     }
 
     if (!is_icmpx_error || ct_value != NULL) {
-        ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_EGRESS,
-                            nat4_v3_timer_base(ct_value));
+        ct_state_transition(pkg_offset.pkt_type, NAT_MAPPING_EGRESS, nat4_v3_timer_base(ct_value));
         nat_metric_accumulate(skb, false, nat4_v3_timer_base(ct_value));
     }
 
@@ -230,8 +229,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     }
 
     if (!is_icmpx_error || ct_value != NULL) {
-        ct_state_transition(pkg_offset.l4_protocol, pkg_offset.pkt_type, NAT_MAPPING_INGRESS,
-                            nat4_v3_timer_base(ct_value));
+        ct_state_transition(pkg_offset.pkt_type, NAT_MAPPING_INGRESS, nat4_v3_timer_base(ct_value));
         nat_metric_accumulate(skb, true, nat4_v3_timer_base(ct_value));
     }
 

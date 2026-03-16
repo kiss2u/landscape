@@ -3,18 +3,296 @@
 
 #include <vmlinux.h>
 
-#include "land_nat_v4.h"
+#include "landscape_log.h"
+#include "land_nat_common.h"
+#include "nat/nat_maps.h"
+#include "land_wan_ip.h"
 #include "nat/nat_v3_maps.h"
 
+volatile const u16 tcp_range_start = 32768;
+volatile const u16 tcp_range_end = 65535;
+
+volatile const u16 udp_range_start = 32768;
+volatile const u16 udp_range_end = 65535;
+
+volatile const u16 icmp_range_start = 32768;
+volatile const u16 icmp_range_end = 65535;
+
+static __always_inline int icmpx_err_l3_offset(int l4_off) {
+    return l4_off + sizeof(struct icmphdr);
+}
+
+#define L3_CSUM_REPLACE_OR_SHOT(skb_ptr, csum_offset, old_val, new_val, size)                      \
+    do {                                                                                           \
+        int _ret = bpf_l3_csum_replace(skb_ptr, csum_offset, old_val, new_val, size);              \
+        if (_ret) {                                                                                \
+            bpf_printk("l3_csum_replace err: %d", _ret);                                           \
+            return TC_ACT_SHOT;                                                                    \
+        }                                                                                          \
+    } while (0)
+
+#define L4_CSUM_REPLACE_OR_SHOT(skb_ptr, csum_offset, old_val, new_val, len_plus_flags)            \
+    do {                                                                                           \
+        int _ret = bpf_l4_csum_replace(skb_ptr, csum_offset, old_val, new_val, len_plus_flags);    \
+        if (_ret) {                                                                                \
+            bpf_printk("l4_csum_replace err: %d", _ret);                                           \
+            return TC_ACT_SHOT;                                                                    \
+        }                                                                                          \
+    } while (0)
+
+static __always_inline int ipv4_update_csum_inner_macro(struct __sk_buff *skb, u32 l4_csum_off,
+                                                        __be32 from_addr, __be16 from_port,
+                                                        __be32 to_addr, __be16 to_port,
+                                                        bool l4_pseudo, bool l4_mangled_0) {
+    u16 csum;
+    if (l4_mangled_0) {
+        READ_SKB_U16(skb, l4_csum_off, csum);
+    }
+
+    if (!l4_mangled_0 || csum != 0) {
+        L3_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, from_port, to_port, 2);
+
+        if (l4_pseudo) {
+            L3_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, from_addr, to_addr, 4);
+        }
+    }
+}
+
+static __always_inline int ipv4_update_csum_icmp_err_macro(struct __sk_buff *skb, u32 icmp_csum_off,
+                                                           u32 err_ip_check_off,
+                                                           u32 err_l4_csum_off, __be32 from_addr,
+                                                           __be16 from_port, __be32 to_addr,
+                                                           __be16 to_port, bool err_l4_pseudo,
+                                                           bool l4_mangled_0) {
+    u16 prev_csum;
+    u16 curr_csum;
+    u16 *tmp_ptr;
+
+    if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_ip_check_off, sizeof(*tmp_ptr))) {
+        return 1;
+    }
+    prev_csum = *tmp_ptr;
+
+    L3_CSUM_REPLACE_OR_SHOT(skb, err_ip_check_off, from_addr, to_addr, 4);
+
+    if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_ip_check_off, sizeof(*tmp_ptr))) {
+        return 1;
+    }
+    curr_csum = *tmp_ptr;
+    L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, prev_csum, curr_csum, 2);
+
+    if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_l4_csum_off, sizeof(*tmp_ptr)) == 0) {
+        prev_csum = *tmp_ptr;
+        ipv4_update_csum_inner_macro(skb, err_l4_csum_off, from_addr, from_port, to_addr, to_port,
+                                     err_l4_pseudo, l4_mangled_0);
+
+        if (VALIDATE_READ_DATA(skb, &tmp_ptr, err_l4_csum_off, sizeof(*tmp_ptr))) {
+            return 1;
+        }
+        curr_csum = *tmp_ptr;
+        L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, prev_csum, curr_csum, 2);
+    }
+
+    L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, from_addr, to_addr, 4);
+    L4_CSUM_REPLACE_OR_SHOT(skb, icmp_csum_off, from_port, to_port, 2);
+
+    return 0;
+}
+
+static __always_inline int modify_headers_v4(struct __sk_buff *skb, bool is_icmpx_error, u8 nexthdr,
+                                             u32 current_l3_offset, int l4_off, int err_l4_off,
+                                             bool is_modify_source,
+                                             const struct nat_action_v4 *action) {
+#define BPF_LOG_TOPIC "modify_headers_v4"
+    int ret;
+    int l4_to_port_off;
+    int l4_to_check_off;
+    bool l4_check_pseudo;
+    bool l4_check_mangle_0;
+
+    int ip_offset =
+        is_modify_source ? offsetof(struct iphdr, saddr) : offsetof(struct iphdr, daddr);
+
+    ret = bpf_skb_store_bytes(skb, current_l3_offset + ip_offset, &action->to_addr.addr,
+                              sizeof(action->to_addr.addr), 0);
+    if (ret) return ret;
+
+    L3_CSUM_REPLACE_OR_SHOT(skb, current_l3_offset + offsetof(struct iphdr, check),
+                            action->from_addr.addr, action->to_addr.addr, 4);
+
+    if (l4_off == 0) return 0;
+
+    switch (nexthdr) {
+    case IPPROTO_TCP:
+        l4_to_port_off =
+            is_modify_source ? offsetof(struct tcphdr, source) : offsetof(struct tcphdr, dest);
+        l4_to_check_off = offsetof(struct tcphdr, check);
+        l4_check_pseudo = true;
+        l4_check_mangle_0 = false;
+        break;
+    case IPPROTO_UDP:
+        l4_to_port_off =
+            is_modify_source ? offsetof(struct udphdr, source) : offsetof(struct udphdr, dest);
+        l4_to_check_off = offsetof(struct udphdr, check);
+        l4_check_pseudo = true;
+        l4_check_mangle_0 = true;
+        break;
+    case IPPROTO_ICMP:
+        l4_to_port_off = offsetof(struct icmphdr, un.echo.id);
+        l4_to_check_off = offsetof(struct icmphdr, checksum);
+        l4_check_pseudo = false;
+        l4_check_mangle_0 = false;
+        break;
+    default:
+        return 1;
+    }
+
+    if (is_icmpx_error) {
+        if (nexthdr == IPPROTO_TCP || nexthdr == IPPROTO_UDP) {
+            l4_to_port_off =
+                is_modify_source ? offsetof(struct tcphdr, dest) : offsetof(struct tcphdr, source);
+        }
+
+        int icmpx_error_offset =
+            is_modify_source ? offsetof(struct iphdr, daddr) : offsetof(struct iphdr, saddr);
+
+        ret = bpf_skb_store_bytes(skb, icmpx_err_l3_offset(l4_off) + icmpx_error_offset,
+                                  &action->to_addr.addr, sizeof(action->to_addr.addr), 0);
+        if (ret) return ret;
+
+        ret = bpf_write_port(skb, err_l4_off + l4_to_port_off, action->to_port);
+        if (ret) return ret;
+
+        if (ipv4_update_csum_icmp_err_macro(
+                skb, l4_off + offsetof(struct icmphdr, checksum),
+                icmpx_err_l3_offset(l4_off) + offsetof(struct iphdr, check),
+                err_l4_off + l4_to_check_off, action->from_addr.addr, action->from_port,
+                action->to_addr.addr, action->to_port, l4_check_pseudo, l4_check_mangle_0))
+            return TC_ACT_SHOT;
+
+    } else {
+        ret = bpf_write_port(skb, l4_off + l4_to_port_off, action->to_port);
+        if (ret) return ret;
+
+        u32 l4_csum_off = l4_off + l4_to_check_off;
+        u32 flags_mangled = l4_check_mangle_0 ? BPF_F_MARK_MANGLED_0 : 0;
+
+        L4_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, action->from_port, action->to_port,
+                                2 | flags_mangled);
+
+        if (l4_check_pseudo) {
+            L4_CSUM_REPLACE_OR_SHOT(skb, l4_csum_off, action->from_addr.addr, action->to_addr.addr,
+                                    4 | BPF_F_PSEUDO_HDR | flags_mangled);
+        }
+    }
+
+    return 0;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline void nat_metric_accumulate(struct __sk_buff *skb, bool ingress,
+                                                  struct nat_timer_value_v4 *value) {
+    u64 bytes = skb->len;
+    if (ingress) {
+        __sync_fetch_and_add(&value->ingress_bytes, bytes);
+        __sync_fetch_and_add(&value->ingress_packets, 1);
+    } else {
+        __sync_fetch_and_add(&value->egress_bytes, bytes);
+        __sync_fetch_and_add(&value->egress_packets, 1);
+    }
+}
+
+static __always_inline int nat_metric_try_report_v4(struct nat_timer_key_v4 *timer_key,
+                                                    struct nat_timer_value_v4 *timer_value,
+                                                    u8 status) {
+#define BPF_LOG_TOPIC "nat_metric_try_report_v4"
+
+    struct nat_conn_metric_event *event;
+    event = bpf_ringbuf_reserve(&nat_conn_metric_events, sizeof(struct nat_conn_metric_event), 0);
+    if (event == NULL) {
+        return -1;
+    }
+
+    event->src_addr.ip = timer_value->client_addr.addr;
+    event->dst_addr.ip = timer_key->pair_ip.src_addr.addr;
+    event->src_port = timer_value->client_port;
+    event->dst_port = timer_key->pair_ip.src_port;
+    event->l4_proto = timer_key->l4proto;
+    event->l3_proto = LANDSCAPE_IPV4_TYPE;
+    event->flow_id = timer_value->flow_id;
+    event->trace_id = 0;
+    event->time = bpf_ktime_get_tai_ns();
+    event->create_time = timer_value->create_time;
+    event->ingress_bytes = timer_value->ingress_bytes;
+    event->ingress_packets = timer_value->ingress_packets;
+    event->egress_bytes = timer_value->egress_bytes;
+    event->egress_packets = timer_value->egress_packets;
+    event->cpu_id = timer_value->cpu_id;
+    event->ifindex = timer_value->ifindex;
+    event->status = status;
+    event->gress = timer_value->gress;
+    bpf_ringbuf_submit(event, 0);
+
+    return 0;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline bool ct_change_state(u64 *status_in_value, u64 curr_state, u64 next_state) {
+    return __sync_bool_compare_and_swap(status_in_value, curr_state, next_state);
+}
+
+static __always_inline int ct_state_transition(u8 pkt_type, u8 gress,
+                                               struct nat_timer_value_v4 *ct_timer_value) {
+#define BPF_LOG_TOPIC "ct_state_transition"
+    u64 curr_state, *modify_status = NULL;
+    if (gress == NAT_MAPPING_INGRESS) {
+        curr_state = ct_timer_value->server_status;
+        modify_status = &ct_timer_value->server_status;
+    } else {
+        curr_state = ct_timer_value->client_status;
+        modify_status = &ct_timer_value->client_status;
+    }
+
+#define NEW_STATE(__state)                                                                         \
+    if (!ct_change_state(modify_status, curr_state, (__state))) {                                  \
+        return TC_ACT_SHOT;                                                                        \
+    }
+
+    if (pkt_type == PKT_CONNLESS_V2) {
+        NEW_STATE(CT_LESS_EST);
+    }
+
+    if (pkt_type == PKT_TCP_RST_V2) {
+        NEW_STATE(CT_INIT);
+    }
+
+    if (pkt_type == PKT_TCP_SYN_V2) {
+        NEW_STATE(CT_SYN);
+    }
+
+    if (pkt_type == PKT_TCP_FIN_V2) {
+        NEW_STATE(CT_FIN);
+    }
+
+    u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
+    if (prev_state != TIMER_ACTIVE) {
+        if (ct_timer_value->client_port == TEST_PORT) {
+            bpf_log_info("flush status to TIMER_ACTIVE: 20");
+        }
+        bpf_timer_start(&ct_timer_value->timer, REPORT_INTERVAL, 0);
+    }
+
+    return TC_ACT_OK;
+#undef BPF_LOG_TOPIC
+}
+
 #define NAT4_V3_STATE_SHIFT 56
-#define NAT4_V3_STATE_MASK (0xFFULL << NAT4_V3_STATE_SHIFT)
 #define NAT4_V3_REF_MASK ((1ULL << NAT4_V3_STATE_SHIFT) - 1)
 #define NAT4_V3_STATE_ACTIVE 1
 #define NAT4_V3_STATE_CLOSED 2
 #define TIMER_RELEASE_PENDING_QUEUE 41ULL
 #define NAT4_V3_TIMER_STEP_DELETE_CT 1U
 #define NAT4_V3_TIMER_STEP_RESTART 2U
-#define NAT4_V3_TIMER_STEP_KEEP 3U
 
 struct nat4_lookup_result_v3 {
     struct nat_mapping_value_v4 *egress;
@@ -262,11 +540,6 @@ static __always_inline void nat4_v3_delete_mapping_and_state(u8 l4proto, __be32 
 static __always_inline struct nat_timer_value_v4 *
 nat4_v3_timer_base(struct nat_timer_value_v4_v3 *value) {
     return (struct nat_timer_value_v4 *)value;
-}
-
-static __always_inline const struct nat_timer_value_v4 *
-nat4_v3_timer_base_const(const struct nat_timer_value_v4_v3 *value) {
-    return (const struct nat_timer_value_v4 *)value;
 }
 
 static __always_inline u32 nat4_v3_handle_timer_step(struct nat_timer_key_v4 *key,

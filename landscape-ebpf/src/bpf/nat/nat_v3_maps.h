@@ -5,7 +5,8 @@
 
 #include <vmlinux.h>
 
-#include "../land_nat_v4.h"
+#include "../land_nat_common.h"
+#include "nat_maps.h"
 
 #define NAT4_V3_DYNAMIC_STATE_SIZE NAT_MAPPING_CACHE_SIZE
 #define NAT4_V3_TIMER_SIZE NAT_MAPPING_TIMER_SIZE
