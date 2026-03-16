@@ -62,9 +62,6 @@ pub enum DnsProviderConfig {
     Google {
         service_account_json: String,
     },
-    Custom {
-        script_path: String,
-    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

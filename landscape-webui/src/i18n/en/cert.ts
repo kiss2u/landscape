@@ -67,7 +67,6 @@ export default {
   dns_provider_tencent: "Tencent",
   dns_provider_aws: "AWS Route53",
   dns_provider_google: "Google Cloud",
-  dns_provider_custom: "Custom Script",
 
   // Status
   status_unregistered: "Unregistered",

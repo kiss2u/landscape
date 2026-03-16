@@ -67,7 +67,6 @@ export default {
   dns_provider_tencent: "腾讯云",
   dns_provider_aws: "AWS Route53",
   dns_provider_google: "Google Cloud",
-  dns_provider_custom: "自定义脚本",
 
   // Status
   status_unregistered: "未注册",

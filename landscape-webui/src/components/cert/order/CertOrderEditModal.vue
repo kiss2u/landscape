@@ -117,14 +117,20 @@ const key_type_options = [
   { label: "RSA 4096", value: "rsa4096" },
 ];
 
+const supported_dns_providers = [
+  "cloudflare",
+  "aliyun",
+  "tencent",
+  "aws",
+  "google",
+] as const;
+
 const dns_provider_options = [
   { label: t("cert.dns_provider_cloudflare"), value: "cloudflare" },
-  // Temporarily disabled until backend support is ready:
-  // { label: t("cert.dns_provider_aliyun"), value: "aliyun" },
-  // { label: t("cert.dns_provider_tencent"), value: "tencent" },
-  // { label: t("cert.dns_provider_aws"), value: "aws" },
-  // { label: t("cert.dns_provider_google"), value: "google" },
-  // { label: t("cert.dns_provider_custom"), value: "custom" },
+  { label: t("cert.dns_provider_aliyun"), value: "aliyun" },
+  { label: t("cert.dns_provider_tencent"), value: "tencent" },
+  { label: t("cert.dns_provider_aws"), value: "aws" },
+  { label: t("cert.dns_provider_google"), value: "google" },
 ];
 
 const cert_type_options = [
@@ -218,6 +224,46 @@ function setDnsField(fieldName: string, val: string) {
   setDnsProvider(dnsProviderKey.value, fields);
 }
 
+function requiredDnsFields(provider: string): string[] {
+  switch (provider) {
+    case "cloudflare":
+      return ["api_token"];
+    case "aliyun":
+      return ["access_key_id", "access_key_secret"];
+    case "tencent":
+      return ["secret_id", "secret_key"];
+    case "aws":
+      return ["access_key_id", "secret_access_key", "region"];
+    case "google":
+      return ["service_account_json"];
+    default:
+      return [];
+  }
+}
+
+function dnsFieldLabel(fieldName: string): string {
+  switch (fieldName) {
+    case "api_token":
+      return "API Token";
+    case "access_key_id":
+      return "Access Key ID";
+    case "access_key_secret":
+      return "Access Key Secret";
+    case "secret_id":
+      return "Secret ID";
+    case "secret_key":
+      return "Secret Key";
+    case "secret_access_key":
+      return "Secret Access Key";
+    case "region":
+      return "Region";
+    case "service_account_json":
+      return "Service Account JSON";
+    default:
+      return fieldName;
+  }
+}
+
 async function enter() {
   accounts.value = await get_cert_accounts();
   if (props.rule_id) {
@@ -241,7 +287,7 @@ async function enter() {
       });
     }
     const provider = getDnsProviderKey(getAcmeField("challenge_type"));
-    if (provider !== "cloudflare") {
+    if (!supported_dns_providers.includes(provider as any)) {
       setDnsProvider("cloudflare", { api_token: "" });
     }
   }
@@ -263,26 +309,22 @@ function on_dns_provider_change(val: string) {
     case "cloudflare":
       setDnsProvider("cloudflare", { api_token: "" });
       break;
-    // Temporarily disabled until backend support is ready:
-    // case "aliyun":
-    //   setDnsProvider("aliyun", { access_key_id: "", access_key_secret: "" });
-    //   break;
-    // case "tencent":
-    //   setDnsProvider("tencent", { secret_id: "", secret_key: "" });
-    //   break;
-    // case "aws":
-    //   setDnsProvider("aws", {
-    //     access_key_id: "",
-    //     secret_access_key: "",
-    //     region: "",
-    //   });
-    //   break;
-    // case "google":
-    //   setDnsProvider("google", { service_account_json: "" });
-    //   break;
-    // case "custom":
-    //   setDnsProvider("custom", { script_path: "" });
-    //   break;
+    case "aliyun":
+      setDnsProvider("aliyun", { access_key_id: "", access_key_secret: "" });
+      break;
+    case "tencent":
+      setDnsProvider("tencent", { secret_id: "", secret_key: "" });
+      break;
+    case "aws":
+      setDnsProvider("aws", {
+        access_key_id: "",
+        secret_access_key: "",
+        region: "",
+      });
+      break;
+    case "google":
+      setDnsProvider("google", { service_account_json: "" });
+      break;
     default:
       setDnsProvider("cloudflare", { api_token: "" });
   }
@@ -293,7 +335,7 @@ const domain_rule = {
   validator(_: unknown, value: string) {
     if (!value) return new Error(t("cert.cert_domains_required"));
     if (
-      !/^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/.test(
+      !/^(\*\.)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/.test(
         value,
       )
     )
@@ -327,6 +369,19 @@ const rules = {
           rule.value.cert_type.validity_days < 1)
       ) {
         return new Error(t("cert.generated_validity_days_invalid"));
+      }
+      return true;
+    },
+  },
+  "cert_type.challenge_type": {
+    trigger: ["blur", "change"],
+    validator() {
+      if (!is_acme.value || !is_dns.value) return true;
+      const provider = dnsProviderKey.value;
+      for (const field of requiredDnsFields(provider)) {
+        if (!dnsField(field).trim()) {
+          return new Error(`${dnsFieldLabel(field)} is required`);
+        }
       }
       return true;
     },
@@ -453,7 +508,10 @@ async function save() {
         </template>
 
         <template v-if="is_dns">
-          <n-form-item :label="t('cert.dns_provider')">
+          <n-form-item
+            :label="t('cert.dns_provider')"
+            path="cert_type.challenge_type"
+          >
             <n-select
               :value="dnsProviderKey"
               :options="dns_provider_options"
@@ -473,7 +531,6 @@ async function save() {
             </n-form-item>
           </template>
 
-          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'aliyun'">
             <n-form-item label="Access Key ID">
               <n-input
@@ -492,9 +549,7 @@ async function save() {
               />
             </n-form-item>
           </template>
-          -->
 
-          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'tencent'">
             <n-form-item label="Secret ID">
               <n-input
@@ -511,9 +566,7 @@ async function save() {
               />
             </n-form-item>
           </template>
-          -->
 
-          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'aws'">
             <n-form-item label="Access Key ID">
               <n-input
@@ -539,9 +592,7 @@ async function save() {
               />
             </n-form-item>
           </template>
-          -->
 
-          <!-- Temporarily disabled until backend support is ready:
           <template v-if="dnsProviderKey === 'google'">
             <n-form-item label="Service Account JSON">
               <n-input
@@ -554,19 +605,6 @@ async function save() {
               />
             </n-form-item>
           </template>
-          -->
-
-          <!-- Temporarily disabled until backend support is ready:
-          <template v-if="dnsProviderKey === 'custom'">
-            <n-form-item label="Script Path">
-              <n-input
-                :value="dnsField('script_path')"
-                @update:value="(v: string) => setDnsField('script_path', v)"
-                placeholder="/path/to/script.sh"
-              />
-            </n-form-item>
-          </template>
-          -->
         </template>
 
         <n-form-item :label="t('cert.acme_auto_renew')">

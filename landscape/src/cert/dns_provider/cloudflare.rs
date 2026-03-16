@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
-
 use landscape_common::cert::CertError;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
 use serde::Deserialize;
 
+use super::common::{record_name, RecordStore};
 use super::DnsChallengeSolver;
 
 const CF_API_BASE: &str = "https://api.cloudflare.com/client/v4";
@@ -13,8 +11,8 @@ const CF_API_BASE: &str = "https://api.cloudflare.com/client/v4";
 pub struct CloudflareSolver {
     client: Client,
     api_token: String,
-    /// Maps (domain, value) → (zone_id, record_id) for cleanup
-    records: Mutex<HashMap<(String, String), (String, String)>>,
+    base_url: String,
+    records: RecordStore<(String, String)>,
 }
 
 #[derive(Deserialize)]
@@ -41,15 +39,24 @@ struct CfDnsRecord {
 
 impl CloudflareSolver {
     pub fn new(api_token: String) -> Self {
+        Self::with_base_url(api_token, CF_API_BASE)
+    }
+
+    pub fn with_base_url(api_token: String, base_url: impl Into<String>) -> Self {
         Self {
             client: Client::new(),
             api_token,
-            records: Mutex::new(HashMap::new()),
+            base_url: base_url.into(),
+            records: RecordStore::new(),
         }
     }
 
     fn auth_header(&self) -> String {
         format!("Bearer {}", self.api_token)
+    }
+
+    fn api_url(&self, path: &str) -> String {
+        format!("{}{}", self.base_url.trim_end_matches('/'), path)
     }
 
     fn cf_error(resp: &Option<Vec<CfError>>) -> String {
@@ -58,15 +65,12 @@ impl CloudflareSolver {
             .unwrap_or_else(|| "unknown Cloudflare API error".to_string())
     }
 
-    /// Find the zone ID for a domain by trying progressively shorter suffixes.
     async fn find_zone_id(&self, domain: &str) -> Result<String, CertError> {
-        let parts: Vec<&str> = domain.split('.').collect();
-        for i in 0..parts.len().saturating_sub(1) {
-            let candidate = parts[i..].join(".");
-            let url = format!("{CF_API_BASE}/zones?name={candidate}");
+        for candidate in super::common::candidate_zones(domain) {
+            let url = self.api_url(&format!("/zones?name={candidate}"));
             let resp = self
                 .client
-                .get(&url)
+                .get(url)
                 .header(AUTHORIZATION, self.auth_header())
                 .send()
                 .await
@@ -89,13 +93,12 @@ impl CloudflareSolver {
             })?;
 
             if body.success {
-                if let Some(zones) = body.result {
-                    if let Some(zone) = zones.into_iter().next() {
-                        return Ok(zone.id);
-                    }
+                if let Some(zone) = body.result.and_then(|zones| zones.into_iter().next()) {
+                    return Ok(zone.id);
                 }
             }
         }
+
         Err(CertError::DnsChallengeSetupFailed(format!(
             "Could not find Cloudflare zone for domain: {domain}"
         )))
@@ -106,9 +109,8 @@ impl CloudflareSolver {
 impl DnsChallengeSolver for CloudflareSolver {
     async fn create_txt_record(&self, domain: &str, value: &str) -> Result<(), CertError> {
         let zone_id = self.find_zone_id(domain).await?;
-        let record_name = format!("_acme-challenge.{domain}");
-
-        let url = format!("{CF_API_BASE}/zones/{zone_id}/dns_records");
+        let record_name = record_name(domain);
+        let url = self.api_url(&format!("/zones/{zone_id}/dns_records"));
         let payload = serde_json::json!({
             "type": "TXT",
             "name": record_name,
@@ -118,7 +120,7 @@ impl DnsChallengeSolver for CloudflareSolver {
 
         let resp = self
             .client
-            .post(&url)
+            .post(url)
             .header(AUTHORIZATION, self.auth_header())
             .header(CONTENT_TYPE, "application/json")
             .body(payload.to_string())
@@ -144,36 +146,29 @@ impl DnsChallengeSolver for CloudflareSolver {
         }
 
         if let Some(record) = body.result {
-            let mut records = self.records.lock().unwrap();
-            records.insert((domain.to_string(), value.to_string()), (zone_id, record.id));
+            self.records.insert(domain, value, (zone_id, record.id));
         }
 
-        tracing::info!("Created TXT record _acme-challenge.{domain}");
+        tracing::info!("Created Cloudflare TXT record for {domain}");
         Ok(())
     }
 
     async fn cleanup_txt_record(&self, domain: &str, value: &str) -> Result<(), CertError> {
-        let key = (domain.to_string(), value.to_string());
-        let entry = {
-            let records = self.records.lock().unwrap();
-            records.get(&key).cloned()
-        };
-
-        let Some((zone_id, record_id)) = entry else {
-            tracing::warn!("No record found to clean up for _acme-challenge.{domain}");
+        let Some((zone_id, record_id)) = self.records.get_cloned(domain, value) else {
+            tracing::warn!("No Cloudflare TXT record found to clean up for {domain}");
             return Ok(());
         };
 
-        let url = format!("{CF_API_BASE}/zones/{zone_id}/dns_records/{record_id}");
+        let url = self.api_url(&format!("/zones/{zone_id}/dns_records/{record_id}"));
         let resp = self
             .client
-            .delete(&url)
+            .delete(url)
             .header(AUTHORIZATION, self.auth_header())
             .send()
             .await
             .map_err(|e| {
-                CertError::DnsChallengeSetupFailed(format!("Failed to delete DNS record: {e}"))
-            })?;
+            CertError::DnsChallengeSetupFailed(format!("Failed to delete DNS record: {e}"))
+        })?;
 
         let text = resp.text().await.map_err(|e| {
             CertError::DnsChallengeSetupFailed(format!("Failed to read Cloudflare response: {e}"))
@@ -185,16 +180,14 @@ impl DnsChallengeSolver for CloudflareSolver {
 
         if !body.success {
             tracing::warn!(
-                "Failed to clean up TXT record for {domain}: {}",
+                "Failed to clean up Cloudflare TXT record for {domain}: {}",
                 Self::cf_error(&body.errors)
             );
         } else {
-            tracing::info!("Cleaned up TXT record _acme-challenge.{domain}");
+            tracing::info!("Cleaned up Cloudflare TXT record for {domain}");
         }
 
-        let mut records = self.records.lock().unwrap();
-        records.remove(&key);
-
+        self.records.remove(domain, value);
         Ok(())
     }
 }
