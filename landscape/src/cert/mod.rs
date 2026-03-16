@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::Arc;
 
 pub mod account_service;
@@ -21,37 +22,72 @@ use uuid::Uuid;
 
 const AUTO_API_FALLBACK_CERT_NAME: &str = "Auto Generated API TLS Certificate";
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone)]
+struct WildcardEntry {
+    suffix: String,
+    cert: Arc<CertifiedKey>,
+}
+
+#[derive(Clone, Default)]
+struct ResolverSnapshot {
+    exact: HashMap<String, Arc<CertifiedKey>>,
+    wildcards: Vec<WildcardEntry>,
+    fallback: Option<Arc<CertifiedKey>>,
+}
+
+impl ResolverSnapshot {
+    fn resolve_name(&self, server_name: Option<&str>) -> Option<Arc<CertifiedKey>> {
+        if let Some(server_name) = server_name.and_then(normalize_domain_name) {
+            if let Some(cert) = self.exact.get(&server_name) {
+                return Some(cert.clone());
+            }
+
+            for wildcard in &self.wildcards {
+                if wildcard_matches_host(&wildcard.suffix, &server_name) {
+                    return Some(wildcard.cert.clone());
+                }
+            }
+        }
+
+        self.fallback.clone()
+    }
+}
+
+struct TlsResolverEntry {
+    cert_name: String,
+    configured_domains: Vec<String>,
+    cert_names: Vec<String>,
+    certified_key: CertifiedKey,
+}
+
+#[derive(Clone, Default)]
 pub struct SharedSniResolver {
-    inner: Arc<ArcSwapOption<ResolvesServerCertUsingSni>>,
-    fallback: Arc<ArcSwapOption<CertifiedKey>>,
+    inner: Arc<ArcSwapOption<ResolverSnapshot>>,
+}
+
+impl fmt::Debug for SharedSniResolver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SharedSniResolver").finish()
+    }
 }
 
 impl SharedSniResolver {
     pub fn new() -> Self {
-        Self {
-            inner: Arc::new(ArcSwapOption::new(None)),
-            fallback: Arc::new(ArcSwapOption::new(None)),
-        }
+        Self { inner: Arc::new(ArcSwapOption::new(None)) }
     }
 
-    pub fn swap(&self, resolver: ResolvesServerCertUsingSni) {
-        self.inner.store(Some(Arc::new(resolver)));
+    fn swap(&self, snapshot: ResolverSnapshot) {
+        self.inner.store(Some(Arc::new(snapshot)));
     }
 
-    pub fn set_fallback(&self, fallback: CertifiedKey) {
-        self.fallback.store(Some(Arc::new(fallback)));
+    fn resolve_name(&self, server_name: Option<&str>) -> Option<Arc<CertifiedKey>> {
+        self.inner.load_full().and_then(|snapshot| snapshot.resolve_name(server_name))
     }
 }
 
 impl ResolvesServerCert for SharedSniResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
-        if let Some(resolver) = self.inner.load_full() {
-            if let Some(cert) = resolver.resolve(client_hello) {
-                return Some(cert);
-            }
-        }
-        self.fallback.load_full()
+        self.resolve_name(client_hello.server_name())
     }
 }
 
@@ -80,23 +116,31 @@ pub async fn reload_gateway_tls_resolver(
         )
     });
 
-    let mut tls_entries: Vec<(String, Vec<String>, CertifiedKey)> = Vec::new();
+    let mut tls_entries = Vec::new();
     for cert in candidates {
         let cert_pem = cert.certificate.as_deref().unwrap_or_default();
         let key_pem = cert.private_key.as_deref().unwrap_or_default();
         let chain_pem = cert.certificate_chain.as_deref();
-        match build_certified_key_from_pem(cert_pem, chain_pem, key_pem) {
-            Ok(ck) => {
-                tls_entries.push((cert.name.clone(), cert.domains.clone(), ck));
-            }
+        let cert_names = match extract_cert_dns_names_from_pem(cert_pem) {
+            Ok(names) => names,
             Err(e) => {
                 tracing::warn!("Skip invalid for_gateway cert '{}' ({})", cert.name, e);
+                continue;
             }
+        };
+        match build_certified_key_from_pem(cert_pem, chain_pem, key_pem) {
+            Ok(ck) => tls_entries.push(TlsResolverEntry {
+                cert_name: cert.name.clone(),
+                configured_domains: cert.domains.clone(),
+                cert_names,
+                certified_key: ck,
+            }),
+            Err(e) => tracing::warn!("Skip invalid for_gateway cert '{}' ({})", cert.name, e),
         }
     }
 
-    let (resolver, inserted_count) = build_sni_resolver_from_entries(tls_entries);
-    shared_resolver.swap(resolver);
+    let (snapshot, inserted_count) = build_resolver_snapshot_from_entries(tls_entries, None);
+    shared_resolver.swap(snapshot);
     tracing::info!("Loaded {inserted_count} SNI domain mappings for Gateway TLS");
     Ok(inserted_count)
 }
@@ -131,18 +175,26 @@ pub async fn reload_api_tls_resolver(
         tracing::info!("Multiple for_api certs found ({})", candidates.len());
     }
 
-    let mut tls_entries: Vec<(String, Vec<String>, CertifiedKey)> = Vec::new();
+    let mut tls_entries = Vec::new();
     for cert in candidates {
         let cert_pem = cert.certificate.as_deref().unwrap_or_default();
         let key_pem = cert.private_key.as_deref().unwrap_or_default();
         let chain_pem = cert.certificate_chain.as_deref();
-        match build_certified_key_from_pem(cert_pem, chain_pem, key_pem) {
-            Ok(ck) => {
-                tls_entries.push((cert.name.clone(), cert.domains.clone(), ck));
-            }
+        let cert_names = match extract_cert_dns_names_from_pem(cert_pem) {
+            Ok(names) => names,
             Err(e) => {
                 tracing::warn!("Skip invalid for_api cert '{}' ({})", cert.name, e);
+                continue;
             }
+        };
+        match build_certified_key_from_pem(cert_pem, chain_pem, key_pem) {
+            Ok(ck) => tls_entries.push(TlsResolverEntry {
+                cert_name: cert.name.clone(),
+                configured_domains: cert.domains.clone(),
+                cert_names,
+                certified_key: ck,
+            }),
+            Err(e) => tracing::warn!("Skip invalid for_api cert '{}' ({})", cert.name, e),
         }
     }
 
@@ -152,10 +204,9 @@ pub async fn reload_api_tls_resolver(
         fallback_cert.private_key.as_deref().unwrap_or_default(),
     )
     .map_err(|e| format!("failed to build fallback API TLS cert: {e}"))?;
-    shared_resolver.set_fallback(fallback_ck);
-
-    let (resolver, inserted_count) = build_sni_resolver_from_entries(tls_entries);
-    shared_resolver.swap(resolver);
+    let (snapshot, inserted_count) =
+        build_resolver_snapshot_from_entries(tls_entries, Some(fallback_ck));
+    shared_resolver.swap(snapshot);
     tracing::info!("Loaded {inserted_count} SNI domain mappings for API TLS");
     Ok(inserted_count)
 }
@@ -187,38 +238,128 @@ fn parse_cert_validity_from_pem(cert_pem: &str) -> (Option<f64>, Option<f64>) {
     )
 }
 
-fn build_sni_resolver_from_entries(
-    entries: Vec<(String, Vec<String>, CertifiedKey)>,
-) -> (ResolvesServerCertUsingSni, usize) {
-    let mut resolver = ResolvesServerCertUsingSni::new();
-    let mut inserted_names: HashSet<String> = HashSet::new();
+pub(crate) fn extract_cert_dns_names_from_pem(cert_pem: &str) -> Result<Vec<String>, String> {
+    let pem_obj =
+        pem::parse(cert_pem).map_err(|e| format!("failed to parse certificate PEM: {e}"))?;
+    let (_, cert) = x509_parser::parse_x509_certificate(pem_obj.contents())
+        .map_err(|e| format!("failed to parse X.509 certificate: {e}"))?;
+
+    let mut names = Vec::new();
+    let mut seen = HashSet::new();
+    for ext in cert.extensions() {
+        if let x509_parser::extensions::ParsedExtension::SubjectAlternativeName(san) =
+            ext.parsed_extension()
+        {
+            for name in &san.general_names {
+                if let x509_parser::extensions::GeneralName::DNSName(dns) = name {
+                    if let Some(normalized) = normalize_domain_name(dns) {
+                        if seen.insert(normalized.clone()) {
+                            names.push(normalized);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if names.is_empty() {
+        if let Some(cn) = cert.subject().iter_common_name().next() {
+            if let Ok(cn_str) = cn.as_str() {
+                if let Some(normalized) = normalize_domain_name(cn_str) {
+                    names.push(normalized);
+                }
+            }
+        }
+    }
+
+    Ok(names)
+}
+
+fn build_resolver_snapshot_from_entries(
+    entries: Vec<TlsResolverEntry>,
+    fallback: Option<CertifiedKey>,
+) -> (ResolverSnapshot, usize) {
+    let mut snapshot = ResolverSnapshot {
+        exact: HashMap::new(),
+        wildcards: Vec::new(),
+        fallback: fallback.map(Arc::new),
+    };
+    let mut exact_validator = ResolvesServerCertUsingSni::new();
+    let mut wildcard_patterns = HashSet::new();
     let mut inserted_count = 0usize;
 
-    for (cert_name, domains, certified_key) in entries {
-        let normalized_domains: Vec<String> = domains
-            .into_iter()
-            .map(|d| d.trim().to_ascii_lowercase())
-            .filter(|d| !d.is_empty())
-            .collect();
+    for entry in entries {
+        let cert = Arc::new(entry.certified_key);
+        let cert_names: HashSet<String> = entry.cert_names.into_iter().collect();
 
-        for domain in normalized_domains {
-            if !inserted_names.insert(domain.clone()) {
+        for domain in entry.configured_domains.into_iter().filter_map(|d| normalize_domain_name(&d))
+        {
+            if let Some(suffix) = wildcard_suffix(&domain) {
+                if !cert_names.contains(&domain) {
+                    tracing::warn!(
+                        "Skip wildcard SNI mapping domain '{}' for cert '{}' (wildcard name not found in certificate SAN/CN)",
+                        domain,
+                        entry.cert_name
+                    );
+                    continue;
+                }
+                if !wildcard_patterns.insert(domain.clone()) {
+                    continue;
+                }
+                snapshot.wildcards.push(WildcardEntry { suffix, cert: cert.clone() });
+                inserted_count += 1;
                 continue;
             }
-            if let Err(e) = resolver.add(&domain, certified_key.clone()) {
+
+            if snapshot.exact.contains_key(&domain) {
+                continue;
+            }
+            if let Err(e) = exact_validator.add(&domain, (*cert).clone()) {
                 tracing::warn!(
                     "Skip SNI mapping domain '{}' for cert '{}' ({})",
                     domain,
-                    cert_name,
+                    entry.cert_name,
                     e
                 );
                 continue;
             }
+            snapshot.exact.insert(domain, cert.clone());
             inserted_count += 1;
         }
     }
 
-    (resolver, inserted_count)
+    (snapshot, inserted_count)
+}
+
+fn normalize_domain_name(domain: &str) -> Option<String> {
+    let normalized = domain.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+fn wildcard_suffix(pattern: &str) -> Option<String> {
+    let suffix = pattern.strip_prefix("*.")?;
+    if suffix.is_empty() || suffix.contains('*') {
+        return None;
+    }
+    Some(suffix.to_string())
+}
+
+fn wildcard_matches_host(suffix: &str, host: &str) -> bool {
+    if host.len() <= suffix.len() + 1 || !host.ends_with(suffix) {
+        return false;
+    }
+
+    let separator_index = host.len() - suffix.len() - 1;
+    if host.as_bytes()[separator_index] != b'.' {
+        return false;
+    }
+
+    let label = &host[..separator_index];
+    !label.is_empty() && !label.contains('.')
 }
 
 fn build_certified_key_from_pem(
@@ -319,4 +460,144 @@ async fn ensure_auto_api_fallback_cert(cert_service: &CertService) -> Result<Cer
         .checked_set(auto_cert)
         .await
         .map_err(|e| format!("failed to persist auto-generated fallback cert: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rcgen::{CertificateParams, KeyPair};
+
+    fn make_test_cert(configured_domains: &[&str], cert_domains: &[&str]) -> TlsResolverEntry {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let params = CertificateParams::new(
+            cert_domains.iter().map(|domain| domain.to_string()).collect::<Vec<_>>(),
+        )
+        .expect("test certificate params should be valid");
+        let signing_key = KeyPair::generate().expect("test key pair should generate");
+        let certificate =
+            params.self_signed(&signing_key).expect("test certificate should self-sign");
+        let cert_pem = certificate.pem();
+        let key_pem = signing_key.serialize_pem();
+        let cert_names =
+            extract_cert_dns_names_from_pem(&cert_pem).expect("generated cert names should parse");
+        let certified_key = build_certified_key_from_pem(&cert_pem, None, &key_pem)
+            .expect("generated cert should build certified key");
+
+        TlsResolverEntry {
+            cert_name: configured_domains.join(","),
+            configured_domains: configured_domains
+                .iter()
+                .map(|domain| domain.to_string())
+                .collect(),
+            cert_names,
+            certified_key,
+        }
+    }
+
+    #[test]
+    fn exact_domain_is_resolved() {
+        let (snapshot, inserted) = build_resolver_snapshot_from_entries(
+            vec![make_test_cert(&["api.example.com"], &["api.example.com"])],
+            None,
+        );
+
+        assert_eq!(inserted, 1);
+        let expected = snapshot.exact.get("api.example.com").expect("exact mapping should exist");
+        let resolved =
+            snapshot.resolve_name(Some("api.example.com")).expect("exact host should resolve");
+        assert!(Arc::ptr_eq(expected, &resolved));
+    }
+
+    #[test]
+    fn wildcard_domain_matches_single_level_subdomain() {
+        let (snapshot, inserted) = build_resolver_snapshot_from_entries(
+            vec![make_test_cert(
+                &["*.example.com", "example.com"],
+                &["*.example.com", "example.com"],
+            )],
+            None,
+        );
+
+        assert_eq!(inserted, 2);
+        let expected = snapshot
+            .wildcards
+            .iter()
+            .find(|entry| entry.suffix == "example.com")
+            .expect("wildcard entry should exist")
+            .cert
+            .clone();
+        let resolved = snapshot
+            .resolve_name(Some("api.example.com"))
+            .expect("single-level subdomain should match wildcard");
+        assert!(Arc::ptr_eq(&expected, &resolved));
+    }
+
+    #[test]
+    fn wildcard_domain_does_not_match_bare_domain_or_nested_subdomain() {
+        let (snapshot, _) = build_resolver_snapshot_from_entries(
+            vec![make_test_cert(&["*.example.com"], &["*.example.com"])],
+            None,
+        );
+
+        assert!(snapshot.resolve_name(Some("example.com")).is_none());
+        assert!(snapshot.resolve_name(Some("foo.bar.example.com")).is_none());
+    }
+
+    #[test]
+    fn exact_match_wins_over_wildcard() {
+        let (snapshot, inserted) = build_resolver_snapshot_from_entries(
+            vec![
+                make_test_cert(&["*.example.com"], &["*.example.com"]),
+                make_test_cert(&["api.example.com"], &["api.example.com"]),
+            ],
+            None,
+        );
+
+        assert_eq!(inserted, 2);
+        let exact =
+            snapshot.exact.get("api.example.com").expect("exact entry should exist").clone();
+        let resolved =
+            snapshot.resolve_name(Some("api.example.com")).expect("exact host should resolve");
+        assert!(Arc::ptr_eq(&exact, &resolved));
+    }
+
+    #[test]
+    fn api_fallback_is_used_for_unmatched_host_and_missing_sni() {
+        let fallback_entry = make_test_cert(&["localhost"], &["localhost"]);
+        let fallback = fallback_entry.certified_key.clone();
+        let (snapshot, inserted) = build_resolver_snapshot_from_entries(vec![], Some(fallback));
+
+        assert_eq!(inserted, 0);
+        let expected = snapshot.fallback.clone().expect("fallback should exist");
+        let unmatched = snapshot
+            .resolve_name(Some("unmatched.example.com"))
+            .expect("fallback should resolve unmatched host");
+        let missing_sni = snapshot.resolve_name(None).expect("fallback should resolve missing sni");
+
+        assert!(Arc::ptr_eq(&expected, &unmatched));
+        assert!(Arc::ptr_eq(&expected, &missing_sni));
+    }
+
+    #[test]
+    fn unmatched_gateway_host_without_fallback_returns_none() {
+        let (snapshot, _) = build_resolver_snapshot_from_entries(
+            vec![make_test_cert(&["api.example.com"], &["api.example.com"])],
+            None,
+        );
+
+        assert!(snapshot.resolve_name(Some("other.example.com")).is_none());
+        assert!(snapshot.resolve_name(None).is_none());
+    }
+
+    #[test]
+    fn wildcard_mapping_is_skipped_when_certificate_name_does_not_contain_pattern() {
+        let (snapshot, inserted) = build_resolver_snapshot_from_entries(
+            vec![make_test_cert(&["*.example.com"], &["api.example.com"])],
+            None,
+        );
+
+        assert_eq!(inserted, 0);
+        assert!(snapshot.wildcards.is_empty());
+        assert!(snapshot.resolve_name(Some("api.example.com")).is_none());
+    }
 }

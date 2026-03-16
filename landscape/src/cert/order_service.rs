@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::cert::{
-    reload_api_tls_resolver, reload_gateway_tls_resolver, validate_certified_key_from_pem,
-    SharedSniResolver,
+    extract_cert_dns_names_from_pem, reload_api_tls_resolver, reload_gateway_tls_resolver,
+    validate_certified_key_from_pem, SharedSniResolver,
 };
 use crate::dns::redirect_service::DNSRedirectService;
 use chrono::{Datelike, Duration as ChronoDuration, Utc};
@@ -1056,29 +1056,9 @@ fn parse_cert_info(pem_str: &str) -> Result<(Vec<String>, f64, f64), CertError> 
 
     let not_before = cert.validity().not_before.timestamp() as f64;
     let not_after = cert.validity().not_after.timestamp() as f64;
-
-    // Extract SANs
-    let mut domains = Vec::new();
-    for ext in cert.extensions() {
-        if let x509_parser::extensions::ParsedExtension::SubjectAlternativeName(san) =
-            ext.parsed_extension()
-        {
-            for name in &san.general_names {
-                if let x509_parser::extensions::GeneralName::DNSName(dns) = name {
-                    domains.push(dns.to_string());
-                }
-            }
-        }
-    }
-
-    // Fallback to CN if no SANs
-    if domains.is_empty() {
-        if let Some(cn) = cert.subject().iter_common_name().next() {
-            if let Ok(cn_str) = cn.as_str() {
-                domains.push(cn_str.to_string());
-            }
-        }
-    }
+    let domains = extract_cert_dns_names_from_pem(pem_str).map_err(|e| {
+        CertError::IssuanceFailed(format!("Failed to extract certificate DNS names: {e}"))
+    })?;
 
     Ok((domains, not_before, not_after))
 }
