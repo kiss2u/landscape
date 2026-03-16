@@ -38,12 +38,15 @@ export default {
   // Cert type
   cert_type: "Type",
   type_acme: "ACME",
+  type_generated: "Generated",
   type_manual: "Manual",
 
   // Manual upload
   upload_cert: "Certificate (PEM)",
   upload_key: "Private Key (PEM)",
   upload_chain: "Certificate Chain (PEM)",
+  generated_validity_days: "Validity (days)",
+  generated_validity_days_invalid: "Validity must be greater than 0 days",
 
   // ACME fields
   acme_account: "ACME Account",

@@ -108,13 +108,16 @@ function status_type(status?: string) {
 function cert_type_label(ct?: CertConfig["cert_type"]) {
   if (!ct) return "-";
   if (ct.t === "acme") return t("cert.type_acme");
+  if (ct.t === "generated") return t("cert.type_generated");
   if (ct.t === "manual") return t("cert.type_manual");
   return "-";
 }
 
 function cert_type_tag_type(ct?: CertConfig["cert_type"]) {
   if (!ct) return "default";
-  return ct.t === "acme" ? "info" : "success";
+  if (ct.t === "acme") return "info";
+  if (ct.t === "generated") return "warning";
+  return "success";
 }
 
 function bool_label(v?: boolean) {

@@ -38,12 +38,15 @@ export default {
   // Cert type
   cert_type: "类型",
   type_acme: "ACME",
+  type_generated: "生成证书",
   type_manual: "手动上传",
 
   // Manual upload
   upload_cert: "证书 (PEM)",
   upload_key: "私钥 (PEM)",
   upload_chain: "证书链 (PEM)",
+  generated_validity_days: "有效期（天）",
+  generated_validity_days_invalid: "有效期必须大于 0 天",
 
   // ACME fields
   acme_account: "ACME 账户",

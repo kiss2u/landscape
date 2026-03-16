@@ -65,7 +65,9 @@ const status_key = computed(() => {
 const cert_type_key = computed(() => {
   const ct = props.cert?.cert_type;
   if (!ct) return "-";
-  return ct.t === "acme" ? t("cert.type_acme") : t("cert.type_manual");
+  if (ct.t === "acme") return t("cert.type_acme");
+  if (ct.t === "generated") return t("cert.type_generated");
+  return t("cert.type_manual");
 });
 
 async function fetch_parsed_info() {

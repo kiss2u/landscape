@@ -13,6 +13,10 @@ fn default_renew_before_days() -> u32 {
     30
 }
 
+fn default_generated_validity_days() -> u32 {
+    365
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
@@ -94,6 +98,7 @@ pub enum KeyType {
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum CertType {
     Acme(AcmeCertConfig),
+    Generated(GeneratedCertConfig),
     Manual,
 }
 
@@ -118,6 +123,19 @@ pub struct AcmeCertConfig {
     pub auto_renew: bool,
     #[serde(default = "default_renew_before_days")]
     pub renew_before_days: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct GeneratedCertConfig {
+    #[serde(default = "default_generated_validity_days")]
+    pub validity_days: u32,
+}
+
+impl Default for GeneratedCertConfig {
+    fn default() -> Self {
+        Self { validity_days: default_generated_validity_days() }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

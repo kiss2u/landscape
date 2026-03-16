@@ -6,6 +6,7 @@ use crate::cert::{
     reload_api_tls_resolver, reload_gateway_tls_resolver, validate_certified_key_from_pem,
     SharedSniResolver,
 };
+use chrono::{Datelike, Duration as ChronoDuration, Utc};
 use instant_acme::{
     Account, ChallengeType as AcmeChallengeType, Identifier, NewOrder, OrderStatus, RetryPolicy,
     RevocationRequest,
@@ -16,6 +17,9 @@ use landscape_common::cert::CertError;
 use landscape_common::service::controller::ConfigController;
 use landscape_database::cert::repository::CertRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
+use rcgen::{
+    date_time_ymd, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, KeyPair,
+};
 use rustls_pki_types::CertificateDer;
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
@@ -42,6 +46,13 @@ struct CertIssueTask {
 enum DoIssueResult {
     Issued { private_key_pem: String, cert_chain_pem: String, expires_at: f64 },
     Cancelled,
+}
+
+struct GeneratedCertMaterial {
+    private_key_pem: String,
+    certificate_pem: String,
+    issued_at: f64,
+    expires_at: f64,
 }
 
 impl CertService {
@@ -175,7 +186,9 @@ impl CertService {
         &self,
         mut config: CertConfig,
     ) -> Result<CertConfig, CertError> {
-        if let Some(existing) = self.find_by_id(config.id).await {
+        let existing = self.find_by_id(config.id).await;
+
+        if let Some(existing) = existing.as_ref() {
             if let (CertType::Acme(existing_acme), CertType::Acme(new_acme)) =
                 (&existing.cert_type, &config.cert_type)
             {
@@ -188,56 +201,100 @@ impl CertService {
             }
         }
 
-        if let CertType::Manual = &config.cert_type {
-            let cert_pem_opt = config.certificate.as_deref().map(str::trim);
-            let key_pem_opt = config.private_key.as_deref().map(str::trim);
-            let has_cert = cert_pem_opt.is_some_and(|v| !v.is_empty());
-            let has_key = key_pem_opt.is_some_and(|v| !v.is_empty());
-
-            if has_cert != has_key {
-                return Err(CertError::InvalidStatusTransition(
-                    "manual certificate and private key must be provided together".to_string(),
-                ));
-            }
-
-            if has_cert {
-                let cert_pem = cert_pem_opt.unwrap_or_default();
-                let key_pem = key_pem_opt.unwrap_or_default();
-                let (domains, not_before, not_after) = parse_cert_info(cert_pem)?;
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs_f64();
-
-                if now < not_before {
-                    return Err(CertError::InvalidStatusTransition(
-                        "manual certificate is not valid yet".to_string(),
-                    ));
-                }
-                if now > not_after {
-                    return Err(CertError::InvalidStatusTransition(
-                        "manual certificate is expired".to_string(),
-                    ));
-                }
-
-                validate_certified_key_from_pem(
-                    cert_pem,
-                    config.certificate_chain.as_deref(),
-                    key_pem,
-                )
-                .map_err(|e| {
-                    CertError::InvalidStatusTransition(format!(
-                        "manual certificate/private key validation failed: {e}"
-                    ))
-                })?;
-
+        match &config.cert_type {
+            CertType::Generated(generated) => {
+                config.domains = normalize_cert_domains(&config.domains);
                 if config.domains.is_empty() {
-                    config.domains = domains;
+                    return Err(CertError::InvalidStatusTransition(
+                        "generated certificate requires at least one domain".to_string(),
+                    ));
                 }
-                config.expires_at = Some(not_after);
-                config.issued_at = Some(not_before);
-                config.status = CertStatus::Valid;
+                if generated.validity_days == 0 {
+                    return Err(CertError::InvalidStatusTransition(
+                        "generated certificate validity_days must be greater than zero".to_string(),
+                    ));
+                }
+
+                let should_regenerate = existing.as_ref().is_none_or(|current| {
+                    generated_cert_needs_regeneration(
+                        current,
+                        &config.domains,
+                        generated.validity_days,
+                    )
+                });
+
+                if should_regenerate {
+                    let material =
+                        generate_self_signed_certificate(&config.domains, generated.validity_days)?;
+                    config.private_key = Some(material.private_key_pem);
+                    config.certificate = Some(material.certificate_pem);
+                    config.certificate_chain = None;
+                    config.issued_at = Some(material.issued_at);
+                    config.expires_at = Some(material.expires_at);
+                    config.status = CertStatus::Valid;
+                    config.status_message = None;
+                } else if let Some(current) = existing.as_ref() {
+                    config.private_key = current.private_key.clone();
+                    config.certificate = current.certificate.clone();
+                    config.certificate_chain = current.certificate_chain.clone();
+                    config.issued_at = current.issued_at;
+                    config.expires_at = current.expires_at;
+                    config.status = CertStatus::Valid;
+                    config.status_message = None;
+                }
             }
+            CertType::Manual => {
+                let cert_pem_opt = config.certificate.as_deref().map(str::trim);
+                let key_pem_opt = config.private_key.as_deref().map(str::trim);
+                let has_cert = cert_pem_opt.is_some_and(|v| !v.is_empty());
+                let has_key = key_pem_opt.is_some_and(|v| !v.is_empty());
+
+                if has_cert != has_key {
+                    return Err(CertError::InvalidStatusTransition(
+                        "manual certificate and private key must be provided together".to_string(),
+                    ));
+                }
+
+                if has_cert {
+                    let cert_pem = cert_pem_opt.unwrap_or_default();
+                    let key_pem = key_pem_opt.unwrap_or_default();
+                    let (domains, not_before, not_after) = parse_cert_info(cert_pem)?;
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs_f64();
+
+                    if now < not_before {
+                        return Err(CertError::InvalidStatusTransition(
+                            "manual certificate is not valid yet".to_string(),
+                        ));
+                    }
+                    if now > not_after {
+                        return Err(CertError::InvalidStatusTransition(
+                            "manual certificate is expired".to_string(),
+                        ));
+                    }
+
+                    validate_certified_key_from_pem(
+                        cert_pem,
+                        config.certificate_chain.as_deref(),
+                        key_pem,
+                    )
+                    .map_err(|e| {
+                        CertError::InvalidStatusTransition(format!(
+                            "manual certificate/private key validation failed: {e}"
+                        ))
+                    })?;
+
+                    if config.domains.is_empty() {
+                        config.domains = domains;
+                    }
+                    config.expires_at = Some(not_after);
+                    config.issued_at = Some(not_before);
+                    config.status = CertStatus::Valid;
+                }
+            }
+            CertType::Acme(_) => {}
         }
 
         self.validate_for_api_domain_conflicts(&config).await?;
@@ -797,6 +854,97 @@ impl ConfigController for CertService {
     }
 }
 
+fn normalize_cert_domains(domains: &[String]) -> Vec<String> {
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+
+    for domain in domains {
+        let domain = domain.trim().to_ascii_lowercase();
+        if domain.is_empty() {
+            continue;
+        }
+        if seen.insert(domain.clone()) {
+            normalized.push(domain);
+        }
+    }
+
+    normalized
+}
+
+fn generated_cert_needs_regeneration(
+    current: &CertConfig,
+    normalized_domains: &[String],
+    validity_days: u32,
+) -> bool {
+    let CertType::Generated(current_generated) = &current.cert_type else {
+        return true;
+    };
+
+    current_generated.validity_days != validity_days
+        || normalize_cert_domains(&current.domains) != normalized_domains
+        || !matches!(current.status, CertStatus::Valid)
+        || current.certificate.as_deref().is_none_or(|pem| pem.trim().is_empty())
+        || current.private_key.as_deref().is_none_or(|pem| pem.trim().is_empty())
+}
+
+fn generate_self_signed_certificate(
+    domains: &[String],
+    validity_days: u32,
+) -> Result<GeneratedCertMaterial, CertError> {
+    let start_date = Utc::now().date_naive();
+    let end_date = start_date
+        .checked_add_signed(ChronoDuration::days(validity_days as i64 + 1))
+        .ok_or_else(|| {
+            CertError::InvalidStatusTransition(
+                "generated certificate validity is out of supported range".to_string(),
+            )
+        })?;
+
+    let mut params = CertificateParams::new(domains.to_vec()).map_err(|e| {
+        CertError::InvalidStatusTransition(format!(
+            "generated certificate domain validation failed: {e}"
+        ))
+    })?;
+    let not_before = date_time_ymd(
+        start_date.year(),
+        start_date.month().try_into().map_err(|_| {
+            CertError::IssuanceFailed("failed to calculate generated cert start month".to_string())
+        })?,
+        start_date.day().try_into().map_err(|_| {
+            CertError::IssuanceFailed("failed to calculate generated cert start day".to_string())
+        })?,
+    );
+    let not_after = date_time_ymd(
+        end_date.year(),
+        end_date.month().try_into().map_err(|_| {
+            CertError::IssuanceFailed("failed to calculate generated cert end month".to_string())
+        })?,
+        end_date.day().try_into().map_err(|_| {
+            CertError::IssuanceFailed("failed to calculate generated cert end day".to_string())
+        })?,
+    );
+    let mut distinguished_name = DistinguishedName::new();
+    distinguished_name.push(DnType::CommonName, domains[0].clone());
+    params.distinguished_name = distinguished_name;
+    params.not_before = not_before;
+    params.not_after = not_after;
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+
+    let signing_key = KeyPair::generate().map_err(|e| {
+        CertError::IssuanceFailed(format!("failed to generate private key for certificate: {e}"))
+    })?;
+    let certificate = params.self_signed(&signing_key).map_err(|e| {
+        CertError::IssuanceFailed(format!("failed to generate self-signed certificate: {e}"))
+    })?;
+
+    Ok(GeneratedCertMaterial {
+        private_key_pem: signing_key.serialize_pem(),
+        certificate_pem: certificate.pem(),
+        issued_at: not_before.unix_timestamp() as f64,
+        expires_at: not_after.unix_timestamp() as f64,
+    })
+}
+
 /// Split a PEM certificate chain into the leaf certificate and the rest of the chain
 fn split_cert_chain(pem_chain: &str) -> (String, String) {
     let marker = "-----END CERTIFICATE-----";
@@ -931,4 +1079,28 @@ fn pem_to_der(pem_str: &str) -> Result<Vec<u8>, CertError> {
         CertError::RevocationFailed(format!("Failed to parse certificate PEM: {e}"))
     })?;
     Ok(pem_obj.into_contents())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_certificate_uses_requested_domains_and_validity() {
+        let domains = vec!["example.com".to_string(), "www.example.com".to_string()];
+        let material =
+            generate_self_signed_certificate(&domains, 30).expect("generated cert should succeed");
+        let (mut parsed_domains, not_before, not_after) =
+            parse_cert_info(&material.certificate_pem).expect("generated cert should parse");
+        let mut expected_domains = domains.clone();
+
+        parsed_domains.sort();
+        expected_domains.sort();
+
+        assert_eq!(parsed_domains, expected_domains);
+        assert!(material.private_key_pem.contains("BEGIN PRIVATE KEY"));
+        assert!(material.certificate_pem.contains("BEGIN CERTIFICATE"));
+        assert!(not_after > not_before);
+        assert!(not_after - not_before >= 30.0 * 86400.0 - 1.0);
+    }
 }

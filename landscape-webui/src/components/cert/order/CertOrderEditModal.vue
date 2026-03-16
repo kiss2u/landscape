@@ -35,23 +35,53 @@ const cert_type_kind = computed(() => {
 });
 
 const is_acme = computed(() => cert_type_kind.value === "acme");
+const is_generated = computed(() => cert_type_kind.value === "generated");
+const needs_domains = computed(() => is_acme.value || is_generated.value);
+
+function buildDefaultAcmeCertType(): CertType {
+  return {
+    t: "acme",
+    account_id: accounts.value[0]?.id ?? "",
+    challenge_type: {
+      dns: { dns_provider: { cloudflare: { api_token: "" } } },
+    },
+    key_type: "ecdsa_p256",
+    auto_renew: true,
+    renew_before_days: 30,
+  } as CertType;
+}
+
+function buildDefaultGeneratedCertType(): CertType {
+  return {
+    t: "generated",
+    validity_days: 365,
+  } as CertType;
+}
+
+function reset_cert_material() {
+  if (!rule.value) return;
+  rule.value.private_key = undefined;
+  rule.value.certificate = undefined;
+  rule.value.certificate_chain = undefined;
+  rule.value.issued_at = undefined;
+  rule.value.expires_at = undefined;
+  rule.value.status_message = undefined;
+  rule.value.status = "pending";
+}
 
 function on_cert_type_change(val: string) {
   if (!rule.value) return;
+  const domains = [...(rule.value.domains ?? [])];
+  reset_cert_material();
+
   if (val === "acme") {
-    rule.value.cert_type = {
-      t: "acme",
-      account_id: accounts.value[0]?.id ?? "",
-      challenge_type: {
-        dns: { dns_provider: { cloudflare: { api_token: "" } } },
-      } as unknown as CertType extends { t: "acme" } ? CertType : never,
-      key_type: "ecdsa_p256",
-      auto_renew: true,
-      renew_before_days: 30,
-    } as CertType;
+    rule.value.cert_type = buildDefaultAcmeCertType();
+    rule.value.domains = domains;
+  } else if (val === "generated") {
+    rule.value.cert_type = buildDefaultGeneratedCertType();
+    rule.value.domains = domains;
   } else {
     rule.value.cert_type = { t: "manual" } as CertType;
-    // Clear ACME-specific data
     rule.value.domains = [];
   }
 }
@@ -99,6 +129,7 @@ const dns_provider_options = [
 
 const cert_type_options = [
   { label: t("cert.type_acme"), value: "acme" },
+  { label: t("cert.type_generated"), value: "generated" },
   { label: t("cert.type_manual"), value: "manual" },
 ];
 
@@ -198,16 +229,7 @@ async function enter() {
       status: "pending",
       for_api: false,
       for_gateway: false,
-      cert_type: {
-        t: "acme",
-        account_id: accounts.value[0]?.id ?? "",
-        challenge_type: {
-          dns: { dns_provider: { cloudflare: { api_token: "" } } },
-        },
-        key_type: "ecdsa_p256",
-        auto_renew: true,
-        renew_before_days: 30,
-      } as CertType,
+      cert_type: buildDefaultAcmeCertType(),
     };
   }
   // Keep UI consistent with currently supported challenge/provider combinations.
@@ -289,8 +311,23 @@ const rules = {
   domains: {
     trigger: ["change"],
     validator(_: unknown, value: string[]) {
-      if (is_acme.value && (!value || value.length === 0))
+      if (needs_domains.value && (!value || value.length === 0))
         return new Error(t("cert.cert_domains_required"));
+      return true;
+    },
+  },
+  "cert_type.validity_days": {
+    trigger: ["blur", "change"],
+    validator() {
+      if (
+        is_generated.value &&
+        (!rule.value?.cert_type ||
+          rule.value.cert_type.t !== "generated" ||
+          !rule.value.cert_type.validity_days ||
+          rule.value.cert_type.validity_days < 1)
+      ) {
+        return new Error(t("cert.generated_validity_days_invalid"));
+      }
       return true;
     },
   },
@@ -355,6 +392,33 @@ async function save() {
         </n-switch>
       </n-form-item>
 
+      <n-form-item
+        v-if="needs_domains"
+        :label="t('cert.cert_domains')"
+        path="domains"
+      >
+        <n-dynamic-input
+          v-model:value="rule.domains"
+          placeholder="example.com"
+          #="{ index }"
+        >
+          <n-form-item
+            :path="`domains[${index}]`"
+            :rule="domain_rule"
+            ignore-path-change
+            :show-label="false"
+            :show-feedback="false"
+            style="margin-bottom: 0; flex: 1"
+          >
+            <n-input
+              v-model:value="rule.domains[index]"
+              placeholder="example.com"
+              @keydown.enter.prevent
+            />
+          </n-form-item>
+        </n-dynamic-input>
+      </n-form-item>
+
       <!-- ===== ACME mode ===== -->
       <template v-if="is_acme && rule.cert_type && rule.cert_type.t === 'acme'">
         <n-form-item :label="t('cert.acme_account')">
@@ -364,29 +428,6 @@ async function save() {
             :options="account_options"
             :placeholder="t('cert.acme_account_required')"
           />
-        </n-form-item>
-
-        <n-form-item :label="t('cert.cert_domains')" path="domains">
-          <n-dynamic-input
-            v-model:value="rule.domains"
-            placeholder="example.com"
-            #="{ index }"
-          >
-            <n-form-item
-              :path="`domains[${index}]`"
-              :rule="domain_rule"
-              ignore-path-change
-              :show-label="false"
-              :show-feedback="false"
-              style="margin-bottom: 0; flex: 1"
-            >
-              <n-input
-                v-model:value="rule.domains[index]"
-                placeholder="example.com"
-                @keydown.enter.prevent
-              />
-            </n-form-item>
-          </n-dynamic-input>
         </n-form-item>
 
         <n-form-item :label="t('cert.acme_key_type')">
@@ -551,8 +592,26 @@ async function save() {
         </n-form-item>
       </template>
 
+      <!-- ===== Generated mode ===== -->
+      <template
+        v-if="
+          is_generated && rule.cert_type && rule.cert_type.t === 'generated'
+        "
+      >
+        <n-form-item
+          :label="t('cert.generated_validity_days')"
+          path="cert_type.validity_days"
+        >
+          <n-input-number
+            v-model:value="rule.cert_type.validity_days"
+            :min="1"
+            :max="36500"
+          />
+        </n-form-item>
+      </template>
+
       <!-- ===== Manual mode ===== -->
-      <template v-if="!is_acme">
+      <template v-if="!is_acme && !is_generated">
         <n-form-item :label="t('cert.upload_cert')">
           <n-input
             v-model:value="rule.certificate"

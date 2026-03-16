@@ -39,6 +39,7 @@ function status_label(status?: string) {
 function cert_type_label(ct?: CertConfig["cert_type"]) {
   if (!ct) return "-";
   if (ct.t === "acme") return t("cert.type_acme");
+  if (ct.t === "generated") return t("cert.type_generated");
   if (ct.t === "manual") return t("cert.type_manual");
   return "-";
 }
