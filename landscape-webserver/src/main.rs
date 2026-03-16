@@ -343,15 +343,13 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         };
         if gateway_tls_mapping_count == 0 {
             tracing::warn!(
-                "No valid for_gateway certificate found; gateway HTTPS listener will stay disabled"
+                "No valid for_gateway certificate found; gateway HTTPS listener will start but reject TLS handshakes until a certificate is loaded"
             );
-            None
-        } else {
-            let mut gateway_server_config =
-                build_tls_server_config_with_shared_resolver(cert_service.gateway_tls_resolver());
-            gateway_server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-            Some(GatewayTlsConfig::new(std::sync::Arc::new(gateway_server_config)))
         }
+        let mut gateway_server_config =
+            build_tls_server_config_with_shared_resolver(cert_service.gateway_tls_resolver());
+        gateway_server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        Some(GatewayTlsConfig::new(std::sync::Arc::new(gateway_server_config)))
     };
     #[cfg(not(feature = "gateway"))]
     let gateway_tls_config: Option<GatewayTlsConfig> = None;
