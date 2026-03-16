@@ -46,6 +46,7 @@ use landscape_common::dhcp::v4_server::config::DHCPv4ServiceConfig;
 use landscape_common::route::lan::RouteLanServiceConfig;
 use landscape_common::{
     args::{DbAction, LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
+    concurrency::{runtime_thread_name_fn, spawn_task, task_label, thread_name},
     config::RuntimeConfig,
     error::LdResult,
     ipv6_pd::IAPrefixMap,
@@ -54,6 +55,7 @@ use landscape_common::{
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::repository::Repository;
+use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::sync::mpsc;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use utoipa_scalar::{Scalar, Servable};
@@ -513,7 +515,10 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
 
     let addr = SocketAddr::from((config.web.address, config.web.https_port));
     // spawn a second server to redirect http requests to this server
-    tokio::spawn(redirect_https::redirect_http_to_https(config.web.clone()));
+    spawn_task(
+        task_label::task::WEB_REDIRECT_HTTPS,
+        redirect_https::redirect_http_to_https(config.web.clone()),
+    );
     let web_root = config.web.web_root.clone();
     let service = (move || handle_404(web_root)).into_service();
 
@@ -653,8 +658,17 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> LdResult<()> {
+fn main() -> LdResult<()> {
+    let runtime = RuntimeBuilder::new_multi_thread()
+        .enable_all()
+        .thread_name_fn(runtime_thread_name_fn(thread_name::prefix::CORE_RUNTIME))
+        .build()
+        .expect("failed to create main runtime");
+
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> LdResult<()> {
     let home_path = LAND_HOME_PATH.clone();
 
     let lock_exists = home_path.join(landscape_common::INIT_LOCK_FILE_NAME).exists();

@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use landscape_common::concurrency::{spawn_task, task_label};
 use landscape_common::gateway::{
     HttpUpstreamMatchRule, HttpUpstreamRuleConfig, HttpUpstreamTarget, LoadBalanceMethod,
 };
@@ -99,17 +100,19 @@ pub async fn proxy_tls_passthrough(
     let (mut downstream_read, mut downstream_write) = downstream.into_split();
     let (mut upstream_read, mut upstream_write) = upstream.into_split();
 
-    let client_to_upstream = tokio::spawn(async move {
-        let result = io::copy(&mut downstream_read, &mut upstream_write).await;
-        let _ = upstream_write.shutdown().await;
-        result
-    });
+    let client_to_upstream =
+        spawn_task(task_label::task::GATEWAY_SNI_CLIENT_TO_UPSTREAM, async move {
+            let result = io::copy(&mut downstream_read, &mut upstream_write).await;
+            let _ = upstream_write.shutdown().await;
+            result
+        });
 
-    let upstream_to_client = tokio::spawn(async move {
-        let result = io::copy(&mut upstream_read, &mut downstream_write).await;
-        let _ = downstream_write.shutdown().await;
-        result
-    });
+    let upstream_to_client =
+        spawn_task(task_label::task::GATEWAY_SNI_UPSTREAM_TO_CLIENT, async move {
+            let result = io::copy(&mut upstream_read, &mut downstream_write).await;
+            let _ = downstream_write.shutdown().await;
+            result
+        });
 
     tokio::pin!(client_to_upstream);
     tokio::pin!(upstream_to_client);

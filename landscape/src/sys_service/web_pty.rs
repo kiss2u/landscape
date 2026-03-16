@@ -1,4 +1,5 @@
 use landscape_common::{
+    concurrency::{short_thread_name, spawn_named_thread, thread_name},
     error::pty::PtyError,
     pty::{LandscapePtyConfig, PtyInMessage, PtyOutMessage, SessionChannel, SessionStatus},
 };
@@ -10,6 +11,7 @@ use std::{
 };
 use tokio::sync::{broadcast, mpsc, watch, RwLock};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct LandscapePtyService {
@@ -38,10 +40,18 @@ impl LandscapePtyService {
 }
 
 pub struct LandscapePtySession {
+    session_key: String,
     pub out_events: broadcast::Sender<PtyOutMessage>,
     pub input_events: mpsc::Sender<PtyInMessage>,
     pub status: watch::Sender<SessionStatus>,
     pub cancel: CancellationToken,
+}
+
+impl Drop for LandscapePtySession {
+    fn drop(&mut self) {
+        tracing::debug!(session = %self.session_key, "dropping PTY session");
+        self.cancel.cancel();
+    }
 }
 
 impl LandscapePtySession {
@@ -104,6 +114,7 @@ impl LandscapePtySession {
     // }
 
     pub async fn new(config: LandscapePtyConfig) -> Result<Self, PtyError> {
+        let session_key = Uuid::new_v4().simple().to_string();
         // 创建广播通道用于输出事件
         let (out_tx, _out_rx) = broadcast::channel::<PtyOutMessage>(1024);
 
@@ -194,115 +205,130 @@ impl LandscapePtySession {
         let out_tx_clone = out_tx.clone();
         let status_tx_clone = status_tx.clone();
         let cancel_clone = cancel.clone();
+        let read_input_tx = input_tx.clone();
+        let read_session_key = session_key.clone();
 
         // 启动读取任务
-        let read_task = tokio::task::spawn_blocking(move || {
-            let mut buffer = [0u8; 1024];
-            loop {
-                // 检查是否被取消
-                if cancel_clone.is_cancelled() {
-                    break;
-                }
-
-                match reader.read(&mut buffer) {
-                    Ok(0) => {
-                        // EOF - 进程结束
-                        let _ = status_tx_clone.send(SessionStatus::Exited(0));
+        spawn_named_thread(
+            short_thread_name(thread_name::prefix::PTY_READ, &session_key),
+            move || {
+                let mut buffer = [0u8; 1024];
+                loop {
+                    // 检查是否被取消
+                    if cancel_clone.is_cancelled() {
                         break;
                     }
-                    Ok(n) => {
-                        let data = buffer[..n].to_vec();
-                        let boxed_data = Box::new(data);
 
-                        // 发送输出数据，如果接收者都断开了就退出
-                        if out_tx_clone.send(PtyOutMessage::Data { data: boxed_data }).is_err() {
+                    match reader.read(&mut buffer) {
+                        Ok(0) => {
+                            // EOF - 进程结束
+                            let _ = status_tx_clone.send(SessionStatus::Exited(0));
+                            break;
+                        }
+                        Ok(n) => {
+                            let data = buffer[..n].to_vec();
+                            let boxed_data = Box::new(data);
+
+                            // 发送输出数据，如果接收者都断开了就退出
+                            if out_tx_clone.send(PtyOutMessage::Data { data: boxed_data }).is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            let _ = status_tx_clone.send(SessionStatus::Error(e.to_string()));
                             break;
                         }
                     }
-                    Err(e) => {
-                        let _ = status_tx_clone.send(SessionStatus::Error(e.to_string()));
-                        break;
-                    }
                 }
-            }
 
-            cancel_clone.cancel();
-            let _ = out_tx_clone.send(PtyOutMessage::Exit { msg: "exit".to_string() });
-            tracing::info!("[web pty]: exit out loop pty");
-        });
+                cancel_clone.cancel();
+                let _ = read_input_tx.try_send(PtyInMessage::Exit);
+                let _ = out_tx_clone.send(PtyOutMessage::Exit { msg: "exit".to_string() });
+                tracing::info!(session = %read_session_key, "[web pty]: exit out loop pty");
+            },
+        )
+        .map_err(PtyError::OpenPty)?;
 
         // 克隆状态发送器用于写入任务
         let status_tx_write = status_tx.clone();
         let cancel_write = cancel.clone();
+        let write_session_key = session_key.clone();
 
-        let write_task = tokio::task::spawn_blocking(move || {
-            while let Some(data) = {
-                tokio::runtime::Handle::current().block_on(async {
-                    tokio::select! {
-                        data = input_rx.recv() => data,
-                        _ = cancel_write.cancelled() => None,
+        spawn_named_thread(
+            short_thread_name(thread_name::prefix::PTY_WRITE, &session_key),
+            move || {
+                while let Some(data) = input_rx.blocking_recv() {
+                    if cancel_write.is_cancelled() {
+                        break;
                     }
-                })
-            } {
-                match data {
-                    PtyInMessage::Size { size } => {
-                        if let Err(e) = pair.master.resize(PtySize {
-                            rows: size.rows,
-                            cols: size.cols,
-                            pixel_width: size.pixel_width,
-                            pixel_height: size.pixel_height,
-                        }) {
-                            let _ = status_tx_write.send(SessionStatus::Error(e.to_string()));
-                            break;
-                        }
-                    }
-                    PtyInMessage::Data { data } => {
-                        if let Err(e) = writer.write_all(&data) {
-                            let _ = status_tx_write.send(SessionStatus::Error(e.to_string()));
-                            break;
-                        }
 
-                        if let Err(e) = writer.flush() {
-                            let _ = status_tx_write.send(SessionStatus::Error(e.to_string()));
+                    match data {
+                        PtyInMessage::Size { size } => {
+                            if let Err(e) = pair.master.resize(PtySize {
+                                rows: size.rows,
+                                cols: size.cols,
+                                pixel_width: size.pixel_width,
+                                pixel_height: size.pixel_height,
+                            }) {
+                                let _ = status_tx_write.send(SessionStatus::Error(e.to_string()));
+                                break;
+                            }
+                        }
+                        PtyInMessage::Data { data } => {
+                            if let Err(e) = writer.write_all(&data) {
+                                let _ = status_tx_write.send(SessionStatus::Error(e.to_string()));
+                                break;
+                            }
+
+                            if let Err(e) = writer.flush() {
+                                let _ = status_tx_write.send(SessionStatus::Error(e.to_string()));
+                                break;
+                            }
+                        }
+                        PtyInMessage::Exit => {
+                            cancel_write.cancel();
                             break;
                         }
-                    }
-                    PtyInMessage::Exit => {
-                        cancel_write.cancel();
                     }
                 }
-            }
 
-            tracing::info!("[web pty]: exit in loop pty");
-        });
+                tracing::info!(session = %write_session_key, "[web pty]: exit in loop pty");
+            },
+        )
+        .map_err(PtyError::OpenPty)?;
 
         // 启动进程监控任务
         let status_tx_monitor = status_tx.clone();
         let cancel_monitor = cancel.clone();
+        let monitor_input_tx = input_tx.clone();
+        let monitor_session_key = session_key.clone();
 
-        tokio::spawn(async move {
-            let exit_status = tokio::task::spawn_blocking(move || child.wait()).await;
-
-            if !cancel_monitor.is_cancelled() {
-                match exit_status {
-                    Ok(Ok(status)) => {
-                        let _ = status_tx_monitor.send(SessionStatus::Exited(status.exit_code()));
-                    }
-                    Ok(Err(e)) => {
-                        let _ = status_tx_monitor.send(SessionStatus::Error(e.to_string()));
-                    }
-                    Err(e) => {
-                        let _ = status_tx_monitor.send(SessionStatus::Error(e.to_string()));
+        spawn_named_thread(
+            short_thread_name(thread_name::prefix::PTY_WAIT, &session_key),
+            move || {
+                let exit_status = child.wait();
+                if !cancel_monitor.is_cancelled() {
+                    match exit_status {
+                        Ok(status) => {
+                            let _ =
+                                status_tx_monitor.send(SessionStatus::Exited(status.exit_code()));
+                        }
+                        Err(e) => {
+                            let _ = status_tx_monitor.send(SessionStatus::Error(e.to_string()));
+                        }
                     }
                 }
-            }
 
-            // 清理任务
-            read_task.abort();
-            write_task.abort();
-        });
+                cancel_monitor.cancel();
+                let _ = monitor_input_tx.try_send(PtyInMessage::Exit);
+                tracing::info!(session = %monitor_session_key, "[web pty]: child wait thread exit");
+            },
+        )
+        .map_err(PtyError::OpenPty)?;
 
         Ok(LandscapePtySession {
+            session_key,
             out_events: out_tx,
             input_events: input_tx,
             status: status_tx,

@@ -13,6 +13,7 @@ use std::os::unix::io::AsRawFd;
 use std::os::windows::io::AsRawSocket;
 
 use arc_swap::ArcSwap;
+use landscape_common::concurrency::{runtime_thread_name_fn, spawn_named_thread, thread_name};
 use landscape_common::gateway::settings::GatewayRuntimeConfig;
 use landscape_common::gateway::HttpUpstreamRuleConfig;
 
@@ -94,7 +95,7 @@ impl GatewayManager {
         let cancel = CancellationToken::new();
         let thread_cancel = cancel.clone();
 
-        let thread = std::thread::spawn(move || {
+        let thread = spawn_named_thread(thread_name::fixed::GATEWAY_MAIN, move || {
             run_pingora_server(
                 rules,
                 http_port,
@@ -104,7 +105,8 @@ impl GatewayManager {
                 thread_cancel,
             );
             status.just_change_status(ServiceStatus::Stop);
-        });
+        })
+        .expect("failed to spawn gateway main thread");
 
         *state = Some(GatewayRuntimeState { thread, cancel });
         self.status.just_change_status(ServiceStatus::Running);
@@ -209,9 +211,10 @@ fn run_pingora_server(
         let rules = rules.clone();
         let status = status.clone();
         let cancel = cancel.child_token();
-        std::thread::spawn(move || {
+        spawn_named_thread(thread_name::fixed::GATEWAY_HTTPS_DRIVER, move || {
             run_https_server(rules, https_port, tls_config, server_conf, status, cancel);
         })
+        .expect("failed to spawn gateway https driver thread")
     });
 
     let run_args = pingora::server::RunArgs {
@@ -236,7 +239,7 @@ fn run_https_server(
 ) {
     let runtime = RuntimeBuilder::new_multi_thread()
         .enable_all()
-        .thread_name("landscape-gateway-https")
+        .thread_name_fn(runtime_thread_name_fn(thread_name::prefix::GATEWAY_HTTPS_RUNTIME))
         .build()
         .expect("Failed to create gateway HTTPS runtime");
 

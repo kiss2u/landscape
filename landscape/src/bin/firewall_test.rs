@@ -10,6 +10,7 @@ use std::{
 use clap::Parser;
 use landscape::iface::get_iface_by_name;
 use landscape_common::{
+    concurrency::{short_thread_name, spawn_named_thread, thread_name},
     firewall::{FirewallRuleItem, FirewallRuleMark},
     flow::mark::FlowMark,
     network::LandscapeIpProtocolCode,
@@ -44,16 +45,22 @@ pub async fn main() {
 
     add_firewall_rule(get_allow_icmp_echo());
     if let Some(iface) = get_iface_by_name(&args.iface_name).await {
-        std::thread::spawn(move || {
-            println!("启动 firewall 在 ifindex: {:?}", iface.index);
-            if let Err(e) =
-                landscape_ebpf::firewall::new_firewall(iface.index as i32, iface.mac.is_some(), rx)
-            {
-                tracing::debug!("error: {e:?}");
-            }
-            println!("向外部线程发送解除阻塞信号");
-            let _ = other_tx.send(());
-        });
+        spawn_named_thread(
+            short_thread_name(thread_name::prefix::FIREWALL, &args.iface_name),
+            move || {
+                println!("启动 firewall 在 ifindex: {:?}", iface.index);
+                if let Err(e) = landscape_ebpf::firewall::new_firewall(
+                    iface.index as i32,
+                    iface.mac.is_some(),
+                    rx,
+                ) {
+                    tracing::debug!("error: {e:?}");
+                }
+                println!("向外部线程发送解除阻塞信号");
+                let _ = other_tx.send(());
+            },
+        )
+        .expect("failed to spawn firewall test thread");
     } else {
         let _ = other_tx.send(());
     }

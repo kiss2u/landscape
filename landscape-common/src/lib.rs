@@ -8,6 +8,7 @@ pub mod sys_config;
 
 pub mod lan_services;
 
+pub mod concurrency;
 pub mod config;
 pub mod dev;
 pub mod dhcp;

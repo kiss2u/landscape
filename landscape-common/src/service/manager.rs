@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::{mpsc, RwLock};
 
+use crate::concurrency::{spawn_task_with_resource, task_label};
 use crate::store::storev2::LandscapeStore;
 
 use super::WatchService;
@@ -44,33 +45,39 @@ impl<H: ServiceStarterTrait> ServiceManager<H> {
 
         let service_map = self.services.clone();
         let starter = self.starter.clone();
-        tokio::spawn(async move {
-            let mut iface_status: Option<WatchService> = Some(service_status);
+        spawn_task_with_resource(
+            task_label::task::SERVICE_MANAGER_SPAWN,
+            key.clone(),
+            async move {
+                let mut iface_status: Option<WatchService> = Some(service_status);
 
-            while let Some(config) = rx.recv().await {
+                while let Some(config) = rx.recv().await {
+                    if let Some(exist_status) = iface_status.take() {
+                        exist_status.wait_stop().await;
+                    }
+
+                    let key = config.get_store_key();
+                    let status = starter.clone().start(config).await;
+
+                    iface_status = Some(status.clone());
+                    let mut write_lock = service_map.write().await;
+                    if let Some((target, _)) = write_lock.get_mut(&key) {
+                        *target = status;
+                    } else {
+                        tracing::warn!(
+                            "service '{key}' removed from map during restart, exiting loop"
+                        );
+                        break;
+                    }
+                    drop(write_lock);
+                }
+
                 if let Some(exist_status) = iface_status.take() {
+                    tracing::debug!("config channel closed, stopping running service");
                     exist_status.wait_stop().await;
                 }
-
-                let key = config.get_store_key();
-                let status = starter.clone().start(config).await;
-
-                iface_status = Some(status.clone());
-                let mut write_lock = service_map.write().await;
-                if let Some((target, _)) = write_lock.get_mut(&key) {
-                    *target = status;
-                } else {
-                    tracing::warn!("service '{key}' removed from map during restart, exiting loop");
-                    break;
-                }
-                drop(write_lock);
-            }
-
-            if let Some(exist_status) = iface_status.take() {
-                tracing::debug!("config channel closed, stopping running service");
-                exist_status.wait_stop().await;
-            }
-        });
+            },
+        );
     }
 
     pub async fn update_service(&self, config: H::Config) -> Result<(), ()> {
@@ -128,11 +135,15 @@ impl<H: ServiceStarterTrait> ServiceManager<H> {
 
         let mut handles = Vec::with_capacity(entries.len());
         for (name, status) in entries {
-            handles.push(tokio::spawn(async move {
-                tracing::info!("Stopping service: {}", name);
-                status.wait_stop().await;
-                tracing::info!("Service stopped: {}", name);
-            }));
+            handles.push(spawn_task_with_resource(
+                task_label::task::SERVICE_MANAGER_STOP,
+                name.clone(),
+                async move {
+                    tracing::info!("Stopping service: {}", name);
+                    status.wait_stop().await;
+                    tracing::info!("Service stopped: {}", name);
+                },
+            ));
         }
         for handle in handles {
             let _ = handle.await;

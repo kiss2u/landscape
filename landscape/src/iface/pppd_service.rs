@@ -20,6 +20,9 @@ use landscape_common::service::controller::ControllerService;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::service::ServiceStatus;
 use landscape_common::{
+    concurrency::{
+        short_thread_name, spawn_named_thread, spawn_task_with_resource, task_label, thread_name,
+    },
     iface::ppp::PPPDServiceConfig,
     service::{manager::ServiceStarterTrait, WatchService},
 };
@@ -77,17 +80,22 @@ impl ServiceStarterTrait for PPPDService {
         if config.enable {
             if let Some(_) = get_iface_by_name(&config.attach_iface_name).await {
                 let status_clone = service_status.clone();
+                let iface_name = config.iface_name.clone();
 
-                tokio::spawn(async move {
-                    create_pppd_thread(
-                        config.attach_iface_name,
-                        config.iface_name,
-                        config.pppd_config,
-                        status_clone,
-                        route_service,
-                    )
-                    .await
-                });
+                spawn_task_with_resource(
+                    task_label::task::PPPD_RUN,
+                    iface_name.clone(),
+                    async move {
+                        create_pppd_thread(
+                            config.attach_iface_name,
+                            config.iface_name,
+                            config.pppd_config,
+                            status_clone,
+                            route_service,
+                        )
+                        .await
+                    },
+                );
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
             }
@@ -111,7 +119,7 @@ pub async fn create_pppd_thread(
 
     service_status.just_change_status(ServiceStatus::Running);
     let service_status_clone = service_status.clone();
-    tokio::spawn(async move {
+    spawn_task_with_resource(task_label::task::PPPD_STOP, ppp_iface_name.clone(), async move {
         let stop_wait = service_status_clone.wait_to_stopping();
         tracing::debug!("等待外部停止信号");
         let _ = stop_wait.await;
@@ -131,71 +139,75 @@ pub async fn create_pppd_thread(
     let (updata_ip, mut updata_ip_rx) = watch::channel(());
     let ppp_iface_name_clone = ppp_iface_name.clone();
     let route_service_clone = route_service.clone();
-    tokio::spawn(async move {
-        let mut ip4addr: Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)> = None;
-        while let Ok(_) = updata_ip_rx.changed().await {
-            let new_ip4addr = crate::get_ppp_address(&ppp_iface_name_clone).await;
-            if let Some(new_ip4addr) = new_ip4addr {
-                let update = if let Some(data) = ip4addr { data != new_ip4addr } else { true };
-                if update {
-                    if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
-                        set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
-                        landscape_ebpf::map_setting::add_ipv4_wan_ip(
-                            new_ip4addr.0,
-                            ip.clone(),
-                            Some(peer_ip.clone()),
-                            32,
-                            None,
-                        );
+    spawn_task_with_resource(
+        task_label::task::PPPD_IP_WATCH,
+        ppp_iface_name_clone.clone(),
+        async move {
+            let mut ip4addr: Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)> = None;
+            while let Ok(_) = updata_ip_rx.changed().await {
+                let new_ip4addr = crate::get_ppp_address(&ppp_iface_name_clone).await;
+                if let Some(new_ip4addr) = new_ip4addr {
+                    let update = if let Some(data) = ip4addr { data != new_ip4addr } else { true };
+                    if update {
+                        if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
+                            set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
+                            landscape_ebpf::map_setting::add_ipv4_wan_ip(
+                                new_ip4addr.0,
+                                ip.clone(),
+                                Some(peer_ip.clone()),
+                                32,
+                                None,
+                            );
 
-                        let info = RouteTargetInfo {
-                            ifindex: new_ip4addr.0,
-                            weight: 1,
-                            mac: None,
-                            is_docker: false,
-                            iface_name: ppp_iface_name_clone.clone(),
-                            iface_ip: IpAddr::V4(ip.clone()),
-                            default_route: as_router,
-                            gateway_ip: IpAddr::V4(peer_ip),
-                        };
-                        route_service_clone
-                            .insert_ipv4_wan_route(&ppp_iface_name_clone, info)
-                            .await;
-
-                        route_service_clone
-                            .insert_ipv4_lan_route(
-                                &ppp_iface_name_clone,
-                                LanRouteInfo {
-                                    ifindex: new_ip4addr.0,
-                                    iface_name: ppp_iface_name_clone.clone(),
-                                    iface_ip: IpAddr::V4(ip.clone()),
-                                    mac: None,
-                                    prefix: 32,
-                                    mode: LanRouteMode::Reachable,
-                                },
-                            )
-                            .await;
-                        if as_router {
-                            LD_ALL_ROUTERS
-                                .add_route(RouteInfo {
-                                    iface_name: ppp_iface_name_clone.clone(),
-                                    weight: 1,
-                                    route: RouteType::PPP,
-                                })
+                            let info = RouteTargetInfo {
+                                ifindex: new_ip4addr.0,
+                                weight: 1,
+                                mac: None,
+                                is_docker: false,
+                                iface_name: ppp_iface_name_clone.clone(),
+                                iface_ip: IpAddr::V4(ip.clone()),
+                                default_route: as_router,
+                                gateway_ip: IpAddr::V4(peer_ip),
+                            };
+                            route_service_clone
+                                .insert_ipv4_wan_route(&ppp_iface_name_clone, info)
                                 .await;
-                        } else {
-                            LD_ALL_ROUTERS.del_route_by_iface(&ppp_iface_name_clone).await;
+
+                            route_service_clone
+                                .insert_ipv4_lan_route(
+                                    &ppp_iface_name_clone,
+                                    LanRouteInfo {
+                                        ifindex: new_ip4addr.0,
+                                        iface_name: ppp_iface_name_clone.clone(),
+                                        iface_ip: IpAddr::V4(ip.clone()),
+                                        mac: None,
+                                        prefix: 32,
+                                        mode: LanRouteMode::Reachable,
+                                    },
+                                )
+                                .await;
+                            if as_router {
+                                LD_ALL_ROUTERS
+                                    .add_route(RouteInfo {
+                                        iface_name: ppp_iface_name_clone.clone(),
+                                        weight: 1,
+                                        route: RouteType::PPP,
+                                    })
+                                    .await;
+                            } else {
+                                LD_ALL_ROUTERS.del_route_by_iface(&ppp_iface_name_clone).await;
+                            }
                         }
                     }
+                    ip4addr = Some(new_ip4addr);
                 }
-                ip4addr = Some(new_ip4addr);
             }
-        }
-    });
+        },
+    );
 
     tracing::info!("pppd 配置写入成功");
     let iface_name = ppp_iface_name.clone();
-    std::thread::spawn(move || {
+    spawn_named_thread(short_thread_name(thread_name::prefix::PPPD, &ppp_iface_name), move || {
         let mut connect_failure_count: u32 = 0;
         let mut should_stop = false;
 
@@ -284,7 +296,8 @@ pub async fn create_pppd_thread(
         tracing::info!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
         pppd_conf.delete_config(&ppp_iface_name);
-    });
+    })
+    .expect("failed to spawn pppd worker thread");
 
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");

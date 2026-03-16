@@ -1,6 +1,9 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::{
     args::LAND_HOME_PATH,
+    concurrency::{
+        short_thread_name, spawn_named_thread, spawn_task_with_resource, task_label, thread_name,
+    },
     iface::wifi::WifiServiceConfig,
     service::{
         controller::ControllerService,
@@ -34,9 +37,14 @@ impl ServiceStarterTrait for WifiService {
         if config.enable {
             if let Some(_) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();
-                tokio::spawn(async move {
-                    create_wifi_service(config.iface_name, config.config, status_clone).await
-                });
+                let iface_name = config.iface_name.clone();
+                spawn_task_with_resource(
+                    task_label::task::WIFI_RUN,
+                    iface_name.clone(),
+                    async move {
+                        create_wifi_service(config.iface_name, config.config, status_clone).await
+                    },
+                );
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
             }
@@ -54,7 +62,7 @@ pub async fn create_wifi_service(iface_name: String, config: String, service_sta
 
     service_status.just_change_status(ServiceStatus::Running);
     let clone_service_status = service_status.clone();
-    tokio::spawn(async move {
+    spawn_task_with_resource(task_label::task::WIFI_STOP, iface_name.clone(), async move {
         let stop_wait = clone_service_status.wait_to_stopping();
         tracing::info!("等待外部停止信号");
         let _ = stop_wait.await;
@@ -70,7 +78,7 @@ pub async fn create_wifi_service(iface_name: String, config: String, service_sta
     };
 
     tracing::info!("hostapd 配置写入成功");
-    std::thread::spawn(move || {
+    spawn_named_thread(short_thread_name(thread_name::prefix::WIFI, &iface_name), move || {
         tracing::info!("hostapd 启动中");
         let mut child = match Command::new("hostapd")
             .arg("-i")
@@ -118,7 +126,8 @@ pub async fn create_wifi_service(iface_name: String, config: String, service_sta
         tracing::info!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
         delete_config(&iface_name);
-    });
+    })
+    .expect("failed to spawn wifi worker thread");
 
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");

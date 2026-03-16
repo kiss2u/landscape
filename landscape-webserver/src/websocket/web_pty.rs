@@ -9,7 +9,10 @@ use axum::{
 };
 use futures::SinkExt;
 use landscape::sys_service::web_pty::LandscapePtySession;
-use landscape_common::pty::{LandscapePtyConfig, LandscapePtySize, PtyInMessage, PtyOutMessage};
+use landscape_common::{
+    concurrency::{spawn_task, task_label},
+    pty::{LandscapePtyConfig, LandscapePtySize, PtyInMessage, PtyOutMessage},
+};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::LandscapeApp;
@@ -55,7 +58,7 @@ async fn handle_socket(mut socket: WebSocket, session: LandscapePtySession) {
         return;
     }
 
-    tokio::spawn(async move {
+    spawn_task(task_label::task::WS_PTY_SESSION, async move {
         let mut out = session.out_events.subscribe();
         let input = session.input_events.clone();
 

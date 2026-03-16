@@ -7,6 +7,7 @@ use axum::{
 };
 use axum::{routing::get, Router};
 use landscape::dump::eth::EthFram;
+use landscape_common::concurrency::{spawn_task, task_label};
 use std::ops::ControlFlow;
 use tokio::sync::mpsc::Sender;
 
@@ -35,7 +36,7 @@ async fn handle_socket(mut socket: WebSocket, who_in: String) {
 
     let (mut dump_tx, mut dump_rx) = landscape::dump::create_dump(who_in.clone()).await;
     println!("create dump thread");
-    tokio::spawn(async move {
+    spawn_task(task_label::task::WS_DUMP_SESSION, async move {
         loop {
             tokio::select! {
                 msg = socket.recv() => {

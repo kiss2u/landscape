@@ -1,4 +1,5 @@
 use landscape::metric::MetricData;
+use landscape_common::concurrency::{spawn_named_thread, thread_name};
 use landscape_common::LANDSCAPE_METRIC_DIR_NAME;
 use landscape_ebpf::metric::new_metric;
 use std::{
@@ -47,10 +48,11 @@ async fn main() {
     )
     .await;
     let metric_service_clone = metric_service.clone();
-    std::thread::spawn(move || {
+    spawn_named_thread(thread_name::fixed::METRIC_EVENT_READER, move || {
         new_metric(rx, metric_service_clone.connect_metric.get_msg_channel());
         let _ = other_tx.send(());
-    });
+    })
+    .expect("failed to spawn metric loop thread");
 
     while running.load(Ordering::SeqCst) {
         tokio::time::sleep(Duration::new(1, 0)).await;

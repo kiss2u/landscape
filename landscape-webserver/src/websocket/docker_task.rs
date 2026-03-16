@@ -7,7 +7,10 @@ use axum::{
     routing::get,
     Router,
 };
-use landscape_common::docker::image::ImgPullEvent;
+use landscape_common::{
+    concurrency::{spawn_task, task_label},
+    docker::image::ImgPullEvent,
+};
 use tokio::sync::broadcast;
 
 use crate::LandscapeApp;
@@ -34,7 +37,7 @@ async fn handle_socket(
         return;
     }
 
-    tokio::spawn(async move {
+    spawn_task(task_label::task::WS_DOCKER_TASKS, async move {
         loop {
             let msg = tokio::select! {
                 msg = socket.recv() => {

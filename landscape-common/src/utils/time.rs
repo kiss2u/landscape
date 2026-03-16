@@ -6,7 +6,9 @@ use std::{
 };
 
 use crate::{
-    config::TimeRuntimeConfig, sys_config, DEFAULT_TIME_ENABLE, DEFAULT_TIME_FALLBACK_SERVER,
+    concurrency::{spawn_named_thread, thread_name},
+    config::TimeRuntimeConfig,
+    sys_config, DEFAULT_TIME_ENABLE, DEFAULT_TIME_FALLBACK_SERVER,
 };
 use libc::{clock_gettime, timespec, CLOCK_BOOTTIME, CLOCK_MONOTONIC};
 use once_cell::sync::{Lazy, OnceCell};
@@ -157,127 +159,118 @@ fn start_time_sync_thread(config: TimeRuntimeConfig) {
     TIME_SYNC_THREAD.get_or_init(|| {
         let status_ref = shared_time_sync_status();
         let config_ref = shared_time_sync_config();
-        thread::Builder::new()
-            .name("landscape-time-sync".to_string())
-            .spawn(move || loop {
-                let config = config_ref
-                    .read()
-                    .map(|config| normalized_time_config(config.clone()))
-                    .unwrap_or_else(|_| normalized_time_config(TimeRuntimeConfig::default()));
-                let now_ms = current_unix_ms();
+        spawn_named_thread(thread_name::fixed::TIME_SYNC, move || loop {
+            let config = config_ref
+                .read()
+                .map(|config| normalized_time_config(config.clone()))
+                .unwrap_or_else(|_| normalized_time_config(TimeRuntimeConfig::default()));
+            let now_ms = current_unix_ms();
 
-                if !config.enabled {
+            if !config.enabled {
+                mirror_system_time(&config, &status_ref, now_ms, "mirror-system", "disabled", None);
+                thread::sleep(StdDuration::from_secs(config.sync_interval_secs));
+                continue;
+            }
+
+            match query_ntp_time_with_sampling(
+                &config.servers,
+                StdDuration::from_secs(config.timeout_secs),
+                config.samples_per_server,
+            ) {
+                Ok(result) => {
+                    let (is_initial_sync, should_step) = status_ref
+                        .read()
+                        .map(|status| {
+                            let is_initial_sync = status.last_success_at.is_none();
+                            let should_step = is_initial_sync
+                                || result.offset_ms.abs() > config.step_threshold_ms as f64;
+                            (is_initial_sync, should_step)
+                        })
+                        .unwrap_or((true, true));
+
+                    let action = if is_initial_sync {
+                        "initial-step"
+                    } else if should_step {
+                        "periodic-step"
+                    } else {
+                        "periodic-refresh"
+                    };
+
+                    match sys_config::set_system_time(result.synced_time) {
+                        Ok(()) => {
+                            tracing::info!(
+                                server = %result.server,
+                                action,
+                                offset_ms = result.offset_ms,
+                                delay_ms = result.delay_ms,
+                                "System time updated from NTP sync"
+                            );
+                            update_shared_time(result.synced_time);
+                            if let Ok(mut status) = status_ref.write() {
+                                status.enabled = true;
+                                status.running = true;
+                                status.current_source = "ntp".to_string();
+                                status.sync_stage = if is_initial_sync {
+                                    "initial".to_string()
+                                } else {
+                                    "steady".to_string()
+                                };
+                                status.last_action = action.to_string();
+                                status.last_attempt_at = Some(now_ms);
+                                status.last_success_at = Some(now_ms);
+                                status.last_system_clock_update_at = Some(now_ms);
+                                status.last_server = Some(result.server.clone());
+                                status.last_offset_ms = Some(result.offset_ms);
+                                status.last_delay_ms = Some(result.delay_ms);
+                                status.selected_sample_count = Some(result.sample_count);
+                                status.last_error = None;
+                                status.system_clock_synced = true;
+                            }
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                server = %result.server,
+                                action,
+                                offset_ms = result.offset_ms,
+                                delay_ms = result.delay_ms,
+                                error = %err,
+                                "NTP sync succeeded but failed to update system clock"
+                            );
+                            mirror_system_time(
+                                &config,
+                                &status_ref,
+                                now_ms,
+                                "ntp-set-failed",
+                                "error",
+                                Some(err.to_string()),
+                            );
+                            if let Ok(mut status) = status_ref.write() {
+                                status.last_success_at = Some(now_ms);
+                                status.last_server = Some(result.server.clone());
+                                status.last_offset_ms = Some(result.offset_ms);
+                                status.last_delay_ms = Some(result.delay_ms);
+                                status.selected_sample_count = Some(result.sample_count);
+                                status.system_clock_synced = false;
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "NTP sync failed, falling back to system clock");
                     mirror_system_time(
                         &config,
                         &status_ref,
                         now_ms,
-                        "mirror-system",
-                        "disabled",
-                        None,
+                        "fallback-system",
+                        "fallback",
+                        Some(err.to_string()),
                     );
-                    thread::sleep(StdDuration::from_secs(config.sync_interval_secs));
-                    continue;
                 }
+            }
 
-                match query_ntp_time_with_sampling(
-                    &config.servers,
-                    StdDuration::from_secs(config.timeout_secs),
-                    config.samples_per_server,
-                ) {
-                    Ok(result) => {
-                        let (is_initial_sync, should_step) = status_ref
-                            .read()
-                            .map(|status| {
-                                let is_initial_sync = status.last_success_at.is_none();
-                                let should_step = is_initial_sync
-                                    || result.offset_ms.abs() > config.step_threshold_ms as f64;
-                                (is_initial_sync, should_step)
-                            })
-                            .unwrap_or((true, true));
-
-                        let action = if is_initial_sync {
-                            "initial-step"
-                        } else if should_step {
-                            "periodic-step"
-                        } else {
-                            "periodic-refresh"
-                        };
-
-                        match sys_config::set_system_time(result.synced_time) {
-                            Ok(()) => {
-                                tracing::info!(
-                                    server = %result.server,
-                                    action,
-                                    offset_ms = result.offset_ms,
-                                    delay_ms = result.delay_ms,
-                                    "System time updated from NTP sync"
-                                );
-                                update_shared_time(result.synced_time);
-                                if let Ok(mut status) = status_ref.write() {
-                                    status.enabled = true;
-                                    status.running = true;
-                                    status.current_source = "ntp".to_string();
-                                    status.sync_stage = if is_initial_sync {
-                                        "initial".to_string()
-                                    } else {
-                                        "steady".to_string()
-                                    };
-                                    status.last_action = action.to_string();
-                                    status.last_attempt_at = Some(now_ms);
-                                    status.last_success_at = Some(now_ms);
-                                    status.last_system_clock_update_at = Some(now_ms);
-                                    status.last_server = Some(result.server.clone());
-                                    status.last_offset_ms = Some(result.offset_ms);
-                                    status.last_delay_ms = Some(result.delay_ms);
-                                    status.selected_sample_count = Some(result.sample_count);
-                                    status.last_error = None;
-                                    status.system_clock_synced = true;
-                                }
-                            }
-                            Err(err) => {
-                                tracing::warn!(
-                                    server = %result.server,
-                                    action,
-                                    offset_ms = result.offset_ms,
-                                    delay_ms = result.delay_ms,
-                                    error = %err,
-                                    "NTP sync succeeded but failed to update system clock"
-                                );
-                                mirror_system_time(
-                                    &config,
-                                    &status_ref,
-                                    now_ms,
-                                    "ntp-set-failed",
-                                    "error",
-                                    Some(err.to_string()),
-                                );
-                                if let Ok(mut status) = status_ref.write() {
-                                    status.last_success_at = Some(now_ms);
-                                    status.last_server = Some(result.server.clone());
-                                    status.last_offset_ms = Some(result.offset_ms);
-                                    status.last_delay_ms = Some(result.delay_ms);
-                                    status.selected_sample_count = Some(result.sample_count);
-                                    status.system_clock_synced = false;
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        tracing::warn!(error = %err, "NTP sync failed, falling back to system clock");
-                        mirror_system_time(
-                            &config,
-                            &status_ref,
-                            now_ms,
-                            "fallback-system",
-                            "fallback",
-                            Some(err.to_string()),
-                        );
-                    }
-                }
-
-                thread::sleep(StdDuration::from_secs(config.sync_interval_secs));
-            })
-            .expect("failed to start time sync thread");
+            thread::sleep(StdDuration::from_secs(config.sync_interval_secs));
+        })
+        .expect("failed to start time sync thread");
     });
 }
 

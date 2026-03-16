@@ -1,6 +1,9 @@
 use dashmap::DashMap;
 use duckdb::{params, Appender, DuckdbConnectionManager};
 
+use landscape_common::concurrency::{
+    runtime_thread_name_fn, spawn_named_thread, task_label, thread_name,
+};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
     ConnectMetricPoint, ConnectRealtimeStatus, ConnectStatusType, MetricResolution,
@@ -13,7 +16,7 @@ use r2d2::{self, PooledConnection};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread;
+use tokio::runtime::{Builder as RuntimeBuilder, Runtime};
 use tokio::sync::mpsc;
 
 fn clean_ip_string(ip: &IpAddr) -> String {
@@ -62,6 +65,7 @@ pub struct DuckMetricStore {
     pub config: MetricRuntimeConfig,
     pub disk_pool: r2d2::Pool<DuckdbConnectionManager>,
     pub realtime_cache: Arc<DashMap<ConnectKey, RealtimeState>>,
+    query_runtime: Arc<Runtime>,
 }
 
 pub fn start_db_thread(
@@ -400,21 +404,35 @@ impl DuckMetricStore {
         let realtime_cache = Arc::new(DashMap::new());
         let thread_realtime_cache = realtime_cache.clone();
 
-        thread::Builder::new()
-            .name("metric-db-thread".to_string())
-            .spawn(move || {
-                start_db_thread(
-                    rx,
-                    config_clone,
-                    thread_disk_pool,
-                    conn_dns,
-                    conn_disk_writer,
-                    thread_realtime_cache,
-                );
-            })
-            .expect("failed to spawn metric db thread");
+        let query_runtime = Arc::new(
+            RuntimeBuilder::new_multi_thread()
+                .worker_threads(1)
+                .max_blocking_threads(config.db_max_threads.max(2))
+                .thread_name_fn(runtime_thread_name_fn(thread_name::prefix::METRIC_QUERY_RUNTIME))
+                .build()
+                .expect("failed to create metric query runtime"),
+        );
 
-        DuckMetricStore { tx, db_path, config, disk_pool, realtime_cache }
+        spawn_named_thread(thread_name::fixed::METRIC_DB_WRITER, move || {
+            start_db_thread(
+                rx,
+                config_clone,
+                thread_disk_pool,
+                conn_dns,
+                conn_disk_writer,
+                thread_realtime_cache,
+            );
+        })
+        .expect("failed to spawn metric db thread");
+
+        DuckMetricStore {
+            tx,
+            db_path,
+            config,
+            disk_pool,
+            realtime_cache,
+            query_runtime,
+        }
     }
 
     /// Get a connection from the disk pool
@@ -467,62 +485,55 @@ impl DuckMetricStore {
         key: ConnectKey,
         resolution: MetricResolution,
     ) -> Vec<ConnectMetricPoint> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || -> Vec<ConnectMetricPoint> {
-            let conn = store.get_disk_conn();
-            connect::query_metric_by_key(&conn, &key, resolution, Some(&store.db_path))
-        })
+        self.run_query(
+            task_label::op::METRIC_QUERY_BY_KEY,
+            move |store| -> Vec<ConnectMetricPoint> {
+                let conn = store.get_disk_conn();
+                connect::query_metric_by_key(&conn, &key, resolution, Some(&store.db_path))
+            },
+        )
         .await
-        .unwrap_or_default()
     }
 
     pub async fn history_summaries_complex(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_query(task_label::op::METRIC_HISTORY_SUMMARIES, move |store| {
             let conn = store.get_disk_conn();
             connect::query_historical_summaries_complex(&conn, params, Some(&store.db_path))
         })
         .await
-        .unwrap_or_default()
     }
 
     pub async fn history_src_ip_stats(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_query(task_label::op::METRIC_HISTORY_SRC_IP, move |store| {
             let conn = store.get_disk_conn();
             connect::query_connection_ip_history(&conn, params, true, Some(&store.db_path))
         })
         .await
-        .unwrap_or_default()
     }
 
     pub async fn history_dst_ip_stats(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_query(task_label::op::METRIC_HISTORY_DST_IP, move |store| {
             let conn = store.get_disk_conn();
             connect::query_connection_ip_history(&conn, params, false, Some(&store.db_path))
         })
         .await
-        .unwrap_or_default()
     }
 
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_query(task_label::op::METRIC_GLOBAL_STATS, move |store| {
             let conn = store.get_disk_conn();
             connect::query_global_stats(&conn)
         })
         .await
-        .unwrap_or_default()
     }
 
     pub async fn insert_dns_metric(&self, mut metric: DnsMetric) {
@@ -534,34 +545,53 @@ impl DuckMetricStore {
 
     pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {
         let store = self.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = store.get_disk_conn();
-            dns::query_dns_history(&conn, params)
-        })
-        .await
-        .unwrap_or(DnsHistoryResponse { items: Vec::new(), total: 0 })
+        let span = tracing::info_span!(
+            "task",
+            task = task_label::task::METRIC_QUERY,
+            op = task_label::op::METRIC_DNS_HISTORY
+        );
+        self.query_runtime
+            .handle()
+            .spawn_blocking(move || {
+                span.in_scope(|| {
+                    let conn = store.get_disk_conn();
+                    dns::query_dns_history(&conn, params)
+                })
+            })
+            .await
+            .unwrap_or(DnsHistoryResponse { items: Vec::new(), total: 0 })
     }
 
     pub async fn get_dns_summary(&self, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_query(task_label::op::METRIC_DNS_SUMMARY, move |store| {
             let conn = store.get_disk_conn();
             dns::query_dns_summary(&conn, params)
         })
         .await
-        .unwrap_or_else(|_| DnsSummaryResponse::default())
     }
 
     pub async fn get_dns_lightweight_summary(
         &self,
         params: DnsSummaryQueryParams,
     ) -> DnsLightweightSummaryResponse {
-        let store = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_query(task_label::op::METRIC_DNS_LIGHTWEIGHT_SUMMARY, move |store| {
             let conn = store.get_disk_conn();
             dns::query_dns_lightweight_summary(&conn, params)
         })
         .await
-        .unwrap_or_else(|_| DnsLightweightSummaryResponse::default())
+    }
+
+    async fn run_query<T, F>(&self, op: &'static str, f: F) -> T
+    where
+        T: Default + Send + 'static,
+        F: FnOnce(Self) -> T + Send + 'static,
+    {
+        let store = self.clone();
+        let span = tracing::info_span!("task", task = task_label::task::METRIC_QUERY, op = op);
+        self.query_runtime
+            .handle()
+            .spawn_blocking(move || span.in_scope(|| f(store)))
+            .await
+            .unwrap_or_default()
     }
 }

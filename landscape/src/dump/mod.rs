@@ -1,6 +1,7 @@
 use eth::EthFram;
 use pnet::datalink::{self, NetworkInterface};
 
+use landscape_common::concurrency::{short_thread_name, spawn_named_thread, thread_name};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
@@ -43,42 +44,50 @@ pub async fn create_dump(iface_name: String) -> (Sender<Vec<u8>>, Receiver<Box<E
     // };
     // let time = Instant::now();
     let mac = interface.mac.map(|mac| mac.octets()).map(|o| MacAddr::from(o));
-    std::thread::spawn(move || loop {
-        println!("loop 1");
-        match rx.next() {
-            Ok(packet) => {
-                println!("catch data stard ==>");
-                println!("catch data: {:?}", packet);
-                let result = EthFram::new(packet, mac);
-                println!("catch data end <==");
-                if let Err(e) = out_tx.blocking_send(Box::new(result)) {
-                    stop_rx.close(); // TODO 是否有必要
-                    panic!("packetdump: unable to receive packet: {}", e)
+    spawn_named_thread(
+        short_thread_name(thread_name::prefix::DUMP_RX, &iface_name),
+        move || loop {
+            println!("loop 1");
+            match rx.next() {
+                Ok(packet) => {
+                    println!("catch data stard ==>");
+                    println!("catch data: {:?}", packet);
+                    let result = EthFram::new(packet, mac);
+                    println!("catch data end <==");
+                    if let Err(e) = out_tx.blocking_send(Box::new(result)) {
+                        stop_rx.close(); // TODO 是否有必要
+                        panic!("packetdump: unable to receive packet: {}", e)
+                    }
+                }
+                Err(e) => panic!("packetdump: unable to receive packet: {}", e),
+            }
+            match stop_rx.try_recv() {
+                Ok(_) | Err(TryRecvError::Closed) => {
+                    println!("[dump] recevied signal to stop dump packet");
+                    break;
+                }
+                Err(TryRecvError::Empty) => {}
+            }
+        },
+    )
+    .expect("failed to spawn dump rx thread");
+    spawn_named_thread(
+        short_thread_name(thread_name::prefix::DUMP_TX, &iface_name),
+        move || loop {
+            println!("loop 2");
+            match in_rx.blocking_recv() {
+                Some(data) => {
+                    tx.send_to(&data, Some(interface.clone()));
+                }
+                None => {
+                    let _ = stop_tx.send(());
+                    println!("[dump] send signal to stop dump packet");
+                    break;
                 }
             }
-            Err(e) => panic!("packetdump: unable to receive packet: {}", e),
-        }
-        match stop_rx.try_recv() {
-            Ok(_) | Err(TryRecvError::Closed) => {
-                println!("[dump] recevied signal to stop dump packet");
-                break;
-            }
-            Err(TryRecvError::Empty) => {}
-        }
-    });
-    std::thread::spawn(move || loop {
-        println!("loop 2");
-        match in_rx.blocking_recv() {
-            Some(data) => {
-                tx.send_to(&data, Some(interface.clone()));
-            }
-            None => {
-                let _ = stop_tx.send(());
-                println!("[dump] send signal to stop dump packet");
-                break;
-            }
-        }
-    });
+        },
+    )
+    .expect("failed to spawn dump tx thread");
     println!("create dump frunction end");
     (in_tx, out_rx)
 }

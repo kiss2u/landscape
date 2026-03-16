@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use landscape_common::{
+    concurrency::{spawn_named_thread, spawn_task, task_label, thread_name},
     event::DnsMetricMessage,
     service::{ServiceStatus, WatchService},
     LANDSCAPE_METRIC_DIR_NAME,
@@ -73,7 +74,7 @@ impl MetricService {
         let status = self.status.clone();
         if status.is_stop() {
             let metric_service = self.data.clone();
-            tokio::spawn(async move {
+            spawn_task(task_label::task::METRIC_SERVICE_RUN, async move {
                 create_metric_service(metric_service, status).await;
             });
         } else {
@@ -96,7 +97,7 @@ pub async fn create_metric_service(metric_service: MetricData, service_status: W
     let (other_tx, other_rx) = oneshot::channel::<()>();
     service_status.just_change_status(ServiceStatus::Running);
     let service_status_clone = service_status.clone();
-    tokio::spawn(async move {
+    spawn_task(task_label::task::METRIC_SERVICE_STOP, async move {
         let stop_wait = service_status_clone.wait_to_stopping();
         tracing::info!("等待外部停止信号");
         let _ = stop_wait.await;
@@ -106,10 +107,11 @@ pub async fn create_metric_service(metric_service: MetricData, service_status: W
     });
 
     let connect_msg_tx = metric_service.connect_metric.get_msg_channel();
-    std::thread::spawn(move || {
+    spawn_named_thread(thread_name::fixed::METRIC_EVENT_READER, move || {
         landscape_ebpf::metric::new_metric(rx, connect_msg_tx);
         let _ = other_tx.send(());
-    });
+    })
+    .expect("failed to spawn metric event thread");
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");
     service_status.just_change_status(ServiceStatus::Stop);

@@ -1,6 +1,10 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::{
+    concurrency::{
+        short_thread_name, spawn_named_thread, spawn_task, spawn_task_with_resource, task_label,
+        thread_name,
+    },
     firewall::service::FirewallServiceConfig,
     observer::IfaceObserverAction,
     service::{
@@ -33,10 +37,20 @@ impl ServiceStarterTrait for FirewallService {
         if config.enable {
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();
-                tokio::spawn(async move {
-                    create_firewall_service(iface.index as i32, iface.mac.is_some(), status_clone)
+                let iface_name = config.iface_name.clone();
+                spawn_task_with_resource(
+                    task_label::task::FIREWALL_RUN,
+                    iface_name.clone(),
+                    async move {
+                        create_firewall_service(
+                            iface_name,
+                            iface.index as i32,
+                            iface.mac.is_some(),
+                            status_clone,
+                        )
                         .await
-                });
+                    },
+                );
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
             }
@@ -46,13 +60,18 @@ impl ServiceStarterTrait for FirewallService {
     }
 }
 
-pub async fn create_firewall_service(ifindex: i32, has_mac: bool, service_status: WatchService) {
+pub async fn create_firewall_service(
+    iface_name: String,
+    ifindex: i32,
+    has_mac: bool,
+    service_status: WatchService,
+) {
     service_status.just_change_status(ServiceStatus::Staring);
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
     service_status.just_change_status(ServiceStatus::Running);
     let service_status_clone = service_status.clone();
-    tokio::spawn(async move {
+    spawn_task_with_resource(task_label::task::FIREWALL_STOP, iface_name.clone(), async move {
         let stop_wait = service_status_clone.wait_to_stopping();
         tracing::info!("等待外部停止信号");
         let _ = stop_wait.await;
@@ -60,13 +79,14 @@ pub async fn create_firewall_service(ifindex: i32, has_mac: bool, service_status
         let _ = tx.send(());
         tracing::info!("向内部发送停止信号");
     });
-    std::thread::spawn(move || {
+    spawn_named_thread(short_thread_name(thread_name::prefix::FIREWALL, &iface_name), move || {
         if let Err(e) = landscape_ebpf::firewall::new_firewall(ifindex, has_mac, rx) {
             tracing::error!("{e:?}");
         }
         tracing::info!("向外部线程发送解除阻塞信号");
         let _ = other_tx.send(());
-    });
+    })
+    .expect("failed to spawn firewall worker thread");
     let _ = other_rx.await;
     tracing::info!("结束外部线程阻塞");
     service_status.just_change_status(ServiceStatus::Stop);
@@ -103,7 +123,7 @@ impl FirewallServiceManagerService {
             ServiceManager::init(store.list().await.unwrap(), FirewallService::default()).await;
 
         let service_clone = service.clone();
-        tokio::spawn(async move {
+        spawn_task(task_label::task::FIREWALL_OBSERVER, async move {
             while let Ok(msg) = dev_observer.recv().await {
                 match msg {
                     IfaceObserverAction::Up(iface_name) => {

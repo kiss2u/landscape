@@ -1,6 +1,10 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::route::wan::RouteWanServiceConfig;
 use landscape_common::{
+    concurrency::{
+        short_thread_name, spawn_named_thread, spawn_task, spawn_task_with_resource, task_label,
+        thread_name,
+    },
     observer::IfaceObserverAction,
     service::{
         controller::ControllerService,
@@ -34,9 +38,20 @@ impl ServiceStarterTrait for RouteWanService {
         if config.enable {
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();
-                tokio::spawn(async move {
-                    create_route_wan_service(iface.index, iface.mac.is_some(), status_clone).await
-                });
+                let iface_name = config.iface_name.clone();
+                spawn_task_with_resource(
+                    task_label::task::ROUTE_WAN_RUN,
+                    iface_name.clone(),
+                    async move {
+                        create_route_wan_service(
+                            iface_name,
+                            iface.index,
+                            iface.mac.is_some(),
+                            status_clone,
+                        )
+                        .await
+                    },
+                );
             } else {
                 tracing::error!("Interface {} not found", config.iface_name);
             }
@@ -46,13 +61,18 @@ impl ServiceStarterTrait for RouteWanService {
     }
 }
 
-pub async fn create_route_wan_service(ifindex: u32, has_mac: bool, service_status: WatchService) {
+pub async fn create_route_wan_service(
+    iface_name: String,
+    ifindex: u32,
+    has_mac: bool,
+    service_status: WatchService,
+) {
     service_status.just_change_status(ServiceStatus::Staring);
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
     service_status.just_change_status(ServiceStatus::Running);
     let service_status_clone = service_status.clone();
-    tokio::spawn(async move {
+    spawn_task_with_resource(task_label::task::ROUTE_WAN_STOP, iface_name.clone(), async move {
         let stop_wait = service_status_clone.wait_to_stopping();
         tracing::info!("Waiting for external stop signal");
         let _ = stop_wait.await;
@@ -60,12 +80,13 @@ pub async fn create_route_wan_service(ifindex: u32, has_mac: bool, service_statu
         let _ = tx.send(());
         tracing::info!("Send a stop signal internally");
     });
-    std::thread::spawn(move || {
+    spawn_named_thread(short_thread_name(thread_name::prefix::ROUTE_WAN, &iface_name), move || {
         tracing::info!("start attach_match_flow at ifindex: {:?}", ifindex);
         landscape_ebpf::route::wan_v2::route_wan(ifindex, has_mac, rx).unwrap();
         tracing::info!("Send an unblocking signal to an external thread");
         let _ = other_tx.send(());
-    });
+    })
+    .expect("failed to spawn route wan worker thread");
     let _ = other_rx.await;
     tracing::info!("End external thread blocking");
     service_status.just_change_status(ServiceStatus::Stop);
@@ -103,7 +124,7 @@ impl RouteWanServiceManagerService {
             ServiceManager::init(store.list().await.unwrap(), server_starter.clone()).await;
 
         let service_clone = service.clone();
-        tokio::spawn(async move {
+        spawn_task(task_label::task::ROUTE_WAN_OBSERVER, async move {
             while let Ok(msg) = dev_observer.recv().await {
                 match msg {
                     IfaceObserverAction::Up(iface_name) => {
