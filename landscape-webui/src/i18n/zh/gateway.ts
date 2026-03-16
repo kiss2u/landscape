@@ -1,8 +1,10 @@
 export default {
+  runtime_title: "网关运行配置",
   edit_title: "网关规则",
   name: "规则名称",
   name_required: "规则名称不能为空",
   enabled: "启用",
+  enabled_desc: "控制网关在重启后是否启动",
   match_type: "匹配类型",
   type_host: "域名匹配",
   type_sni_proxy: "SNI 透传",
@@ -67,8 +69,16 @@ export default {
   status_running: "运行中",
   status_stopped: "已停止",
   http_port: "HTTP 端口",
+  http_port_desc: "纯 HTTP 流量的监听端口",
   https_port: "HTTPS 端口",
+  https_port_desc: "TLS 流量的监听端口",
   rule_count: "规则数量",
+  save_runtime: "保存运行配置",
+  save_and_restart: "保存并重启",
+  restart_hint:
+    "端口和启用状态变更需要重启后生效。“保存并重启”会立即应用当前表单值。",
+  restart_success: "网关已重启",
+  restart_failed: "网关重启失败",
 
   // Card
   no_rules: "暂无网关规则",

@@ -6,6 +6,7 @@ use landscape_common::config::{
 };
 use landscape_common::database::LandscapeStore;
 use landscape_common::error::{LdError, LdResult};
+use landscape_common::gateway::settings::{GatewayRuntimeConfig, LandscapeGatewayConfig};
 use landscape_database::provider::LandscapeDBServiceProvider;
 use sha2::{Digest, Sha256};
 use std::fs::OpenOptions;
@@ -89,6 +90,14 @@ impl LandscapeConfigService {
         self.config.load().file_config.time.clone()
     }
 
+    pub fn get_gateway_config_from_memory(&self) -> LandscapeGatewayConfig {
+        self.config.load().file_config.gateway.clone()
+    }
+
+    pub fn get_gateway_runtime_config(&self) -> GatewayRuntimeConfig {
+        self.config.load().gateway.clone()
+    }
+
     pub async fn get_time_config_from_file(&self) -> (LandscapeTimeConfig, String) {
         let (config, hash) = self.get_config_with_hash().await.unwrap_or_default();
         (config.time, hash)
@@ -97,6 +106,11 @@ impl LandscapeConfigService {
     pub async fn get_dns_config_from_file(&self) -> (LandscapeDnsConfig, String) {
         let (config, hash) = self.get_config_with_hash().await.unwrap_or_default();
         (config.dns, hash)
+    }
+
+    pub async fn get_gateway_config_from_file(&self) -> (LandscapeGatewayConfig, String) {
+        let (config, hash) = self.get_config_with_hash().await.unwrap_or_default();
+        (config.gateway, hash)
     }
 
     pub fn get_config_path(&self) -> std::path::PathBuf {
@@ -376,6 +390,71 @@ impl LandscapeConfigService {
             new_config
         });
         landscape_common::utils::time::update_time_sync_config(self.config.load().time.clone());
+
+        Ok(())
+    }
+
+    pub async fn update_gateway_config(
+        &self,
+        new_gateway: LandscapeGatewayConfig,
+        expected_hash: String,
+    ) -> LdResult<()> {
+        let path = self.get_config_path();
+
+        let file = OpenOptions::new().read(true).write(true).create(true).open(&path)?;
+
+        file.lock_exclusive()?;
+
+        let result = {
+            let mut content = String::new();
+            let mut file_obj = &file;
+            file_obj.read_to_string(&mut content)?;
+
+            let mut hasher = Sha256::new();
+            hasher.update(content.as_bytes());
+            let current_hash = format!("{:x}", hasher.finalize());
+
+            if current_hash != expected_hash {
+                return Err(LdError::ConfigConflict);
+            }
+
+            let mut doc =
+                content.parse::<DocumentMut>().map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            let gateway_value =
+                toml::to_string(&new_gateway).map_err(|e| LdError::ConfigError(e.to_string()))?;
+            let gateway_doc = gateway_value
+                .parse::<DocumentMut>()
+                .map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            doc["gateway"] = gateway_doc.as_item().clone();
+
+            let new_content = doc.to_string();
+
+            let tmp_path = path.with_extension("toml.tmp");
+            let mut tmp_file =
+                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+
+            tmp_file.write_all(new_content.as_bytes())?;
+            tmp_file.sync_all()?;
+
+            std::fs::rename(&tmp_path, &path)?;
+
+            Ok::<(), LdError>(())
+        };
+
+        file.unlock()?;
+
+        if let Err(e) = result {
+            return Err(e);
+        }
+
+        self.config.rcu(|old| {
+            let mut new_config = (**old).clone();
+            new_config.gateway = GatewayRuntimeConfig::from_file_config(&new_gateway);
+            new_config.file_config.gateway = new_gateway.clone();
+            new_config
+        });
 
         Ok(())
     }

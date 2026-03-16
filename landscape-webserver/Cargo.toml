@@ -11,6 +11,7 @@ landscape-database = { path = "../landscape-database" }
 landscape-ebpf = { path = "../landscape-ebpf" }
 landscape-gateway = { path = "../landscape-gateway", optional = true }
 
+arc-swap = { workspace = true }
 
 rustls = { workspace = true }
 rcgen = { workspace = true }

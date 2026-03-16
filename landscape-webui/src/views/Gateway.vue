@@ -1,18 +1,43 @@
 <script lang="ts" setup>
-import { get_gateway_rules, get_gateway_status } from "@/api/gateway";
-import type {
-  HttpUpstreamRuleConfig,
-  GatewayStatus,
-} from "@landscape-router/types/api/schemas";
-import { ref, onMounted } from "vue";
+import {
+  get_gateway_config_edit,
+  get_gateway_rules,
+  get_gateway_status,
+  restart_gateway,
+  update_gateway_config,
+  type GatewayStatus,
+} from "@/api/gateway";
+import { ServiceStatusType } from "@/lib/services";
+import type { HttpUpstreamRuleConfig } from "@landscape-router/types/api/schemas";
+import { Settings } from "@vicons/carbon";
+import { useMessage } from "naive-ui";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
 const rules = ref<HttpUpstreamRuleConfig[]>([]);
 const status = ref<GatewayStatus>();
+const gatewayEnabled = ref(false);
+const httpPort = ref<number | null>(80);
+const httpsPort = ref<number | null>(443);
+const configHash = ref("");
+const savingConfig = ref(false);
+const restartingGateway = ref(false);
+const show_edit_modal = ref(false);
+const show_settings = ref(false);
+let status_poll_timer: ReturnType<typeof setInterval> | null = null;
 const { t } = useI18n();
+const message = useMessage();
 
 async function refresh_rules() {
   rules.value = await get_gateway_rules();
+}
+
+async function refresh_config() {
+  const { gateway, hash } = await get_gateway_config_edit();
+  gatewayEnabled.value = gateway.enable ?? false;
+  httpPort.value = gateway.http_port ?? 80;
+  httpsPort.value = gateway.https_port ?? 443;
+  configHash.value = hash;
 }
 
 async function refresh_status() {
@@ -20,34 +45,229 @@ async function refresh_status() {
 }
 
 async function refreshAll() {
-  await Promise.all([refresh_rules(), refresh_status()]);
+  await Promise.all([refresh_rules(), refresh_status(), refresh_config()]);
+}
+
+function isTransitionStatus(statusValue: GatewayStatus | undefined) {
+  return (
+    statusValue?.status.t === ServiceStatusType.Staring ||
+    statusValue?.status.t === ServiceStatusType.Stopping
+  );
+}
+
+function start_status_polling() {
+  if (status_poll_timer) return;
+  status_poll_timer = setInterval(() => {
+    void refresh_status();
+  }, 2000);
+}
+
+function stop_status_polling() {
+  if (status_poll_timer) {
+    clearInterval(status_poll_timer);
+    status_poll_timer = null;
+  }
+}
+
+function sync_status_polling(statusValue: GatewayStatus | undefined) {
+  if (isTransitionStatus(statusValue)) {
+    start_status_polling();
+  } else {
+    stop_status_polling();
+  }
+}
+
+function gateway_status_label(statusValue: GatewayStatus | undefined) {
+  switch (statusValue?.status.t) {
+    case ServiceStatusType.Staring:
+      return t("common.starting");
+    case ServiceStatusType.Running:
+      return t("common.running");
+    case ServiceStatusType.Stopping:
+      return t("common.stopping");
+    default:
+      return t("common.stopped");
+  }
+}
+
+function gateway_status_tag_type(statusValue: GatewayStatus | undefined) {
+  switch (statusValue?.status.t) {
+    case ServiceStatusType.Running:
+      return "success";
+    case ServiceStatusType.Staring:
+    case ServiceStatusType.Stopping:
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
+async function saveGatewayConfig(showSuccess = true) {
+  await update_gateway_config({
+    new_gateway: {
+      enable: gatewayEnabled.value,
+      http_port: httpPort.value ?? undefined,
+      https_port: httpsPort.value ?? undefined,
+    },
+    expected_hash: configHash.value,
+  });
+  await refresh_config();
+  if (showSuccess) {
+    show_settings.value = false;
+    message.success(t("config.save_success"));
+  }
+}
+
+async function handleSaveGatewayConfig() {
+  savingConfig.value = true;
+  try {
+    await saveGatewayConfig();
+  } catch (e: any) {
+    if (e?.error_id === "config.conflict" || e?.response?.status === 409) {
+      message.error(t("config.conflict"));
+    } else if (!e?.error_id) {
+      message.error(t("config.save_failed") + ": " + e.message);
+    }
+  } finally {
+    savingConfig.value = false;
+  }
+}
+
+async function handleSaveAndRestartGateway() {
+  restartingGateway.value = true;
+  try {
+    await saveGatewayConfig(false);
+    status.value = await restart_gateway();
+    show_settings.value = false;
+    message.success(t("gateway.restart_success"));
+  } catch (e: any) {
+    if (e?.error_id === "config.conflict" || e?.response?.status === 409) {
+      message.error(t("config.conflict"));
+    } else if (!e?.error_id) {
+      message.error(t("gateway.restart_failed") + ": " + e.message);
+    }
+  } finally {
+    restartingGateway.value = false;
+  }
 }
 
 onMounted(async () => {
-  await refreshAll();
+  try {
+    await refreshAll();
+  } catch (e) {
+    message.error(t("config.load_failed"));
+    console.error(e);
+  }
 });
 
-const show_edit_modal = ref(false);
+onUnmounted(() => {
+  stop_status_polling();
+});
+
+watch(
+  () => status.value,
+  (value) => {
+    sync_status_polling(value);
+  },
+  { immediate: true },
+);
 </script>
 <template>
   <n-flex vertical style="flex: 1">
     <n-flex align="center" justify="space-between">
       <n-flex>
-        <n-button @click="show_edit_modal = true">{{
-          t("common.create")
-        }}</n-button>
+        <n-button
+          :disabled="status?.supported === false"
+          @click="show_edit_modal = true"
+          >{{ t("common.create") }}</n-button
+        >
       </n-flex>
       <n-flex v-if="status" align="center" :size="16">
-        <n-tag :type="status.running ? 'success' : 'default'" size="small">
-          {{
-            status.running
-              ? t("gateway.status_running")
-              : t("gateway.status_stopped")
-          }}
+        <n-tag :type="gateway_status_tag_type(status)" size="small">
+          {{ gateway_status_label(status) }}
         </n-tag>
         <n-text depth="3" style="font-size: 13px">
-          HTTP: {{ status.http_port }} | HTTPS: {{ status.https_port }}
+          HTTP: {{ status.http_port }} | HTTPS: {{ status.https_port }} |
+          {{ t("gateway.rule_count") }}: {{ status.rule_count }}
         </n-text>
+        <n-popover
+          v-model:show="show_settings"
+          trigger="click"
+          placement="bottom-end"
+        >
+          <template #trigger>
+            <n-button quaternary circle size="small">
+              <template #icon>
+                <n-icon :component="Settings" />
+              </template>
+            </n-button>
+          </template>
+
+          <n-flex
+            vertical
+            size="small"
+            style="padding: 4px; min-width: 320px; max-width: 360px"
+          >
+            <n-text strong>{{ t("gateway.runtime_title") }}</n-text>
+            <n-form label-placement="top">
+              <n-form-item :label="t('gateway.enabled')">
+                <n-switch v-model:value="gatewayEnabled" />
+                <template #feedback>
+                  {{ t("gateway.enabled_desc") }}
+                </template>
+              </n-form-item>
+              <n-grid x-gap="12" cols="2">
+                <n-grid-item>
+                  <n-form-item :label="t('gateway.http_port')">
+                    <n-input-number
+                      v-model:value="httpPort"
+                      :min="1"
+                      :max="65535"
+                      style="width: 100%"
+                    />
+                    <template #feedback>
+                      {{ t("gateway.http_port_desc") }}
+                    </template>
+                  </n-form-item>
+                </n-grid-item>
+                <n-grid-item>
+                  <n-form-item :label="t('gateway.https_port')">
+                    <n-input-number
+                      v-model:value="httpsPort"
+                      :min="1"
+                      :max="65535"
+                      style="width: 100%"
+                    />
+                    <template #feedback>
+                      {{ t("gateway.https_port_desc") }}
+                    </template>
+                  </n-form-item>
+                </n-grid-item>
+              </n-grid>
+            </n-form>
+
+            <n-alert type="info" :show-icon="false">
+              {{ t("gateway.restart_hint") }}
+            </n-alert>
+
+            <n-flex justify="end" :size="8">
+              <n-button
+                :loading="savingConfig"
+                @click="handleSaveGatewayConfig"
+              >
+                {{ t("gateway.save_runtime") }}
+              </n-button>
+              <n-button
+                type="primary"
+                :disabled="status?.supported === false"
+                :loading="restartingGateway"
+                @click="handleSaveAndRestartGateway"
+              >
+                {{ t("gateway.save_and_restart") }}
+              </n-button>
+            </n-flex>
+          </n-flex>
+        </n-popover>
       </n-flex>
     </n-flex>
     <n-flex>

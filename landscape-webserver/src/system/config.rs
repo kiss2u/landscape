@@ -26,6 +26,11 @@ pub fn get_sys_config_paths() -> OpenApiRouter<LandscapeApp> {
         ))
         .routes(routes!(super::dns_config::get_dns_config_fast))
         .routes(routes!(super::dns_config::get_dns_config, super::dns_config::update_dns_config))
+        .routes(routes!(super::gateway_config::get_gateway_config_fast))
+        .routes(routes!(
+            super::gateway_config::get_gateway_config,
+            super::gateway_config::update_gateway_config
+        ))
 }
 
 #[utoipa::path(

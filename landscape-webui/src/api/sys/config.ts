@@ -1,11 +1,14 @@
 import type {
   GetDnsConfigResponse,
   GetDnsConfigResponse as GetDnsConfigFastResponse,
+  GetGatewayConfigResponse,
   GetMetricConfigResponse,
+  LandscapeGatewayConfig,
   GetUIConfigResponse,
   LandscapeDnsConfig,
   LandscapeMetricConfig,
   LandscapeUIConfig,
+  UpdateGatewayConfigRequest,
   UpdateMetricConfigRequest,
   UpdateUIConfigRequest,
 } from "@landscape-router/types/api/schemas";
@@ -20,6 +23,9 @@ import {
   getDnsConfigFast,
   getDnsConfig,
   updateDnsConfig,
+  getGatewayConfigFast,
+  getGatewayConfig,
+  updateGatewayConfig,
 } from "@landscape-router/types/api/system-config/system-config";
 
 /** Local type -- backend accepts serde_json::Value, so no ORVAL-generated request type exists. */
@@ -90,4 +96,18 @@ export async function update_dns_config(
   payload: UpdateDnsConfigRequest,
 ): Promise<void> {
   await updateDnsConfig(payload);
+}
+
+export async function get_gateway_config(): Promise<LandscapeGatewayConfig> {
+  return await getGatewayConfigFast();
+}
+
+export async function get_gateway_config_edit(): Promise<GetGatewayConfigResponse> {
+  return await getGatewayConfig();
+}
+
+export async function update_gateway_config(
+  payload: UpdateGatewayConfigRequest,
+): Promise<void> {
+  await updateGatewayConfig(payload);
 }

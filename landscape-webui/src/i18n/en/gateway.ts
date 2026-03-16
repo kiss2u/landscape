@@ -1,8 +1,11 @@
 export default {
+  runtime_title: "Gateway Runtime",
   edit_title: "Gateway Rule",
   name: "Rule Name",
   name_required: "Rule name is required",
   enabled: "Enabled",
+  enabled_desc:
+    "Controls whether the gateway process should be started after restart",
   match_type: "Match Type",
   type_host: "Host Match",
   type_sni_proxy: "SNI Proxy",
@@ -69,8 +72,16 @@ export default {
   status_running: "Running",
   status_stopped: "Stopped",
   http_port: "HTTP Port",
+  http_port_desc: "Listening port for plaintext HTTP traffic",
   https_port: "HTTPS Port",
+  https_port_desc: "Listening port for TLS traffic",
   rule_count: "Rule Count",
+  save_runtime: "Save Runtime Config",
+  save_and_restart: "Save & Restart",
+  restart_hint:
+    "Port and enable changes take effect after restart. Save & Restart applies the current form values immediately.",
+  restart_success: "Gateway restarted successfully",
+  restart_failed: "Failed to restart gateway",
 
   // Card
   no_rules: "No gateway rules",

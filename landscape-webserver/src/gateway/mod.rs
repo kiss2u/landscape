@@ -12,6 +12,7 @@ use landscape_common::gateway::{
     ClientIpHeaderPolicy, GatewayError, HttpPathGroup, HttpUpstreamConfig, HttpUpstreamMatchRule,
     HttpUpstreamRuleConfig,
 };
+use landscape_common::service::ServiceStatus;
 use serde::Serialize;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -29,13 +30,13 @@ pub fn get_gateway_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .routes(routes!(list_gateway_rules, create_gateway_rule))
         .routes(routes!(get_gateway_rule, delete_gateway_rule))
-        .routes(routes!(get_gateway_status))
+        .routes(routes!(get_gateway_status, restart_gateway))
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct GatewayStatus {
     pub supported: bool,
-    pub running: bool,
+    pub status: ServiceStatus,
     pub http_port: u16,
     pub https_port: u16,
     pub https_ready: bool,
@@ -145,19 +146,36 @@ async fn delete_gateway_rule(
 async fn get_gateway_status(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<GatewayStatus> {
-    let status = GatewayStatus {
-        supported: state.gateway_service.is_supported(),
-        running: state.gateway_service.is_running(),
-        http_port: state.gateway_service.config().http_port,
-        https_port: state.gateway_service.config().https_port,
-        https_ready: state.gateway_service.has_https_listener(),
-        rule_count: state.gateway_service.stored_rule_count().await,
-    };
-    LandscapeApiResp::success(status)
+    LandscapeApiResp::success(build_gateway_status(&state).await)
+}
+
+#[utoipa::path(
+    post,
+    path = "/restart",
+    tag = "Gateway",
+    responses((status = 200, body = CommonApiResp<GatewayStatus>))
+)]
+async fn restart_gateway(State(state): State<LandscapeApp>) -> LandscapeApiResult<GatewayStatus> {
+    ensure_gateway_supported(&state)?;
+    let gateway_config = state.config_service.get_gateway_runtime_config();
+    state.gateway_service.restart(gateway_config, std::time::Duration::from_secs(10)).await;
+    LandscapeApiResp::success(build_gateway_status(&state).await)
 }
 
 async fn reload_gateway_rules(state: &LandscapeApp) {
     state.gateway_service.reload_rules().await;
+}
+
+async fn build_gateway_status(state: &LandscapeApp) -> GatewayStatus {
+    let config = state.gateway_service.config();
+    GatewayStatus {
+        supported: state.gateway_service.is_supported(),
+        status: state.gateway_service.status(),
+        http_port: config.http_port,
+        https_port: config.https_port,
+        https_ready: state.gateway_service.has_https_listener(),
+        rule_count: state.gateway_service.stored_rule_count().await,
+    }
 }
 
 pub(crate) async fn sync_gateway_dynamic_dns_redirects(state: &LandscapeApp) {
