@@ -4,6 +4,10 @@ use axum::extract::{Path, State};
 use axum::http::{header::HeaderName, HeaderValue};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
+use landscape_common::dns::redirect::{
+    DnsRedirectAnswerMode, DynamicDnsMatch, DynamicDnsRedirectBatch, DynamicDnsRedirectRecord,
+    DynamicDnsRedirectScope, DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+};
 use landscape_common::gateway::{
     ClientIpHeaderPolicy, GatewayError, HttpPathGroup, HttpUpstreamConfig, HttpUpstreamMatchRule,
     HttpUpstreamRuleConfig,
@@ -18,6 +22,8 @@ use crate::{
     api::LandscapeApiResp,
     error::{LandscapeApiError, LandscapeApiResult},
 };
+
+const GATEWAY_DYNAMIC_DNS_REDIRECT_SOURCE_ID: &str = "gateway-auto-local-ips";
 
 pub fn get_gateway_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
@@ -70,6 +76,7 @@ async fn create_gateway_rule(
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
 
+    sync_gateway_dynamic_dns_redirects(&state).await;
     reload_gateway_rules(&state).await;
 
     LandscapeApiResp::success(saved)
@@ -123,6 +130,7 @@ async fn delete_gateway_rule(
         .await
         .map_err(|e| landscape_common::error::LdError::ConfigError(e.to_string()))?;
 
+    sync_gateway_dynamic_dns_redirects(&state).await;
     reload_gateway_rules(&state).await;
 
     LandscapeApiResp::success(())
@@ -150,6 +158,16 @@ async fn get_gateway_status(
 
 async fn reload_gateway_rules(state: &LandscapeApp) {
     state.gateway_service.reload_rules().await;
+}
+
+pub(crate) async fn sync_gateway_dynamic_dns_redirects(state: &LandscapeApp) {
+    let rules = if state.gateway_service.is_supported() {
+        state.gateway_service.list_rules().await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let batch = build_gateway_dynamic_dns_redirect_batch(&rules);
+    let _ = state.dns_redirect_service.set_dynamic_batch(batch).await;
 }
 
 async fn validate_gateway_rule(
@@ -371,10 +389,55 @@ fn normalize_prefix(prefix: &str) -> Result<String, GatewayError> {
     }
 }
 
+fn build_gateway_dynamic_dns_redirect_batch(
+    rules: &[HttpUpstreamRuleConfig],
+) -> DynamicDnsRedirectBatch {
+    let mut domains = rules
+        .iter()
+        .filter(|rule| rule.enable)
+        .flat_map(|rule| rule.domains.iter())
+        .filter_map(|domain| normalize_gateway_domain(domain))
+        .collect::<Vec<_>>();
+    domains.sort();
+    domains.dedup();
+
+    DynamicDnsRedirectBatch {
+        source_id: GATEWAY_DYNAMIC_DNS_REDIRECT_SOURCE_ID.to_string(),
+        scope: DynamicDnsRedirectScope::Global,
+        records: domains
+            .into_iter()
+            .map(|domain| DynamicDnsRedirectRecord {
+                match_rule: gateway_domain_to_dynamic_match(&domain),
+                answer_mode: DnsRedirectAnswerMode::AllLocalIps,
+                result_info: vec![],
+                ttl_secs: DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+            })
+            .collect(),
+    }
+}
+
+fn normalize_gateway_domain(domain: &str) -> Option<String> {
+    let normalized = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+fn gateway_domain_to_dynamic_match(domain: &str) -> DynamicDnsMatch {
+    if let Some(suffix) = domain.strip_prefix("*.") {
+        DynamicDnsMatch::Domain(suffix.to_string())
+    } else {
+        DynamicDnsMatch::Full(domain.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use landscape_common::dns::redirect::{DnsRedirectAnswerMode, DynamicDnsRedirectScope};
     use landscape_common::gateway::{
         ClientIpHeaderPolicy, HttpUpstreamConfig, HttpUpstreamTarget, LoadBalanceMethod,
         ProxyHeaderConflictMode, ProxyRequestHeader,
@@ -574,5 +637,59 @@ mod tests {
     fn normalize_prefix_rejects_missing_leading_slash() {
         let err = normalize_prefix("api").unwrap_err();
         assert!(matches!(err, GatewayError::InvalidPathPrefix { .. }));
+    }
+
+    #[test]
+    fn build_gateway_dynamic_dns_redirect_batch_uses_all_local_ips() {
+        let rules = vec![
+            rule(
+                "gateway-host",
+                &["Example.com.", "*.svc.example.com", " example.com "],
+                HttpUpstreamMatchRule::Host { path_groups: vec![] },
+            ),
+            rule("disabled", &["ignored.example.com"], HttpUpstreamMatchRule::SniProxy),
+        ];
+        let mut rules = rules;
+        rules[1].enable = false;
+
+        let batch = build_gateway_dynamic_dns_redirect_batch(&rules);
+
+        assert_eq!(batch.source_id, GATEWAY_DYNAMIC_DNS_REDIRECT_SOURCE_ID);
+        assert_eq!(batch.scope, DynamicDnsRedirectScope::Global);
+        assert_eq!(batch.records.len(), 2);
+        assert!(batch.records.iter().all(|record| {
+            record.answer_mode == DnsRedirectAnswerMode::AllLocalIps
+                && record.result_info.is_empty()
+                && record.ttl_secs == DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS
+        }));
+        assert!(batch
+            .records
+            .iter()
+            .any(|record| record.match_rule == DynamicDnsMatch::Full("example.com".to_string())));
+        assert!(batch.records.iter().any(|record| {
+            record.match_rule == DynamicDnsMatch::Domain("svc.example.com".to_string())
+        }));
+    }
+
+    #[test]
+    fn gateway_domain_to_dynamic_match_maps_wildcard_to_domain_match() {
+        assert_eq!(
+            gateway_domain_to_dynamic_match("*.example.com"),
+            DynamicDnsMatch::Domain("example.com".to_string())
+        );
+        assert_eq!(
+            gateway_domain_to_dynamic_match("api.example.com"),
+            DynamicDnsMatch::Full("api.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_gateway_domain_skips_empty_values() {
+        assert_eq!(normalize_gateway_domain(""), None);
+        assert_eq!(normalize_gateway_domain("  "), None);
+        assert_eq!(
+            normalize_gateway_domain("Api.Example.Com."),
+            Some("api.example.com".to_string())
+        );
     }
 }

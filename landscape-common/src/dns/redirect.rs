@@ -131,6 +131,9 @@ impl From<DynamicDnsMatch> for DomainConfig {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DynamicDnsRedirectRecord {
     pub match_rule: DynamicDnsMatch,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub answer_mode: DnsRedirectAnswerMode,
     #[cfg_attr(feature = "openapi", schema(value_type = Vec<String>))]
     pub result_info: Vec<IpAddr>,
     pub ttl_secs: u32,

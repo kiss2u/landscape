@@ -320,8 +320,12 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let metric_service = MetricService::new(home_path.clone(), config.metric.clone()).await;
 
     let cert_account_service = CertAccountService::new(db_store_provider.clone()).await;
-    let cert_service =
-        CertService::new(db_store_provider.clone(), cert_account_service.clone()).await;
+    let cert_service = CertService::new(
+        db_store_provider.clone(),
+        cert_account_service.clone(),
+        Some(dns_redirect_service.clone()),
+    )
+    .await;
     if let Err(e) = cert_service.reload_api_tls_mapping().await {
         return Err(landscape_common::error::LdError::ConfigError(format!(
             "failed to load api tls certificates: {e}"
@@ -502,6 +506,8 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         // gateway
         gateway_service: gateway_service.clone(),
     };
+
+    gateway::sync_gateway_dynamic_dns_redirects(&landscape_app_status).await;
 
     // 初始化结束
     let tls_config = build_tls_server_config_with_shared_resolver(cert_service.api_tls_resolver());

@@ -31,7 +31,7 @@ impl DomainMatcher {
             match each_config.match_type {
                 DomainMatchType::Plain => {
                     // 将关键字添加到列表
-                    keywords.push(each_config.value.to_string());
+                    keywords.push(normalize_domain_text(&each_config.value));
                 }
                 DomainMatchType::Regex => {
                     // 将正则表达式添加到 Vec 中
@@ -42,12 +42,13 @@ impl DomainMatcher {
                 DomainMatchType::Domain => {
                     // 子域名匹配（倒序存储以便构建 Trie）
                     subdomain_trie_size += 1;
-                    let reversed_domain = each_config.value.chars().rev().collect::<String>();
+                    let reversed_domain =
+                        normalize_domain_text(&each_config.value).chars().rev().collect::<String>();
                     trie_builder.push(reversed_domain);
                 }
                 DomainMatchType::Full => {
                     // 完全匹配（存储在 HashSet 中）
-                    full_domains.insert(each_config.value);
+                    full_domains.insert(normalize_domain_text(&each_config.value));
                 }
             }
         }
@@ -74,13 +75,15 @@ impl DomainMatcher {
 
     // 执行匹配的主方法
     pub fn is_match(&self, domain: &str) -> bool {
+        let normalized_domain = normalize_domain_text(domain);
+
         // 完全匹配
-        if self.full_domains.contains(domain) {
+        if self.full_domains.contains(&normalized_domain) {
             return true;
         }
 
         // 子域名匹配
-        let reversed_domain = domain.chars().rev().collect::<String>();
+        let reversed_domain = normalized_domain.chars().rev().collect::<String>();
         let reversed_bytes = reversed_domain.as_bytes();
 
         for result in
@@ -93,7 +96,7 @@ impl DomainMatcher {
         }
 
         // 关键字匹配
-        if self.keyword_ac.is_match(domain) {
+        if self.keyword_ac.is_match(&normalized_domain) {
             return true;
         }
 
@@ -106,6 +109,10 @@ impl DomainMatcher {
 
         false
     }
+}
+
+fn normalize_domain_text(domain: &str) -> String {
+    domain.trim_end_matches('.').to_ascii_lowercase()
 }
 
 #[cfg(test)]
@@ -278,5 +285,32 @@ mod tests {
 
         // ❌ 反向用例：不应该匹配
         assert!(!matcher.is_match("example.com"), "Should not match unrelated domain");
+    }
+
+    #[test]
+    fn full_match_is_case_insensitive() {
+        let configs = vec![DomainConfig {
+            match_type: DomainMatchType::Full,
+            value: "Example.COM".to_string(),
+        }];
+
+        let matcher = DomainMatcher::new(configs);
+
+        assert!(matcher.is_match("example.com"));
+        assert!(matcher.is_match("EXAMPLE.COM"));
+        assert!(matcher.is_match("example.com."));
+    }
+
+    #[test]
+    fn domain_match_is_case_insensitive_for_root_and_subdomain() {
+        let configs = vec![DomainConfig {
+            match_type: DomainMatchType::Domain,
+            value: "Example.COM".to_string(),
+        }];
+
+        let matcher = DomainMatcher::new(configs);
+
+        assert!(matcher.is_match("example.com"));
+        assert!(matcher.is_match("WWW.EXAMPLE.COM"));
     }
 }

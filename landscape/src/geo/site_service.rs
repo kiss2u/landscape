@@ -3,8 +3,8 @@ use landscape_common::{
     dns::{
         config::DnsUpstreamConfig,
         redirect::{
-            DNSRedirectRule, DNSRedirectRuntimeRule, DnsRedirectAnswerMode,
-            DynamicDnsRedirectBatch, DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+            DNSRedirectRule, DNSRedirectRuntimeRule, DynamicDnsRedirectBatch,
+            DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
         },
         rule::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
         ChainDnsServerInitInfo,
@@ -116,7 +116,7 @@ impl GeoSiteService {
                 redirect_rules.push(DNSRedirectRuntimeRule {
                     redirect_id: None,
                     dynamic_redirect_source: Some(source_id.clone()),
-                    answer_mode: DnsRedirectAnswerMode::StaticIps,
+                    answer_mode: record.answer_mode,
                     match_rules: vec![record.match_rule.into()],
                     result_info: record.result_info,
                     ttl_secs: record.ttl_secs,

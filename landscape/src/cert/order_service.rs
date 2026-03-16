@@ -6,6 +6,7 @@ use crate::cert::{
     reload_api_tls_resolver, reload_gateway_tls_resolver, validate_certified_key_from_pem,
     SharedSniResolver,
 };
+use crate::dns::redirect_service::DNSRedirectService;
 use chrono::{Datelike, Duration as ChronoDuration, Utc};
 use instant_acme::{
     Account, ChallengeType as AcmeChallengeType, Identifier, NewOrder, OrderStatus, RetryPolicy,
@@ -14,6 +15,10 @@ use instant_acme::{
 use landscape_common::cert::account::AccountStatus;
 use landscape_common::cert::order::{CertConfig, CertParsedInfo, CertStatus, CertType};
 use landscape_common::cert::CertError;
+use landscape_common::dns::redirect::{
+    DnsRedirectAnswerMode, DynamicDnsMatch, DynamicDnsRedirectBatch, DynamicDnsRedirectRecord,
+    DynamicDnsRedirectScope, DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+};
 use landscape_common::service::controller::ConfigController;
 use landscape_database::cert::repository::CertRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
@@ -29,12 +34,15 @@ use uuid::Uuid;
 use super::account_service::CertAccountService;
 use super::dns_provider;
 
+const API_CERT_DYNAMIC_DNS_REDIRECT_SOURCE_ID: &str = "cert-api-local-ips";
+
 #[derive(Clone)]
 pub struct CertService {
     store: CertRepository,
     account_service: CertAccountService,
     api_tls_resolver: SharedSniResolver,
     gateway_tls_resolver: SharedSniResolver,
+    api_dns_redirect_service: Option<DNSRedirectService>,
     tasks: Arc<Mutex<HashMap<Uuid, CertIssueTask>>>,
 }
 
@@ -61,6 +69,7 @@ impl CertService {
     pub async fn new(
         store_provider: LandscapeDBServiceProvider,
         account_service: CertAccountService,
+        api_dns_redirect_service: Option<DNSRedirectService>,
     ) -> Self {
         let store = store_provider.cert_store();
         let service = Self {
@@ -68,6 +77,7 @@ impl CertService {
             account_service,
             api_tls_resolver: SharedSniResolver::new(),
             gateway_tls_resolver: SharedSniResolver::new(),
+            api_dns_redirect_service,
             tasks: Arc::new(Mutex::new(HashMap::new())),
         };
 
@@ -111,9 +121,11 @@ impl CertService {
     }
 
     pub async fn reload_api_tls_mapping(&self) -> Result<usize, CertError> {
-        reload_api_tls_resolver(self, &self.api_tls_resolver)
+        let inserted_count = reload_api_tls_resolver(self, &self.api_tls_resolver)
             .await
-            .map_err(CertError::IssuanceFailed)
+            .map_err(CertError::IssuanceFailed)?;
+        self.sync_api_dynamic_dns_redirects().await;
+        Ok(inserted_count)
     }
 
     pub async fn reload_gateway_tls_mapping(&self) -> Result<usize, CertError> {
@@ -141,6 +153,16 @@ impl CertService {
         if let Err(e) = self.reload_gateway_tls_mapping().await {
             tracing::warn!("Failed to reload Gateway TLS mapping after cert delete: {e}");
         }
+    }
+
+    async fn sync_api_dynamic_dns_redirects(&self) {
+        let Some(dns_redirect_service) = self.api_dns_redirect_service.as_ref() else {
+            return;
+        };
+
+        let certs = self.list().await;
+        let batch = build_api_dynamic_dns_redirect_batch(&certs);
+        let _ = dns_redirect_service.set_dynamic_batch(batch).await;
     }
 
     async fn check_auto_renewals(&self) {
@@ -843,6 +865,58 @@ impl CertService {
     }
 }
 
+fn build_api_dynamic_dns_redirect_batch(certs: &[CertConfig]) -> DynamicDnsRedirectBatch {
+    let mut matches = HashSet::new();
+    for cert in certs.iter().filter(|cert| cert.for_api) {
+        for domain in &cert.domains {
+            if let Some(domain_match) = cert_domain_to_dynamic_match(domain) {
+                matches.insert(domain_match);
+            }
+        }
+    }
+
+    let mut records: Vec<_> = matches.into_iter().collect();
+    records.sort_by(|left, right| dynamic_match_sort_key(left).cmp(&dynamic_match_sort_key(right)));
+
+    DynamicDnsRedirectBatch {
+        source_id: API_CERT_DYNAMIC_DNS_REDIRECT_SOURCE_ID.to_string(),
+        scope: DynamicDnsRedirectScope::Global,
+        records: records
+            .into_iter()
+            .map(|match_rule| DynamicDnsRedirectRecord {
+                match_rule,
+                answer_mode: DnsRedirectAnswerMode::AllLocalIps,
+                result_info: vec![],
+                ttl_secs: DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+            })
+            .collect(),
+    }
+}
+
+fn cert_domain_to_dynamic_match(domain: &str) -> Option<DynamicDnsMatch> {
+    let normalized = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    if normalized.is_empty() {
+        return None;
+    }
+
+    if let Some(suffix) = normalized.strip_prefix("*.") {
+        if suffix.is_empty() {
+            None
+        } else {
+            Some(DynamicDnsMatch::Domain(suffix.to_string()))
+        }
+    } else {
+        Some(DynamicDnsMatch::Full(normalized))
+    }
+}
+
+fn dynamic_match_sort_key(value: &DynamicDnsMatch) -> (u8, &str) {
+    match value {
+        DynamicDnsMatch::Full(value) => (0, value.as_str()),
+        DynamicDnsMatch::Domain(value) => (1, value.as_str()),
+    }
+}
+
 #[async_trait::async_trait]
 impl ConfigController for CertService {
     type Id = Uuid;
@@ -1084,6 +1158,7 @@ fn pem_to_der(pem_str: &str) -> Result<Vec<u8>, CertError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use landscape_common::cert::order::GeneratedCertConfig;
 
     #[test]
     fn generated_certificate_uses_requested_domains_and_validity() {
@@ -1102,5 +1177,65 @@ mod tests {
         assert!(material.certificate_pem.contains("BEGIN CERTIFICATE"));
         assert!(not_after > not_before);
         assert!(not_after - not_before >= 30.0 * 86400.0 - 1.0);
+    }
+
+    #[test]
+    fn build_api_dynamic_dns_redirect_batch_only_includes_for_api_domains() {
+        let batch = build_api_dynamic_dns_redirect_batch(&[
+            CertConfig {
+                id: Uuid::new_v4(),
+                name: "api".to_string(),
+                domains: vec!["api.example.com".to_string()],
+                status: CertStatus::Pending,
+                private_key: None,
+                certificate: None,
+                certificate_chain: None,
+                expires_at: None,
+                issued_at: None,
+                status_message: None,
+                cert_type: CertType::Generated(GeneratedCertConfig { validity_days: 30 }),
+                for_api: true,
+                for_gateway: false,
+                update_at: 0.0,
+            },
+            CertConfig {
+                id: Uuid::new_v4(),
+                name: "gateway".to_string(),
+                domains: vec!["gw.example.com".to_string()],
+                status: CertStatus::Valid,
+                private_key: None,
+                certificate: None,
+                certificate_chain: None,
+                expires_at: None,
+                issued_at: None,
+                status_message: None,
+                cert_type: CertType::Manual,
+                for_api: false,
+                for_gateway: true,
+                update_at: 0.0,
+            },
+        ]);
+
+        assert_eq!(batch.source_id, API_CERT_DYNAMIC_DNS_REDIRECT_SOURCE_ID);
+        assert_eq!(batch.scope, DynamicDnsRedirectScope::Global);
+        assert_eq!(batch.records.len(), 1);
+        assert_eq!(
+            batch.records[0].match_rule,
+            DynamicDnsMatch::Full("api.example.com".to_string())
+        );
+        assert_eq!(batch.records[0].answer_mode, DnsRedirectAnswerMode::AllLocalIps);
+        assert!(batch.records[0].result_info.is_empty());
+    }
+
+    #[test]
+    fn wildcard_cert_domain_maps_to_domain_match() {
+        assert_eq!(
+            cert_domain_to_dynamic_match("*.example.com"),
+            Some(DynamicDnsMatch::Domain("example.com".to_string()))
+        );
+        assert_eq!(
+            cert_domain_to_dynamic_match(" Api.Example.Com. "),
+            Some(DynamicDnsMatch::Full("api.example.com".to_string()))
+        );
     }
 }

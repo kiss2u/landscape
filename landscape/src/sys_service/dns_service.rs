@@ -117,7 +117,12 @@ impl LandscapeDnsService {
                                 deps.dynamic_redirect_sources.contains(&source_id)
                             })
                             .await;
-                        dns_service_clone.refresh_flow_ids(flow_ids).await;
+
+                        if flow_ids.is_empty() {
+                            dns_service_clone.refresh_all_flows().await;
+                        } else {
+                            dns_service_clone.refresh_flow_ids(flow_ids).await;
+                        }
                     }
                     DnsEvent::UpstreamsChanged { upstream_ids } => {
                         let upstream_ids = upstream_ids.into_iter().collect::<HashSet<_>>();

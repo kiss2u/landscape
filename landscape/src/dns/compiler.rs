@@ -2,8 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use landscape_common::dns::config::DnsUpstreamConfig;
 use landscape_common::dns::redirect::{
-    DNSRedirectRule, DnsRedirectAnswerMode, DynamicDnsRedirectBatch,
-    DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
+    DNSRedirectRule, DynamicDnsRedirectBatch, DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
 };
 use landscape_common::dns::rule::DNSRuleConfig;
 use landscape_common::dns::{
@@ -76,7 +75,7 @@ impl FlowDnsCompiler {
                     redirect_id: None,
                     dynamic_source_id: Some(dynamic_batch.source_id.clone()),
                     order: next_dynamic_order,
-                    answer_mode: DnsRedirectAnswerMode::StaticIps,
+                    answer_mode: record.answer_mode,
                     match_rules: vec![record.match_rule.into()],
                     result_ips: record.result_info,
                     ttl_secs: record.ttl_secs,
@@ -141,8 +140,8 @@ mod tests {
 
     use landscape_common::dns::config::DnsUpstreamConfig;
     use landscape_common::dns::redirect::{
-        DNSRedirectRule, DynamicDnsMatch, DynamicDnsRedirectBatch, DynamicDnsRedirectRecord,
-        DynamicDnsRedirectScope,
+        DNSRedirectRule, DnsRedirectAnswerMode, DynamicDnsMatch, DynamicDnsRedirectBatch,
+        DynamicDnsRedirectRecord, DynamicDnsRedirectScope,
     };
     use landscape_common::dns::rule::{DNSRuleConfig, DomainConfig, DomainMatchType, RuleSource};
     use landscape_common::dns::upstream::DnsUpstreamMode;
@@ -205,6 +204,7 @@ mod tests {
             scope: DynamicDnsRedirectScope::Flow(7),
             records: vec![DynamicDnsRedirectRecord {
                 match_rule: DynamicDnsMatch::Full("dynamic.example".into()),
+                answer_mode: DnsRedirectAnswerMode::StaticIps,
                 result_info: vec![IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2))],
                 ttl_secs: 30,
             }],
@@ -230,6 +230,45 @@ mod tests {
             Some("dynamic-a")
         );
         assert_eq!(compiled.desired_state.redirect_rules[1].order, 1);
+        assert_eq!(
+            compiled.desired_state.redirect_rules[1].answer_mode,
+            DnsRedirectAnswerMode::StaticIps
+        );
+    }
+
+    #[tokio::test]
+    async fn compile_flow_preserves_dynamic_redirect_answer_mode() {
+        let geo_service = test_geo_service().await;
+        let compiler = FlowDnsCompiler::new(geo_service);
+        let upstream = test_upstream();
+        let dynamic_redirects = vec![DynamicDnsRedirectBatch {
+            source_id: "dynamic-local".into(),
+            scope: DynamicDnsRedirectScope::Global,
+            records: vec![DynamicDnsRedirectRecord {
+                match_rule: DynamicDnsMatch::Domain("example.com".into()),
+                answer_mode: DnsRedirectAnswerMode::AllLocalIps,
+                result_info: vec![],
+                ttl_secs: 10,
+            }],
+        }];
+
+        let compiled = compiler
+            .compile_flow(
+                7,
+                vec![],
+                vec![],
+                dynamic_redirects,
+                vec![upstream],
+                test_cache_runtime(),
+                Some(test_doh_runtime()),
+            )
+            .await;
+
+        assert_eq!(compiled.desired_state.redirect_rules.len(), 1);
+        assert_eq!(
+            compiled.desired_state.redirect_rules[0].answer_mode,
+            DnsRedirectAnswerMode::AllLocalIps
+        );
     }
 
     #[tokio::test]
