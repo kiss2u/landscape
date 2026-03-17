@@ -9,7 +9,7 @@ use landscape_common::{
         rule::{DNSRuleConfig, DNSRuntimeRule, DomainConfig, RuleSource},
         ChainDnsServerInitInfo,
     },
-    geo::{GeoDomainConfig, GeoFileCacheKey, GeoSiteFileConfig, GeoSiteSource},
+    geo::{GeoDomainConfig, GeoFileCacheKey, GeoSiteSource},
     service::controller::ConfigController,
     store::storev4::LandscapeStoreTrait,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
@@ -245,8 +245,8 @@ impl GeoSiteService {
     ) -> ExpandedRuleSources {
         let mut lock = self.file_cache.lock().await;
 
-        let mut source = vec![];
-        let mut used_geo_keys = HashSet::new();
+        let mut source = Vec::with_capacity(rule_source.len());
+        let mut used_geo_keys = HashSet::with_capacity(rule_source.len());
 
         let mut inverse_keys: HashMap<String, HashSet<String>> = HashMap::new();
         for each in rule_source.into_iter() {
@@ -255,21 +255,23 @@ impl GeoSiteService {
                     inverse_keys.entry(k.name).or_default().insert(k.key);
                 }
                 RuleSource::GeoKey(k) => {
+                    let attr_key = k.attribute_key.clone();
                     let file_cache_key = k.get_file_cache_key();
                     if applied_config.contains(&file_cache_key) {
                         continue;
                     }
-                    let predicate: Box<dyn Fn(&GeoSiteFileConfig) -> bool> =
-                        if let Some(ref attr) = k.attribute_key {
-                            let attr = attr.clone();
-                            Box::new(move |config: &GeoSiteFileConfig| {
-                                config.attributes.contains(&attr)
-                            })
-                        } else {
-                            Box::new(move |_: &GeoSiteFileConfig| true)
-                        };
                     if let Some(domains) = lock.get(&file_cache_key) {
-                        source.extend(domains.values.into_iter().filter(predicate).map(Into::into));
+                        source.reserve(domains.values.len());
+                        match attr_key {
+                            Some(attr) => source.extend(
+                                domains
+                                    .values
+                                    .into_iter()
+                                    .filter(|config| config.attributes.contains(&attr))
+                                    .map(Into::into),
+                            ),
+                            None => source.extend(domains.values.into_iter().map(Into::into)),
+                        }
                     }
                     applied_config.insert(file_cache_key);
                     used_geo_keys.insert(k.get_file_cache_key());
@@ -290,6 +292,7 @@ impl GeoSiteService {
                     if !excluded_names.contains(&key.key) {
                         if !applied_config.contains(key) {
                             if let Some(domains) = lock.get(key) {
+                                source.reserve(domains.values.len());
                                 applied_config.insert(key.clone());
                                 used_geo_keys.insert(key.clone());
                                 source.extend(domains.values.into_iter().map(Into::into));

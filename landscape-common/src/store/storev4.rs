@@ -27,7 +27,7 @@ enum SaveUnit<K, V> {
 }
 
 /// 用来记录当前这条数据在文件中的位置
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct UnitPosition {
     pub era: u64,
     pub start: u64,
@@ -205,7 +205,7 @@ where
             (current_era, BufWriter::new(writer_file), index, readers, junk_data_size)
         };
 
-        let mut store = StoreFileManager {
+        StoreFileManager {
             path: data_floder,
             name,
             current_era,
@@ -214,11 +214,7 @@ where
             index,
             readers,
             _marker: std::marker::PhantomData,
-        };
-        if store.readers.len() > 5 {
-            store.periodization();
         }
-        store
     }
 
     /// 进行文件精简
@@ -249,20 +245,20 @@ where
             .unwrap();
         let mut temp_collect_file_era_writer = BufWriter::new(periodization_file);
 
-        let mut new_index: HashMap<K, UnitPosition> = HashMap::new();
+        let mut new_index: HashMap<K, UnitPosition> = HashMap::with_capacity(self.index.len());
         let mut periodization_file_pos = 0;
-        for (key, UnitPosition { era, start, len }) in self.index.iter_mut() {
-            if !self.readers.contains_key(&era) {
-                let missing_reader = self.path.join(format!("{}.{}", &era, &self.name));
+        for (key, pos) in &self.index {
+            if !self.readers.contains_key(&pos.era) {
+                let missing_reader = self.path.join(format!("{}.{}", pos.era, &self.name));
                 // reader.seek(pos)
                 let missing_reader =
                     OpenOptions::new().read(true).truncate(false).open(missing_reader).unwrap();
-                self.readers.insert(*era, BufReader::new(missing_reader));
+                self.readers.insert(pos.era, BufReader::new(missing_reader));
             };
 
-            let reader = self.readers.get_mut(&era).unwrap();
-            reader.seek(SeekFrom::Start(*start)).unwrap();
-            let mut data = reader.take(*len);
+            let reader = self.readers.get_mut(&pos.era).unwrap();
+            reader.seek(SeekFrom::Start(pos.start)).unwrap();
+            let mut data = reader.take(pos.len);
             let copy_length = std::io::copy(&mut data, &mut temp_collect_file_era_writer).unwrap();
             new_index.insert(
                 key.clone(),
@@ -328,28 +324,28 @@ where
         }
     }
 
-    /// 根据 key 获取该结构
-    pub fn get(&mut self, key: &K) -> Option<V> {
-        let pos = self.index.get(key)?;
+    fn read_data_at(&mut self, pos: UnitPosition) -> Option<V> {
         let reader = self.readers.get_mut(&pos.era)?;
         reader.seek(SeekFrom::Start(pos.start)).ok()?;
 
-        // 读取数据到内存中
-        let mut buffer = vec![0u8; pos.len as usize];
-        reader.read_exact(&mut buffer).ok()?;
-
-        // 使用 bincode 反序列化
-        if let Ok((SaveUnit::<K, V>::Data(obj), _)) =
-            bincode::serde::decode_from_slice(&buffer, bincode::config::standard())
-        {
-            Some(obj)
-        } else {
-            None
+        let mut limited_reader = reader.take(pos.len);
+        match bincode::serde::decode_from_std_read::<SaveUnit<K, V>, _, _>(
+            &mut limited_reader,
+            bincode::config::standard(),
+        ) {
+            Ok(SaveUnit::Data(obj)) => Some(obj),
+            Ok(SaveUnit::Del(_)) | Err(_) => None,
         }
     }
 
+    /// 根据 key 获取该结构
+    pub fn get(&mut self, key: &K) -> Option<V> {
+        let pos = *self.index.get(key)?;
+        self.read_data_at(pos)
+    }
+
     pub fn keys(&self) -> Vec<K> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.index.len());
         for (key, _) in &self.index {
             result.push(key.clone());
         }
@@ -357,7 +353,7 @@ where
     }
 
     pub fn keys_ref(&self) -> Vec<&K> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.index.len());
         for (key, _) in &self.index {
             result.push(key);
         }
@@ -376,22 +372,11 @@ where
     }
 
     pub fn list(&mut self) -> Vec<V> {
-        let mut result = Vec::new();
-        for (_, pos) in &self.index {
-            // 依次读出
-            if let Some(reader) = self.readers.get_mut(&pos.era) {
-                reader.seek(SeekFrom::Start(pos.start)).unwrap();
-                let mut buffer = vec![0u8; pos.len as usize];
-
-                // 使用 bincode 反序列化
-                if reader.read_exact(&mut buffer).is_ok() {
-                    // 使用 bincode 反序列化
-                    if let Ok((SaveUnit::<K, V>::Data(obj), _)) =
-                        bincode::serde::decode_from_slice(&buffer, bincode::config::standard())
-                    {
-                        result.push(obj);
-                    }
-                }
+        let positions: Vec<_> = self.index.values().copied().collect();
+        let mut result = Vec::with_capacity(positions.len());
+        for pos in positions {
+            if let Some(obj) = self.read_data_at(pos) {
+                result.push(obj);
             }
         }
         result
@@ -468,5 +453,117 @@ where
         // 添加对应的 reader
         let reader_file = OpenOptions::new().read(true).open(current_era_file_path).unwrap();
         self.readers.insert(self.current_era, BufReader::new(reader_file));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::Path};
+
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+    struct TestValue {
+        key: String,
+        payload: String,
+    }
+
+    impl TestValue {
+        fn new(key: &str, payload: impl Into<String>) -> Self {
+            Self { key: key.to_string(), payload: payload.into() }
+        }
+    }
+
+    impl LandscapeStoreTrait for TestValue {
+        type K = String;
+
+        fn get_store_key(&self) -> Self::K {
+            self.key.clone()
+        }
+    }
+
+    fn open_store(path: &Path) -> StoreFileManager<String, TestValue> {
+        StoreFileManager::new(path.to_path_buf(), "items".to_string())
+    }
+
+    fn store_files(path: &Path) -> Vec<String> {
+        let mut entries = fs::read_dir(path.join("items"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<Vec<_>>();
+        entries.sort();
+        entries
+    }
+
+    #[test]
+    fn get_and_list_rebuild_index_across_eras() {
+        let dir = tempdir().unwrap();
+
+        {
+            let mut store = open_store(dir.path());
+            store.set(TestValue::new("alpha", "v1"));
+            store.set(TestValue::new("beta", "v1"));
+        }
+
+        {
+            let mut store = open_store(dir.path());
+            store.set(TestValue::new("alpha", "v2"));
+            store.del(&"beta".to_string());
+            store.set(TestValue::new("gamma", "v1"));
+        }
+
+        let mut store = open_store(dir.path());
+        assert_eq!(store.len(), 2);
+        assert_eq!(store.get(&"alpha".to_string()).unwrap().payload, "v2");
+        assert_eq!(store.get(&"gamma".to_string()).unwrap().payload, "v1");
+        assert_eq!(store.get(&"beta".to_string()), None);
+
+        let mut values =
+            store.list().into_iter().map(|value| (value.key, value.payload)).collect::<Vec<_>>();
+        values.sort();
+
+        assert_eq!(
+            values,
+            vec![("alpha".to_string(), "v2".to_string()), ("gamma".to_string(), "v1".to_string())]
+        );
+    }
+
+    #[test]
+    fn startup_does_not_periodize_existing_eras() {
+        let dir = tempdir().unwrap();
+
+        for _ in 0..6 {
+            let _store = open_store(dir.path());
+        }
+
+        assert_eq!(
+            store_files(dir.path()),
+            vec![
+                "1.items".to_string(),
+                "2.items".to_string(),
+                "3.items".to_string(),
+                "4.items".to_string(),
+                "5.items".to_string(),
+                "6.items".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn junk_threshold_still_triggers_periodization() {
+        let dir = tempdir().unwrap();
+        let mut store = open_store(dir.path());
+        let large_payload = "x".repeat(3 * 1024 * 1024);
+
+        for version in 0..4 {
+            store.set(TestValue::new("alpha", format!("{version}-{large_payload}")));
+        }
+
+        let files = store_files(dir.path());
+        assert_eq!(files.len(), 2);
+        assert_eq!(store.len(), 1);
+        assert!(store.get(&"alpha".to_string()).unwrap().payload.starts_with("3-"));
     }
 }

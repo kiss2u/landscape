@@ -88,34 +88,29 @@ impl GeoIpService {
         // Deduplicate by cidr (ip + prefix) — keep the first occurrence (highest priority).
         // Configs are sorted by ascending index before calling, so the first seen = highest priority.
         let mut seen = std::collections::HashSet::new();
-        let mut result = vec![];
+        let mut result = Vec::with_capacity(configs.len());
         for config in configs.into_iter() {
-            let mut source = vec![];
-            for each in config.source.iter() {
+            let priority = config.index as u16;
+            let mark = config.mark;
+            for each in config.source.into_iter() {
                 match each {
                     WanIPRuleSource::GeoKey(config_key) => {
                         if let Some(ips) = lock.get(&config_key.get_file_cache_key()) {
-                            source.extend(ips.values.iter().cloned());
+                            result.reserve(ips.values.len());
+                            for cidr in ips.values {
+                                if seen.insert(cidr.clone()) {
+                                    result.push(IpMarkInfo { mark, cidr, priority });
+                                }
+                            }
                         }
                     }
                     WanIPRuleSource::Config(c) => {
-                        source.push(c.clone());
+                        if seen.insert(c.clone()) {
+                            result.push(IpMarkInfo { mark, cidr: c, priority });
+                        }
                     }
                 }
             }
-
-            let ip_marks = source.into_iter().filter_map(|cidr| {
-                if seen.insert(cidr.clone()) {
-                    Some(IpMarkInfo {
-                        mark: config.mark,
-                        cidr,
-                        priority: config.index as u16,
-                    })
-                } else {
-                    None
-                }
-            });
-            result.extend(ip_marks);
         }
         result
     }
