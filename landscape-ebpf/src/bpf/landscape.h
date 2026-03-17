@@ -1,6 +1,7 @@
 #ifndef __LD_LANDSCAPE_H__
 #define __LD_LANDSCAPE_H__
 #include <vmlinux.h>
+#include <bpf/bpf_endian.h>
 #include "landscape_log.h"
 #include "base/mark.h"
 #include "base/tp.h"
