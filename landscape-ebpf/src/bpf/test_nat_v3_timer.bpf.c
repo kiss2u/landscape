@@ -92,11 +92,11 @@ int nat_v4_timer_step_test(struct __sk_buff *skb) {
     result->ingress_mapping_exists = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key) ? 1 : 0;
     result->egress_mapping_exists = bpf_map_lookup_elem(&nat4_dyn_map, &egress_key) ? 1 : 0;
 
-    struct nat4_mapping_state_v3 *state = bpf_map_lookup_elem(&nat4_dynamic_state_v3, &ingress_key);
-    result->state_exists = state ? 1 : 0;
-    if (state) {
-        result->state_ref = state->state_ref;
-        result->generation = state->generation;
+    struct nat_mapping_value_v4_v3 *ingress_value = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
+    result->state_exists = ingress_value ? 1 : 0;
+    if (ingress_value) {
+        result->state_ref = ingress_value->state_ref;
+        result->generation = ingress_value->generation;
     }
 
     return TC_ACT_OK;

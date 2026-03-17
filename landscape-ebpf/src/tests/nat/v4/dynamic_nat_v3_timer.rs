@@ -17,6 +17,7 @@ const NAT_MAPPING_EGRESS: u8 = 1;
 const STATE_SHIFT: u64 = 56;
 const STATE_ACTIVE: u64 = 1;
 const STATE_CLOSED: u64 = 2;
+const TIMER_PENDING_REF: u64 = 10;
 const TIMER_TIMEOUT_2: u64 = 31;
 const TIMER_RELEASE: u64 = 40;
 const TIMER_RELEASE_PENDING_QUEUE: u64 = 41;
@@ -76,26 +77,26 @@ fn egress_key() -> types::nat_mapping_key_v4 {
     }
 }
 
-fn mapping_pair() -> (types::nat_mapping_value_v4, types::nat_mapping_value_v4) {
-    let egress = types::nat_mapping_value_v4 {
+fn mapping_pair() -> (types::nat_mapping_value_v4_v3, types::nat_mapping_value_v4_v3) {
+    let egress = types::nat_mapping_value_v4_v3 {
+        state_ref: 0,
         addr: WAN_IP.to_bits().to_be(),
         trigger_addr: REMOTE_IP.to_bits().to_be(),
         port: NAT_PORT.to_be(),
         trigger_port: 443u16.to_be(),
+        generation: 0,
         is_static: 0,
         is_allow_reuse: 1,
-        _pad: [0; 2],
-        active_time: 1,
     };
-    let ingress = types::nat_mapping_value_v4 {
+    let ingress = types::nat_mapping_value_v4_v3 {
+        state_ref: state_ref(STATE_ACTIVE, 1),
         addr: LAN_HOST.to_bits().to_be(),
         trigger_addr: REMOTE_IP.to_bits().to_be(),
         port: LAN_PORT.to_be(),
         trigger_port: 443u16.to_be(),
+        generation: GENERATION,
         is_static: 0,
         is_allow_reuse: 1,
-        _pad: [0; 2],
-        active_time: 1,
     };
     (egress, ingress)
 }
@@ -107,13 +108,12 @@ fn put_mapping_pair<T: MapCore>(map: &T) {
 }
 
 fn put_state<T: MapCore>(map: &T, generation: u16, state_ref_: u64) {
-    let value = types::nat4_mapping_state_v3 {
-        state_ref: state_ref_,
-        generation,
-        _pad0: 0,
-        _pad1: 0,
-    };
-    map.update(as_bytes(&ingress_key()), as_bytes(&value), MapFlags::ANY).unwrap();
+    let key = ingress_key();
+    let bytes = map.lookup(as_bytes(&key), MapFlags::ANY).unwrap().expect("missing ingress mapping");
+    let mut value = read_unaligned::<types::nat_mapping_value_v4_v3>(&bytes);
+    value.generation = generation;
+    value.state_ref = state_ref_;
+    map.update(as_bytes(&key), as_bytes(&value), MapFlags::ANY).unwrap();
 }
 
 fn put_timer<T: MapCore>(map: &T, status: u64, generation_snapshot: u16, is_final_releaser: u8) {
@@ -174,7 +174,7 @@ mod tests {
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
-        put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION + 1, state_ref(STATE_ACTIVE, 1));
+        put_state(&skel.maps.nat4_dyn_map, GENERATION + 1, state_ref(STATE_ACTIVE, 1));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 0);
 
         let result = run_step(&skel, false);
@@ -198,7 +198,7 @@ mod tests {
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
-        put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION, state_ref(STATE_ACTIVE, 2));
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 2));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 0);
 
         let result = run_step(&skel, false);
@@ -221,7 +221,7 @@ mod tests {
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
-        put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION, state_ref(STATE_ACTIVE, 1));
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 1));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_TIMEOUT_2, GENERATION, 0);
 
         let result = run_step(&skel, false);
@@ -243,7 +243,7 @@ mod tests {
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
-        put_state(&skel.maps.nat4_dynamic_state_v3, GENERATION, state_ref(STATE_CLOSED, 1));
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_CLOSED, 1));
         put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 1);
 
         let result = run_step(&skel, true);
@@ -273,5 +273,28 @@ mod tests {
         assert_eq!(result.action, STEP_DELETE_CT);
         assert_eq!(result.queue_push_ret, 0);
         assert_eq!(result.timer_exists, 0);
+    }
+
+    #[test]
+    fn pending_ref_timer_cleanup_deletes_ct_only() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 0));
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_PENDING_REF, GENERATION, 0);
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_DELETE_CT);
+        assert_eq!(result.timer_exists, 0);
+        assert_eq!(result.ingress_mapping_exists, 1);
+        assert_eq!(result.egress_mapping_exists, 1);
+        assert_eq!(result.state_exists, 1);
+        assert_eq!(result.state_ref, state_ref(STATE_ACTIVE, 0));
     }
 }

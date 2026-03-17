@@ -48,6 +48,17 @@ struct nat_mapping_value_v4 {
     u64 active_time;
 };
 
+struct nat_mapping_value_v4_v3 {
+    u64 state_ref;
+    __be32 addr;
+    __be32 trigger_addr;
+    __be16 port;
+    __be16 trigger_port;
+    u16 generation;
+    u8 is_static;
+    u8 is_allow_reuse;
+};
+
 struct {
     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
     __type(key, struct static_nat_mapping_key_v6);
@@ -60,7 +71,7 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_mapping_key_v4);
-    __type(value, struct nat_mapping_value_v4);
+    __type(value, struct nat_mapping_value_v4_v3);
     __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_st_map SEC(".maps");

@@ -5,7 +5,8 @@ use libbpf_rs::{MapCore, MapFlags};
 
 use crate::{
     map_setting::share_map::types::{
-        nat_mapping_value_v4, static_nat_mapping_key_v6, static_nat_mapping_value_v6,
+        nat_mapping_value_v4, nat_mapping_value_v4_v3, static_nat_mapping_key_v6,
+        static_nat_mapping_value_v6,
     },
     LANDSCAPE_IPV6_TYPE, MAP_PATHS, NAT_MAPPING_EGRESS, NAT_MAPPING_INGRESS,
 };
@@ -93,6 +94,62 @@ where
 
     if let Err(e) = nat4_st_map.update_batch(&keys, &values, counts, MapFlags::ANY, MapFlags::ANY) {
         tracing::error!("counts: {counts:?}, update nat4_st_map error:{e:?}");
+    }
+}
+
+pub(crate) fn add_static_nat4_mapping_v3<'obj, T, I>(nat4_st_map: &T, mappings: I)
+where
+    T: MapCore,
+    I: IntoIterator<Item = StaticNatMappingV4Item>,
+    I::IntoIter: ExactSizeIterator,
+{
+    let mapping_iter = mappings.into_iter();
+    if mapping_iter.len() == 0 {
+        return;
+    }
+
+    let mut keys = vec![];
+    let mut values = vec![];
+    let counts = (mapping_iter.len() * 2) as u32;
+
+    for static_mapping in mapping_iter {
+        let ingress_mapping_key = NatMappingKeyV4 {
+            gress: NAT_MAPPING_INGRESS,
+            l4proto: static_mapping.l4_protocol,
+            from_port: static_mapping.wan_port.to_be(),
+            from_addr: 0,
+        };
+
+        let egress_mapping_key = NatMappingKeyV4 {
+            gress: NAT_MAPPING_EGRESS,
+            l4proto: static_mapping.l4_protocol,
+            from_port: static_mapping.lan_port.to_be(),
+            from_addr: static_mapping.lan_ip.to_bits().to_be(),
+        };
+
+        let mut ingress_mapping_value = nat_mapping_value_v4_v3::default();
+        let mut egress_mapping_value = nat_mapping_value_v4_v3::default();
+
+        ingress_mapping_value.port = static_mapping.lan_port.to_be();
+        ingress_mapping_value.addr = static_mapping.lan_ip.to_bits().to_be();
+        ingress_mapping_value.is_static = 1;
+
+        egress_mapping_value.port = static_mapping.wan_port.to_be();
+        egress_mapping_value.is_static = 1;
+
+        keys.extend_from_slice(unsafe { plain::as_bytes(&ingress_mapping_key) });
+        values.extend_from_slice(unsafe { plain::as_bytes(&ingress_mapping_value) });
+
+        keys.extend_from_slice(unsafe { plain::as_bytes(&egress_mapping_key) });
+        values.extend_from_slice(unsafe { plain::as_bytes(&egress_mapping_value) });
+    }
+
+    if counts == 0 {
+        return;
+    }
+
+    if let Err(e) = nat4_st_map.update_batch(&keys, &values, counts, MapFlags::ANY, MapFlags::ANY) {
+        tracing::error!("counts: {counts:?}, update nat4_st_map(v3) error:{e:?}");
     }
 }
 
@@ -190,7 +247,7 @@ where
     }
 
     let nat4_st_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat4_st_map).unwrap();
-    add_static_nat4_mapping(&nat4_st_map, v4_rules.iter().copied());
+    add_static_nat4_mapping_v3(&nat4_st_map, v4_rules.iter().copied());
     let nat4_mappings = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.nat4_mappings).unwrap();
     add_static_nat4_mapping(&nat4_mappings, v4_rules);
     let static_nat_mappings =

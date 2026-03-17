@@ -8,20 +8,12 @@
 #include "../land_nat_common.h"
 #include "nat_maps.h"
 
-#define NAT4_V3_DYNAMIC_STATE_SIZE NAT_MAPPING_CACHE_SIZE
 #define NAT4_V3_TIMER_SIZE NAT_MAPPING_TIMER_SIZE
 #define NAT4_V3_PORT_QUEUE_SIZE 65536
 
 struct nat4_port_queue_value_v3 {
     __be16 port;
     u16 last_generation;
-};
-
-struct nat4_mapping_state_v3 {
-    u64 state_ref;
-    u16 generation;
-    u16 _pad0;
-    u32 _pad1;
 };
 
 struct nat_timer_value_v4_v3 {
@@ -48,16 +40,9 @@ struct nat_timer_value_v4_v3 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_mapping_key_v4);
-    __type(value, struct nat_mapping_value_v4);
+    __type(value, struct nat_mapping_value_v4_v3);
     __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
 } nat4_dyn_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct nat_mapping_key_v4);
-    __type(value, struct nat4_mapping_state_v3);
-    __uint(max_entries, NAT4_V3_DYNAMIC_STATE_SIZE);
-} nat4_dynamic_state_v3 SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
