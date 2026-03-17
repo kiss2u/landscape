@@ -63,7 +63,13 @@ fn build_ipv4_tcp_syn(src: Ipv4Addr, dst: Ipv4Addr, src_port: u16, dst_port: u16
     buf
 }
 
-fn put_v3_state<T: MapCore>(map: &T, l4proto: u8, nat_addr: Ipv4Addr, nat_port: u16, state_ref: u64) {
+fn put_v3_state<T: MapCore>(
+    map: &T,
+    l4proto: u8,
+    nat_addr: Ipv4Addr,
+    nat_port: u16,
+    state_ref: u64,
+) {
     let ingress_key = NatMappingKeyV4 {
         gress: NAT_MAPPING_INGRESS,
         l4proto,
@@ -74,8 +80,9 @@ fn put_v3_state<T: MapCore>(map: &T, l4proto: u8, nat_addr: Ipv4Addr, nat_port: 
         .lookup(unsafe { plain::as_bytes(&ingress_key) }, MapFlags::ANY)
         .expect("lookup v3 ingress entry")
         .expect("missing v3 ingress entry");
-    let mut value =
-        unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<types::nat_mapping_value_v4_v3>()) };
+    let mut value = unsafe {
+        std::ptr::read_unaligned(bytes.as_ptr().cast::<types::nat_mapping_value_v4_v3>())
+    };
     value.generation = GENERATION;
     value.state_ref = state_ref;
 
@@ -519,7 +526,10 @@ mod tests {
 
         let result = landscape_skel.progs.nat_v4_egress.test_run(input).expect("test_run failed");
 
-        assert_eq!(result.return_value as i32, 2, "stale dynamic pair should drop non-initiating packet");
+        assert_eq!(
+            result.return_value as i32, 2,
+            "stale dynamic pair should drop non-initiating packet"
+        );
 
         let egress_key = NatMappingKeyV4 {
             gress: NAT_MAPPING_EGRESS,
@@ -593,7 +603,8 @@ mod tests {
             panic!("expected TCP transport header in output");
         }
 
-        let ingress = read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
+        let ingress =
+            read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
         assert_eq!(ingress.generation, 1);
         assert_eq!(ingress.state_ref, ((1u64) << 56) | 1);
     }
@@ -701,7 +712,8 @@ mod tests {
             .expect("lookup second egress mapping");
         assert!(second_mapping.is_some(), "unrelated egress mapping should be preserved");
 
-        let ingress = read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
+        let ingress =
+            read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
         assert_eq!(Ipv4Addr::from(u32::from_be(ingress.addr)), SECOND_LAN_HOST);
         assert_eq!(u16::from_be(ingress.port), SECOND_LAN_PORT);
     }
@@ -775,13 +787,10 @@ mod tests {
             panic!("expected TCP transport header in output");
         }
 
-        let ingress = read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
+        let ingress =
+            read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
         assert_eq!(ingress.generation, GENERATION);
-        assert_eq!(
-            ingress.state_ref,
-            ((1u64) << 56) | 2,
-            "reuse ingress should incref state_ref"
-        );
+        assert_eq!(ingress.state_ref, ((1u64) << 56) | 2, "reuse ingress should incref state_ref");
 
         let timer_key = types::nat_timer_key_v4 {
             l4proto: 6,
@@ -861,7 +870,8 @@ mod tests {
 
         assert_eq!(result.return_value as i32, 2, "closed mapping should reject new ingress CT");
 
-        let ingress = read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
+        let ingress =
+            read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
         assert_eq!(ingress.state_ref, ((2u64) << 56) | 1);
     }
 
@@ -920,7 +930,8 @@ mod tests {
 
         assert_eq!(result.return_value as i32, 2, "active|0 mapping should reject new ingress CT");
 
-        let ingress = read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
+        let ingress =
+            read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
         assert_eq!(ingress.state_ref, ((1u64) << 56) | 0);
 
         let timer_key = types::nat_timer_key_v4 {
@@ -1008,7 +1019,8 @@ mod tests {
             panic!("expected IPv4 header in output");
         }
 
-        let ingress = read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
+        let ingress =
+            read_v3_ingress_mapping(&landscape_skel.maps.nat4_dyn_map, 6, WAN_IP, NAT_PORT);
         assert_eq!(
             ingress.state_ref,
             ((2u64) << 56) | 1,

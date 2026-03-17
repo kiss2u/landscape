@@ -109,7 +109,8 @@ fn put_mapping_pair<T: MapCore>(map: &T) {
 
 fn put_state<T: MapCore>(map: &T, generation: u16, state_ref_: u64) {
     let key = ingress_key();
-    let bytes = map.lookup(as_bytes(&key), MapFlags::ANY).unwrap().expect("missing ingress mapping");
+    let bytes =
+        map.lookup(as_bytes(&key), MapFlags::ANY).unwrap().expect("missing ingress mapping");
     let mut value = read_unaligned::<types::nat_mapping_value_v4_v3>(&bytes);
     value.generation = generation;
     value.state_ref = state_ref_;
