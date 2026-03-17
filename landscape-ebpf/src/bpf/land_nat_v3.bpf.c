@@ -79,11 +79,13 @@ int nat_v4_egress(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) return TC_ACT_SHOT;
 
     bool is_icmpx_error = is_icmp_error_pkt(&pkg_offset);
+    u8 nat_l4_protocol =
+        is_icmpx_error ? pkg_offset.icmp_error_l4_protocol : pkg_offset.l4_protocol;
     bool allow_create_mapping = !is_icmpx_error && pkt_allow_initiating_ct(pkg_offset.pkt_type);
 
-    ret = nat4_v3_egress_lookup_or_new_mapping_v4(
-        skb, pkg_offset.l4_protocol, allow_create_mapping, &ip_pair, &nat_egress_value,
-        &nat_ingress_value, &alloc_item, &created);
+    ret = nat4_v3_egress_lookup_or_new_mapping_v4(skb, nat_l4_protocol, allow_create_mapping,
+                                                  &ip_pair, &nat_egress_value, &nat_ingress_value,
+                                                  &alloc_item, &created);
     if (ret != TC_ACT_OK || !nat_egress_value || !nat_ingress_value) {
         return TC_ACT_SHOT;
     }
@@ -92,7 +94,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
     bool is_ancestor = ip_pair.dst_addr.addr == nat_egress_value->trigger_addr &&
                        ip_pair.dst_port == nat_egress_value->trigger_port;
 
-    if (is_dynamic && nat_egress_value->is_allow_reuse == 0 && pkg_offset.l4_protocol != IPPROTO_ICMP) {
+    if (is_dynamic && nat_egress_value->is_allow_reuse == 0 && nat_l4_protocol != IPPROTO_ICMP) {
         if (!is_ancestor) {
             return TC_ACT_SHOT;
         }
@@ -125,20 +127,20 @@ int nat_v4_egress(struct __sk_buff *skb) {
         .dst_addr = nat_addr,
         .dst_port = nat_port,
     };
-    if (pkg_offset.l4_protocol == IPPROTO_ICMP) {
+    if (nat_l4_protocol == IPPROTO_ICMP) {
         server_nat_pair.src_port = nat_port;
     }
 
     struct nat_timer_value_v4_v3 *ct_value = NULL;
-    ret = nat4_v3_lookup_or_new_ct(skb, pkg_offset.l4_protocol, allow_create_mapping,
-                                   &server_nat_pair, &ip_pair.src_addr, ip_pair.src_port,
-                                   NAT_MAPPING_EGRESS, nat_ingress_value, &ct_value);
+    ret = nat4_v3_lookup_or_new_ct(skb, nat_l4_protocol, allow_create_mapping, &server_nat_pair,
+                                   &ip_pair.src_addr, ip_pair.src_port, NAT_MAPPING_EGRESS,
+                                   nat_ingress_value, &ct_value);
     if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
         if (created && is_dynamic &&
             nat_ingress_value->state_ref == nat4_v3_state_make(NAT4_V3_STATE_ACTIVE, 0)) {
-            nat4_v3_delete_mapping_pair(pkg_offset.l4_protocol, nat_addr.addr, nat_port,
+            nat4_v3_delete_mapping_pair(nat_l4_protocol, nat_addr.addr, nat_port,
                                         ip_pair.src_addr.addr, ip_pair.src_port);
-            (void)nat4_v3_queue_push(pkg_offset.l4_protocol, &alloc_item);
+            (void)nat4_v3_queue_push(nat_l4_protocol, &alloc_item);
         }
         return TC_ACT_SHOT;
     }
@@ -155,7 +157,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
         .to_port = nat_port,
     };
 
-    ret = modify_headers_v4(skb, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
+    ret = modify_headers_v4(skb, is_icmpx_error, nat_l4_protocol, current_l3_offset,
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
                             &action);
     return ret ? TC_ACT_SHOT : TC_ACT_UNSPEC;
@@ -182,17 +184,17 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     if (ret != TC_ACT_OK) return TC_ACT_SHOT;
 
     bool is_icmpx_error = is_icmp_error_pkt(&pkg_offset);
+    u8 nat_l4_protocol =
+        is_icmpx_error ? pkg_offset.icmp_error_l4_protocol : pkg_offset.l4_protocol;
 
-    ret = nat4_v3_ingress_lookup_or_new_mapping4(pkg_offset.l4_protocol, &ip_pair,
-                                                 &nat_ingress_value);
+    ret = nat4_v3_ingress_lookup_or_new_mapping4(nat_l4_protocol, &ip_pair, &nat_ingress_value);
     if (ret != TC_ACT_OK || !nat_ingress_value) {
         return TC_ACT_SHOT;
     }
 
     bool is_static = nat_ingress_value->is_static != 0;
 
-    if (!is_static && nat_ingress_value->is_allow_reuse == 0 &&
-        pkg_offset.l4_protocol != IPPROTO_ICMP) {
+    if (!is_static && nat_ingress_value->is_allow_reuse == 0 && nat_l4_protocol != IPPROTO_ICMP) {
         if (ip_pair.src_addr.addr != nat_ingress_value->trigger_addr ||
             ip_pair.src_port != nat_ingress_value->trigger_port) {
             return TC_ACT_SHOT;
@@ -222,17 +224,15 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     };
 
     u64 ingress_state_ref = nat_ingress_value->state_ref;
-    bool do_new_ct = is_static
-                         ? (!is_icmpx_error && pkt_allow_initiating_ct(pkg_offset.pkt_type))
-                         : (nat_ingress_value->is_allow_reuse &&
-                            nat4_v3_state_get(ingress_state_ref) == NAT4_V3_STATE_ACTIVE &&
-                            nat4_v3_ref_get(ingress_state_ref) > 0 && !is_icmpx_error &&
-                            pkt_allow_initiating_ct(pkg_offset.pkt_type));
+    bool do_new_ct = is_static ? (!is_icmpx_error && pkt_allow_initiating_ct(pkg_offset.pkt_type))
+                               : (nat_ingress_value->is_allow_reuse &&
+                                  nat4_v3_state_get(ingress_state_ref) == NAT4_V3_STATE_ACTIVE &&
+                                  nat4_v3_ref_get(ingress_state_ref) > 0 && !is_icmpx_error &&
+                                  pkt_allow_initiating_ct(pkg_offset.pkt_type));
 
     struct nat_timer_value_v4_v3 *ct_value = NULL;
-    ret = nat4_v3_lookup_or_new_ct(skb, pkg_offset.l4_protocol, do_new_ct, &server_nat_pair,
-                                   &lan_ip, lan_port, NAT_MAPPING_INGRESS, nat_ingress_value,
-                                   &ct_value);
+    ret = nat4_v3_lookup_or_new_ct(skb, nat_l4_protocol, do_new_ct, &server_nat_pair, &lan_ip,
+                                   lan_port, NAT_MAPPING_INGRESS, nat_ingress_value, &ct_value);
     if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
         return TC_ACT_SHOT;
     }
@@ -249,7 +249,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
         .to_port = lan_port,
     };
 
-    ret = modify_headers_v4(skb, is_icmpx_error, pkg_offset.l4_protocol, current_l3_offset,
+    ret = modify_headers_v4(skb, is_icmpx_error, nat_l4_protocol, current_l3_offset,
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
                             &action);
     return ret ? TC_ACT_SHOT : TC_ACT_UNSPEC;

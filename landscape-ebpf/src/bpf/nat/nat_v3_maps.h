@@ -33,8 +33,7 @@ struct nat_timer_value_v4_v3 {
     u32 cpu_id;
     u32 ifindex;
     u16 generation_snapshot;
-    u8 is_final_releaser;
-    u8 _pad0;
+    u16 _pad0;
 };
 
 struct {

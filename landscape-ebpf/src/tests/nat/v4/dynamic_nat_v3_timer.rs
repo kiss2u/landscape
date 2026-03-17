@@ -17,10 +17,23 @@ const NAT_MAPPING_EGRESS: u8 = 1;
 const STATE_SHIFT: u64 = 56;
 const STATE_ACTIVE: u64 = 1;
 const STATE_CLOSED: u64 = 2;
+const CT_INIT: u64 = 0;
+const CT_SYN: u64 = 1;
+const CT_LESS_EST: u64 = 3;
 const TIMER_PENDING_REF: u64 = 10;
+const TIMER_ACTIVE: u64 = 20;
+const TIMER_TIMEOUT_1: u64 = 30;
 const TIMER_TIMEOUT_2: u64 = 31;
 const TIMER_RELEASE: u64 = 40;
-const TIMER_RELEASE_PENDING_QUEUE: u64 = 41;
+const TIMER_DELETE_EGRESS: u64 = 50;
+const TIMER_DELETE_INGRESS: u64 = 51;
+const TIMER_PUSH_QUEUE: u64 = 52;
+const REPORT_INTERVAL: u64 = 5_000_000_000;
+const TCP_SYN_TIMEOUT: u64 = 6_000_000_000;
+const TCP_TIMEOUT: u64 = 600_000_000_000;
+const UDP_TIMEOUT: u64 = 300_000_000_000;
+const DELETE_RETRY_INTERVAL: u64 = 100_000_000;
+const QUEUE_RETRY_INTERVAL: u64 = 500_000_000;
 const STEP_DELETE_CT: u32 = 1;
 const STEP_RESTART: u32 = 2;
 
@@ -30,7 +43,10 @@ const REMOTE_IP: Ipv4Addr = Ipv4Addr::new(50, 18, 88, 205);
 const IFINDEX: u32 = 6;
 const LAN_PORT: u16 = 56186;
 const NAT_PORT: u16 = 40000;
+const ALT_NAT_PORT: u16 = 40001;
 const GENERATION: u16 = 7;
+const IPPROTO_TCP: u8 = 6;
+const IPPROTO_UDP: u8 = 17;
 
 fn as_bytes<T>(value: &T) -> &[u8] {
     unsafe {
@@ -47,8 +63,12 @@ fn state_ref(state: u64, refs: u64) -> u64 {
 }
 
 fn timer_key() -> types::nat_timer_key_v4 {
+    timer_key_with_proto(IPPROTO_TCP)
+}
+
+fn timer_key_with_proto(l4proto: u8) -> types::nat_timer_key_v4 {
     types::nat_timer_key_v4 {
-        l4proto: 6,
+        l4proto,
         _pad: [0; 3],
         pair_ip: types::inet4_pair {
             src_addr: types::inet4_addr { addr: REMOTE_IP.to_bits().to_be() },
@@ -101,6 +121,15 @@ fn mapping_pair() -> (types::nat_mapping_value_v4_v3, types::nat_mapping_value_v
     (egress, ingress)
 }
 
+fn lookup_mapping<T: MapCore>(
+    map: &T,
+    key: &types::nat_mapping_key_v4,
+) -> Option<types::nat_mapping_value_v4_v3> {
+    map.lookup(as_bytes(key), MapFlags::ANY)
+        .unwrap()
+        .map(|bytes| read_unaligned::<types::nat_mapping_value_v4_v3>(&bytes))
+}
+
 fn put_mapping_pair<T: MapCore>(map: &T) {
     let (egress, ingress) = mapping_pair();
     map.update(as_bytes(&egress_key()), as_bytes(&egress), MapFlags::ANY).unwrap();
@@ -109,18 +138,39 @@ fn put_mapping_pair<T: MapCore>(map: &T) {
 
 fn put_state<T: MapCore>(map: &T, generation: u16, state_ref_: u64) {
     let key = ingress_key();
-    let bytes =
-        map.lookup(as_bytes(&key), MapFlags::ANY).unwrap().expect("missing ingress mapping");
-    let mut value = read_unaligned::<types::nat_mapping_value_v4_v3>(&bytes);
+    let mut value = lookup_mapping(map, &key).expect("missing ingress mapping");
     value.generation = generation;
     value.state_ref = state_ref_;
     map.update(as_bytes(&key), as_bytes(&value), MapFlags::ANY).unwrap();
 }
 
-fn put_timer<T: MapCore>(map: &T, status: u64, generation_snapshot: u16, is_final_releaser: u8) {
+fn set_egress_target<T: MapCore>(map: &T, nat_port: u16) {
+    let key = egress_key();
+    let mut value = lookup_mapping(map, &key).expect("missing egress mapping");
+    value.addr = WAN_IP.to_bits().to_be();
+    value.port = nat_port.to_be();
+    map.update(as_bytes(&key), as_bytes(&value), MapFlags::ANY).unwrap();
+}
+
+fn delete_mapping<T: MapCore>(map: &T, key: &types::nat_mapping_key_v4) {
+    let _ = map.delete(as_bytes(key));
+}
+
+fn put_timer<T: MapCore>(map: &T, status: u64, generation_snapshot: u16) {
+    put_timer_with_key(map, &timer_key(), status, generation_snapshot, CT_SYN, CT_SYN);
+}
+
+fn put_timer_with_key<T: MapCore>(
+    map: &T,
+    key: &types::nat_timer_key_v4,
+    status: u64,
+    generation_snapshot: u16,
+    client_status: u64,
+    server_status: u64,
+) {
     let mut value = types::nat_timer_value_v4_v3::default();
-    value.server_status = 1;
-    value.client_status = 1;
+    value.server_status = server_status;
+    value.client_status = client_status;
     value.status = status;
     value.client_addr = types::inet4_addr { addr: LAN_HOST.to_bits().to_be() };
     value.client_port = LAN_PORT.to_be();
@@ -128,13 +178,16 @@ fn put_timer<T: MapCore>(map: &T, status: u64, generation_snapshot: u16, is_fina
     value.create_time = 1;
     value.ifindex = IFINDEX;
     value.generation_snapshot = generation_snapshot;
-    value.is_final_releaser = is_final_releaser;
-    map.update(as_bytes(&timer_key()), as_bytes(&value), MapFlags::ANY).unwrap();
+    map.update(as_bytes(key), as_bytes(&value), MapFlags::ANY).unwrap();
 }
 
-fn put_test_input<T: MapCore>(map: &T, force_queue_push_fail: bool) {
+fn put_test_input_with_key<T: MapCore>(
+    map: &T,
+    key: &types::nat_timer_key_v4,
+    force_queue_push_fail: bool,
+) {
     let value = types::nat4_timer_test_input_v3 {
-        key: timer_key(),
+        key: *key,
         force_queue_push_fail: force_queue_push_fail as u8,
         _pad: [0; 3],
     };
@@ -152,7 +205,15 @@ fn run_step(
     skel: &test_nat_v3_timer::TestNatV3TimerSkel<'_>,
     force_queue_push_fail: bool,
 ) -> types::nat4_timer_test_result_v3 {
-    put_test_input(&skel.maps.nat4_timer_test_input_v3, force_queue_push_fail);
+    run_step_with_key(skel, &timer_key(), force_queue_push_fail)
+}
+
+fn run_step_with_key(
+    skel: &test_nat_v3_timer::TestNatV3TimerSkel<'_>,
+    key: &types::nat_timer_key_v4,
+    force_queue_push_fail: bool,
+) -> types::nat4_timer_test_result_v3 {
+    put_test_input_with_key(&skel.maps.nat4_timer_test_input_v3, key, force_queue_push_fail);
     let mut data = vec![0u8; 64];
     let input = ProgramInput { data_in: Some(&mut data), ..Default::default() };
     let result = skel.progs.nat_v4_timer_step_test.test_run(input).expect("test_run failed");
@@ -176,7 +237,7 @@ mod tests {
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dyn_map, GENERATION + 1, state_ref(STATE_ACTIVE, 1));
-        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 0);
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION);
 
         let result = run_step(&skel, false);
 
@@ -200,7 +261,7 @@ mod tests {
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 2));
-        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 0);
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION);
 
         let result = run_step(&skel, false);
 
@@ -213,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn timeout2_transitions_to_release_and_closes_last() {
+    fn timeout2_bi_syn_transitions_to_release_with_tcp_timeout() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut builder = TestNatV3TimerSkelBuilder::default();
         let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
@@ -223,19 +284,134 @@ mod tests {
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 1));
-        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_TIMEOUT_2, GENERATION, 0);
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_TIMEOUT_2, GENERATION);
 
         let result = run_step(&skel, false);
 
         assert_eq!(result.action, STEP_RESTART);
         assert_eq!(result.timer_exists, 1);
         assert_eq!(u64::from(result.status), TIMER_RELEASE);
+        assert_eq!(result.next_timeout, TCP_TIMEOUT);
+        assert_eq!(result.state_exists, 1);
+        assert_eq!(result.state_ref, state_ref(STATE_ACTIVE, 1));
+    }
+
+    #[test]
+    fn active_transitions_to_timeout1_with_report_interval() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_ACTIVE, GENERATION);
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_TIMEOUT_1);
+        assert_eq!(result.next_timeout, REPORT_INTERVAL);
+    }
+
+    #[test]
+    fn timeout1_transitions_to_timeout2_with_report_interval() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_TIMEOUT_1, GENERATION);
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_TIMEOUT_2);
+        assert_eq!(result.next_timeout, REPORT_INTERVAL);
+    }
+
+    #[test]
+    fn timeout2_tcp_non_syn_uses_tcp_syn_timeout() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_timer_with_key(
+            &skel.maps.nat4_mapping_timer_v3,
+            &timer_key(),
+            TIMER_TIMEOUT_2,
+            GENERATION,
+            CT_LESS_EST,
+            CT_LESS_EST,
+        );
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_RELEASE);
+        assert_eq!(result.next_timeout, TCP_SYN_TIMEOUT);
+    }
+
+    #[test]
+    fn timeout2_udp_uses_udp_timeout() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        let udp_key = timer_key_with_proto(IPPROTO_UDP);
+        put_timer_with_key(
+            &skel.maps.nat4_mapping_timer_v3,
+            &udp_key,
+            TIMER_TIMEOUT_2,
+            GENERATION,
+            CT_INIT,
+            CT_INIT,
+        );
+
+        let result = run_step_with_key(&skel, &udp_key, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_RELEASE);
+        assert_eq!(result.next_timeout, UDP_TIMEOUT);
+    }
+
+    #[test]
+    fn release_last_ref_transitions_to_delete_egress() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 1));
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION);
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_DELETE_EGRESS);
+        assert_eq!(result.next_timeout, DELETE_RETRY_INTERVAL);
         assert_eq!(result.state_exists, 1);
         assert_eq!(result.state_ref, state_ref(STATE_CLOSED, 1));
     }
 
     #[test]
-    fn release_closed_queue_fail_enters_pending() {
+    fn delete_egress_removes_old_key_and_transitions_to_delete_ingress() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut builder = TestNatV3TimerSkelBuilder::default();
         let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
@@ -245,21 +421,21 @@ mod tests {
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_CLOSED, 1));
-        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION, 1);
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_DELETE_EGRESS, GENERATION);
 
-        let result = run_step(&skel, true);
+        let result = run_step(&skel, false);
 
         assert_eq!(result.action, STEP_RESTART);
-        assert_eq!(result.queue_push_ret, -1);
         assert_eq!(result.timer_exists, 1);
-        assert_eq!(u64::from(result.status), TIMER_RELEASE_PENDING_QUEUE);
-        assert_eq!(result.ingress_mapping_exists, 0);
+        assert_eq!(u64::from(result.status), TIMER_DELETE_INGRESS);
+        assert_eq!(result.next_timeout, DELETE_RETRY_INTERVAL);
         assert_eq!(result.egress_mapping_exists, 0);
-        assert_eq!(result.state_exists, 0);
+        assert_eq!(result.ingress_mapping_exists, 1);
+        assert_eq!(result.state_ref, state_ref(STATE_CLOSED, 1));
     }
 
     #[test]
-    fn pending_queue_retry_success_deletes_ct() {
+    fn delete_egress_preserves_retargeted_mapping() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut builder = TestNatV3TimerSkelBuilder::default();
         let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
@@ -267,13 +443,126 @@ mod tests {
         let mut open_object = MaybeUninit::uninit();
         let open = builder.open(&mut open_object).unwrap();
         let skel = open.load().unwrap();
-        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE_PENDING_QUEUE, GENERATION, 1);
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_CLOSED, 1));
+        set_egress_target(&skel.maps.nat4_dyn_map, ALT_NAT_PORT);
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_DELETE_EGRESS, GENERATION);
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_DELETE_INGRESS);
+        assert_eq!(result.next_timeout, DELETE_RETRY_INTERVAL);
+        assert_eq!(result.egress_mapping_exists, 1);
+        let egress =
+            lookup_mapping(&skel.maps.nat4_dyn_map, &egress_key()).expect("egress mapping");
+        assert_eq!(u16::from_be(egress.port), ALT_NAT_PORT);
+    }
+
+    #[test]
+    fn delete_ingress_removes_same_generation_and_transitions_to_push_queue() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_CLOSED, 1));
+        delete_mapping(&skel.maps.nat4_dyn_map, &egress_key());
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_DELETE_INGRESS, GENERATION);
+
+        let result = run_step(&skel, false);
+
+        assert_eq!(result.action, STEP_RESTART);
+        assert_eq!(result.timer_exists, 1);
+        assert_eq!(u64::from(result.status), TIMER_PUSH_QUEUE);
+        assert_eq!(result.next_timeout, QUEUE_RETRY_INTERVAL);
+        assert_eq!(result.ingress_mapping_exists, 0);
+        assert_eq!(result.egress_mapping_exists, 0);
+        assert_eq!(result.state_exists, 0);
+    }
+
+    #[test]
+    fn delete_ingress_generation_mismatch_stops_cleanup() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
+        put_state(&skel.maps.nat4_dyn_map, GENERATION + 1, state_ref(STATE_CLOSED, 1));
+        delete_mapping(&skel.maps.nat4_dyn_map, &egress_key());
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_DELETE_INGRESS, GENERATION);
 
         let result = run_step(&skel, false);
 
         assert_eq!(result.action, STEP_DELETE_CT);
-        assert_eq!(result.queue_push_ret, 0);
         assert_eq!(result.timer_exists, 0);
+        assert_eq!(result.ingress_mapping_exists, 1);
+        assert_eq!(result.egress_mapping_exists, 0);
+        assert_eq!(result.state_exists, 1);
+        assert_eq!(result.generation, GENERATION + 1);
+    }
+
+    #[test]
+    fn push_queue_retries_and_then_deletes_ct() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_PUSH_QUEUE, GENERATION);
+
+        let retry = run_step(&skel, true);
+
+        assert_eq!(retry.action, STEP_RESTART);
+        assert_eq!(retry.queue_push_ret, -1);
+        assert_eq!(retry.timer_exists, 1);
+        assert_eq!(u64::from(retry.status), TIMER_PUSH_QUEUE);
+        assert_eq!(retry.next_timeout, QUEUE_RETRY_INTERVAL);
+
+        let done = run_step(&skel, false);
+
+        assert_eq!(done.action, STEP_DELETE_CT);
+        assert_eq!(done.queue_push_ret, 0);
+        assert_eq!(done.timer_exists, 0);
+    }
+
+    #[test]
+    fn full_release_cleanup_sequence_completes() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut builder = TestNatV3TimerSkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3-timer");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+        put_mapping_pair(&skel.maps.nat4_dyn_map);
+        put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 1));
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_RELEASE, GENERATION);
+
+        let release = run_step(&skel, false);
+        assert_eq!(u64::from(release.status), TIMER_DELETE_EGRESS);
+
+        let delete_egress = run_step(&skel, false);
+        assert_eq!(u64::from(delete_egress.status), TIMER_DELETE_INGRESS);
+        assert_eq!(delete_egress.egress_mapping_exists, 0);
+
+        let delete_ingress = run_step(&skel, false);
+        assert_eq!(u64::from(delete_ingress.status), TIMER_PUSH_QUEUE);
+        assert_eq!(delete_ingress.ingress_mapping_exists, 0);
+
+        let finish = run_step(&skel, false);
+        assert_eq!(finish.action, STEP_DELETE_CT);
+        assert_eq!(finish.queue_push_ret, 0);
+        assert_eq!(finish.timer_exists, 0);
     }
 
     #[test]
@@ -287,7 +576,7 @@ mod tests {
         let skel = open.load().unwrap();
         put_mapping_pair(&skel.maps.nat4_dyn_map);
         put_state(&skel.maps.nat4_dyn_map, GENERATION, state_ref(STATE_ACTIVE, 0));
-        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_PENDING_REF, GENERATION, 0);
+        put_timer(&skel.maps.nat4_mapping_timer_v3, TIMER_PENDING_REF, GENERATION);
 
         let result = run_step(&skel, false);
 

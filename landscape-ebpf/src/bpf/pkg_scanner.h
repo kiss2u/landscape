@@ -633,10 +633,9 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
 #undef BPF_LOG_TOPIC
 }
 
-
 static __always_inline int read_packet_info4(struct __sk_buff *skb,
-                                            struct packet_offset_info *offset_info,
-                                            struct inet4_pair *ip_pair) {
+                                             struct packet_offset_info *offset_info,
+                                             struct inet4_pair *ip_pair) {
 #define BPF_LOG_TOPIC "read_packet_info4"
 
     int ret;
@@ -650,13 +649,19 @@ static __always_inline int read_packet_info4(struct __sk_buff *skb,
 
     if (offset_info->icmp_error_l3_offset > 0) {
         if (VALIDATE_READ_DATA(skb, &iph, offset_info->icmp_error_l3_offset,
-                                sizeof(struct iphdr))) {
+                               sizeof(struct iphdr))) {
             bpf_log_info("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         ip_pair->src_addr.addr = iph->daddr;
     }
- 
+
+    if (offset_info->fragment_type >= FRAG_MIDDLE) {
+        // Later fragments do not carry a usable L4 header here; ports will be
+        // restored from fragment tracking and this packet must not initiate CT.
+        offset_info->pkt_type = PKT_TCP_ACK_V2;
+        return TC_ACT_OK;
+    }
 
     if (offset_info->icmp_error_l4_protocol == IPPROTO_TCP) {
         struct tcphdr *tcph;

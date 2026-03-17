@@ -3,7 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use etherparse::PacketBuilder;
+use etherparse::{icmpv4, Icmpv4Type, PacketBuilder};
 use landscape_common::iface::nat::NatConfig;
 use landscape_common::net::MacAddr;
 use libbpf_rs::{
@@ -61,6 +61,37 @@ fn build_ipv4_tcp_syn(src: Ipv4Addr, dst: Ipv4Addr, src_port: u16, dst_port: u16
     let mut buf = Vec::with_capacity(builder.size(payload.len()));
     builder.write(&mut buf, &payload).unwrap();
     buf
+}
+
+fn build_ipv4_icmp_time_exceeded(
+    src: Ipv4Addr,
+    dst: Ipv4Addr,
+    quoted_ipv4_packet: &[u8],
+) -> Vec<u8> {
+    let builder = PacketBuilder::ethernet2(
+        [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF],
+        [0x11, 0x22, 0x33, 0x44, 0x55, 0x66],
+    )
+    .ipv4(src.octets(), dst.octets(), 64)
+    .icmpv4(Icmpv4Type::TimeExceeded(icmpv4::TimeExceededCode::TtlExceededInTransit));
+
+    let mut buf = Vec::with_capacity(builder.size(quoted_ipv4_packet.len()));
+    builder.write(&mut buf, quoted_ipv4_packet).unwrap();
+    buf
+}
+
+fn build_quoted_ipv4_tcp(src: Ipv4Addr, dst: Ipv4Addr, src_port: u16, dst_port: u16) -> Vec<u8> {
+    build_ipv4_tcp(src, dst, src_port, dst_port)[14..].to_vec()
+}
+
+fn parse_inner_ipv4_from_icmp(packet: &[u8]) -> etherparse::PacketHeaders<'_> {
+    let outer = etherparse::PacketHeaders::from_ethernet_slice(packet).expect("parse outer packet");
+    let ipv4 = match outer.net {
+        Some(etherparse::NetHeaders::Ipv4(ipv4, _)) => ipv4,
+        _ => panic!("expected outer IPv4 header"),
+    };
+    let inner_offset = 14 + ipv4.header_len() + 8;
+    etherparse::PacketHeaders::from_ip_slice(&packet[inner_offset..]).expect("parse quoted packet")
 }
 
 fn put_v3_state<T: MapCore>(
@@ -446,6 +477,87 @@ mod tests {
     }
 
     #[test]
+    fn tcp_egress_dynamic_v3_icmp_error_uses_inner_l4_protocol() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut landscape_builder = LandNatV3SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let landscape_open = landscape_builder.open(&mut open_object).unwrap();
+        let landscape_skel = landscape_open.load().unwrap();
+
+        add_wan_ip(
+            &landscape_skel.maps.wan_ip_binding,
+            IFINDEX,
+            IpAddr::V4(WAN_IP),
+            None,
+            24,
+            Some(MacAddr::broadcast()),
+        );
+
+        add_dynamic_mapping_pair(
+            &landscape_skel.maps.nat4_dyn_map,
+            6,
+            LAN_HOST,
+            LAN_PORT,
+            WAN_IP,
+            NAT_PORT,
+            REMOTE_IP,
+            443,
+        );
+        add_v3_ct(
+            &landscape_skel.maps.nat4_mapping_timer_v3,
+            6,
+            REMOTE_IP,
+            443,
+            WAN_IP,
+            NAT_PORT,
+            LAN_HOST,
+            LAN_PORT,
+            NAT_MAPPING_EGRESS,
+        );
+
+        let quoted = build_quoted_ipv4_tcp(REMOTE_IP, LAN_HOST, 443, LAN_PORT);
+        let mut pkt = build_ipv4_icmp_time_exceeded(LAN_HOST, REMOTE_IP, &quoted);
+        let mut ctx = TestSkb::default();
+        ctx.ifindex = IFINDEX;
+
+        let mut packet_out = vec![0u8; pkt.len()];
+        let input = ProgramInput {
+            data_in: Some(&mut pkt),
+            context_in: Some(ctx.as_mut_bytes()),
+            data_out: Some(&mut packet_out),
+            ..Default::default()
+        };
+
+        let result = landscape_skel.progs.nat_v4_egress.test_run(input).expect("test_run failed");
+
+        assert_eq!(result.return_value as i32, -1);
+
+        let pkt_out = etherparse::PacketHeaders::from_ethernet_slice(&packet_out)
+            .expect("parse output packet");
+        if let Some(etherparse::NetHeaders::Ipv4(ipv4, _)) = pkt_out.net {
+            let src: Ipv4Addr = ipv4.source.into();
+            assert_eq!(src, WAN_IP);
+        } else {
+            panic!("expected IPv4 header in output");
+        }
+
+        let quoted_out = parse_inner_ipv4_from_icmp(&packet_out);
+        if let Some(etherparse::NetHeaders::Ipv4(ipv4, _)) = quoted_out.net {
+            let dst: Ipv4Addr = ipv4.destination.into();
+            assert_eq!(dst, WAN_IP);
+        } else {
+            panic!("expected quoted IPv4 header in output");
+        }
+        if let Some(etherparse::TransportHeader::Tcp(tcp)) = quoted_out.transport {
+            assert_eq!(tcp.destination_port, NAT_PORT);
+        } else {
+            panic!("expected quoted TCP header in output");
+        }
+    }
+
+    #[test]
     fn tcp_egress_dynamic_v3_missing_ingress_cleans_stale_pair_for_non_initiating_packet() {
         let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut landscape_builder = LandNatV3SkelBuilder::default();
@@ -813,6 +925,87 @@ mod tests {
         };
         assert_eq!(timer.generation_snapshot, GENERATION);
         assert_eq!(timer.client_port, LAN_PORT.to_be());
+    }
+
+    #[test]
+    fn tcp_ingress_dynamic_v3_icmp_error_uses_inner_l4_protocol() {
+        let _guard = NAT_V3_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut landscape_builder = LandNatV3SkelBuilder::default();
+        let pin_root = crate::tests::nat::isolated_pin_root("nat-v4-dynamic-v3");
+        landscape_builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+        let mut open_object = MaybeUninit::uninit();
+        let landscape_open = landscape_builder.open(&mut open_object).unwrap();
+        let landscape_skel = landscape_open.load().unwrap();
+
+        add_wan_ip(
+            &landscape_skel.maps.wan_ip_binding,
+            IFINDEX,
+            IpAddr::V4(WAN_IP),
+            None,
+            24,
+            Some(MacAddr::broadcast()),
+        );
+
+        add_dynamic_mapping_pair(
+            &landscape_skel.maps.nat4_dyn_map,
+            6,
+            LAN_HOST,
+            LAN_PORT,
+            WAN_IP,
+            NAT_PORT,
+            REMOTE_IP,
+            443,
+        );
+        add_v3_ct(
+            &landscape_skel.maps.nat4_mapping_timer_v3,
+            6,
+            REMOTE_IP,
+            443,
+            WAN_IP,
+            NAT_PORT,
+            LAN_HOST,
+            LAN_PORT,
+            NAT_MAPPING_INGRESS,
+        );
+
+        let quoted = build_quoted_ipv4_tcp(WAN_IP, REMOTE_IP, NAT_PORT, 443);
+        let mut pkt = build_ipv4_icmp_time_exceeded(REMOTE_IP, WAN_IP, &quoted);
+        let mut ctx = TestSkb::default();
+        ctx.ifindex = IFINDEX;
+
+        let mut packet_out = vec![0u8; pkt.len()];
+        let input = ProgramInput {
+            data_in: Some(&mut pkt),
+            context_in: Some(ctx.as_mut_bytes()),
+            data_out: Some(&mut packet_out),
+            ..Default::default()
+        };
+
+        let result = landscape_skel.progs.nat_v4_ingress.test_run(input).expect("test_run failed");
+
+        assert_eq!(result.return_value as i32, -1);
+
+        let pkt_out = etherparse::PacketHeaders::from_ethernet_slice(&packet_out)
+            .expect("parse output packet");
+        if let Some(etherparse::NetHeaders::Ipv4(ipv4, _)) = pkt_out.net {
+            let dst: Ipv4Addr = ipv4.destination.into();
+            assert_eq!(dst, LAN_HOST);
+        } else {
+            panic!("expected IPv4 header in output");
+        }
+
+        let quoted_out = parse_inner_ipv4_from_icmp(&packet_out);
+        if let Some(etherparse::NetHeaders::Ipv4(ipv4, _)) = quoted_out.net {
+            let src: Ipv4Addr = ipv4.source.into();
+            assert_eq!(src, LAN_HOST);
+        } else {
+            panic!("expected quoted IPv4 header in output");
+        }
+        if let Some(etherparse::TransportHeader::Tcp(tcp)) = quoted_out.transport {
+            assert_eq!(tcp.source_port, LAN_PORT);
+        } else {
+            panic!("expected quoted TCP header in output");
+        }
     }
 
     #[test]

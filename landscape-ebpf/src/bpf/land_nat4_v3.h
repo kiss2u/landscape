@@ -291,7 +291,8 @@ static __always_inline int ct_state_transition(u8 pkt_type, u8 gress,
 #define NAT4_V3_STATE_ACTIVE 1
 #define NAT4_V3_STATE_CLOSED 2
 #define TIMER_PENDING_REF 10ULL
-#define TIMER_RELEASE_PENDING_QUEUE 41ULL
+#define DELETE_RETRY_INTERVAL 100000000ULL
+#define QUEUE_RETRY_INTERVAL 500000000ULL
 #define NAT4_V3_TIMER_STEP_DELETE_CT 1U
 #define NAT4_V3_TIMER_STEP_RESTART 2U
 
@@ -485,6 +486,18 @@ nat4_v3_lookup_ingress_dynamic(u8 l4proto, __be32 nat_addr, __be16 nat_port) {
     return bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
 }
 
+static __always_inline struct nat_mapping_value_v4_v3 *
+nat4_v3_lookup_egress_dynamic(u8 l4proto, __be32 client_addr, __be16 client_port) {
+    struct nat_mapping_key_v4 egress_key = {
+        .gress = NAT_MAPPING_EGRESS,
+        .l4proto = l4proto,
+        .from_addr = client_addr,
+        .from_port = client_port,
+    };
+
+    return bpf_map_lookup_elem(&nat4_dyn_map, &egress_key);
+}
+
 static __always_inline void nat4_v3_delete_mapping_pair(u8 l4proto, __be32 nat_addr,
                                                         __be16 nat_port, __be32 client_addr,
                                                         __be16 client_port) {
@@ -510,6 +523,23 @@ nat4_v3_timer_base(struct nat_timer_value_v4_v3 *value) {
     return (struct nat_timer_value_v4 *)value;
 }
 
+static __always_inline u32 nat4_v3_timer_delete_ct(struct nat_timer_key_v4 *key) {
+    bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
+    return NAT4_V3_TIMER_STEP_DELETE_CT;
+}
+
+static __always_inline u32 nat4_v3_timer_restart_with_status(
+    struct nat_timer_value_v4_v3 *value, u64 current_status, u64 next_status, u64 timeout_ns,
+    u64 *next_timeout) {
+    if (current_status != next_status && !ct_change_state(&value->status, current_status, next_status)) {
+        *next_timeout = REPORT_INTERVAL;
+        return NAT4_V3_TIMER_STEP_RESTART;
+    }
+
+    *next_timeout = timeout_ns;
+    return NAT4_V3_TIMER_STEP_RESTART;
+}
+
 static __always_inline u32 nat4_v3_handle_timer_step(struct nat_timer_key_v4 *key,
                                                      struct nat_timer_value_v4_v3 *value,
                                                      bool force_queue_push_fail,
@@ -523,64 +553,105 @@ static __always_inline u32 nat4_v3_handle_timer_step(struct nat_timer_key_v4 *ke
     *next_timeout = REPORT_INTERVAL;
 
     if (current_status == TIMER_PENDING_REF) {
-        bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
-        return NAT4_V3_TIMER_STEP_DELETE_CT;
+        return nat4_v3_timer_delete_ct(key);
     }
 
-    if (current_status == TIMER_RELEASE_PENDING_QUEUE) {
+    if (current_status == TIMER_RELEASE) {
+        ret = nat_metric_try_report_v4(key, base, NAT_CONN_DELETE);
+
+        struct nat_mapping_value_v4_v3 *ingress_value = nat4_v3_lookup_ingress_dynamic(
+            key->l4proto, key->pair_ip.dst_addr.addr, key->pair_ip.dst_port);
+        if (!ingress_value || ingress_value->generation != value->generation_snapshot) {
+            return nat4_v3_timer_delete_ct(key);
+        }
+
+        if (nat4_v3_state_try_close_last(ingress_value) == 0) {
+            return nat4_v3_timer_restart_with_status(value, current_status,
+                                                     TIMER_DELETE_EGRESS, DELETE_RETRY_INTERVAL,
+                                                     next_timeout);
+        }
+
+        if (nat4_v3_state_try_dec(ingress_value) == 0) {
+            return nat4_v3_timer_delete_ct(key);
+        }
+
+        return nat4_v3_timer_delete_ct(key);
+    }
+
+    if (current_status == TIMER_DELETE_EGRESS) {
+        struct nat_mapping_key_v4 egress_key = {
+            .gress = NAT_MAPPING_EGRESS,
+            .l4proto = key->l4proto,
+            .from_addr = value->client_addr.addr,
+            .from_port = value->client_port,
+        };
+        struct nat_mapping_value_v4_v3 *egress_value =
+            nat4_v3_lookup_egress_dynamic(key->l4proto, value->client_addr.addr, value->client_port);
+
+        if (egress_value && egress_value->addr == key->pair_ip.dst_addr.addr &&
+            egress_value->port == key->pair_ip.dst_port) {
+            bpf_map_delete_elem(&nat4_dyn_map, &egress_key);
+
+            egress_value =
+                nat4_v3_lookup_egress_dynamic(key->l4proto, value->client_addr.addr, value->client_port);
+            if (egress_value && egress_value->addr == key->pair_ip.dst_addr.addr &&
+                egress_value->port == key->pair_ip.dst_port) {
+                return nat4_v3_timer_restart_with_status(value, current_status, current_status,
+                                                         DELETE_RETRY_INTERVAL, next_timeout);
+            }
+        }
+
+        return nat4_v3_timer_restart_with_status(value, current_status, TIMER_DELETE_INGRESS,
+                                                 DELETE_RETRY_INTERVAL, next_timeout);
+    }
+
+    if (current_status == TIMER_DELETE_INGRESS) {
+        struct nat_mapping_key_v4 ingress_key = {
+            .gress = NAT_MAPPING_INGRESS,
+            .l4proto = key->l4proto,
+            .from_addr = key->pair_ip.dst_addr.addr,
+            .from_port = key->pair_ip.dst_port,
+        };
+        struct nat_mapping_value_v4_v3 *ingress_value =
+            bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
+
+        if (!ingress_value) {
+            return nat4_v3_timer_restart_with_status(value, current_status, TIMER_PUSH_QUEUE,
+                                                     QUEUE_RETRY_INTERVAL, next_timeout);
+        }
+
+        if (ingress_value->generation != value->generation_snapshot) {
+            return nat4_v3_timer_delete_ct(key);
+        }
+
+        bpf_map_delete_elem(&nat4_dyn_map, &ingress_key);
+
+        ingress_value = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
+        if (!ingress_value) {
+            return nat4_v3_timer_restart_with_status(value, current_status, TIMER_PUSH_QUEUE,
+                                                     QUEUE_RETRY_INTERVAL, next_timeout);
+        }
+
+        if (ingress_value->generation != value->generation_snapshot) {
+            return nat4_v3_timer_delete_ct(key);
+        }
+
+        return nat4_v3_timer_restart_with_status(value, current_status, current_status,
+                                                 DELETE_RETRY_INTERVAL, next_timeout);
+    }
+
+    if (current_status == TIMER_PUSH_QUEUE) {
         struct nat4_port_queue_value_v3 free_item = {
             .port = key->pair_ip.dst_port,
             .last_generation = value->generation_snapshot,
         };
         *queue_push_ret = force_queue_push_fail ? -1 : nat4_v3_queue_push(key->l4proto, &free_item);
         if (*queue_push_ret == 0) {
-            bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
-            return NAT4_V3_TIMER_STEP_DELETE_CT;
-        }
-        *next_timeout = REPORT_INTERVAL;
-        return NAT4_V3_TIMER_STEP_RESTART;
-    }
-
-    if (current_status == TIMER_RELEASE) {
-        ret = nat_metric_try_report_v4(key, base, NAT_CONN_DELETE);
-        if (ret) {
-            *next_timeout = REPORT_INTERVAL;
-            return NAT4_V3_TIMER_STEP_RESTART;
+            return nat4_v3_timer_delete_ct(key);
         }
 
-        struct nat_mapping_value_v4_v3 *ingress_value = nat4_v3_lookup_ingress_dynamic(
-            key->l4proto, key->pair_ip.dst_addr.addr, key->pair_ip.dst_port);
-        if (!ingress_value || ingress_value->generation != value->generation_snapshot) {
-            bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
-            return NAT4_V3_TIMER_STEP_DELETE_CT;
-        }
-
-        if (value->is_final_releaser || nat4_v3_state_try_close_last(ingress_value) == 0) {
-            struct nat4_port_queue_value_v3 free_item = {
-                .port = key->pair_ip.dst_port,
-                .last_generation = value->generation_snapshot,
-            };
-            nat4_v3_delete_mapping_pair(key->l4proto, key->pair_ip.dst_addr.addr,
-                                        key->pair_ip.dst_port, value->client_addr.addr,
-                                        value->client_port);
-            *queue_push_ret =
-                force_queue_push_fail ? -1 : nat4_v3_queue_push(key->l4proto, &free_item);
-            if (*queue_push_ret == 0) {
-                bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
-                return NAT4_V3_TIMER_STEP_DELETE_CT;
-            }
-            value->status = TIMER_RELEASE_PENDING_QUEUE;
-            *next_timeout = REPORT_INTERVAL;
-            return NAT4_V3_TIMER_STEP_RESTART;
-        }
-
-        if (nat4_v3_state_try_dec(ingress_value) == 0) {
-            bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
-            return NAT4_V3_TIMER_STEP_DELETE_CT;
-        }
-
-        bpf_map_delete_elem(&nat4_mapping_timer_v3, key);
-        return NAT4_V3_TIMER_STEP_DELETE_CT;
+        return nat4_v3_timer_restart_with_status(value, current_status, current_status,
+                                                 QUEUE_RETRY_INTERVAL, next_timeout);
     }
 
     ret = nat_metric_try_report_v4(key, base, NAT_CONN_ACTIVE);
@@ -596,13 +667,6 @@ static __always_inline u32 nat4_v3_handle_timer_step(struct nat_timer_key_v4 *ke
         next_status = TIMER_TIMEOUT_2;
         *next_timeout = REPORT_INTERVAL;
     } else if (current_status == TIMER_TIMEOUT_2) {
-        struct nat_mapping_value_v4_v3 *ingress_value = nat4_v3_lookup_ingress_dynamic(
-            key->l4proto, key->pair_ip.dst_addr.addr, key->pair_ip.dst_port);
-        value->is_final_releaser =
-            ingress_value && ingress_value->generation == value->generation_snapshot &&
-                    nat4_v3_state_try_close_last(ingress_value) == 0
-                ? 1
-                : 0;
         next_status = TIMER_RELEASE;
         if (key->l4proto == IPPROTO_TCP) {
             if (value->client_status == CT_SYN && value->server_status == CT_SYN) {
