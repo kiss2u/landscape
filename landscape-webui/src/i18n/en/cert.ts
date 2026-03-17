@@ -38,7 +38,7 @@ export default {
   // Cert type
   cert_type: "Type",
   type_acme: "ACME",
-  type_generated: "Generated",
+  type_generated: "Self-signed",
   type_manual: "Manual",
 
   // Manual upload

@@ -21,6 +21,27 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use uuid::Uuid;
 
 const AUTO_API_FALLBACK_CERT_NAME: &str = "Auto Generated API TLS Certificate";
+const AUTO_API_FALLBACK_CERT_DOMAINS: [&str; 2] = ["landscape.local", "*.landscape.local"];
+
+fn auto_api_fallback_domains() -> Vec<String> {
+    AUTO_API_FALLBACK_CERT_DOMAINS.iter().map(|domain| domain.to_string()).collect()
+}
+
+fn has_expected_auto_api_fallback_domains(domains: &[String]) -> bool {
+    let mut actual = domains.to_vec();
+    let mut expected = auto_api_fallback_domains();
+    actual.sort();
+    expected.sort();
+    actual == expected
+}
+
+fn is_usable_auto_api_fallback_cert(cert: &CertConfig) -> bool {
+    cert.name == AUTO_API_FALLBACK_CERT_NAME
+        && matches!(cert.status, CertStatus::Valid)
+        && cert.certificate.as_ref().is_some()
+        && cert.private_key.as_ref().is_some()
+        && has_expected_auto_api_fallback_domains(&cert.domains)
+}
 
 #[derive(Clone)]
 struct WildcardEntry {
@@ -419,18 +440,28 @@ async fn ensure_auto_api_fallback_cert(cert_service: &CertService) -> Result<Cer
         )
     });
 
-    if let Some(existing) = manual_for_api_certs.into_iter().find(|c| {
-        matches!(c.status, CertStatus::Valid)
+    if let Some(existing) = manual_for_api_certs.iter().find(|c| {
+        c.name != AUTO_API_FALLBACK_CERT_NAME
+            && matches!(c.status, CertStatus::Valid)
             && c.certificate.as_ref().is_some()
             && c.private_key.as_ref().is_some()
     }) {
-        return Ok(existing);
+        return Ok(existing.clone());
+    }
+
+    let existing_auto_fallback =
+        manual_for_api_certs.into_iter().find(|c| c.name == AUTO_API_FALLBACK_CERT_NAME);
+
+    if let Some(existing) =
+        existing_auto_fallback.as_ref().filter(|cert| is_usable_auto_api_fallback_cert(cert))
+    {
+        return Ok(existing.clone());
     }
 
     tracing::warn!(
         "No usable manual for_api fallback cert found, generating a new self-signed one"
     );
-    let subject_alt_names = vec!["localhost".to_string()];
+    let subject_alt_names = auto_api_fallback_domains();
     let rcgen::CertifiedKey { cert, signing_key } =
         generate_simple_self_signed(subject_alt_names.clone())
             .map_err(|e| format!("failed to generate self-signed fallback cert: {e}"))?;
@@ -440,7 +471,7 @@ async fn ensure_auto_api_fallback_cert(cert_service: &CertService) -> Result<Cer
     let (issued_at, expires_at) = parse_cert_validity_from_pem(&cert_pem);
 
     let auto_cert = CertConfig {
-        id: Uuid::new_v4(),
+        id: existing_auto_fallback.as_ref().map(|cert| cert.id).unwrap_or_else(Uuid::new_v4),
         name: AUTO_API_FALLBACK_CERT_NAME.to_string(),
         domains: subject_alt_names,
         status: CertStatus::Valid,
@@ -453,7 +484,10 @@ async fn ensure_auto_api_fallback_cert(cert_service: &CertService) -> Result<Cer
         cert_type: CertType::Manual,
         for_api: true,
         for_gateway: false,
-        update_at: get_f64_timestamp(),
+        update_at: existing_auto_fallback
+            .as_ref()
+            .map(|cert| cert.update_at)
+            .unwrap_or_else(get_f64_timestamp),
     };
 
     cert_service
@@ -563,7 +597,10 @@ mod tests {
 
     #[test]
     fn api_fallback_is_used_for_unmatched_host_and_missing_sni() {
-        let fallback_entry = make_test_cert(&["localhost"], &["localhost"]);
+        let fallback_entry = make_test_cert(
+            &["landscape.local", "*.landscape.local"],
+            &["landscape.local", "*.landscape.local"],
+        );
         let fallback = fallback_entry.certified_key.clone();
         let (snapshot, inserted) = build_resolver_snapshot_from_entries(vec![], Some(fallback));
 
@@ -576,6 +613,50 @@ mod tests {
 
         assert!(Arc::ptr_eq(&expected, &unmatched));
         assert!(Arc::ptr_eq(&expected, &missing_sni));
+    }
+
+    #[test]
+    fn legacy_localhost_auto_api_fallback_cert_is_not_reusable() {
+        let legacy_cert = CertConfig {
+            id: Uuid::new_v4(),
+            name: AUTO_API_FALLBACK_CERT_NAME.to_string(),
+            domains: vec!["localhost".to_string()],
+            status: CertStatus::Valid,
+            private_key: Some("key".to_string()),
+            certificate: Some("cert".to_string()),
+            certificate_chain: None,
+            expires_at: None,
+            issued_at: None,
+            status_message: None,
+            cert_type: CertType::Manual,
+            for_api: true,
+            for_gateway: false,
+            update_at: 0.0,
+        };
+
+        assert!(!is_usable_auto_api_fallback_cert(&legacy_cert));
+    }
+
+    #[test]
+    fn expected_auto_api_fallback_cert_is_reusable() {
+        let auto_cert = CertConfig {
+            id: Uuid::new_v4(),
+            name: AUTO_API_FALLBACK_CERT_NAME.to_string(),
+            domains: vec!["landscape.local".to_string(), "*.landscape.local".to_string()],
+            status: CertStatus::Valid,
+            private_key: Some("key".to_string()),
+            certificate: Some("cert".to_string()),
+            certificate_chain: None,
+            expires_at: None,
+            issued_at: None,
+            status_message: None,
+            cert_type: CertType::Manual,
+            for_api: true,
+            for_gateway: false,
+            update_at: 0.0,
+        };
+
+        assert!(is_usable_auto_api_fallback_cert(&auto_cert));
     }
 
     #[test]

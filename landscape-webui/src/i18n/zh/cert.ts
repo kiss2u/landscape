@@ -38,7 +38,7 @@ export default {
   // Cert type
   cert_type: "类型",
   type_acme: "ACME",
-  type_generated: "生成证书",
+  type_generated: "自签名",
   type_manual: "手动上传",
 
   // Manual upload

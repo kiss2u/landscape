@@ -305,6 +305,19 @@ const columns = computed<DataTableColumns<CertConfig>>(() => [
         ),
       );
 
+      // Edit: always
+      btns.push(
+        h(
+          NButton,
+          {
+            size: "small",
+            secondary: true,
+            onClick: () => open_edit(id),
+          },
+          () => t("common.edit"),
+        ),
+      );
+
       // Issue: pending | invalid | expired | revoked (ACME only)
       if (
         is_acme(row) &&
@@ -395,19 +408,6 @@ const columns = computed<DataTableColumns<CertConfig>>(() => [
           ),
         );
       }
-
-      // Edit: always
-      btns.push(
-        h(
-          NButton,
-          {
-            size: "small",
-            secondary: true,
-            onClick: () => open_edit(id),
-          },
-          () => t("common.edit"),
-        ),
-      );
 
       // Delete: always (with confirmation)
       btns.push(
