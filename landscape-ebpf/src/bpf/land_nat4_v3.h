@@ -528,10 +528,11 @@ static __always_inline u32 nat4_v3_timer_delete_ct(struct nat_timer_key_v4 *key)
     return NAT4_V3_TIMER_STEP_DELETE_CT;
 }
 
-static __always_inline u32 nat4_v3_timer_restart_with_status(
-    struct nat_timer_value_v4_v3 *value, u64 current_status, u64 next_status, u64 timeout_ns,
-    u64 *next_timeout) {
-    if (current_status != next_status && !ct_change_state(&value->status, current_status, next_status)) {
+static __always_inline u32 nat4_v3_timer_restart_with_status(struct nat_timer_value_v4_v3 *value,
+                                                             u64 current_status, u64 next_status,
+                                                             u64 timeout_ns, u64 *next_timeout) {
+    if (current_status != next_status &&
+        !ct_change_state(&value->status, current_status, next_status)) {
         *next_timeout = REPORT_INTERVAL;
         return NAT4_V3_TIMER_STEP_RESTART;
     }
@@ -566,9 +567,8 @@ static __always_inline u32 nat4_v3_handle_timer_step(struct nat_timer_key_v4 *ke
         }
 
         if (nat4_v3_state_try_close_last(ingress_value) == 0) {
-            return nat4_v3_timer_restart_with_status(value, current_status,
-                                                     TIMER_DELETE_EGRESS, DELETE_RETRY_INTERVAL,
-                                                     next_timeout);
+            return nat4_v3_timer_restart_with_status(value, current_status, TIMER_DELETE_EGRESS,
+                                                     DELETE_RETRY_INTERVAL, next_timeout);
         }
 
         if (nat4_v3_state_try_dec(ingress_value) == 0) {
@@ -585,15 +585,15 @@ static __always_inline u32 nat4_v3_handle_timer_step(struct nat_timer_key_v4 *ke
             .from_addr = value->client_addr.addr,
             .from_port = value->client_port,
         };
-        struct nat_mapping_value_v4_v3 *egress_value =
-            nat4_v3_lookup_egress_dynamic(key->l4proto, value->client_addr.addr, value->client_port);
+        struct nat_mapping_value_v4_v3 *egress_value = nat4_v3_lookup_egress_dynamic(
+            key->l4proto, value->client_addr.addr, value->client_port);
 
         if (egress_value && egress_value->addr == key->pair_ip.dst_addr.addr &&
             egress_value->port == key->pair_ip.dst_port) {
             bpf_map_delete_elem(&nat4_dyn_map, &egress_key);
 
-            egress_value =
-                nat4_v3_lookup_egress_dynamic(key->l4proto, value->client_addr.addr, value->client_port);
+            egress_value = nat4_v3_lookup_egress_dynamic(key->l4proto, value->client_addr.addr,
+                                                         value->client_port);
             if (egress_value && egress_value->addr == key->pair_ip.dst_addr.addr &&
                 egress_value->port == key->pair_ip.dst_port) {
                 return nat4_v3_timer_restart_with_status(value, current_status, current_status,
@@ -729,12 +729,12 @@ err:
     return NULL;
 }
 
-static __always_inline int nat4_v3_lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, bool do_new,
-                                                    const struct inet4_pair *server_nat_pair,
-                                                    const struct inet4_addr *client_addr,
-                                                    __be16 client_port, u8 gress,
-                                                    struct nat_mapping_value_v4_v3 *nat_ingress_value,
-                                                    struct nat_timer_value_v4_v3 **timer_value_) {
+static __always_inline int
+nat4_v3_lookup_or_new_ct(struct __sk_buff *skb, u8 l4proto, bool do_new,
+                         const struct inet4_pair *server_nat_pair,
+                         const struct inet4_addr *client_addr, __be16 client_port, u8 gress,
+                         struct nat_mapping_value_v4_v3 *nat_ingress_value,
+                         struct nat_timer_value_v4_v3 **timer_value_) {
     bool track_dynamic_ref = nat_ingress_value && nat_ingress_value->is_static == 0;
     u16 generation_snapshot = track_dynamic_ref ? nat_ingress_value->generation : 0;
     struct nat_timer_key_v4 timer_key = {0};
@@ -789,14 +789,11 @@ static __always_inline int nat4_v3_lookup_or_new_ct(struct __sk_buff *skb, u8 l4
     return TIMER_CREATED;
 }
 
-static __always_inline int
-nat4_v3_egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol,
-                                        bool allow_create_mapping,
-                                        const struct inet4_pair *pkt_ip_pair,
-                                        struct nat_mapping_value_v4_v3 **nat_egress_value_,
-                                        struct nat_mapping_value_v4_v3 **nat_ingress_value_,
-                                        struct nat4_port_queue_value_v3 *alloc_item,
-                                        bool *created) {
+static __always_inline int nat4_v3_egress_lookup_or_new_mapping_v4(
+    struct __sk_buff *skb, u8 ip_protocol, bool allow_create_mapping,
+    const struct inet4_pair *pkt_ip_pair, struct nat_mapping_value_v4_v3 **nat_egress_value_,
+    struct nat_mapping_value_v4_v3 **nat_ingress_value_,
+    struct nat4_port_queue_value_v3 *alloc_item, bool *created) {
     struct nat_mapping_key_v4 egress_key = {
         .gress = NAT_MAPPING_EGRESS,
         .l4proto = ip_protocol,
@@ -896,7 +893,8 @@ nat4_v3_ingress_lookup_or_new_mapping4(u8 ip_protocol, const struct inet4_pair *
         .from_addr = pkt_ip_pair->dst_addr.addr,
     };
 
-    struct nat_mapping_value_v4_v3 *dynamic_value = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
+    struct nat_mapping_value_v4_v3 *dynamic_value =
+        bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
     if (!dynamic_value) {
         ingress_key.from_addr = 0;
         *nat_ingress_value_ = bpf_map_lookup_elem(&nat4_st_map, &ingress_key);
@@ -912,8 +910,7 @@ nat4_v3_ingress_lookup_or_new_mapping4(u8 ip_protocol, const struct inet4_pair *
         .from_port = dynamic_value->port,
         .from_addr = dynamic_value->addr,
     };
-    struct nat_mapping_value_v4_v3 *egress_value =
-        bpf_map_lookup_elem(&nat4_dyn_map, &egress_key);
+    struct nat_mapping_value_v4_v3 *egress_value = bpf_map_lookup_elem(&nat4_dyn_map, &egress_key);
     if (!egress_value || egress_value->addr != pkt_ip_pair->dst_addr.addr ||
         egress_value->port != pkt_ip_pair->dst_port) {
         bpf_map_delete_elem(&nat4_dyn_map, &ingress_key);
