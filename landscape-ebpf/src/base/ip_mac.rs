@@ -33,7 +33,17 @@ pub fn neigh_update(mut service_status: oneshot::Receiver<()>) -> LdEbpfResult<(
     let skel = open_skel.load()?;
     let kprobe_neigh_update = skel.progs.kprobe_neigh_update;
 
-    let _link = kprobe_neigh_update.attach_kprobe(false, "neigh_update").unwrap();
+    let _link = match kprobe_neigh_update.attach_kprobe(false, "neigh_update") {
+        Ok(link) => Some(link),
+        Err(e) => {
+            // Keep the periodic `/proc/net/arp` sync alive even when this kernel
+            // does not expose the neigh_update kprobe symbol.
+            tracing::warn!(
+                "failed to attach neigh_update kprobe, falling back to periodic ARP sync only: {e}"
+            );
+            None
+        }
+    };
 
     let mut times = 0_u8;
     'm: loop {
@@ -67,7 +77,10 @@ pub fn sync_arp_table_to_ebpf_map() {
         return;
     }
 
-    let ip_mac_v4 = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.ip_mac_v4).unwrap();
+    let Ok(ip_mac_v4) = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.ip_mac_v4) else {
+        tracing::error!("open pinned ip_mac_v4 map error, skip current arp sync");
+        return;
+    };
 
     let mut keys = vec![];
     let mut values = vec![];

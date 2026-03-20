@@ -13,7 +13,9 @@ impl LandscapeEbpfService {
     pub fn new() -> Self {
         let (tx, rx) = oneshot::channel::<()>();
         spawn_named_thread(thread_name::fixed::EBPF_NEIGH_UPDATE, move || {
-            landscape_ebpf::base::ip_mac::neigh_update(rx).unwrap();
+            if let Err(e) = landscape_ebpf::base::ip_mac::neigh_update(rx) {
+                tracing::warn!("eBPF neigh_update service exited with error: {e}");
+            }
         })
         .expect("failed to spawn ebpf neigh_update thread");
 
