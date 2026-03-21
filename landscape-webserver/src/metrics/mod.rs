@@ -56,7 +56,7 @@ async fn get_metric_status(State(state): State<LandscapeApp>) -> LandscapeApiRes
 async fn get_connects_info(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<Vec<ConnectRealtimeStatus>> {
-    let data = state.metric_service.data.connect_metric.connect_infos().await;
+    let data = state.metric_service.store.connect_infos().await;
     LandscapeApiResp::success(data)
 }
 
@@ -72,8 +72,8 @@ async fn get_connect_metric_info(
     State(state): State<LandscapeApp>,
     JsonBody(req): JsonBody<MetricChartRequest>,
 ) -> LandscapeApiResult<Vec<ConnectMetricPoint>> {
-    let data =
-        state.metric_service.data.connect_metric.query_metric_by_key(req.key, req.resolution).await;
+    let resolution = req.resolution.unwrap_or_default();
+    let data = state.metric_service.store.query_metric_by_key(req.key, resolution).await;
     LandscapeApiResp::success(data)
 }
 
@@ -89,7 +89,7 @@ async fn get_connect_history(
     State(state): State<LandscapeApp>,
     Query(params): Query<ConnectHistoryQueryParams>,
 ) -> LandscapeApiResult<Vec<ConnectHistoryStatus>> {
-    let data = state.metric_service.data.connect_metric.history_summaries_complex(params).await;
+    let data = state.metric_service.store.history_summaries_complex(params).await;
     LandscapeApiResp::success(data)
 }
 
@@ -105,12 +105,8 @@ async fn get_connect_global_stats(
     State(state): State<LandscapeApp>,
     Query(params): Query<GetConnectGlobalStatsParams>,
 ) -> LandscapeApiResult<ConnectGlobalStats> {
-    let data = state
-        .metric_service
-        .data
-        .connect_metric
-        .get_global_stats(params.force_refresh.unwrap_or(false))
-        .await?;
+    let data =
+        state.metric_service.store.get_global_stats(params.force_refresh.unwrap_or(false)).await?;
     LandscapeApiResp::success(data)
 }
 
@@ -124,7 +120,7 @@ async fn get_connect_global_stats(
 async fn get_src_ip_stats(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<Vec<IpRealtimeStat>> {
-    let data = state.metric_service.data.connect_metric.get_src_ip_stats().await;
+    let data = state.metric_service.store.get_realtime_ip_stats(true).await;
     LandscapeApiResp::success(data)
 }
 
@@ -138,7 +134,7 @@ async fn get_src_ip_stats(
 async fn get_dst_ip_stats(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<Vec<IpRealtimeStat>> {
-    let data = state.metric_service.data.connect_metric.get_dst_ip_stats().await;
+    let data = state.metric_service.store.get_realtime_ip_stats(false).await;
     LandscapeApiResp::success(data)
 }
 
@@ -154,7 +150,7 @@ async fn get_history_src_ip_stats(
     State(state): State<LandscapeApp>,
     Query(params): Query<ConnectHistoryQueryParams>,
 ) -> LandscapeApiResult<Vec<IpHistoryStat>> {
-    let data = state.metric_service.data.connect_metric.history_src_ip_stats(params).await;
+    let data = state.metric_service.store.history_src_ip_stats(params).await;
     LandscapeApiResp::success(data)
 }
 
@@ -170,7 +166,7 @@ async fn get_history_dst_ip_stats(
     State(state): State<LandscapeApp>,
     Query(params): Query<ConnectHistoryQueryParams>,
 ) -> LandscapeApiResult<Vec<IpHistoryStat>> {
-    let data = state.metric_service.data.connect_metric.history_dst_ip_stats(params).await;
+    let data = state.metric_service.store.history_dst_ip_stats(params).await;
     LandscapeApiResp::success(data)
 }
 
@@ -186,7 +182,7 @@ async fn get_dns_history(
     State(state): State<LandscapeApp>,
     Query(params): Query<DnsHistoryQueryParams>,
 ) -> LandscapeApiResult<DnsHistoryResponse> {
-    let data = state.metric_service.data.dns_metric.query_dns_history(params).await;
+    let data = state.metric_service.store.query_dns_history(params).await;
     LandscapeApiResp::success(data)
 }
 
@@ -202,7 +198,7 @@ async fn get_dns_summary(
     State(state): State<LandscapeApp>,
     Query(params): Query<DnsSummaryQueryParams>,
 ) -> LandscapeApiResult<DnsSummaryResponse> {
-    let data = state.metric_service.data.dns_metric.get_dns_summary(params).await;
+    let data = state.metric_service.store.get_dns_summary(params).await;
     LandscapeApiResp::success(data)
 }
 
@@ -218,6 +214,6 @@ async fn get_dns_lightweight_summary(
     State(state): State<LandscapeApp>,
     Query(params): Query<DnsSummaryQueryParams>,
 ) -> LandscapeApiResult<DnsLightweightSummaryResponse> {
-    let data = state.metric_service.data.dns_metric.get_dns_lightweight_summary(params).await;
+    let data = state.metric_service.store.get_dns_lightweight_summary(params).await;
     LandscapeApiResp::success(data)
 }

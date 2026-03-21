@@ -82,7 +82,7 @@ pub struct DnsSummaryQueryParams {
     pub flow_id: Option<u32>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DnsHistoryResponse {
     pub items: Vec<DnsMetric>,

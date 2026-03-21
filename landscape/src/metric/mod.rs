@@ -9,42 +9,23 @@ use landscape_common::{
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
-pub mod connect_manager;
-pub mod dns_manager;
 #[cfg(feature = "metric-duckdb")]
 pub mod duckdb;
-pub mod noop_store;
+#[cfg(not(feature = "metric-duckdb"))]
+pub mod memory_store;
 
 #[cfg(feature = "metric-duckdb")]
 pub type MetricStore = duckdb::DuckMetricStore;
 #[cfg(not(feature = "metric-duckdb"))]
-pub type MetricStore = noop_store::NoopMetricStore;
+pub type MetricStore = memory_store::MemoryMetricStore;
 
-use crate::metric::connect_manager::ConnectMetricManager;
-use crate::metric::dns_manager::DnsMetricManager;
 use landscape_common::config::MetricRuntimeConfig;
-
-#[derive(Clone)]
-pub struct MetricData {
-    pub connect_metric: ConnectMetricManager,
-    pub dns_metric: DnsMetricManager,
-}
-
-impl MetricData {
-    pub async fn new(home_path: PathBuf, config: MetricRuntimeConfig) -> Self {
-        let store = MetricStore::new(home_path, config).await;
-        MetricData {
-            connect_metric: ConnectMetricManager::with_store(store.clone()),
-            dns_metric: DnsMetricManager::with_store(store),
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct MetricService {
     pub enabled: bool,
     pub status: WatchService,
-    pub data: MetricData,
+    pub store: MetricStore,
 }
 
 impl MetricService {
@@ -58,7 +39,7 @@ impl MetricService {
         let status = WatchService::new();
         MetricService {
             enabled: config.enable,
-            data: MetricData::new(metric_path, config).await,
+            store: MetricStore::new(metric_path, config).await,
             status,
         }
     }
@@ -71,9 +52,9 @@ impl MetricService {
 
         let status = self.status.clone();
         if status.is_stop() {
-            let metric_service = self.data.clone();
+            let metric_store = self.store.clone();
             spawn_task(task_label::task::METRIC_SERVICE_RUN, async move {
-                create_metric_service(metric_service, status).await;
+                create_metric_service(metric_store, status).await;
             });
         } else {
             tracing::info!("Metric Service is not stopped");
@@ -85,11 +66,11 @@ impl MetricService {
     }
 
     pub fn get_dns_metric_channel(&self) -> Option<mpsc::Sender<DnsMetricMessage>> {
-        self.enabled.then(|| self.data.dns_metric.get_msg_channel())
+        self.enabled.then(|| self.store.get_dns_msg_channel())
     }
 }
 
-pub async fn create_metric_service(metric_service: MetricData, service_status: WatchService) {
+pub async fn create_metric_service(metric_store: MetricStore, service_status: WatchService) {
     service_status.just_change_status(ServiceStatus::Staring);
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
@@ -104,7 +85,7 @@ pub async fn create_metric_service(metric_service: MetricData, service_status: W
         tracing::info!("向内部发送停止信号");
     });
 
-    let connect_msg_tx = metric_service.connect_metric.get_msg_channel();
+    let connect_msg_tx = metric_store.get_connect_msg_channel();
     spawn_named_thread(thread_name::fixed::METRIC_EVENT_READER, move || {
         landscape_ebpf::metric::new_metric(rx, connect_msg_tx);
         let _ = other_tx.send(());

@@ -1,4 +1,4 @@
-use landscape::metric::MetricData;
+use landscape::metric::MetricStore;
 use landscape_common::concurrency::{spawn_named_thread, thread_name};
 use landscape_common::LANDSCAPE_METRIC_DIR_NAME;
 use landscape_ebpf::metric::new_metric;
@@ -27,7 +27,7 @@ async fn main() {
     let (tx, rx) = oneshot::channel::<()>();
     let (other_tx, other_rx) = oneshot::channel::<()>();
 
-    let metric_service = MetricData::new(
+    let metric_store = MetricStore::new(
         metric_path,
         landscape_common::config::MetricRuntimeConfig {
             enable: landscape_common::DEFAULT_METRIC_ENABLE,
@@ -47,16 +47,16 @@ async fn main() {
         },
     )
     .await;
-    let metric_service_clone = metric_service.clone();
+    let metric_store_clone = metric_store.clone();
     spawn_named_thread(thread_name::fixed::METRIC_EVENT_READER, move || {
-        new_metric(rx, metric_service_clone.connect_metric.get_msg_channel());
+        new_metric(rx, metric_store_clone.get_connect_msg_channel());
         let _ = other_tx.send(());
     })
     .expect("failed to spawn metric loop thread");
 
     while running.load(Ordering::SeqCst) {
         tokio::time::sleep(Duration::new(1, 0)).await;
-        println!("data: {:?}", metric_service.connect_metric.connect_infos().await);
+        println!("data: {:?}", metric_store.connect_infos().await);
     }
 
     let _ = tx.send(());
