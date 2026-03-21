@@ -316,7 +316,7 @@ mod tests {
                 FlowDnsDesiredState::default(),
                 Arc::new(ArcSwap::from_pointee(test_cache_runtime_config())),
                 7,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 None,
             );
             entry.runtime.store(Some(Arc::new(FlowServerRuntime {

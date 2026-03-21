@@ -7,6 +7,8 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
+#[cfg(test)]
+use arc_swap::ArcSwapOption;
 use hickory_proto::{
     op::{Header, ResponseCode},
     rr::{
@@ -806,7 +808,7 @@ mod tests {
                 ChainDnsServerInitInfo::default().into(),
                 runtime_config.clone(),
                 9,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 None,
             );
             let handler_clone = handler.clone();
@@ -862,7 +864,7 @@ mod tests {
                 .into(),
                 shared_cache_runtime_config(5),
                 1,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 None,
             );
 
@@ -918,7 +920,7 @@ mod tests {
                 .into(),
                 runtime_config.clone(),
                 1,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 None,
             );
 
@@ -980,7 +982,7 @@ mod tests {
                 .into(),
                 shared_cache_runtime_config(5),
                 1,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 Some(Arc::new(MockLocalAnswerProvider {
                     addrs: vec![
                         IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
@@ -1025,7 +1027,7 @@ mod tests {
                 .into(),
                 shared_cache_runtime_config(5),
                 1,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 Some(Arc::new(MockLocalAnswerProvider {
                     addrs: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))],
                 })),
@@ -1056,7 +1058,7 @@ mod tests {
                 .into(),
                 shared_cache_runtime_config(5),
                 1,
-                None,
+                Arc::new(ArcSwapOption::new(None)),
                 None,
             );
 
