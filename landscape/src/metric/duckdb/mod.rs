@@ -27,11 +27,38 @@ pub mod dns;
 
 const CHANNEL_CAPACITY: usize = 1024;
 const MS_PER_MINUTE: u64 = 60 * 1000;
+const MS_PER_TEN_MINUTES: u64 = 10 * MS_PER_MINUTE;
 const MS_PER_HOUR: u64 = 60 * MS_PER_MINUTE;
 const MS_PER_DAY: u64 = 24 * MS_PER_HOUR;
 const STALE_TIMEOUT_MS: u64 = 5 * MS_PER_MINUTE;
+const DEFAULT_CONNECT_SAMPLE_INTERVAL_MS: u64 = 5 * 1000;
 
-fn clean_ip_string(ip: &IpAddr) -> String {
+fn bucket_start(report_time: u64, bucket_ms: u64) -> u64 {
+    report_time / bucket_ms * bucket_ms
+}
+
+fn minute_slot(report_time: u64) -> u64 {
+    bucket_start(report_time, MS_PER_MINUTE)
+}
+
+fn hour_refresh_slot(report_time: u64) -> u64 {
+    bucket_start(report_time, MS_PER_TEN_MINUTES)
+}
+
+fn day_refresh_slot(report_time: u64) -> u64 {
+    bucket_start(report_time, MS_PER_HOUR)
+}
+
+fn second_window_ms(config: &MetricRuntimeConfig) -> u64 {
+    config.connect_second_window_minutes.max(1).saturating_mul(MS_PER_MINUTE)
+}
+
+fn second_ring_capacity(config: &MetricRuntimeConfig) -> usize {
+    let target_points = second_window_ms(config) / DEFAULT_CONNECT_SAMPLE_INTERVAL_MS;
+    target_points.saturating_add(8).clamp(32, 4096) as usize
+}
+
+pub(super) fn clean_ip_string(ip: &IpAddr) -> String {
     match ip {
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4_mapped() {
@@ -42,19 +69,6 @@ fn clean_ip_string(ip: &IpAddr) -> String {
         }
         IpAddr::V4(v4) => v4.to_string(),
     }
-}
-
-fn bucket_start(report_time: u64, bucket_ms: u64) -> u64 {
-    report_time / bucket_ms * bucket_ms
-}
-
-fn second_window_ms(config: &MetricRuntimeConfig) -> u64 {
-    config.connect_second_window_minutes.max(1).saturating_mul(MS_PER_MINUTE)
-}
-
-fn second_ring_capacity(config: &MetricRuntimeConfig) -> usize {
-    let target_points = config.connect_second_window_minutes.max(1).saturating_mul(60) / 3;
-    target_points.saturating_add(8).clamp(32, 4096) as usize
 }
 
 fn metric_to_point(metric: &ConnectMetric) -> ConnectMetricPoint {
@@ -95,9 +109,9 @@ struct FlowState {
     last_metric: ConnectMetric,
     realtime: ConnectRealtimeStatus,
     second_ring: VecDeque<ConnectMetricPoint>,
-    current_minute_bucket: u64,
-    current_hour_bucket: u64,
-    current_day_bucket: u64,
+    last_minute_slot: u64,
+    last_hour_refresh_slot: u64,
+    last_day_refresh_slot: u64,
     finalized: bool,
 }
 
@@ -111,9 +125,9 @@ impl FlowState {
             realtime: metric_to_realtime(&metric),
             last_metric: metric,
             second_ring,
-            current_minute_bucket: bucket_start(report_time, MS_PER_MINUTE),
-            current_hour_bucket: bucket_start(report_time, MS_PER_HOUR),
-            current_day_bucket: bucket_start(report_time, MS_PER_DAY),
+            last_minute_slot: minute_slot(report_time),
+            last_hour_refresh_slot: hour_refresh_slot(report_time),
+            last_day_refresh_slot: day_refresh_slot(report_time),
             finalized: false,
         };
         state.trim_second_ring(window_ms, ring_cap);
@@ -194,7 +208,6 @@ type FlowCache = Arc<RwLock<HashMap<ConnectKey, FlowState>>>;
 pub struct DuckMetricStore {
     connect_tx: mpsc::Sender<ConnectMessage>,
     dns_tx: mpsc::Sender<DnsMetricMessage>,
-    pub db_path: PathBuf,
     pub config: MetricRuntimeConfig,
     pub disk_pool: r2d2::Pool<DuckdbConnectionManager>,
     flow_cache: FlowCache,
@@ -242,9 +255,19 @@ fn finalize_state(conn: &Connection, state: &mut FlowState, mark_disabled: bool)
         state.realtime.status = ConnectStatusType::Disabled;
     }
 
-    upsert_bucket_row(conn, "conn_metrics_1m", &metric, state.current_minute_bucket);
-    upsert_bucket_row(conn, "conn_metrics_1h", &metric, state.current_hour_bucket);
-    upsert_bucket_row(conn, "conn_metrics_1d", &metric, state.current_day_bucket);
+    upsert_bucket_row(conn, "conn_metrics_1m", &metric, minute_slot(metric.report_time));
+    upsert_bucket_row(
+        conn,
+        "conn_metrics_1h",
+        &metric,
+        bucket_start(metric.report_time, MS_PER_HOUR),
+    );
+    upsert_bucket_row(
+        conn,
+        "conn_metrics_1d",
+        &metric,
+        bucket_start(metric.report_time, MS_PER_DAY),
+    );
     upsert_summary_row(conn, &metric);
     state.finalized = true;
 }
@@ -256,9 +279,9 @@ fn process_connect_metric(
     second_window_ms: u64,
     second_ring_cap: usize,
 ) {
-    let minute_bucket = bucket_start(metric.report_time, MS_PER_MINUTE);
-    let hour_bucket = bucket_start(metric.report_time, MS_PER_HOUR);
-    let day_bucket = bucket_start(metric.report_time, MS_PER_DAY);
+    let curr_minute_slot = minute_slot(metric.report_time);
+    let curr_hour_refresh_slot = hour_refresh_slot(metric.report_time);
+    let curr_day_refresh_slot = day_refresh_slot(metric.report_time);
 
     let mut cache = flow_cache.write().expect("metric flow cache poisoned");
     match cache.entry(metric.key.clone()) {
@@ -268,18 +291,22 @@ fn process_connect_metric(
                 return;
             }
 
-            if minute_bucket > state.current_minute_bucket {
-                upsert_bucket_row(conn, "conn_metrics_1m", &metric, state.current_minute_bucket);
+            let previous_minute_bucket = minute_slot(state.last_metric.report_time);
+            let previous_hour_bucket = bucket_start(state.last_metric.report_time, MS_PER_HOUR);
+            let previous_day_bucket = bucket_start(state.last_metric.report_time, MS_PER_DAY);
+
+            if curr_minute_slot > state.last_minute_slot {
+                upsert_bucket_row(conn, "conn_metrics_1m", &metric, previous_minute_bucket);
                 upsert_summary_row(conn, &metric);
-                state.current_minute_bucket = minute_bucket;
+                state.last_minute_slot = curr_minute_slot;
             }
-            if hour_bucket > state.current_hour_bucket {
-                upsert_bucket_row(conn, "conn_metrics_1h", &metric, state.current_hour_bucket);
-                state.current_hour_bucket = hour_bucket;
+            if curr_hour_refresh_slot > state.last_hour_refresh_slot {
+                upsert_bucket_row(conn, "conn_metrics_1h", &metric, previous_hour_bucket);
+                state.last_hour_refresh_slot = curr_hour_refresh_slot;
             }
-            if day_bucket > state.current_day_bucket {
-                upsert_bucket_row(conn, "conn_metrics_1d", &metric, state.current_day_bucket);
-                state.current_day_bucket = day_bucket;
+            if curr_day_refresh_slot > state.last_day_refresh_slot {
+                upsert_bucket_row(conn, "conn_metrics_1d", &metric, previous_day_bucket);
+                state.last_day_refresh_slot = curr_day_refresh_slot;
             }
 
             let should_finalize = metric.status == ConnectStatusType::Disabled;
@@ -299,24 +326,41 @@ fn process_connect_metric(
     }
 }
 
+#[derive(Default)]
+struct FlowCacheStats {
+    active_flows: usize,
+    finalized_flows: usize,
+    finalized_in_run: usize,
+    second_ring_points: usize,
+}
+
 fn cleanup_flow_cache(
     conn: &Connection,
     flow_cache: &FlowCache,
     now_ms: u64,
     second_window_ms: u64,
-) {
+) -> FlowCacheStats {
     let stale_cutoff = now_ms.saturating_sub(STALE_TIMEOUT_MS);
     let window_cutoff = now_ms.saturating_sub(second_window_ms);
 
     let mut cache = flow_cache.write().expect("metric flow cache poisoned");
     let mut expired_keys = Vec::new();
+    let mut stats = FlowCacheStats::default();
 
     for (key, state) in cache.iter_mut() {
         if !state.finalized && state.realtime.last_report_time < stale_cutoff {
             finalize_state(conn, state, true);
+            stats.finalized_in_run += 1;
         }
 
         state.trim_second_ring_before(window_cutoff);
+        stats.second_ring_points += state.second_ring.len();
+
+        if state.finalized {
+            stats.finalized_flows += 1;
+        } else if state.is_active(now_ms) {
+            stats.active_flows += 1;
+        }
 
         if state.finalized && state.realtime.last_report_time < window_cutoff {
             expired_keys.push(key.clone());
@@ -326,6 +370,8 @@ fn cleanup_flow_cache(
     for key in expired_keys {
         cache.remove(&key);
     }
+
+    stats
 }
 
 fn finalize_all_flows(conn: &Connection, flow_cache: &FlowCache) {
@@ -373,20 +419,18 @@ fn start_db_thread(
                     }
 
                     let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-                    cleanup_flow_cache(&conn_connect_writer, &flow_cache, now_ms, second_window_ms);
+                    let flow_stats =
+                        cleanup_flow_cache(&conn_connect_writer, &flow_cache, now_ms, second_window_ms);
 
-                    let cutoff_raw = now_ms.saturating_sub(metric_config.raw_retention_minutes * MS_PER_MINUTE);
-                    let cutoff_1m = now_ms.saturating_sub(metric_config.rollup_1m_retention_days * MS_PER_DAY);
-                    let cutoff_1h = now_ms.saturating_sub(metric_config.rollup_1h_retention_days * MS_PER_DAY);
-                    let cutoff_1d = now_ms.saturating_sub(metric_config.rollup_1d_retention_days * MS_PER_DAY);
+                    let cutoff_1m = now_ms.saturating_sub(metric_config.connect_1m_retention_days * MS_PER_DAY);
+                    let cutoff_1h = now_ms.saturating_sub(metric_config.connect_1h_retention_days * MS_PER_DAY);
+                    let cutoff_1d = now_ms.saturating_sub(metric_config.connect_1d_retention_days * MS_PER_DAY);
                     let cutoff_dns = now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
 
                     dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
-                    if let (Ok(conn_raw), Ok(conn_agg)) = (disk_pool.get(), disk_pool.get()) {
+                    if let Ok(conn_agg) = disk_pool.get() {
                         let stats = connect::cleanup_old_metrics_only(
-                            &conn_raw,
                             &conn_agg,
-                            cutoff_raw,
                             cutoff_1m,
                             cutoff_1h,
                             cutoff_1d,
@@ -394,14 +438,17 @@ fn start_db_thread(
                             metric_config.cleanup_slice_window_secs,
                         );
                         tracing::info!(
-                            "phase=cleanup elapsed_ms={} budget_hit={} deleted_raw={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_summaries={}",
+                            "phase=cleanup elapsed_ms={} budget_hit={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_summaries={} active_flows={} finalized_flows={} finalized_in_run={} second_ring_points={}",
                             stats.elapsed_ms,
                             stats.budget_hit,
-                            stats.deleted_raw,
                             stats.deleted_1m,
                             stats.deleted_1h,
                             stats.deleted_1d,
                             stats.deleted_summaries,
+                            flow_stats.active_flows,
+                            flow_stats.finalized_flows,
+                            flow_stats.finalized_in_run,
+                            flow_stats.second_ring_points,
                         );
                     }
                 }
@@ -493,12 +540,10 @@ impl DuckMetricStore {
         let conn_disk = disk_pool.get().expect("Failed to get disk connection");
         let _ = conn_disk.execute("PRAGMA wal_autocheckpoint='256MB'", []);
 
-        connect::create_summaries_table(&conn_disk, "");
-        connect::create_metrics_table(&conn_disk, "")
+        connect::create_summaries_table(&conn_disk);
+        connect::create_metrics_table(&conn_disk)
             .expect("Failed to create connect metrics tables on disk");
-        connect::create_live_tables(&conn_disk)
-            .expect("Failed to create raw metric tables on disk");
-        dns::create_dns_table(&conn_disk, "").expect("Failed to create DNS metrics tables on disk");
+        dns::create_dns_table(&conn_disk).expect("Failed to create DNS metrics tables on disk");
 
         let thread_disk_pool = disk_pool.clone();
         let conn_dns = disk_pool.get().expect("Failed to get DNS writer connection from disk pool");
@@ -531,7 +576,6 @@ impl DuckMetricStore {
         DuckMetricStore {
             connect_tx,
             dns_tx,
-            db_path,
             config,
             disk_pool,
             flow_cache,
@@ -549,10 +593,6 @@ impl DuckMetricStore {
 
     pub fn get_dns_msg_channel(&self) -> mpsc::Sender<DnsMetricMessage> {
         self.dns_tx.clone()
-    }
-
-    pub async fn insert_metric(&self, metric: ConnectMetric) {
-        let _ = self.connect_tx.send(ConnectMessage::Metric(metric)).await;
     }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
@@ -611,7 +651,7 @@ impl DuckMetricStore {
             task_label::op::METRIC_QUERY_BY_KEY,
             move |store| -> Vec<ConnectMetricPoint> {
                 let conn = store.get_disk_conn();
-                connect::query_metric_by_key(&conn, &key, resolution, Some(&store.db_path))
+                connect::query_metric_by_key(&conn, &key, resolution)
             },
         )
         .await
@@ -623,7 +663,7 @@ impl DuckMetricStore {
     ) -> Vec<ConnectHistoryStatus> {
         self.run_query(task_label::op::METRIC_HISTORY_SUMMARIES, move |store| {
             let conn = store.get_disk_conn();
-            connect::query_historical_summaries_complex(&conn, params, Some(&store.db_path))
+            connect::query_historical_summaries_complex(&conn, params)
         })
         .await
     }
@@ -634,7 +674,7 @@ impl DuckMetricStore {
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
         self.run_query(task_label::op::METRIC_HISTORY_SRC_IP, move |store| {
             let conn = store.get_disk_conn();
-            connect::query_connection_ip_history(&conn, params, true, Some(&store.db_path))
+            connect::query_connection_ip_history(&conn, params, true)
         })
         .await
     }
@@ -645,7 +685,7 @@ impl DuckMetricStore {
     ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
         self.run_query(task_label::op::METRIC_HISTORY_DST_IP, move |store| {
             let conn = store.get_disk_conn();
-            connect::query_connection_ip_history(&conn, params, false, Some(&store.db_path))
+            connect::query_connection_ip_history(&conn, params, false)
         })
         .await
     }

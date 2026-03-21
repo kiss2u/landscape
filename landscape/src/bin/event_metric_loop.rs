@@ -31,12 +31,11 @@ async fn main() {
         metric_path,
         landscape_common::config::MetricRuntimeConfig {
             enable: landscape_common::DEFAULT_METRIC_ENABLE,
-            raw_retention_minutes: landscape_common::DEFAULT_METRIC_RAW_RETENTION_MINUTES,
             connect_second_window_minutes:
                 landscape_common::DEFAULT_METRIC_CONNECT_SECOND_WINDOW_MINUTES,
-            rollup_1m_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1M_RETENTION_DAYS,
-            rollup_1h_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1H_RETENTION_DAYS,
-            rollup_1d_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1D_RETENTION_DAYS,
+            connect_1m_retention_days: landscape_common::DEFAULT_METRIC_CONNECT_1M_RETENTION_DAYS,
+            connect_1h_retention_days: landscape_common::DEFAULT_METRIC_CONNECT_1H_RETENTION_DAYS,
+            connect_1d_retention_days: landscape_common::DEFAULT_METRIC_CONNECT_1D_RETENTION_DAYS,
             dns_retention_days: landscape_common::DEFAULT_DNS_METRIC_RETENTION_DAYS,
             write_batch_size: landscape_common::DEFAULT_METRIC_WRITE_BATCH_SIZE,
             write_flush_interval_secs: landscape_common::DEFAULT_METRIC_WRITE_FLUSH_INTERVAL_SECS,
@@ -45,7 +44,6 @@ async fn main() {
             cleanup_interval_secs: landscape_common::DEFAULT_METRIC_CLEANUP_INTERVAL_SECS,
             cleanup_time_budget_ms: landscape_common::DEFAULT_METRIC_CLEANUP_TIME_BUDGET_MS,
             cleanup_slice_window_secs: landscape_common::DEFAULT_METRIC_CLEANUP_SLICE_WINDOW_SECS,
-            aggregate_interval_secs: landscape_common::DEFAULT_METRIC_AGGREGATE_INTERVAL_SECS,
         },
     )
     .await;

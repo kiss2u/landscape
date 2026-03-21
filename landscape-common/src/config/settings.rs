@@ -54,19 +54,16 @@ pub struct LandscapeMetricConfig {
     pub enable: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub raw_retention_minutes: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub connect_second_window_minutes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub rollup_1m_retention_days: Option<u64>,
+    pub connect_1m_retention_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub rollup_1h_retention_days: Option<u64>,
+    pub connect_1h_retention_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub rollup_1d_retention_days: Option<u64>,
+    pub connect_1d_retention_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub dns_retention_days: Option<u64>,
@@ -91,9 +88,6 @@ pub struct LandscapeMetricConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub cleanup_slice_window_secs: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
-    pub aggregate_interval_secs: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

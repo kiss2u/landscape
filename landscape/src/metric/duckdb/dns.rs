@@ -5,11 +5,9 @@ use landscape_common::metric::dns::{
     DnsSortKey, DnsStatEntry, DnsSummaryQueryParams, DnsSummaryResponse,
 };
 
-pub fn create_dns_table(conn: &Connection, schema: &str) -> duckdb::Result<()> {
-    let prefix = if schema.is_empty() { "".to_string() } else { format!("{}.", schema) };
-    let sql = format!(
-        "
-        CREATE TABLE IF NOT EXISTS {}dns_metrics (
+pub fn create_dns_table(conn: &Connection) -> duckdb::Result<()> {
+    let sql = "
+        CREATE TABLE IF NOT EXISTS dns_metrics (
             flow_id INTEGER,
             domain TEXT,
             query_type TEXT,
@@ -20,15 +18,13 @@ pub fn create_dns_table(conn: &Connection, schema: &str) -> duckdb::Result<()> {
             answers TEXT,
             status TEXT
         );
-        CREATE INDEX IF NOT EXISTS idx_dns_report_time ON {}dns_metrics (report_time);
-        CREATE INDEX IF NOT EXISTS idx_dns_domain ON {}dns_metrics (domain);
-        CREATE INDEX IF NOT EXISTS idx_dns_src_ip ON {}dns_metrics (src_ip);
-        CREATE INDEX IF NOT EXISTS idx_dns_status ON {}dns_metrics (status);
-    ",
-        prefix, prefix, prefix, prefix, prefix
-    );
+        CREATE INDEX IF NOT EXISTS idx_dns_report_time ON dns_metrics (report_time);
+        CREATE INDEX IF NOT EXISTS idx_dns_domain ON dns_metrics (domain);
+        CREATE INDEX IF NOT EXISTS idx_dns_src_ip ON dns_metrics (src_ip);
+        CREATE INDEX IF NOT EXISTS idx_dns_status ON dns_metrics (status);
+    ";
 
-    conn.execute_batch(&sql)
+    conn.execute_batch(sql)
 }
 
 pub fn query_dns_history(

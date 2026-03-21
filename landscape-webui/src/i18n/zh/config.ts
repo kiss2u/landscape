@@ -25,8 +25,7 @@ export default {
   cache_negative_ttl: "否定缓存 TTL (秒)",
   cache_negative_ttl_desc: "DNS 否定缓存（NXDOMAIN/NODATA）记录的保存时间",
 
-  conn_retention_mins: "原始数据保存 (分钟)",
-  conn_retention_mins_desc: "原始秒级连接数据的保存期限（分钟）",
+  conn_retention_mins: "连接指标设置",
   connect_second_window_mins: "秒级热窗口 (分钟)",
   connect_second_window_mins_desc: "秒级连接图表在内存中的保留窗口",
   conn_retention_minute_days: "聚合数据保存 (分钟级)",
@@ -48,15 +47,13 @@ export default {
   db_max_threads: "数据库并发线程",
   db_max_threads_desc: "数据库处理任务时允许使用的最大线程数",
 
-  maintenance_settings: "自动清理与聚合任务",
+  maintenance_settings: "自动清理设置",
   cleanup_interval: "数据清理间隔 (秒)",
   cleanup_interval_desc: "执行过期指标历史清理任务的时间间隔",
   cleanup_budget: "清理时间预算 (毫秒)",
   cleanup_budget_desc: "单次清理任务允许运行的最大毫秒数（切片清理）",
   cleanup_slice_window: "清理分片窗口 (秒)",
   cleanup_slice_window_desc: "单次清理事务处理的时间范围粒度",
-  aggregate_interval: "统计聚合间隔 (秒)",
-  aggregate_interval_desc: "执行全局历史统计聚合任务的时间间隔",
 
   backup_desc:
     "你可以将当前路由器的所有配置（除 Docker 相关）导出为一个初始化文件，用于快速恢复或迁移。",

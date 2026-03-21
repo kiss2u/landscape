@@ -41,20 +41,6 @@ async function handleSaveMetric() {
       </n-divider>
       <n-grid x-gap="12" :cols="2">
         <n-gi>
-          <n-form-item :label="t('config.conn_retention_mins')">
-            <n-input-number
-              v-model:value="metricStore.rawRetentionMinutes"
-              :min="1"
-              :max="1440"
-              placeholder="5"
-              style="width: 100%"
-            />
-            <template #feedback>
-              {{ t("config.conn_retention_mins_desc") }}
-            </template>
-          </n-form-item>
-        </n-gi>
-        <n-gi>
           <n-form-item :label="t('config.connect_second_window_mins')">
             <n-input-number
               v-model:value="metricStore.connectSecondWindowMinutes"
@@ -71,7 +57,7 @@ async function handleSaveMetric() {
         <n-gi>
           <n-form-item :label="t('config.conn_retention_minute_days')">
             <n-input-number
-              v-model:value="metricStore.rollup1mRetentionDays"
+              v-model:value="metricStore.connect1mRetentionDays"
               :min="1"
               :max="365"
               placeholder="1"
@@ -85,7 +71,7 @@ async function handleSaveMetric() {
         <n-gi>
           <n-form-item :label="t('config.conn_retention_hour_days')">
             <n-input-number
-              v-model:value="metricStore.rollup1hRetentionDays"
+              v-model:value="metricStore.connect1hRetentionDays"
               :min="1"
               :max="365"
               placeholder="7"
@@ -99,7 +85,7 @@ async function handleSaveMetric() {
         <n-gi>
           <n-form-item :label="t('config.conn_retention_day_days')">
             <n-input-number
-              v-model:value="metricStore.rollup1dRetentionDays"
+              v-model:value="metricStore.connect1dRetentionDays"
               :min="1"
               :max="3650"
               placeholder="30"
@@ -233,20 +219,6 @@ async function handleSaveMetric() {
             />
             <template #feedback>
               {{ t("config.cleanup_slice_window_desc") }}
-            </template>
-          </n-form-item>
-        </n-gi>
-        <n-gi>
-          <n-form-item :label="t('config.aggregate_interval')">
-            <n-input-number
-              v-model:value="metricStore.aggregateIntervalSecs"
-              :min="300"
-              :max="86400"
-              placeholder="3600"
-              style="width: 100%"
-            />
-            <template #feedback>
-              {{ t("config.aggregate_interval_desc") }}
             </template>
           </n-form-item>
         </n-gi>

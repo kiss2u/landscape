@@ -27,9 +27,7 @@ export default {
   cache_negative_ttl_desc:
     "Retention time for negative (NXDOMAIN/NODATA) DNS records",
 
-  conn_retention_mins: "Raw Data Retention (Mins)",
-  conn_retention_mins_desc:
-    "Retention period for raw connection metrics (seconds interval) in minutes",
+  conn_retention_mins: "Connection Metric Settings",
   connect_second_window_mins: "Second Window (Mins)",
   connect_second_window_mins_desc:
     "In-memory retention window for second-level connection charts",
@@ -56,7 +54,7 @@ export default {
   db_max_threads: "DB Max Threads",
   db_max_threads_desc: "Maximum background threads for database operations",
 
-  maintenance_settings: "Maintenance & Aggregation Tasks",
+  maintenance_settings: "Cleanup Settings",
   cleanup_interval: "Cleanup Interval (s)",
   cleanup_interval_desc: "Interval between history cleanup tasks",
   cleanup_budget: "Cleanup Budget (ms)",
@@ -64,9 +62,6 @@ export default {
   cleanup_slice_window: "Cleanup Slice Window (s)",
   cleanup_slice_window_desc:
     "Time granularity for each cleanup transaction slice",
-  aggregate_interval: "Aggregate Interval (s)",
-  aggregate_interval_desc:
-    "Interval between global statistics aggregation tasks",
 
   backup_desc:
     "You can export all current router configurations (including DNS, firewall, network interfaces, etc.) as an init file for quick recovery or migration.",

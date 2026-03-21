@@ -75,20 +75,16 @@ sysctl = { workspace = true }
 portable-pty = { workspace = true }
 # pseudoterminal = { version = "0.2.1", features = ["non-blocking"] }
 
-polars = { workspace = true, features = ["lazy", "parquet"], optional = true }
 duckdb = { workspace = true, optional = true }
 r2d2 = { workspace = true, optional = true }
 
 etherparse = { workspace = true }
-dashmap = { workspace = true, optional = true }
-
 [dependencies.pnet]
 workspace = true
 
 [features]
 default = []
-polars = ["dep:polars"]
-metric-duckdb = ["dep:duckdb", "dep:r2d2", "dep:dashmap"]
+metric-duckdb = ["dep:duckdb", "dep:r2d2"]
 duckdb-bundled = ["metric-duckdb", "duckdb/bundled"]
 
 [dev-dependencies]

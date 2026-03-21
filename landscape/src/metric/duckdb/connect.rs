@@ -1,10 +1,9 @@
+use super::clean_ip_string;
 use duckdb::{params, Connection};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
     ConnectMetricPoint, ConnectSortKey, MetricResolution, SortOrder,
 };
-use std::net::IpAddr;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 pub const SUMMARY_INSERT_SQL: &str = "
@@ -20,19 +19,6 @@ pub const SUMMARY_INSERT_SQL: &str = "
         total_egress_pkts = GREATEST(conn_summaries.total_egress_pkts, EXCLUDED.total_egress_pkts),
         status = CASE WHEN EXCLUDED.last_report_time >= conn_summaries.last_report_time THEN EXCLUDED.status ELSE conn_summaries.status END
 ";
-
-fn clean_ip_string(ip: &IpAddr) -> String {
-    match ip {
-        IpAddr::V6(v6) => {
-            if let Some(v4) = v6.to_ipv4_mapped() {
-                v4.to_string()
-            } else {
-                v6.to_string()
-            }
-        }
-        IpAddr::V4(v4) => v4.to_string(),
-    }
-}
 
 pub fn upsert_metric_bucket(
     conn: &Connection,
@@ -101,11 +87,9 @@ pub fn upsert_summary(conn: &Connection, metric: &ConnectMetric) -> duckdb::Resu
     )
 }
 
-pub fn create_summaries_table(conn: &Connection, schema: &str) {
-    let prefix = if schema.is_empty() { "".to_string() } else { format!("{}.", schema) };
-    let sql = format!(
-        "
-        CREATE TABLE IF NOT EXISTS {}conn_summaries (
+pub fn create_summaries_table(conn: &Connection) {
+    let sql = "
+        CREATE TABLE IF NOT EXISTS conn_summaries (
             create_time UBIGINT,
             cpu_id INTEGER,
             src_ip VARCHAR,
@@ -126,19 +110,15 @@ pub fn create_summaries_table(conn: &Connection, schema: &str) {
             gress INTEGER,
             PRIMARY KEY (create_time, cpu_id)
         );
-        CREATE INDEX IF NOT EXISTS idx_conn_summaries_time ON {}conn_summaries (last_report_time);
-    ",
-        prefix, prefix
-    );
+        CREATE INDEX IF NOT EXISTS idx_conn_summaries_time ON conn_summaries (last_report_time);
+    ";
 
-    conn.execute_batch(&sql).expect("Failed to create summaries table");
+    conn.execute_batch(sql).expect("Failed to create summaries table");
 }
 
-pub fn create_metrics_table(conn: &Connection, schema: &str) -> duckdb::Result<()> {
-    let prefix = if schema.is_empty() { "".to_string() } else { format!("{}.", schema) };
-    let sql = format!(
-        "
-        CREATE TABLE IF NOT EXISTS {}conn_metrics_1m (
+pub fn create_metrics_table(conn: &Connection) -> duckdb::Result<()> {
+    let sql = "
+        CREATE TABLE IF NOT EXISTS conn_metrics_1m (
             create_time UBIGINT,
             cpu_id INTEGER,
             report_time BIGINT,
@@ -151,7 +131,7 @@ pub fn create_metrics_table(conn: &Connection, schema: &str) -> duckdb::Result<(
             PRIMARY KEY (create_time, cpu_id, report_time)
         );
 
-        CREATE TABLE IF NOT EXISTS {}conn_metrics_1h (
+        CREATE TABLE IF NOT EXISTS conn_metrics_1h (
             create_time UBIGINT,
             cpu_id INTEGER,
             report_time BIGINT,
@@ -164,7 +144,7 @@ pub fn create_metrics_table(conn: &Connection, schema: &str) -> duckdb::Result<(
             PRIMARY KEY (create_time, cpu_id, report_time)
         );
 
-        CREATE TABLE IF NOT EXISTS {}conn_metrics_1d (
+        CREATE TABLE IF NOT EXISTS conn_metrics_1d (
             create_time UBIGINT,
             cpu_id INTEGER,
             report_time BIGINT,
@@ -177,52 +157,21 @@ pub fn create_metrics_table(conn: &Connection, schema: &str) -> duckdb::Result<(
             PRIMARY KEY (create_time, cpu_id, report_time)
         );
 
-        CREATE TABLE IF NOT EXISTS {}global_stats (
-            total_ingress_bytes BIGINT,
-            total_egress_bytes BIGINT,
-            total_ingress_pkts BIGINT,
-            total_egress_pkts BIGINT,
-            total_connect_count BIGINT,
-            last_calculate_time UBIGINT
-        );
+        CREATE INDEX IF NOT EXISTS idx_conn_metrics_1m_time ON conn_metrics_1m (report_time);
+        CREATE INDEX IF NOT EXISTS idx_conn_metrics_1h_time ON conn_metrics_1h (report_time);
+        CREATE INDEX IF NOT EXISTS idx_conn_metrics_1d_time ON conn_metrics_1d (report_time);
+    ";
 
-        CREATE INDEX IF NOT EXISTS idx_conn_metrics_1m_time ON {}conn_metrics_1m (report_time);
-        CREATE INDEX IF NOT EXISTS idx_conn_metrics_1h_time ON {}conn_metrics_1h (report_time);
-        CREATE INDEX IF NOT EXISTS idx_conn_metrics_1d_time ON {}conn_metrics_1d (report_time);
-    ",
-        prefix, prefix, prefix, prefix, prefix, prefix, prefix
-    );
-
-    conn.execute_batch(&sql)
-}
-
-pub fn create_live_tables(conn: &Connection) -> duckdb::Result<()> {
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS conn_metrics (
-            create_time UBIGINT,
-            cpu_id INTEGER,
-            report_time BIGINT,
-            ingress_bytes BIGINT,
-            ingress_packets BIGINT,
-            egress_bytes BIGINT,
-            egress_packets BIGINT,
-            status INTEGER,
-            create_time_ms UBIGINT
-        );
-        CREATE INDEX IF NOT EXISTS idx_conn_metrics_time ON conn_metrics (report_time);
-        ",
-    )
+    conn.execute_batch(sql)
 }
 
 pub fn query_metric_by_key(
     conn: &Connection,
     key: &ConnectKey,
-    _resolution: MetricResolution,
-    _history_db_path: Option<&PathBuf>,
+    resolution: MetricResolution,
 ) -> Vec<ConnectMetricPoint> {
-    let table = match _resolution {
-        MetricResolution::Second => "conn_metrics",
+    let table = match resolution {
+        MetricResolution::Second => return Vec::new(),
         MetricResolution::Minute => "conn_metrics_1m",
         MetricResolution::Hour => "conn_metrics_1h",
         MetricResolution::Day => "conn_metrics_1d",
@@ -279,7 +228,6 @@ pub fn query_metric_by_key(
 pub fn query_historical_summaries_complex(
     conn: &Connection,
     params: ConnectHistoryQueryParams,
-    _history_db_path: Option<&PathBuf>,
 ) -> Vec<ConnectHistoryStatus> {
     let now = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
 
@@ -450,101 +398,8 @@ pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
     res.unwrap_or_default()
 }
 
-pub fn aggregate_global_stats(conn: &Connection) -> duckdb::Result<()> {
-    conn.execute_batch(
-        "
-        DELETE FROM global_stats;
-        INSERT INTO global_stats
-        SELECT
-            SUM(max_ingress_bytes),
-            SUM(max_egress_bytes),
-            SUM(max_ingress_pkts),
-            SUM(max_egress_pkts),
-            COUNT(*),
-            EXTRACT(EPOCH FROM now()) * 1000
-        FROM (
-            SELECT
-                MAX(ingress_bytes) as max_ingress_bytes,
-                MAX(egress_bytes) as max_egress_bytes,
-                MAX(ingress_packets) as max_ingress_pkts,
-                MAX(egress_packets) as max_egress_pkts
-            FROM conn_metrics_1d
-            GROUP BY create_time, cpu_id
-        );
-    ",
-    )
-}
-
-pub fn perform_inner_db_rollup(conn: &Connection) -> duckdb::Result<()> {
-    // 1. Aggregate raw metrics (5s) into 1 minute buckets
-    conn.execute_batch(
-        "
-        INSERT INTO conn_metrics_1m (
-            create_time, cpu_id, report_time,
-            ingress_bytes, ingress_packets, egress_bytes, egress_packets, 
-            status, create_time_ms
-        )
-        SELECT 
-            create_time, cpu_id, (report_time // 60000) * 60000 as bucket_time,
-            MAX(ingress_bytes), MAX(ingress_packets), MAX(egress_bytes), MAX(egress_packets),
-            MAX(status), MAX(create_time_ms)
-        FROM conn_metrics
-        WHERE report_time >= (EXTRACT(EPOCH FROM now()) * 1000 - 600000)
-        GROUP BY 1, 2, 3
-        ON CONFLICT (create_time, cpu_id, report_time) DO UPDATE SET
-            ingress_bytes = GREATEST(conn_metrics_1m.ingress_bytes, EXCLUDED.ingress_bytes),
-            ingress_packets = GREATEST(conn_metrics_1m.ingress_packets, EXCLUDED.ingress_packets),
-            egress_bytes = GREATEST(conn_metrics_1m.egress_bytes, EXCLUDED.egress_bytes),
-            egress_packets = GREATEST(conn_metrics_1m.egress_packets, EXCLUDED.egress_packets),
-            status = GREATEST(conn_metrics_1m.status, EXCLUDED.status);
-
-        -- 2. Aggregate 1m into 1h
-        INSERT INTO conn_metrics_1h (
-            create_time, cpu_id, report_time,
-            ingress_bytes, ingress_packets, egress_bytes, egress_packets, 
-            status, create_time_ms
-        )
-        SELECT 
-            create_time, cpu_id, (report_time // 3600000) * 3600000 as bucket_time,
-            MAX(ingress_bytes), MAX(ingress_packets), MAX(egress_bytes), MAX(egress_packets),
-            MAX(status), MAX(create_time_ms)
-        FROM conn_metrics_1m
-        WHERE report_time >= (EXTRACT(EPOCH FROM now()) * 1000 - 7200000)
-        GROUP BY 1, 2, 3
-        ON CONFLICT (create_time, cpu_id, report_time) DO UPDATE SET
-            ingress_bytes = GREATEST(conn_metrics_1h.ingress_bytes, EXCLUDED.ingress_bytes),
-            ingress_packets = GREATEST(conn_metrics_1h.ingress_packets, EXCLUDED.ingress_packets),
-            egress_bytes = GREATEST(conn_metrics_1h.egress_bytes, EXCLUDED.egress_bytes),
-            egress_packets = GREATEST(conn_metrics_1h.egress_packets, EXCLUDED.egress_packets),
-            status = GREATEST(conn_metrics_1h.status, EXCLUDED.status);
-
-        -- 3. Aggregate 1h into 1d
-        INSERT INTO conn_metrics_1d (
-            create_time, cpu_id, report_time,
-            ingress_bytes, ingress_packets, egress_bytes, egress_packets, 
-            status, create_time_ms
-        )
-        SELECT 
-            create_time, cpu_id, (report_time // 86400000) * 86400000 as bucket_time,
-            MAX(ingress_bytes), MAX(ingress_packets), MAX(egress_bytes), MAX(egress_packets),
-            MAX(status), MAX(create_time_ms)
-        FROM conn_metrics_1h
-        WHERE report_time >= (EXTRACT(EPOCH FROM now()) * 1000 - 172800000)
-        GROUP BY 1, 2, 3
-        ON CONFLICT (create_time, cpu_id, report_time) DO UPDATE SET
-            ingress_bytes = GREATEST(conn_metrics_1d.ingress_bytes, EXCLUDED.ingress_bytes),
-            ingress_packets = GREATEST(conn_metrics_1d.ingress_packets, EXCLUDED.ingress_packets),
-            egress_bytes = GREATEST(conn_metrics_1d.egress_bytes, EXCLUDED.egress_bytes),
-            egress_packets = GREATEST(conn_metrics_1d.egress_packets, EXCLUDED.egress_packets),
-            status = GREATEST(conn_metrics_1d.status, EXCLUDED.status);
-    ",
-    )?;
-    Ok(())
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct CleanupStats {
-    pub deleted_raw: usize,
     pub deleted_1m: usize,
     pub deleted_1h: usize,
     pub deleted_1d: usize,
@@ -603,9 +458,7 @@ fn delete_table_in_slices(
 }
 
 pub fn cleanup_old_metrics_only(
-    conn_mem: &Connection,
-    conn_disk: &Connection,
-    cutoff_raw: u64,
+    conn: &Connection,
     cutoff_1m: u64,
     cutoff_1h: u64,
     cutoff_1d: u64,
@@ -619,23 +472,8 @@ pub fn cleanup_old_metrics_only(
 
     let mut stats = CleanupStats::default();
 
-    let (deleted_raw, budget_hit) = delete_table_in_slices(
-        conn_mem,
-        "conn_metrics",
-        "report_time",
-        cutoff_raw,
-        slice_window_ms,
-        deadline,
-    );
-    stats.deleted_raw = deleted_raw;
-    stats.budget_hit = budget_hit;
-    if stats.budget_hit {
-        stats.elapsed_ms = start.elapsed().as_millis();
-        return stats;
-    }
-
     let (deleted_1m, budget_hit) = delete_table_in_slices(
-        conn_disk,
+        conn,
         "conn_metrics_1m",
         "report_time",
         cutoff_1m,
@@ -650,7 +488,7 @@ pub fn cleanup_old_metrics_only(
     }
 
     let (deleted_1h, budget_hit) = delete_table_in_slices(
-        conn_disk,
+        conn,
         "conn_metrics_1h",
         "report_time",
         cutoff_1h,
@@ -665,7 +503,7 @@ pub fn cleanup_old_metrics_only(
     }
 
     let (deleted_1d, budget_hit) = delete_table_in_slices(
-        conn_disk,
+        conn,
         "conn_metrics_1d",
         "report_time",
         cutoff_1d,
@@ -680,7 +518,7 @@ pub fn cleanup_old_metrics_only(
     }
 
     let (deleted_summaries, budget_hit) = delete_table_in_slices(
-        conn_disk,
+        conn,
         "conn_summaries",
         "last_report_time",
         cutoff_1d,
@@ -698,7 +536,6 @@ pub fn query_connection_ip_history(
     conn: &Connection,
     params: ConnectHistoryQueryParams,
     is_src: bool,
-    _history_db_path: Option<&PathBuf>,
 ) -> Vec<landscape_common::metric::connect::IpHistoryStat> {
     // Always use conn_summaries (no history prefix needed with unified architecture)
     let table_name = "conn_summaries";

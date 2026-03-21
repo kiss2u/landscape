@@ -34,12 +34,6 @@ impl ConnectMetricManager {
         self.metric_store.get_connect_msg_channel()
     }
 
-    pub fn send_connect_msg(&self, msg: ConnectMessage) {
-        if let Err(e) = self.metric_store.get_connect_msg_channel().try_send(msg) {
-            tracing::error!("send firewall metric error: {e:?}");
-        }
-    }
-
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         self.metric_store.connect_infos().await
     }

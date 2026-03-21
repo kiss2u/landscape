@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use landscape_common::config::MetricRuntimeConfig;
 use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
-    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
+    ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
     ConnectMetricPoint, ConnectRealtimeStatus, IpRealtimeStat, MetricResolution,
 };
 use landscape_common::metric::dns::{
@@ -42,10 +42,6 @@ impl NoopMetricStore {
         self.dns_tx.clone()
     }
 
-    pub async fn insert_metric(&self, metric: ConnectMetric) {
-        let _ = self.connect_tx.send(ConnectMessage::Metric(metric)).await;
-    }
-
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         Vec::new()
     }
@@ -60,16 +56,6 @@ impl NoopMetricStore {
         _resolution: MetricResolution,
     ) -> Vec<ConnectMetricPoint> {
         Vec::new()
-    }
-
-    pub async fn collect_and_cleanup_old_metrics(
-        &self,
-        _cutoff_raw: u64,
-        _cutoff_1m: u64,
-        _cutoff_1h: u64,
-        _cutoff_1d: u64,
-    ) -> Box<Vec<ConnectMetric>> {
-        Box::new(Vec::new())
     }
 
     pub async fn history_summaries_complex(

@@ -57,11 +57,10 @@ pub struct StoreRuntimeConfig {
 #[derive(Clone, Debug)]
 pub struct MetricRuntimeConfig {
     pub enable: bool,
-    pub raw_retention_minutes: u64,
     pub connect_second_window_minutes: u64,
-    pub rollup_1m_retention_days: u64,
-    pub rollup_1h_retention_days: u64,
-    pub rollup_1d_retention_days: u64,
+    pub connect_1m_retention_days: u64,
+    pub connect_1h_retention_days: u64,
+    pub connect_1d_retention_days: u64,
     pub dns_retention_days: u64,
     pub write_batch_size: usize,
     pub write_flush_interval_secs: u64,
@@ -70,7 +69,6 @@ pub struct MetricRuntimeConfig {
     pub cleanup_interval_secs: u64,
     pub cleanup_time_budget_ms: u64,
     pub cleanup_slice_window_secs: u64,
-    pub aggregate_interval_secs: u64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -139,11 +137,10 @@ impl RuntimeConfig {
          \n\
          [Metric]\n\
          Enabled: {}\n\
-         Raw Retention: {} mins\n\
          Connect Second Window: {} mins\n\
-         Rollup 1m Retention: {} days\n\
-         Rollup 1h Retention: {} days\n\
-         Rollup 1d Retention: {} days\n\
+         Connect 1m Retention: {} days\n\
+         Connect 1h Retention: {} days\n\
+         Connect 1d Retention: {} days\n\
          DNS Retention: {} days\n\
          Write Batch Size: {}\n\
          Write Flush Interval: {}s\n\
@@ -152,7 +149,6 @@ impl RuntimeConfig {
          Cleanup Interval: {}s\n\
          Cleanup Budget: {}ms\n\
           Cleanup Slice Window: {}s\n\
-          Aggregate Interval: {}s\n\
           \n\
           [Time]\n\
           Enabled: {}\n\
@@ -173,11 +169,10 @@ impl RuntimeConfig {
             address_https_str,
             self.store.database_path,
             self.metric.enable,
-            self.metric.raw_retention_minutes,
             self.metric.connect_second_window_minutes,
-            self.metric.rollup_1m_retention_days,
-            self.metric.rollup_1h_retention_days,
-            self.metric.rollup_1d_retention_days,
+            self.metric.connect_1m_retention_days,
+            self.metric.connect_1h_retention_days,
+            self.metric.connect_1d_retention_days,
             self.metric.dns_retention_days,
             self.metric.write_batch_size,
             self.metric.write_flush_interval_secs,
@@ -186,7 +181,6 @@ impl RuntimeConfig {
             self.metric.cleanup_interval_secs,
             self.metric.cleanup_time_budget_ms,
             self.metric.cleanup_slice_window_secs,
-            self.metric.aggregate_interval_secs,
             self.time.enabled,
             self.time.servers.join(", "),
             self.time.sync_interval_secs,
@@ -202,20 +196,17 @@ impl MetricRuntimeConfig {
         if let Some(v) = config.enable {
             self.enable = v;
         }
-        if let Some(v) = config.raw_retention_minutes {
-            self.raw_retention_minutes = v;
-        }
         if let Some(v) = config.connect_second_window_minutes {
             self.connect_second_window_minutes = v;
         }
-        if let Some(v) = config.rollup_1m_retention_days {
-            self.rollup_1m_retention_days = v;
+        if let Some(v) = config.connect_1m_retention_days {
+            self.connect_1m_retention_days = v;
         }
-        if let Some(v) = config.rollup_1h_retention_days {
-            self.rollup_1h_retention_days = v;
+        if let Some(v) = config.connect_1h_retention_days {
+            self.connect_1h_retention_days = v;
         }
-        if let Some(v) = config.rollup_1d_retention_days {
-            self.rollup_1d_retention_days = v;
+        if let Some(v) = config.connect_1d_retention_days {
+            self.connect_1d_retention_days = v;
         }
         if let Some(v) = config.dns_retention_days {
             self.dns_retention_days = v;
@@ -240,9 +231,6 @@ impl MetricRuntimeConfig {
         }
         if let Some(v) = config.cleanup_slice_window_secs {
             self.cleanup_slice_window_secs = v;
-        }
-        if let Some(v) = config.aggregate_interval_secs {
-            self.aggregate_interval_secs = v;
         }
     }
 }

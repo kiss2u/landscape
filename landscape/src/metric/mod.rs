@@ -14,8 +14,6 @@ pub mod dns_manager;
 #[cfg(feature = "metric-duckdb")]
 pub mod duckdb;
 pub mod noop_store;
-#[cfg(feature = "polars")]
-pub mod polars;
 
 #[cfg(feature = "metric-duckdb")]
 pub type MetricStore = duckdb::DuckMetricStore;

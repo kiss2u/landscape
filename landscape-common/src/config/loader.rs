@@ -98,26 +98,22 @@ impl RuntimeConfig {
 
         let metric = MetricRuntimeConfig {
             enable: config.metric.enable.unwrap_or(crate::DEFAULT_METRIC_ENABLE),
-            raw_retention_minutes: config
-                .metric
-                .raw_retention_minutes
-                .unwrap_or(crate::DEFAULT_METRIC_RAW_RETENTION_MINUTES),
             connect_second_window_minutes: config
                 .metric
                 .connect_second_window_minutes
                 .unwrap_or(crate::DEFAULT_METRIC_CONNECT_SECOND_WINDOW_MINUTES),
-            rollup_1m_retention_days: config
+            connect_1m_retention_days: config
                 .metric
-                .rollup_1m_retention_days
-                .unwrap_or(crate::DEFAULT_METRIC_ROLLUP_1M_RETENTION_DAYS),
-            rollup_1h_retention_days: config
+                .connect_1m_retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_CONNECT_1M_RETENTION_DAYS),
+            connect_1h_retention_days: config
                 .metric
-                .rollup_1h_retention_days
-                .unwrap_or(crate::DEFAULT_METRIC_ROLLUP_1H_RETENTION_DAYS),
-            rollup_1d_retention_days: config
+                .connect_1h_retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_CONNECT_1H_RETENTION_DAYS),
+            connect_1d_retention_days: config
                 .metric
-                .rollup_1d_retention_days
-                .unwrap_or(crate::DEFAULT_METRIC_ROLLUP_1D_RETENTION_DAYS),
+                .connect_1d_retention_days
+                .unwrap_or(crate::DEFAULT_METRIC_CONNECT_1D_RETENTION_DAYS),
             dns_retention_days: config
                 .metric
                 .dns_retention_days
@@ -150,10 +146,6 @@ impl RuntimeConfig {
                 .metric
                 .cleanup_slice_window_secs
                 .unwrap_or(crate::DEFAULT_METRIC_CLEANUP_SLICE_WINDOW_SECS),
-            aggregate_interval_secs: config
-                .metric
-                .aggregate_interval_secs
-                .unwrap_or(crate::DEFAULT_METRIC_AGGREGATE_INTERVAL_SECS),
         };
 
         let dns = DnsRuntimeConfig {

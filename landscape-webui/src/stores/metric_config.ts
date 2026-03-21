@@ -5,11 +5,10 @@ import { get_metric_config_edit, update_metric_config } from "@/api/sys/config";
 
 export const useMetricConfigStore = defineStore("metric_config", () => {
   const enabled = ref<boolean>(true);
-  const rawRetentionMinutes = ref<number | undefined>(undefined);
   const connectSecondWindowMinutes = ref<number | undefined>(undefined);
-  const rollup1mRetentionDays = ref<number | undefined>(undefined);
-  const rollup1hRetentionDays = ref<number | undefined>(undefined);
-  const rollup1dRetentionDays = ref<number | undefined>(undefined);
+  const connect1mRetentionDays = ref<number | undefined>(undefined);
+  const connect1hRetentionDays = ref<number | undefined>(undefined);
+  const connect1dRetentionDays = ref<number | undefined>(undefined);
   const dnsRetentionDays = ref<number | undefined>(undefined);
   const writeBatchSize = ref<number | undefined>(undefined);
   const writeFlushIntervalSecs = ref<number | undefined>(undefined);
@@ -18,18 +17,19 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
   const cleanupIntervalSecs = ref<number | undefined>(undefined);
   const cleanupTimeBudgetMs = ref<number | undefined>(undefined);
   const cleanupSliceWindowSecs = ref<number | undefined>(undefined);
-  const aggregateIntervalSecs = ref<number | undefined>(undefined);
   const expectedHash = ref<string>("");
 
   async function loadMetricConfig() {
     const { metric, hash } = await get_metric_config_edit();
     enabled.value = metric.enable ?? true;
-    rawRetentionMinutes.value = metric.raw_retention_minutes ?? undefined;
     connectSecondWindowMinutes.value =
       metric.connect_second_window_minutes ?? undefined;
-    rollup1mRetentionDays.value = metric.rollup_1m_retention_days ?? undefined;
-    rollup1hRetentionDays.value = metric.rollup_1h_retention_days ?? undefined;
-    rollup1dRetentionDays.value = metric.rollup_1d_retention_days ?? undefined;
+    connect1mRetentionDays.value =
+      metric.connect_1m_retention_days ?? undefined;
+    connect1hRetentionDays.value =
+      metric.connect_1h_retention_days ?? undefined;
+    connect1dRetentionDays.value =
+      metric.connect_1d_retention_days ?? undefined;
     dnsRetentionDays.value = metric.dns_retention_days ?? undefined;
     writeBatchSize.value = metric.write_batch_size ?? undefined;
     writeFlushIntervalSecs.value =
@@ -40,18 +40,16 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
     cleanupTimeBudgetMs.value = metric.cleanup_time_budget_ms ?? undefined;
     cleanupSliceWindowSecs.value =
       metric.cleanup_slice_window_secs ?? undefined;
-    aggregateIntervalSecs.value = metric.aggregate_interval_secs ?? undefined;
     expectedHash.value = hash;
   }
 
   async function saveMetricConfig() {
     const new_metric: LandscapeMetricConfig = {
       enable: enabled.value,
-      raw_retention_minutes: rawRetentionMinutes.value,
       connect_second_window_minutes: connectSecondWindowMinutes.value,
-      rollup_1m_retention_days: rollup1mRetentionDays.value,
-      rollup_1h_retention_days: rollup1hRetentionDays.value,
-      rollup_1d_retention_days: rollup1dRetentionDays.value,
+      connect_1m_retention_days: connect1mRetentionDays.value,
+      connect_1h_retention_days: connect1hRetentionDays.value,
+      connect_1d_retention_days: connect1dRetentionDays.value,
       dns_retention_days: dnsRetentionDays.value,
       write_batch_size: writeBatchSize.value,
       write_flush_interval_secs: writeFlushIntervalSecs.value,
@@ -60,7 +58,6 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
       cleanup_interval_secs: cleanupIntervalSecs.value,
       cleanup_time_budget_ms: cleanupTimeBudgetMs.value,
       cleanup_slice_window_secs: cleanupSliceWindowSecs.value,
-      aggregate_interval_secs: aggregateIntervalSecs.value,
     };
     await update_metric_config({
       new_metric,
@@ -74,11 +71,10 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
 
   return {
     enabled,
-    rawRetentionMinutes,
     connectSecondWindowMinutes,
-    rollup1mRetentionDays,
-    rollup1hRetentionDays,
-    rollup1dRetentionDays,
+    connect1mRetentionDays,
+    connect1hRetentionDays,
+    connect1dRetentionDays,
     dnsRetentionDays,
     writeBatchSize,
     writeFlushIntervalSecs,
@@ -87,7 +83,6 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
     cleanupIntervalSecs,
     cleanupTimeBudgetMs,
     cleanupSliceWindowSecs,
-    aggregateIntervalSecs,
     expectedHash,
     loadMetricConfig,
     saveMetricConfig,
