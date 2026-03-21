@@ -3,7 +3,7 @@ import { ref, computed, reactive, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { ConnectFilter } from "@/lib/metric.rs";
-import { get_connect_history, get_connect_global_stats } from "@/api/metric";
+import { get_connect_history } from "@/api/metric";
 import { formatSize, formatCount } from "@/lib/util";
 import { useThemeVars } from "naive-ui";
 import { useMetricStore } from "@/stores/status_metric";
@@ -39,11 +39,11 @@ const sortOrder = computed(() => frontEndStore.history_conn_sort_order);
 const globalStats = computed(() => metricStore.global_history_stats);
 const refreshingGlobalStats = ref(false);
 
-const refreshGlobalStats = async () => {
+const refreshGlobalStats = async (forceRefresh = true) => {
   if (refreshingGlobalStats.value) return;
   refreshingGlobalStats.value = true;
   try {
-    await metricStore.UPDATE_GLOBAL_HISTORY_STATS();
+    await metricStore.UPDATE_GLOBAL_HISTORY_STATS(forceRefresh);
   } catch (e) {
     console.error(e);
   } finally {
@@ -241,7 +241,7 @@ onMounted(() => {
   if (route.query.flow_id)
     historyFilter.flow_id = parseInt(route.query.flow_id as string);
 
-  refreshGlobalStats();
+  refreshGlobalStats(false);
   fetchHistory();
 });
 </script>

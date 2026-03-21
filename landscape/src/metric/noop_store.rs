@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use landscape_common::config::MetricRuntimeConfig;
+use landscape_common::error::LdResult;
 use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
@@ -79,8 +80,8 @@ impl NoopMetricStore {
         Vec::new()
     }
 
-    pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        ConnectGlobalStats::default()
+    pub async fn get_global_stats(&self, _force_refresh: bool) -> LdResult<ConnectGlobalStats> {
+        Ok(ConnectGlobalStats::default())
     }
 
     pub async fn insert_dns_metric(&self, metric: DnsMetric) {

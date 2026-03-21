@@ -364,7 +364,7 @@ pub fn query_historical_summaries_complex(
     }
 }
 
-pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
+pub fn query_global_stats(conn: &Connection) -> duckdb::Result<ConnectGlobalStats> {
     let stmt = "
         SELECT
             COALESCE(SUM(total_ingress_bytes), 0),
@@ -375,15 +375,9 @@ pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
         FROM conn_summaries
     ";
 
-    let mut stmt = match conn.prepare(stmt) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("Failed to prepare SQL for global stats: {}", e);
-            return ConnectGlobalStats::default();
-        }
-    };
+    let mut stmt = conn.prepare(stmt)?;
 
-    let res = stmt.query_row([], |row| {
+    stmt.query_row([], |row| {
         Ok(ConnectGlobalStats {
             total_ingress_bytes: row.get::<_, i64>(0)? as u64,
             total_egress_bytes: row.get::<_, i64>(1)? as u64,
@@ -393,9 +387,7 @@ pub fn query_global_stats(conn: &Connection) -> ConnectGlobalStats {
             last_calculate_time: landscape_common::utils::time::get_current_time_ms()
                 .unwrap_or_default(),
         })
-    });
-
-    res.unwrap_or_default()
+    })
 }
 
 #[derive(Debug, Default, Clone)]

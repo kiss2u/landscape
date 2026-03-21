@@ -102,6 +102,8 @@ pub mod task_label {
         pub const METRIC_SERVICE_RUN: &str = "metric.service.run";
         /// Metric service stop-signal bridge task.
         pub const METRIC_SERVICE_STOP: &str = "metric.service.stop";
+        /// Background task that refreshes cached connect global stats.
+        pub const METRIC_GLOBAL_STATS_REFRESH: &str = "metric.global_stats.refresh";
         /// Metric query executor task name used inside the dedicated query runtime.
         pub const METRIC_QUERY: &str = "metric.query";
         /// WiFi service async launcher.

@@ -1,5 +1,6 @@
 use tokio::sync::mpsc;
 
+use landscape_common::error::LdResult;
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
@@ -18,8 +19,8 @@ impl ConnectMetricManager {
         ConnectMetricManager { metric_store }
     }
 
-    pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        self.metric_store.get_global_stats().await
+    pub async fn get_global_stats(&self, force_refresh: bool) -> LdResult<ConnectGlobalStats> {
+        self.metric_store.get_global_stats(force_refresh).await
     }
 
     pub async fn get_src_ip_stats(&self) -> Vec<IpRealtimeStat> {

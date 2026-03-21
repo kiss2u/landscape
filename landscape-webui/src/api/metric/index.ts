@@ -5,6 +5,7 @@ import type {
   ConnectRealtimeStatus,
   ConnectHistoryStatus,
   ConnectGlobalStats,
+  GetConnectGlobalStatsParams,
   IpRealtimeStat,
   IpHistoryStat,
   GetConnectHistoryParams as ConnectHistoryQueryParams,
@@ -32,8 +33,10 @@ export async function get_dst_ip_stats(): Promise<IpRealtimeStat[]> {
   return _getDstIpStats();
 }
 
-export async function get_connect_global_stats(): Promise<ConnectGlobalStats> {
-  return _getConnectGlobalStats();
+export async function get_connect_global_stats(
+  params?: GetConnectGlobalStatsParams,
+): Promise<ConnectGlobalStats> {
+  return _getConnectGlobalStats(params);
 }
 
 export async function get_metric_status(): Promise<ServiceStatus> {

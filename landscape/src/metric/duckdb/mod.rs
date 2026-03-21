@@ -1,9 +1,11 @@
+use chrono::{Duration as ChronoDuration, Local, LocalResult, NaiveTime, TimeZone};
 use duckdb::{params, Appender, Connection, DuckdbConnectionManager};
 
 use landscape_common::concurrency::{
-    runtime_thread_name_fn, spawn_named_thread, task_label, thread_name,
+    runtime_thread_name_fn, spawn_named_thread, spawn_task, task_label, thread_name,
 };
 use landscape_common::config::MetricRuntimeConfig;
+use landscape_common::error::{LdError, LdResult};
 use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
@@ -20,7 +22,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use tokio::runtime::{Builder as RuntimeBuilder, Runtime};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 pub mod connect;
 pub mod dns;
@@ -32,6 +34,8 @@ const MS_PER_HOUR: u64 = 60 * MS_PER_MINUTE;
 const MS_PER_DAY: u64 = 24 * MS_PER_HOUR;
 const STALE_TIMEOUT_MS: u64 = 5 * MS_PER_MINUTE;
 const DEFAULT_CONNECT_SAMPLE_INTERVAL_MS: u64 = 5 * 1000;
+const GLOBAL_STATS_REFRESH_HOUR: u32 = 0;
+const GLOBAL_STATS_REFRESH_MINUTE: u32 = 5;
 
 fn bucket_start(report_time: u64, bucket_ms: u64) -> u64 {
     report_time / bucket_ms * bucket_ms
@@ -56,6 +60,23 @@ fn second_window_ms(config: &MetricRuntimeConfig) -> u64 {
 fn second_ring_capacity(config: &MetricRuntimeConfig) -> usize {
     let target_points = second_window_ms(config) / DEFAULT_CONNECT_SAMPLE_INTERVAL_MS;
     target_points.saturating_add(8).clamp(32, 4096) as usize
+}
+
+fn next_global_stats_refresh_at(now: chrono::DateTime<Local>) -> chrono::DateTime<Local> {
+    let refresh_time =
+        NaiveTime::from_hms_opt(GLOBAL_STATS_REFRESH_HOUR, GLOBAL_STATS_REFRESH_MINUTE, 0)
+            .expect("valid global stats refresh time");
+    let mut target_date = now.date_naive();
+    if now.time() >= refresh_time {
+        target_date = target_date.succ_opt().unwrap_or(target_date);
+    }
+
+    let target_naive = target_date.and_time(refresh_time);
+    match Local.from_local_datetime(&target_naive) {
+        LocalResult::Single(dt) => dt,
+        LocalResult::Ambiguous(first, second) => first.min(second),
+        LocalResult::None => now + ChronoDuration::hours(24),
+    }
 }
 
 pub(super) fn clean_ip_string(ip: &IpAddr) -> String {
@@ -211,6 +232,8 @@ pub struct DuckMetricStore {
     pub config: MetricRuntimeConfig,
     pub disk_pool: r2d2::Pool<DuckdbConnectionManager>,
     flow_cache: FlowCache,
+    global_stats_cache: Arc<RwLock<ConnectGlobalStats>>,
+    global_stats_refresh_lock: Arc<Mutex<()>>,
     query_runtime: Arc<Runtime>,
 }
 
@@ -544,12 +567,21 @@ impl DuckMetricStore {
         connect::create_metrics_table(&conn_disk)
             .expect("Failed to create connect metrics tables on disk");
         dns::create_dns_table(&conn_disk).expect("Failed to create DNS metrics tables on disk");
+        let initial_global_stats = match connect::query_global_stats(&conn_disk) {
+            Ok(stats) => stats,
+            Err(error) => {
+                tracing::error!("failed to prewarm connect global stats cache: {}", error);
+                ConnectGlobalStats::default()
+            }
+        };
 
         let thread_disk_pool = disk_pool.clone();
         let conn_dns = disk_pool.get().expect("Failed to get DNS writer connection from disk pool");
         let conn_connect_writer = disk_pool.get().expect("Failed to get connect writer connection");
         let flow_cache: FlowCache = Arc::new(RwLock::new(HashMap::new()));
         let thread_flow_cache = flow_cache.clone();
+        let global_stats_cache = Arc::new(RwLock::new(initial_global_stats));
+        let global_stats_refresh_lock = Arc::new(Mutex::new(()));
 
         let query_runtime = Arc::new(
             RuntimeBuilder::new_multi_thread()
@@ -573,14 +605,44 @@ impl DuckMetricStore {
         })
         .expect("failed to spawn metric db thread");
 
-        DuckMetricStore {
+        let store = DuckMetricStore {
             connect_tx,
             dns_tx,
             config,
             disk_pool,
             flow_cache,
+            global_stats_cache,
+            global_stats_refresh_lock,
             query_runtime,
-        }
+        };
+
+        let refresh_store = store.clone();
+        spawn_task(task_label::task::METRIC_GLOBAL_STATS_REFRESH, async move {
+            loop {
+                let now = Local::now();
+                let next_refresh_at = next_global_stats_refresh_at(now);
+                let sleep_duration = (next_refresh_at - now)
+                    .to_std()
+                    .unwrap_or_else(|_| std::time::Duration::from_secs(60));
+                tracing::info!(
+                    "next connect global stats refresh scheduled at {}",
+                    next_refresh_at.to_rfc3339()
+                );
+                tokio::time::sleep(sleep_duration).await;
+                match refresh_store.refresh_global_stats_cache().await {
+                    Ok(stats) => tracing::info!(
+                        "refreshed connect global stats cache at {} total_connect_count={}",
+                        stats.last_calculate_time,
+                        stats.total_connect_count
+                    ),
+                    Err(error) => {
+                        tracing::error!("failed to refresh connect global stats cache: {}", error)
+                    }
+                }
+            }
+        });
+
+        store
     }
 
     fn get_disk_conn(&self) -> r2d2::PooledConnection<DuckdbConnectionManager> {
@@ -690,12 +752,54 @@ impl DuckMetricStore {
         .await
     }
 
-    pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        self.run_query(task_label::op::METRIC_GLOBAL_STATS, move |store| {
-            let conn = store.get_disk_conn();
-            connect::query_global_stats(&conn)
-        })
-        .await
+    fn cached_global_stats(&self) -> ConnectGlobalStats {
+        self.global_stats_cache.read().expect("metric global stats cache poisoned").clone()
+    }
+
+    async fn refresh_global_stats_cache(&self) -> LdResult<ConnectGlobalStats> {
+        let refresh_requested_at =
+            landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+        let _refresh_guard = self.global_stats_refresh_lock.lock().await;
+        let cached = self.cached_global_stats();
+        if cached.last_calculate_time >= refresh_requested_at && cached.last_calculate_time != 0 {
+            return Ok(cached);
+        }
+
+        let store = self.clone();
+        let span = tracing::info_span!(
+            "task",
+            task = task_label::task::METRIC_QUERY,
+            op = task_label::op::METRIC_GLOBAL_STATS
+        );
+        let result = self
+            .query_runtime
+            .handle()
+            .spawn_blocking(move || {
+                span.in_scope(|| {
+                    let conn = store.get_disk_conn();
+                    connect::query_global_stats(&conn).map_err(|error| {
+                        LdError::DbMsg(format!("failed to refresh connect global stats: {error}"))
+                    })
+                })
+            })
+            .await
+            .map_err(|error| {
+                LdError::DbMsg(format!("connect global stats refresh task join failed: {error}"))
+            })?;
+
+        let stats = result?;
+        let mut cache =
+            self.global_stats_cache.write().expect("metric global stats cache poisoned");
+        *cache = stats.clone();
+        Ok(stats)
+    }
+
+    pub async fn get_global_stats(&self, force_refresh: bool) -> LdResult<ConnectGlobalStats> {
+        if force_refresh {
+            self.refresh_global_stats_cache().await
+        } else {
+            Ok(self.cached_global_stats())
+        }
     }
 
     pub async fn insert_dns_metric(&self, mut metric: DnsMetric) {

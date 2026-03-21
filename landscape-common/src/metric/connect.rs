@@ -151,6 +151,14 @@ pub struct ConnectGlobalStats {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema, utoipa::IntoParams))]
+#[cfg_attr(feature = "openapi", into_params(parameter_in = Query))]
+pub struct GetConnectGlobalStatsParams {
+    #[cfg_attr(feature = "openapi", schema(nullable = false))]
+    pub force_refresh: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum ConnectSortKey {

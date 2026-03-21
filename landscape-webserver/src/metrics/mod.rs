@@ -2,7 +2,8 @@ use axum::extract::{Query, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectMetricPoint,
-    ConnectRealtimeStatus, IpHistoryStat, IpRealtimeStat, MetricChartRequest,
+    ConnectRealtimeStatus, GetConnectGlobalStatsParams, IpHistoryStat, IpRealtimeStat,
+    MetricChartRequest,
 };
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse,
@@ -97,12 +98,19 @@ async fn get_connect_history(
     path = "/connections/global_stats",
     tag = "Metric",
     operation_id = "get_connect_global_stats",
+    params(GetConnectGlobalStatsParams),
     responses((status = 200, body = CommonApiResp<ConnectGlobalStats>))
 )]
 async fn get_connect_global_stats(
     State(state): State<LandscapeApp>,
+    Query(params): Query<GetConnectGlobalStatsParams>,
 ) -> LandscapeApiResult<ConnectGlobalStats> {
-    let data = state.metric_service.data.connect_metric.get_global_stats().await;
+    let data = state
+        .metric_service
+        .data
+        .connect_metric
+        .get_global_stats(params.force_refresh.unwrap_or(false))
+        .await?;
     LandscapeApiResp::success(data)
 }
 

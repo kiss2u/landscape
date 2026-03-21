@@ -63,8 +63,10 @@ export const useMetricStore = defineStore("dns_metric", () => {
     }
   }
 
-  async function UPDATE_GLOBAL_HISTORY_STATS() {
-    global_history_stats.value = await get_connect_global_stats();
+  async function UPDATE_GLOBAL_HISTORY_STATS(force_refresh = false) {
+    global_history_stats.value = await get_connect_global_stats(
+      force_refresh ? { force_refresh: true } : undefined,
+    );
   }
 
   async function SET_ENABLE(mode: "live" | "src" | "dst", value: boolean) {
