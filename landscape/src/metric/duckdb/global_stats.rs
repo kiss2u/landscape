@@ -38,7 +38,10 @@ pub(crate) fn spawn_global_stats_refresh_task(store: DuckMetricStore) {
                 "next connect global stats refresh scheduled at {}",
                 next_refresh_at.to_rfc3339()
             );
-            tokio::time::sleep(sleep_duration).await;
+            tokio::select! {
+                _ = store.global_stats_refresh_shutdown.cancelled() => break,
+                _ = tokio::time::sleep(sleep_duration) => {}
+            }
             match store.refresh_global_stats_cache().await {
                 Ok(stats) => tracing::info!(
                     "refreshed connect global stats cache at {} total_connect_count={}",

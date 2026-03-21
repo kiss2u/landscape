@@ -97,7 +97,7 @@ impl RuntimeConfig {
         };
 
         let metric = MetricRuntimeConfig {
-            enable: config.metric.enable.unwrap_or(crate::DEFAULT_METRIC_ENABLE),
+            mode: config.metric.mode.clone().unwrap_or(crate::DEFAULT_METRIC_MODE),
             connect_second_window_minutes: config
                 .metric
                 .connect_second_window_minutes

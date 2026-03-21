@@ -84,7 +84,7 @@ pub fn upsert_summary(conn: &Connection, metric: &ConnectMetric) -> duckdb::Resu
     )
 }
 
-pub fn create_summaries_table(conn: &Connection) {
+pub fn create_summaries_table(conn: &Connection) -> duckdb::Result<()> {
     let sql = "
         CREATE TABLE IF NOT EXISTS conn_summaries (
             create_time UBIGINT,
@@ -110,7 +110,7 @@ pub fn create_summaries_table(conn: &Connection) {
         CREATE INDEX IF NOT EXISTS idx_conn_summaries_time ON conn_summaries (last_report_time);
     ";
 
-    conn.execute_batch(sql).expect("Failed to create summaries table");
+    conn.execute_batch(sql)
 }
 
 pub fn create_metrics_table(conn: &Connection) -> duckdb::Result<()> {

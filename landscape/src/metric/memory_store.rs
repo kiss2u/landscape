@@ -228,8 +228,6 @@ pub struct MemoryMetricStore {
 
 impl MemoryMetricStore {
     pub async fn new(_base_path: PathBuf, config: MetricRuntimeConfig) -> Self {
-        tracing::info!("metric-duckdb feature disabled, using realtime-only memory metric store");
-
         let (connect_tx, mut connect_rx) = mpsc::channel::<ConnectMessage>(CHANNEL_CAPACITY);
         let (dns_tx, mut dns_rx) = mpsc::channel::<DnsMetricMessage>(CHANNEL_CAPACITY);
         let flow_cache: FlowCache = Arc::new(RwLock::new(HashMap::new()));
@@ -286,6 +284,8 @@ impl MemoryMetricStore {
     pub fn get_dns_msg_channel(&self) -> mpsc::Sender<DnsMetricMessage> {
         self.dns_tx.clone()
     }
+
+    pub fn shutdown(&self) {}
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();

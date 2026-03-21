@@ -71,6 +71,10 @@ impl LandscapeConfigService {
         self.config.load().file_config.metric.clone()
     }
 
+    pub fn get_metric_runtime_config(&self) -> landscape_common::config::MetricRuntimeConfig {
+        self.config.load().metric.clone()
+    }
+
     pub fn get_dns_config(&self) -> (LandscapeDnsConfig, String) {
         let config = self.config.load();
         let dns = config.file_config.dns.clone();

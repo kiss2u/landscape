@@ -49,5 +49,8 @@ pub async fn update_metric_config(
     JsonBody(payload): JsonBody<UpdateMetricConfigRequest>,
 ) -> LandscapeApiResult<()> {
     state.config_service.update_metric_config(payload.new_metric, payload.expected_hash).await?;
+    let metric_runtime = state.config_service.get_metric_runtime_config();
+    state.metric_service.apply_runtime_config(metric_runtime).await;
+    state.dns_service.update_metric_sender(state.metric_service.get_dns_metric_channel());
     LandscapeApiResp::success(())
 }

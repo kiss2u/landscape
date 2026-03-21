@@ -22,12 +22,11 @@ use hickory_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
 use moka::future::Cache;
-use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
     server::rule::{RedirectSolution, ResolutionRule},
-    server::{CacheRuntimeConfig, LocalDnsAnswerProvider},
+    server::{CacheRuntimeConfig, LocalDnsAnswerProvider, MetricSenderState},
     CacheDNSItem, CheckChainDnsResult, DNSCache,
 };
 use landscape_common::{
@@ -47,7 +46,7 @@ pub struct DnsRequestHandler {
     resolves: Arc<ArcSwap<BTreeMap<u32, ResolutionRule>>>,
     pub cache: Arc<ArcSwap<DNSCache>>,
     pub flow_id: u32,
-    pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+    pub msg_tx: MetricSenderState,
     runtime_config: Arc<ArcSwap<CacheRuntimeConfig>>,
     pub local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
 }
@@ -57,7 +56,7 @@ impl DnsRequestHandler {
         desired_state: FlowDnsDesiredState,
         runtime_config: Arc<ArcSwap<CacheRuntimeConfig>>,
         flow_id: u32,
-        msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+        msg_tx: MetricSenderState,
         local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
     ) -> DnsRequestHandler {
         let FlowDnsDesiredState { dns_rules, redirect_rules, .. } = desired_state;
@@ -386,7 +385,7 @@ impl DnsRequestHandler {
         src_ip: std::net::IpAddr,
         answers: Vec<String>,
     ) {
-        if let Some(msg_tx) = &self.msg_tx {
+        if let Some(msg_tx) = self.msg_tx.load_full() {
             let dns_metric = DnsMetric {
                 flow_id: self.flow_id,
                 domain,

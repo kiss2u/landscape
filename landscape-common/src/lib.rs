@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
 
+use crate::config::MetricMode;
 pub use landscape_macro::LdApiError;
 
 pub mod api_response;
@@ -78,7 +79,7 @@ pub const LANDSCAPE_METRIC_DIR_NAME: &str = "metric";
 pub const LANDSCAPE_METRIC_DB_VERSION: u32 = 11;
 
 // Metric Retention Defaults
-pub const DEFAULT_METRIC_ENABLE: bool = true;
+pub const DEFAULT_METRIC_MODE: MetricMode = MetricMode::Duckdb;
 pub const DEFAULT_METRIC_CONNECT_1M_RETENTION_DAYS: u64 = 1;
 pub const DEFAULT_METRIC_CONNECT_1H_RETENTION_DAYS: u64 = 7;
 pub const DEFAULT_METRIC_CONNECT_1D_RETENTION_DAYS: u64 = 30;

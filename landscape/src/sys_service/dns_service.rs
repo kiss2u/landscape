@@ -173,6 +173,10 @@ impl LandscapeDnsService {
         landscape_dns::restore_resolver_conf();
     }
 
+    pub fn update_metric_sender(&self, msg_tx: Option<mpsc::Sender<DnsMetricMessage>>) {
+        self.dns_service.update_metric_sender(msg_tx);
+    }
+
     pub async fn check_domain(&self, req: CheckDnsReq) -> CheckChainDnsResult {
         self.dns_service.check_domain(req).await
     }

@@ -3,8 +3,10 @@ import { ref } from "vue";
 import type { LandscapeMetricConfig } from "@landscape-router/types/api/schemas";
 import { get_metric_config_edit, update_metric_config } from "@/api/sys/config";
 
+type MetricMode = "off" | "memory" | "duckdb";
+
 export const useMetricConfigStore = defineStore("metric_config", () => {
-  const enabled = ref<boolean>(true);
+  const mode = ref<MetricMode>("duckdb");
   const connectSecondWindowMinutes = ref<number | undefined>(undefined);
   const connect1mRetentionDays = ref<number | undefined>(undefined);
   const connect1hRetentionDays = ref<number | undefined>(undefined);
@@ -21,7 +23,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
 
   async function loadMetricConfig() {
     const { metric, hash } = await get_metric_config_edit();
-    enabled.value = metric.enable ?? true;
+    mode.value = (metric.mode as MetricMode | undefined) ?? "duckdb";
     connectSecondWindowMinutes.value =
       metric.connect_second_window_minutes ?? undefined;
     connect1mRetentionDays.value =
@@ -45,7 +47,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
 
   async function saveMetricConfig() {
     const new_metric: LandscapeMetricConfig = {
-      enable: enabled.value,
+      mode: mode.value,
       connect_second_window_minutes: connectSecondWindowMinutes.value,
       connect_1m_retention_days: connect1mRetentionDays.value,
       connect_1h_retention_days: connect1hRetentionDays.value,
@@ -70,7 +72,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
   }
 
   return {
-    enabled,
+    mode,
     connectSecondWindowMinutes,
     connect1mRetentionDays,
     connect1hRetentionDays,

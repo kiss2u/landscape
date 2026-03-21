@@ -28,6 +28,8 @@ pub(crate) mod rule;
 pub use crate::listener::EffectiveDohListenerConfig;
 pub use landscape_common::dns::{CacheRuntimeConfig, DohRuntimeConfig};
 
+pub(crate) type MetricSenderState = Arc<ArcSwapOption<mpsc::Sender<DnsMetricMessage>>>;
+
 pub trait LocalDnsAnswerProvider: Send + Sync {
     fn load_local_answer_addrs(
         &self,
@@ -45,7 +47,7 @@ pub struct LandscapeDnsServer {
     // 用于重定向的动态更新
     pub local_answer_provider: Option<Arc<dyn LocalDnsAnswerProvider>>,
     // DNS 事件
-    pub msg_tx: Option<mpsc::Sender<DnsMetricMessage>>,
+    pub msg_tx: MetricSenderState,
     // 监听 UDP DNS 地址
     pub udp_listener_addr: SocketAddr,
     cache_live_config: Arc<ArcSwap<CacheRuntimeConfig>>,
@@ -91,7 +93,7 @@ impl LandscapeDnsServer {
                 0,
                 0,
             )),
-            msg_tx,
+            msg_tx: Arc::new(ArcSwapOption::new(msg_tx.map(Arc::new))),
             cache_live_config: Arc::new(ArcSwap::from_pointee(cache_runtime)),
             doh_listener: doh.map(DohListenerState::from_effective_config),
             local_answer_provider,
@@ -111,6 +113,10 @@ impl LandscapeDnsServer {
         if let Some(doh_listener) = self.doh_listener.as_ref() {
             doh_listener.update_live_config(doh_runtime);
         }
+    }
+
+    pub fn update_metric_sender(&self, msg_tx: Option<mpsc::Sender<DnsMetricMessage>>) {
+        self.msg_tx.store(msg_tx.map(Arc::new));
     }
 
     pub fn current_live_runtime_config(&self) -> (CacheRuntimeConfig, Option<DohRuntimeConfig>) {

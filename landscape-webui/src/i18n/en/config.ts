@@ -9,9 +9,12 @@ export default {
   save_dns: "Save DNS Config",
   save_metric: "Save Metric Config",
 
-  metric_enabled: "Enable Metric Service",
-  metric_enabled_desc:
-    "When disabled, new connection and DNS metric data will no longer be collected",
+  metric_mode: "Metric Mode",
+  metric_mode_desc:
+    "Disable metrics entirely, keep realtime data in memory only, or enable DuckDB persistence",
+  metric_mode_off: "Off (OFF)",
+  metric_mode_memory: "Memory Only (MEM)",
+  metric_mode_duckdb: "Persistent (DB)",
 
   language: "Language",
   theme: "Theme",

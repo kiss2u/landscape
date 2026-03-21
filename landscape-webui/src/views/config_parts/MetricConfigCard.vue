@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { useMetricConfigStore } from "@/stores/metric_config";
 import { useMessage } from "naive-ui";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
 const metricStore = useMetricConfigStore();
 const message = useMessage();
 const { t } = useI18n();
+const modeOptions = computed(() => [
+  { label: t("config.metric_mode_off"), value: "off" },
+  { label: t("config.metric_mode_memory"), value: "memory" },
+  { label: t("config.metric_mode_duckdb"), value: "duckdb" },
+]);
 
 async function handleSaveMetric() {
   try {
@@ -29,10 +35,14 @@ async function handleSaveMetric() {
       </n-button>
     </template>
     <n-form label-placement="left" label-width="120">
-      <n-form-item :label="t('config.metric_enabled')">
-        <n-switch v-model:value="metricStore.enabled" />
+      <n-form-item :label="t('config.metric_mode')">
+        <n-select
+          v-model:value="metricStore.mode"
+          :options="modeOptions"
+          style="width: 240px"
+        />
         <template #feedback>
-          {{ t("config.metric_enabled_desc") }}
+          {{ t("config.metric_mode_desc") }}
         </template>
       </n-form-item>
 

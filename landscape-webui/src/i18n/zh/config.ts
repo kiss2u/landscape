@@ -9,8 +9,11 @@ export default {
   save_dns: "保存 DNS 配置",
   save_metric: "保存指标配置",
 
-  metric_enabled: "启用指标服务",
-  metric_enabled_desc: "关闭后不再采集新的连接与 DNS 指标数据",
+  metric_mode: "指标模式",
+  metric_mode_desc: "关闭、仅内存实时、或启用 DuckDB 历史持久化",
+  metric_mode_off: "关闭 (OFF)",
+  metric_mode_memory: "内存实时 (MEM)",
+  metric_mode_duckdb: "持久化 (DB)",
 
   language: "语言设定",
   theme: "外观主题",

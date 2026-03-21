@@ -2,7 +2,7 @@ use std::{net::IpAddr, path::PathBuf};
 
 use crate::config::settings::{
     LandscapeConfig, LandscapeDnsConfig, LandscapeMetricConfig, LandscapeTimeConfig,
-    LandscapeUIConfig,
+    LandscapeUIConfig, MetricMode,
 };
 use crate::gateway::settings::GatewayRuntimeConfig;
 use crate::{
@@ -56,7 +56,7 @@ pub struct StoreRuntimeConfig {
 
 #[derive(Clone, Debug)]
 pub struct MetricRuntimeConfig {
-    pub enable: bool,
+    pub mode: MetricMode,
     pub connect_second_window_minutes: u64,
     pub connect_1m_retention_days: u64,
     pub connect_1h_retention_days: u64,
@@ -136,7 +136,7 @@ impl RuntimeConfig {
          Database Connect: {}\n\
          \n\
          [Metric]\n\
-         Enabled: {}\n\
+         Mode: {:?}\n\
          Connect Second Window: {} mins\n\
          Connect 1m Retention: {} days\n\
          Connect 1h Retention: {} days\n\
@@ -168,7 +168,7 @@ impl RuntimeConfig {
             address_http_str,
             address_https_str,
             self.store.database_path,
-            self.metric.enable,
+            self.metric.mode,
             self.metric.connect_second_window_minutes,
             self.metric.connect_1m_retention_days,
             self.metric.connect_1h_retention_days,
@@ -193,8 +193,8 @@ impl RuntimeConfig {
 
 impl MetricRuntimeConfig {
     pub fn update_from_file_config(&mut self, config: &LandscapeMetricConfig) {
-        if let Some(v) = config.enable {
-            self.enable = v;
+        if let Some(v) = &config.mode {
+            self.mode = v.clone();
         }
         if let Some(v) = config.connect_second_window_minutes {
             self.connect_second_window_minutes = v;
