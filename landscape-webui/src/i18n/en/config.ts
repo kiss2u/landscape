@@ -30,6 +30,9 @@ export default {
   conn_retention_mins: "Raw Data Retention (Mins)",
   conn_retention_mins_desc:
     "Retention period for raw connection metrics (seconds interval) in minutes",
+  connect_second_window_mins: "Second Window (Mins)",
+  connect_second_window_mins_desc:
+    "In-memory retention window for second-level connection charts",
   conn_retention_minute_days: "Aggregated Data (Minute)",
   conn_retention_minute_days_desc:
     "Retention period for minute aggregated connection metrics in days",

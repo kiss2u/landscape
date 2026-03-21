@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use landscape_common::config::MetricRuntimeConfig;
+use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
     ConnectMetricPoint, ConnectRealtimeStatus, IpRealtimeStat, MetricResolution,
@@ -9,21 +10,41 @@ use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
     DnsSummaryQueryParams, DnsSummaryResponse,
 };
+use tokio::sync::mpsc;
 
 /// A no-op metric store that returns empty results.
 /// Used when the `metric-duckdb` feature is disabled to avoid compiling DuckDB.
 #[derive(Clone)]
-pub struct NoopMetricStore;
+pub struct NoopMetricStore {
+    connect_tx: mpsc::Sender<ConnectMessage>,
+    dns_tx: mpsc::Sender<DnsMetricMessage>,
+}
 
 impl NoopMetricStore {
     pub async fn new(_base_path: PathBuf, _config: MetricRuntimeConfig) -> Self {
         tracing::info!(
             "Metric store disabled (metric-duckdb feature not enabled), using no-op store"
         );
-        NoopMetricStore
+        let (connect_tx, mut connect_rx) = mpsc::channel::<ConnectMessage>(16);
+        let (dns_tx, mut dns_rx) = mpsc::channel::<DnsMetricMessage>(16);
+
+        tokio::spawn(async move { while connect_rx.recv().await.is_some() {} });
+        tokio::spawn(async move { while dns_rx.recv().await.is_some() {} });
+
+        NoopMetricStore { connect_tx, dns_tx }
     }
 
-    pub async fn insert_metric(&self, _metric: ConnectMetric) {}
+    pub fn get_connect_msg_channel(&self) -> mpsc::Sender<ConnectMessage> {
+        self.connect_tx.clone()
+    }
+
+    pub fn get_dns_msg_channel(&self) -> mpsc::Sender<DnsMetricMessage> {
+        self.dns_tx.clone()
+    }
+
+    pub async fn insert_metric(&self, metric: ConnectMetric) {
+        let _ = self.connect_tx.send(ConnectMessage::Metric(metric)).await;
+    }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
         Vec::new()
@@ -76,7 +97,9 @@ impl NoopMetricStore {
         ConnectGlobalStats::default()
     }
 
-    pub async fn insert_dns_metric(&self, _metric: DnsMetric) {}
+    pub async fn insert_dns_metric(&self, metric: DnsMetric) {
+        let _ = self.dns_tx.send(DnsMetricMessage::Metric(metric)).await;
+    }
 
     pub async fn query_dns_history(&self, _params: DnsHistoryQueryParams) -> DnsHistoryResponse {
         DnsHistoryResponse { items: Vec::new(), total: 0 }

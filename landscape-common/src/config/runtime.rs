@@ -58,6 +58,7 @@ pub struct StoreRuntimeConfig {
 pub struct MetricRuntimeConfig {
     pub enable: bool,
     pub raw_retention_minutes: u64,
+    pub connect_second_window_minutes: u64,
     pub rollup_1m_retention_days: u64,
     pub rollup_1h_retention_days: u64,
     pub rollup_1d_retention_days: u64,
@@ -136,9 +137,10 @@ impl RuntimeConfig {
          [Store]\n\
          Database Connect: {}\n\
          \n\
-          [Metric]\n\
+         [Metric]\n\
          Enabled: {}\n\
          Raw Retention: {} mins\n\
+         Connect Second Window: {} mins\n\
          Rollup 1m Retention: {} days\n\
          Rollup 1h Retention: {} days\n\
          Rollup 1d Retention: {} days\n\
@@ -172,6 +174,7 @@ impl RuntimeConfig {
             self.store.database_path,
             self.metric.enable,
             self.metric.raw_retention_minutes,
+            self.metric.connect_second_window_minutes,
             self.metric.rollup_1m_retention_days,
             self.metric.rollup_1h_retention_days,
             self.metric.rollup_1d_retention_days,
@@ -201,6 +204,9 @@ impl MetricRuntimeConfig {
         }
         if let Some(v) = config.raw_retention_minutes {
             self.raw_retention_minutes = v;
+        }
+        if let Some(v) = config.connect_second_window_minutes {
+            self.connect_second_window_minutes = v;
         }
         if let Some(v) = config.rollup_1m_retention_days {
             self.rollup_1m_retention_days = v;

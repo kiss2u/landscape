@@ -32,6 +32,8 @@ async fn main() {
         landscape_common::config::MetricRuntimeConfig {
             enable: landscape_common::DEFAULT_METRIC_ENABLE,
             raw_retention_minutes: landscape_common::DEFAULT_METRIC_RAW_RETENTION_MINUTES,
+            connect_second_window_minutes:
+                landscape_common::DEFAULT_METRIC_CONNECT_SECOND_WINDOW_MINUTES,
             rollup_1m_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1M_RETENTION_DAYS,
             rollup_1h_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1H_RETENTION_DAYS,
             rollup_1d_retention_days: landscape_common::DEFAULT_METRIC_ROLLUP_1D_RETENTION_DAYS,

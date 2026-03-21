@@ -1,23 +1,35 @@
-use dashmap::DashMap;
-use duckdb::{params, Appender, DuckdbConnectionManager};
+use duckdb::{params, Appender, Connection, DuckdbConnectionManager};
 
 use landscape_common::concurrency::{
     runtime_thread_name_fn, spawn_named_thread, task_label, thread_name,
 };
+use landscape_common::config::MetricRuntimeConfig;
+use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetric,
-    ConnectMetricPoint, ConnectRealtimeStatus, ConnectStatusType, MetricResolution,
+    ConnectMetricPoint, ConnectRealtimeStatus, ConnectStatusType, IpAggregatedStats,
+    MetricResolution,
 };
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
     DnsSummaryQueryParams, DnsSummaryResponse,
 };
 use r2d2::{self, PooledConnection};
+use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::runtime::{Builder as RuntimeBuilder, Runtime};
 use tokio::sync::mpsc;
+
+pub mod connect;
+pub mod dns;
+
+const CHANNEL_CAPACITY: usize = 1024;
+const MS_PER_MINUTE: u64 = 60 * 1000;
+const MS_PER_HOUR: u64 = 60 * MS_PER_MINUTE;
+const MS_PER_DAY: u64 = 24 * MS_PER_HOUR;
+const STALE_TIMEOUT_MS: u64 = 5 * MS_PER_MINUTE;
 
 fn clean_ip_string(ip: &IpAddr) -> String {
     match ip {
@@ -32,149 +44,336 @@ fn clean_ip_string(ip: &IpAddr) -> String {
     }
 }
 
-pub mod connect;
-pub mod dns;
+fn bucket_start(report_time: u64, bucket_ms: u64) -> u64 {
+    report_time / bucket_ms * bucket_ms
+}
 
-use landscape_common::config::MetricRuntimeConfig;
+fn second_window_ms(config: &MetricRuntimeConfig) -> u64 {
+    config.connect_second_window_minutes.max(1).saturating_mul(MS_PER_MINUTE)
+}
 
-const A_MIN: u64 = 60 * 1000;
-const MS_PER_MINUTE: u64 = A_MIN;
-const MS_PER_DAY: u64 = 24 * 60 * A_MIN;
-const STALE_TIMEOUT_MS: u64 = 5 * A_MIN;
+fn second_ring_capacity(config: &MetricRuntimeConfig) -> usize {
+    let target_points = config.connect_second_window_minutes.max(1).saturating_mul(60) / 3;
+    target_points.saturating_add(8).clamp(32, 4096) as usize
+}
 
-/// Database operation messages
-pub enum DBMessage {
-    // Write Operations
-    InsertMetric(ConnectMetric),
-    InsertDnsMetric(DnsMetric),
+fn metric_to_point(metric: &ConnectMetric) -> ConnectMetricPoint {
+    ConnectMetricPoint {
+        report_time: metric.report_time,
+        ingress_bytes: metric.ingress_bytes,
+        ingress_packets: metric.ingress_packets,
+        egress_bytes: metric.egress_bytes,
+        egress_packets: metric.egress_packets,
+        status: metric.status.clone(),
+    }
+}
+
+fn metric_to_realtime(metric: &ConnectMetric) -> ConnectRealtimeStatus {
+    ConnectRealtimeStatus {
+        key: metric.key.clone(),
+        src_ip: metric.src_ip,
+        dst_ip: metric.dst_ip,
+        src_port: metric.src_port,
+        dst_port: metric.dst_port,
+        l4_proto: metric.l4_proto,
+        l3_proto: metric.l3_proto,
+        flow_id: metric.flow_id,
+        trace_id: metric.trace_id,
+        gress: metric.gress,
+        create_time_ms: metric.create_time_ms,
+        ingress_bps: 0,
+        egress_bps: 0,
+        ingress_pps: 0,
+        egress_pps: 0,
+        last_report_time: metric.report_time,
+        status: metric.status.clone(),
+    }
 }
 
 #[derive(Clone)]
-pub struct RealtimeState {
-    pub status: ConnectRealtimeStatus,
-    pub last_ingress_bytes: u64,
-    pub last_egress_bytes: u64,
-    pub last_ingress_pkts: u64,
-    pub last_egress_pkts: u64,
+struct FlowState {
+    last_metric: ConnectMetric,
+    realtime: ConnectRealtimeStatus,
+    second_ring: VecDeque<ConnectMetricPoint>,
+    current_minute_bucket: u64,
+    current_hour_bucket: u64,
+    current_day_bucket: u64,
+    finalized: bool,
 }
+
+impl FlowState {
+    fn new(metric: ConnectMetric, window_ms: u64, ring_cap: usize) -> Self {
+        let report_time = metric.report_time;
+        let mut second_ring = VecDeque::with_capacity(ring_cap.max(1));
+        second_ring.push_back(metric_to_point(&metric));
+
+        let mut state = Self {
+            realtime: metric_to_realtime(&metric),
+            last_metric: metric,
+            second_ring,
+            current_minute_bucket: bucket_start(report_time, MS_PER_MINUTE),
+            current_hour_bucket: bucket_start(report_time, MS_PER_HOUR),
+            current_day_bucket: bucket_start(report_time, MS_PER_DAY),
+            finalized: false,
+        };
+        state.trim_second_ring(window_ms, ring_cap);
+        state
+    }
+
+    fn update_from_metric(&mut self, metric: ConnectMetric, window_ms: u64, ring_cap: usize) {
+        if metric.report_time > self.last_metric.report_time {
+            let delta_t = metric.report_time.saturating_sub(self.last_metric.report_time);
+            if delta_t > 0 {
+                self.realtime.ingress_bps =
+                    metric.ingress_bytes.saturating_sub(self.last_metric.ingress_bytes) * 8000
+                        / delta_t;
+                self.realtime.egress_bps =
+                    metric.egress_bytes.saturating_sub(self.last_metric.egress_bytes) * 8000
+                        / delta_t;
+                self.realtime.ingress_pps =
+                    metric.ingress_packets.saturating_sub(self.last_metric.ingress_packets) * 1000
+                        / delta_t;
+                self.realtime.egress_pps =
+                    metric.egress_packets.saturating_sub(self.last_metric.egress_packets) * 1000
+                        / delta_t;
+            }
+        }
+
+        self.realtime.last_report_time = metric.report_time;
+        self.realtime.src_ip = metric.src_ip;
+        self.realtime.dst_ip = metric.dst_ip;
+        self.realtime.src_port = metric.src_port;
+        self.realtime.dst_port = metric.dst_port;
+        self.realtime.l4_proto = metric.l4_proto;
+        self.realtime.l3_proto = metric.l3_proto;
+        self.realtime.flow_id = metric.flow_id;
+        self.realtime.trace_id = metric.trace_id;
+        self.realtime.gress = metric.gress;
+        self.realtime.create_time_ms = metric.create_time_ms;
+        if metric.status != ConnectStatusType::Unknow {
+            self.realtime.status = metric.status.clone();
+        }
+
+        self.last_metric = metric.clone();
+        self.second_ring.push_back(metric_to_point(&metric));
+        self.finalized = false;
+        self.trim_second_ring(window_ms, ring_cap);
+    }
+
+    fn trim_second_ring(&mut self, window_ms: u64, ring_cap: usize) {
+        let cutoff = self.realtime.last_report_time.saturating_sub(window_ms);
+        self.trim_second_ring_before(cutoff);
+        while self.second_ring.len() > ring_cap.max(1) {
+            self.second_ring.pop_front();
+        }
+    }
+
+    fn trim_second_ring_before(&mut self, cutoff: u64) {
+        while let Some(point) = self.second_ring.front() {
+            if point.report_time >= cutoff {
+                break;
+            }
+            self.second_ring.pop_front();
+        }
+    }
+
+    fn second_points_since(&self, cutoff: u64) -> Vec<ConnectMetricPoint> {
+        self.second_ring.iter().filter(|point| point.report_time >= cutoff).cloned().collect()
+    }
+
+    fn is_active(&self, now_ms: u64) -> bool {
+        !self.finalized
+            && self.realtime.status != ConnectStatusType::Disabled
+            && self.realtime.last_report_time >= now_ms.saturating_sub(STALE_TIMEOUT_MS)
+    }
+}
+
+type FlowCache = Arc<RwLock<HashMap<ConnectKey, FlowState>>>;
 
 #[derive(Clone)]
 pub struct DuckMetricStore {
-    tx: mpsc::Sender<DBMessage>,
+    connect_tx: mpsc::Sender<ConnectMessage>,
+    dns_tx: mpsc::Sender<DnsMetricMessage>,
     pub db_path: PathBuf,
     pub config: MetricRuntimeConfig,
     pub disk_pool: r2d2::Pool<DuckdbConnectionManager>,
-    pub realtime_cache: Arc<DashMap<ConnectKey, RealtimeState>>,
+    flow_cache: FlowCache,
     query_runtime: Arc<Runtime>,
 }
 
-pub fn start_db_thread(
-    mut rx: mpsc::Receiver<DBMessage>,
+fn upsert_bucket_row(
+    conn: &Connection,
+    table: &str,
+    metric: &ConnectMetric,
+    bucket_report_time: u64,
+) {
+    if let Err(error) = connect::upsert_metric_bucket(conn, table, metric, bucket_report_time) {
+        tracing::error!(
+            "failed to upsert {} bucket for {}:{} at {}: {}",
+            table,
+            metric.key.create_time,
+            metric.key.cpu_id,
+            bucket_report_time,
+            error,
+        );
+    }
+}
+
+fn upsert_summary_row(conn: &Connection, metric: &ConnectMetric) {
+    if let Err(error) = connect::upsert_summary(conn, metric) {
+        tracing::error!(
+            "failed to upsert summary for {}:{}: {}",
+            metric.key.create_time,
+            metric.key.cpu_id,
+            error,
+        );
+    }
+}
+
+fn finalize_state(conn: &Connection, state: &mut FlowState, mark_disabled: bool) {
+    if state.finalized {
+        return;
+    }
+
+    let mut metric = state.last_metric.clone();
+    if mark_disabled {
+        metric.status = ConnectStatusType::Disabled;
+        state.last_metric.status = ConnectStatusType::Disabled;
+        state.realtime.status = ConnectStatusType::Disabled;
+    }
+
+    upsert_bucket_row(conn, "conn_metrics_1m", &metric, state.current_minute_bucket);
+    upsert_bucket_row(conn, "conn_metrics_1h", &metric, state.current_hour_bucket);
+    upsert_bucket_row(conn, "conn_metrics_1d", &metric, state.current_day_bucket);
+    upsert_summary_row(conn, &metric);
+    state.finalized = true;
+}
+
+fn process_connect_metric(
+    conn: &Connection,
+    flow_cache: &FlowCache,
+    metric: ConnectMetric,
+    second_window_ms: u64,
+    second_ring_cap: usize,
+) {
+    let minute_bucket = bucket_start(metric.report_time, MS_PER_MINUTE);
+    let hour_bucket = bucket_start(metric.report_time, MS_PER_HOUR);
+    let day_bucket = bucket_start(metric.report_time, MS_PER_DAY);
+
+    let mut cache = flow_cache.write().expect("metric flow cache poisoned");
+    match cache.entry(metric.key.clone()) {
+        std::collections::hash_map::Entry::Occupied(mut entry) => {
+            let state = entry.get_mut();
+            if metric.report_time < state.last_metric.report_time {
+                return;
+            }
+
+            if minute_bucket > state.current_minute_bucket {
+                upsert_bucket_row(conn, "conn_metrics_1m", &metric, state.current_minute_bucket);
+                upsert_summary_row(conn, &metric);
+                state.current_minute_bucket = minute_bucket;
+            }
+            if hour_bucket > state.current_hour_bucket {
+                upsert_bucket_row(conn, "conn_metrics_1h", &metric, state.current_hour_bucket);
+                state.current_hour_bucket = hour_bucket;
+            }
+            if day_bucket > state.current_day_bucket {
+                upsert_bucket_row(conn, "conn_metrics_1d", &metric, state.current_day_bucket);
+                state.current_day_bucket = day_bucket;
+            }
+
+            let should_finalize = metric.status == ConnectStatusType::Disabled;
+            state.update_from_metric(metric, second_window_ms, second_ring_cap);
+            if should_finalize {
+                finalize_state(conn, state, true);
+            }
+        }
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            let should_finalize = metric.status == ConnectStatusType::Disabled;
+            let mut state = FlowState::new(metric, second_window_ms, second_ring_cap);
+            if should_finalize {
+                finalize_state(conn, &mut state, true);
+            }
+            entry.insert(state);
+        }
+    }
+}
+
+fn cleanup_flow_cache(
+    conn: &Connection,
+    flow_cache: &FlowCache,
+    now_ms: u64,
+    second_window_ms: u64,
+) {
+    let stale_cutoff = now_ms.saturating_sub(STALE_TIMEOUT_MS);
+    let window_cutoff = now_ms.saturating_sub(second_window_ms);
+
+    let mut cache = flow_cache.write().expect("metric flow cache poisoned");
+    let mut expired_keys = Vec::new();
+
+    for (key, state) in cache.iter_mut() {
+        if !state.finalized && state.realtime.last_report_time < stale_cutoff {
+            finalize_state(conn, state, true);
+        }
+
+        state.trim_second_ring_before(window_cutoff);
+
+        if state.finalized && state.realtime.last_report_time < window_cutoff {
+            expired_keys.push(key.clone());
+        }
+    }
+
+    for key in expired_keys {
+        cache.remove(&key);
+    }
+}
+
+fn finalize_all_flows(conn: &Connection, flow_cache: &FlowCache) {
+    let mut cache = flow_cache.write().expect("metric flow cache poisoned");
+    for state in cache.values_mut() {
+        finalize_state(conn, state, true);
+    }
+}
+
+fn start_db_thread(
+    mut connect_rx: mpsc::Receiver<ConnectMessage>,
+    mut dns_rx: mpsc::Receiver<DnsMetricMessage>,
     metric_config: MetricRuntimeConfig,
     disk_pool: r2d2::Pool<DuckdbConnectionManager>,
     conn_dns: PooledConnection<DuckdbConnectionManager>,
-    conn_disk_writer: PooledConnection<DuckdbConnectionManager>,
-    realtime_cache: Arc<DashMap<ConnectKey, RealtimeState>>,
+    conn_connect_writer: PooledConnection<DuckdbConnectionManager>,
+    flow_cache: FlowCache,
 ) {
     let flush_interval_duration =
         std::time::Duration::from_secs(metric_config.write_flush_interval_secs.max(1));
     let cleanup_interval_duration =
         std::time::Duration::from_secs(metric_config.cleanup_interval_secs.max(1));
-    let aggregate_interval_duration =
-        std::time::Duration::from_secs(metric_config.aggregate_interval_secs.max(1));
-    let summary_sync_duration = std::time::Duration::from_secs(60);
+    let second_window_ms = second_window_ms(&metric_config);
+    let second_ring_cap = second_ring_capacity(&metric_config);
 
     let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
     rt.block_on(async move {
-        let mut metrics_appender: Option<Appender> = Some(conn_disk_writer.appender("conn_metrics").unwrap());
         let mut dns_appender: Option<Appender> = Some(conn_dns.appender("dns_metrics").unwrap());
-        let mut batch_count = 0;
-
+        let mut dns_batch_count = 0usize;
         let mut flush_interval = tokio::time::interval(flush_interval_duration);
         let mut cleanup_interval = tokio::time::interval(cleanup_interval_duration);
-        let mut aggregate_interval = tokio::time::interval(aggregate_interval_duration);
-        let mut summary_sync_interval = tokio::time::interval(summary_sync_duration);
+        let mut connect_closed = false;
+        let mut dns_closed = false;
 
         loop {
             tokio::select! {
-                _ = summary_sync_interval.tick() => {
-                    let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-                    let cutoff_live = now_ms.saturating_sub(STALE_TIMEOUT_MS);
-
-                    // 1. Flush appenders
-                    if let Some(ref mut appender) = metrics_appender {
-                        let _ = appender.flush();
-                    }
-
-                    // 2. Sync summaries using a SEPARATE connection to avoid borrow issues with appender
-                    if let Ok(mut conn_sync) = disk_pool.get() {
-                        match conn_sync.transaction() {
-                            Ok(tx) => {
-                                let mut sync_count = 0;
-                                {
-                                    let mut stmt = tx.prepare_cached(connect::SUMMARY_INSERT_SQL).unwrap();
-                                    for entry in realtime_cache.iter() {
-                                        let state = entry.value();
-                                        let s = &state.status;
-                                        let status_val: u8 = s.status.clone().into();
-
-                                        if let Err(e) = stmt.execute(params![
-                                            s.key.create_time as i64,
-                                            s.key.cpu_id as i64,
-                                            clean_ip_string(&s.src_ip),
-                                            clean_ip_string(&s.dst_ip),
-                                            s.src_port as i64,
-                                            s.dst_port as i64,
-                                            s.l4_proto as i64,
-                                            s.l3_proto as i64,
-                                            s.flow_id as i64,
-                                            s.trace_id as i64,
-                                            s.last_report_time as i64,
-                                            state.last_ingress_bytes as i64,
-                                            state.last_egress_bytes as i64,
-                                            state.last_ingress_pkts as i64,
-                                            state.last_egress_pkts as i64,
-                                            status_val as i64,
-                                            s.create_time_ms as i64,
-                                            s.gress as i64,
-                                        ]) {
-                                            tracing::error!("Sync summary failed for {}:{}: {}", s.key.create_time, s.key.cpu_id, e);
-                                        } else {
-                                            sync_count += 1;
-                                        }
-                                    }
-                                }
-                                if let Err(e) = tx.commit() {
-                                    tracing::error!("Sync summary transaction commit failed: {}", e);
-                                } else {
-                                    tracing::debug!("Synced {} summaries to disk", sync_count);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to start sync summary transaction on disk writer: {}", e);
-                            }
-                        }
-                    }
-
-                    // 3. Cleanup stale live sessions
-                    realtime_cache.retain(|_, v| {
-                        let is_disabled = v.status.status == ConnectStatusType::Disabled;
-                        let is_stale = v.status.last_report_time < cutoff_live;
-                        !is_disabled && !is_stale
-                    });
-                }
-
                 _ = flush_interval.tick() => {
                     if let Some(ref mut appender) = dns_appender {
                         let _ = appender.flush();
                     }
-                    if let Some(ref mut appender) = metrics_appender {
+                }
+                _ = cleanup_interval.tick() => {
+                    if let Some(ref mut appender) = dns_appender {
                         let _ = appender.flush();
                     }
-                }
 
-                _ = cleanup_interval.tick() => {
                     let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+                    cleanup_flow_cache(&conn_connect_writer, &flow_cache, now_ms, second_window_ms);
 
                     let cutoff_raw = now_ms.saturating_sub(metric_config.raw_retention_minutes * MS_PER_MINUTE);
                     let cutoff_1m = now_ms.saturating_sub(metric_config.rollup_1m_retention_days * MS_PER_DAY);
@@ -182,174 +381,81 @@ pub fn start_db_thread(
                     let cutoff_1d = now_ms.saturating_sub(metric_config.rollup_1d_retention_days * MS_PER_DAY);
                     let cutoff_dns = now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
 
-                    // Flush appenders
-                    if let Some(ref mut appender) = dns_appender {
-                        let _ = appender.flush();
-                    }
-                    if let Some(ref mut appender) = metrics_appender {
-                        let _ = appender.flush();
-                    }
-
                     dns::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
-                    if let Ok(conn_disk) = disk_pool.get() {
-                        // Rollup raw metrics into 1m/1h/1d buckets
-                        let _ = connect::perform_inner_db_rollup(&conn_disk);
-                        // Use a fresh connection for maintenance instead of conn_disk_writer
-                        if let Ok(conn_maint) = disk_pool.get() {
-                            let stats = connect::cleanup_old_metrics_only(
-                                &conn_maint,
-                                &conn_disk,
-                                cutoff_raw,
-                                cutoff_1m,
-                                cutoff_1h,
-                                cutoff_1d,
-                                metric_config.cleanup_time_budget_ms,
-                                metric_config.cleanup_slice_window_secs,
-                            );
-                            tracing::info!(
-                                "phase=cleanup elapsed_ms={} budget_hit={} deleted_raw={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_summaries={}",
-                                stats.elapsed_ms,
-                                stats.budget_hit,
-                                stats.deleted_raw,
-                                stats.deleted_1m,
-                                stats.deleted_1h,
-                                stats.deleted_1d,
-                                stats.deleted_summaries,
+                    if let (Ok(conn_raw), Ok(conn_agg)) = (disk_pool.get(), disk_pool.get()) {
+                        let stats = connect::cleanup_old_metrics_only(
+                            &conn_raw,
+                            &conn_agg,
+                            cutoff_raw,
+                            cutoff_1m,
+                            cutoff_1h,
+                            cutoff_1d,
+                            metric_config.cleanup_time_budget_ms,
+                            metric_config.cleanup_slice_window_secs,
+                        );
+                        tracing::info!(
+                            "phase=cleanup elapsed_ms={} budget_hit={} deleted_raw={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_summaries={}",
+                            stats.elapsed_ms,
+                            stats.budget_hit,
+                            stats.deleted_raw,
+                            stats.deleted_1m,
+                            stats.deleted_1h,
+                            stats.deleted_1d,
+                            stats.deleted_summaries,
+                        );
+                    }
+                }
+                msg_opt = connect_rx.recv(), if !connect_closed => {
+                    match msg_opt {
+                        Some(ConnectMessage::Metric(metric)) => {
+                            process_connect_metric(
+                                &conn_connect_writer,
+                                &flow_cache,
+                                metric,
+                                second_window_ms,
+                                second_ring_cap,
                             );
                         }
-                    }
-
-                    tracing::info!(
-                        "Auto cleanup metrics, raw: {}, 1m: {}, 1h: {}, 1d: {}, dns: {}, budget_ms: {}, slice_window_secs: {}",
-                        cutoff_raw, cutoff_1m, cutoff_1h, cutoff_1d, cutoff_dns
-                        , metric_config.cleanup_time_budget_ms, metric_config.cleanup_slice_window_secs
-                    );
-                }
-                _ = aggregate_interval.tick() => {
-                    if let Ok(conn_disk) = disk_pool.get() {
-                        let _ = connect::aggregate_global_stats(&conn_disk);
-                        tracing::debug!("phase=aggregate_global_stats done");
+                        None => connect_closed = true,
                     }
                 }
-                msg_opt = rx.recv() => {
+                msg_opt = dns_rx.recv(), if !dns_closed => {
                     match msg_opt {
-                        Some(msg) => {
-                            let mut current_msg = Some(msg);
-                            // Process in batches to reduce select! overhead
-                            for _ in 0..metric_config.write_batch_size.max(100) {
-                                if let Some(m) = current_msg.take() {
-                                    match m {
-                                        DBMessage::InsertMetric(metric) => {
-                                            let key = &metric.key;
-                                            if let Some(ref mut appender) = metrics_appender {
-                                                let _ = appender.append_row(params![
-                                                    key.create_time as i64,
-                                                    key.cpu_id as i64,
-                                                    metric.report_time as i64,
-                                                    metric.ingress_bytes as i64,
-                                                    metric.ingress_packets as i64,
-                                                    metric.egress_bytes as i64,
-                                                    metric.egress_packets as i64,
-                                                    {
-                                                        let v: u8 = metric.status.clone().into();
-                                                        v as i64
-                                                    },
-                                                    metric.create_time_ms as i64,
-                                                ]);
-                                            }
-
-                                            // Update realtime cache (DashMap)
-                                            let key_clone = metric.key.clone();
-                                            let now = metric.report_time;
-
-                                            realtime_cache.entry(key_clone.clone()).and_modify(|e| {
-                                                if now > e.status.last_report_time {
-                                                    let delta_t = now.saturating_sub(e.status.last_report_time);
-                                                    if delta_t > 0 {
-                                                        e.status.ingress_bps = (metric.ingress_bytes.saturating_sub(e.last_ingress_bytes)) * 8000 / delta_t;
-                                                        e.status.egress_bps = (metric.egress_bytes.saturating_sub(e.last_egress_bytes)) * 8000 / delta_t;
-                                                        e.status.ingress_pps = (metric.ingress_packets.saturating_sub(e.last_ingress_pkts)) * 1000 / delta_t;
-                                                        e.status.egress_pps = (metric.egress_packets.saturating_sub(e.last_egress_pkts)) * 1000 / delta_t;
-                                                    }
-                                                    e.status.last_report_time = now;
-                                                    // Only update status if the new status is NOT Unknow.
-                                                    // Once it's Active, it should stay Active until Disabled.
-                                                    if metric.status != ConnectStatusType::Unknow {
-                                                        e.status.status = metric.status.clone();
-                                                    }
-                                                    // Ensure counters only increase
-                                                    e.last_ingress_bytes = e.last_ingress_bytes.max(metric.ingress_bytes);
-                                                    e.last_egress_bytes = e.last_egress_bytes.max(metric.egress_bytes);
-                                                    e.last_ingress_pkts = e.last_ingress_pkts.max(metric.ingress_packets);
-                                                    e.last_egress_pkts = e.last_egress_pkts.max(metric.egress_packets);
-                                                }
-                                            }).or_insert(RealtimeState {
-                                                status: landscape_common::metric::connect::ConnectRealtimeStatus {
-                                                    key: key_clone,
-                                                    src_ip: metric.src_ip,
-                                                    dst_ip: metric.dst_ip,
-                                                    src_port: metric.src_port,
-                                                    dst_port: metric.dst_port,
-                                                    l4_proto: metric.l4_proto,
-                                                    l3_proto: metric.l3_proto,
-                                                    flow_id: metric.flow_id,
-                                                    trace_id: metric.trace_id,
-                                                    gress: metric.gress,
-                                                    create_time_ms: metric.create_time_ms,
-                                                    ingress_bps: 0,
-                                                    egress_bps: 0,
-                                                    ingress_pps: 0,
-                                                    egress_pps: 0,
-                                                    last_report_time: now,
-                                                    status: metric.status.clone(),
-                                                },
-                                                last_ingress_bytes: metric.ingress_bytes,
-                                                last_egress_bytes: metric.egress_bytes,
-                                                last_ingress_pkts: metric.ingress_packets,
-                                                last_egress_pkts: metric.egress_packets,
-                                            });
-
-                                            batch_count += 1;
-                                        }
-                                        DBMessage::InsertDnsMetric(metric) => {
-                                            if let Some(ref mut appender) = dns_appender {
-                                                let _ = appender.append_row(params![
-                                                    metric.flow_id as i64,
-                                                    metric.domain,
-                                                    metric.query_type,
-                                                    metric.response_code,
-                                                    metric.report_time as i64,
-                                                    metric.duration_ms as i64,
-                                                    clean_ip_string(&metric.src_ip),
-                                                    serde_json::to_string(&metric.answers).unwrap_or_default(),
-                                                    serde_json::to_string(&metric.status).unwrap_or_default(),
-                                                ]);
-                                            }
-                                        }
-                                    }
-
-                                    if batch_count >= metric_config.write_batch_size {
-                                        if let Some(ref mut appender) = dns_appender {
-                                            let _ = appender.flush();
-                                        }
-                                        if let Some(ref mut appender) = metrics_appender {
-                                            let _ = appender.flush();
-                                        }
-                                        batch_count = 0;
-                                    }
+                        Some(DnsMetricMessage::Metric(metric)) => {
+                            if let Some(ref mut appender) = dns_appender {
+                                let _ = appender.append_row(params![
+                                    metric.flow_id as i64,
+                                    metric.domain,
+                                    metric.query_type,
+                                    metric.response_code,
+                                    metric.report_time as i64,
+                                    metric.duration_ms as i64,
+                                    clean_ip_string(&metric.src_ip),
+                                    serde_json::to_string(&metric.answers).unwrap_or_default(),
+                                    serde_json::to_string(&metric.status).unwrap_or_default(),
+                                ]);
+                            }
+                            dns_batch_count += 1;
+                            if dns_batch_count >= metric_config.write_batch_size.max(1) {
+                                if let Some(ref mut appender) = dns_appender {
+                                    let _ = appender.flush();
                                 }
-
-                                // Try to get next message without blocking
-                                match rx.try_recv() {
-                                    Ok(m) => current_msg = Some(m),
-                                    Err(_) => break,
-                                }
+                                dns_batch_count = 0;
                             }
                         }
-                        None => break,
+                        None => dns_closed = true,
                     }
                 }
             }
+
+            if connect_closed && dns_closed {
+                break;
+            }
+        }
+
+        finalize_all_flows(&conn_connect_writer, &flow_cache);
+        if let Some(ref mut appender) = dns_appender {
+            let _ = appender.flush();
         }
     });
 }
@@ -363,10 +469,10 @@ impl DuckMetricStore {
                 std::fs::create_dir_all(parent).expect("Failed to create base directory");
             }
         }
-        let (tx, rx) = mpsc::channel::<DBMessage>(1024);
-        let config_clone = config.clone();
 
-        // Create independent disk pool (disk database)
+        let (connect_tx, connect_rx) = mpsc::channel::<ConnectMessage>(CHANNEL_CAPACITY);
+        let (dns_tx, dns_rx) = mpsc::channel::<DnsMetricMessage>(CHANNEL_CAPACITY);
+        let config_clone = config.clone();
 
         let disk_manager = DuckdbConnectionManager::file_with_flags(
             &db_path,
@@ -379,15 +485,12 @@ impl DuckMetricStore {
         .unwrap();
 
         let disk_pool = r2d2::Pool::builder()
-            .max_size(8) // Disk pool for queries and sync
+            .max_size(8)
             .max_lifetime(Some(std::time::Duration::from_secs(120)))
             .build(disk_manager)
             .expect("Failed to create disk connection pool");
 
-        // Initialize tables in disk database
         let conn_disk = disk_pool.get().expect("Failed to get disk connection");
-
-        // Performance optimizations for disk database
         let _ = conn_disk.execute("PRAGMA wal_autocheckpoint='256MB'", []);
 
         connect::create_summaries_table(&conn_disk, "");
@@ -399,10 +502,9 @@ impl DuckMetricStore {
 
         let thread_disk_pool = disk_pool.clone();
         let conn_dns = disk_pool.get().expect("Failed to get DNS writer connection from disk pool");
-        let conn_disk_writer = disk_pool.get().expect("Failed to get disk writer connection");
-
-        let realtime_cache = Arc::new(DashMap::new());
-        let thread_realtime_cache = realtime_cache.clone();
+        let conn_connect_writer = disk_pool.get().expect("Failed to get connect writer connection");
+        let flow_cache: FlowCache = Arc::new(RwLock::new(HashMap::new()));
+        let thread_flow_cache = flow_cache.clone();
 
         let query_runtime = Arc::new(
             RuntimeBuilder::new_multi_thread()
@@ -415,41 +517,52 @@ impl DuckMetricStore {
 
         spawn_named_thread(thread_name::fixed::METRIC_DB_WRITER, move || {
             start_db_thread(
-                rx,
+                connect_rx,
+                dns_rx,
                 config_clone,
                 thread_disk_pool,
                 conn_dns,
-                conn_disk_writer,
-                thread_realtime_cache,
+                conn_connect_writer,
+                thread_flow_cache,
             );
         })
         .expect("failed to spawn metric db thread");
 
         DuckMetricStore {
-            tx,
+            connect_tx,
+            dns_tx,
             db_path,
             config,
             disk_pool,
-            realtime_cache,
+            flow_cache,
             query_runtime,
         }
     }
 
-    /// Get a connection from the disk pool
     fn get_disk_conn(&self) -> r2d2::PooledConnection<DuckdbConnectionManager> {
         self.disk_pool.get().expect("Failed to get disk connection from pool")
     }
 
-    pub async fn insert_metric(&self, metric: ConnectMetric) {
-        let _ = self.tx.send(DBMessage::InsertMetric(metric)).await;
+    pub fn get_connect_msg_channel(&self) -> mpsc::Sender<ConnectMessage> {
+        self.connect_tx.clone()
     }
 
-    pub async fn connect_infos(
-        &self,
-    ) -> Vec<landscape_common::metric::connect::ConnectRealtimeStatus> {
-        let mut infos: Vec<_> =
-            self.realtime_cache.iter().map(|v| v.value().status.clone()).collect();
-        // Sort by last_report_time DESC to match original behavior
+    pub fn get_dns_msg_channel(&self) -> mpsc::Sender<DnsMetricMessage> {
+        self.dns_tx.clone()
+    }
+
+    pub async fn insert_metric(&self, metric: ConnectMetric) {
+        let _ = self.connect_tx.send(ConnectMessage::Metric(metric)).await;
+    }
+
+    pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
+        let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+        let cache = self.flow_cache.read().expect("metric flow cache poisoned");
+        let mut infos: Vec<_> = cache
+            .values()
+            .filter(|state| state.is_active(now_ms))
+            .map(|state| state.realtime.clone())
+            .collect();
         infos.sort_by(|a, b| b.last_report_time.cmp(&a.last_report_time));
         infos
     }
@@ -458,19 +571,17 @@ impl DuckMetricStore {
         &self,
         is_src: bool,
     ) -> Vec<landscape_common::metric::connect::IpRealtimeStat> {
-        use std::collections::HashMap;
-        let mut stats_map: HashMap<IpAddr, landscape_common::metric::connect::IpAggregatedStats> =
-            HashMap::new();
+        let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+        let cache = self.flow_cache.read().expect("metric flow cache poisoned");
+        let mut stats_map: HashMap<IpAddr, IpAggregatedStats> = HashMap::new();
 
-        for entry in self.realtime_cache.iter() {
-            let status = &entry.value().status;
-            let ip = if is_src { status.src_ip } else { status.dst_ip };
-
+        for state in cache.values().filter(|state| state.is_active(now_ms)) {
+            let ip = if is_src { state.realtime.src_ip } else { state.realtime.dst_ip };
             let stats = stats_map.entry(ip).or_default();
-            stats.ingress_bps += status.ingress_bps;
-            stats.egress_bps += status.egress_bps;
-            stats.ingress_pps += status.ingress_pps;
-            stats.egress_pps += status.egress_pps;
+            stats.ingress_bps += state.realtime.ingress_bps;
+            stats.egress_bps += state.realtime.egress_bps;
+            stats.ingress_pps += state.realtime.ingress_pps;
+            stats.egress_pps += state.realtime.egress_pps;
             stats.active_conns += 1;
         }
 
@@ -485,6 +596,17 @@ impl DuckMetricStore {
         key: ConnectKey,
         resolution: MetricResolution,
     ) -> Vec<ConnectMetricPoint> {
+        if resolution == MetricResolution::Second {
+            let cutoff = landscape_common::utils::time::get_current_time_ms()
+                .unwrap_or_default()
+                .saturating_sub(second_window_ms(&self.config));
+            let cache = self.flow_cache.read().expect("metric flow cache poisoned");
+            return cache
+                .get(&key)
+                .map(|state| state.second_points_since(cutoff))
+                .unwrap_or_default();
+        }
+
         self.run_query(
             task_label::op::METRIC_QUERY_BY_KEY,
             move |store| -> Vec<ConnectMetricPoint> {
@@ -540,7 +662,7 @@ impl DuckMetricStore {
         if metric.domain.ends_with('.') && metric.domain.len() > 1 {
             metric.domain.pop();
         }
-        let _ = self.tx.send(DBMessage::InsertDnsMetric(metric)).await;
+        let _ = self.dns_tx.send(DnsMetricMessage::Metric(metric)).await;
     }
 
     pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {

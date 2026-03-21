@@ -27,6 +27,8 @@ export default {
 
   conn_retention_mins: "原始数据保存 (分钟)",
   conn_retention_mins_desc: "原始秒级连接数据的保存期限（分钟）",
+  connect_second_window_mins: "秒级热窗口 (分钟)",
+  connect_second_window_mins_desc: "秒级连接图表在内存中的保留窗口",
   conn_retention_minute_days: "聚合数据保存 (分钟级)",
   conn_retention_minute_days_desc: "按分钟聚合的连接指标保存期限（天）",
   conn_retention_hour_days: "聚合数据保存 (小时级)",

@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
 use landscape_common::event::ConnectMessage;
 use landscape_common::metric::connect::{
@@ -12,47 +10,16 @@ use crate::metric::MetricStore;
 
 #[derive(Clone)]
 pub struct ConnectMetricManager {
-    msg_channel: mpsc::Sender<ConnectMessage>,
     metric_store: MetricStore,
-    global_stats: Arc<RwLock<ConnectGlobalStats>>,
 }
 
 impl ConnectMetricManager {
     pub fn with_store(metric_store: MetricStore) -> Self {
-        let (msg_channel, mut message_rx) = mpsc::channel(1024);
-
-        let metric_store_clone = metric_store.clone();
-
-        tokio::spawn(async move {
-            while let Some(msg) = message_rx.recv().await {
-                let ConnectMessage::Metric(metric) = msg;
-                metric_store_clone.insert_metric(metric).await;
-            }
-        });
-
-        let global_stats = Arc::new(RwLock::new(ConnectGlobalStats::default()));
-
-        // Regularly aggregate global statistics (every 24 hours)
-        {
-            let metric_store_clone = metric_store.clone();
-            let global_stats_clone = global_stats.clone();
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(86400));
-                loop {
-                    interval.tick().await;
-                    let stats = metric_store_clone.get_global_stats().await;
-                    let mut lock = global_stats_clone.write().await;
-                    *lock = stats;
-                    tracing::info!("Global stats updated: {} connects", lock.total_connect_count);
-                }
-            });
-        }
-
-        ConnectMetricManager { msg_channel, metric_store, global_stats }
+        ConnectMetricManager { metric_store }
     }
 
     pub async fn get_global_stats(&self) -> ConnectGlobalStats {
-        self.global_stats.read().await.clone()
+        self.metric_store.get_global_stats().await
     }
 
     pub async fn get_src_ip_stats(&self) -> Vec<IpRealtimeStat> {
@@ -64,11 +31,11 @@ impl ConnectMetricManager {
     }
 
     pub fn get_msg_channel(&self) -> mpsc::Sender<ConnectMessage> {
-        self.msg_channel.clone()
+        self.metric_store.get_connect_msg_channel()
     }
 
     pub fn send_connect_msg(&self, msg: ConnectMessage) {
-        if let Err(e) = self.msg_channel.try_send(msg) {
+        if let Err(e) = self.metric_store.get_connect_msg_channel().try_send(msg) {
             tracing::error!("send firewall metric error: {e:?}");
         }
     }

@@ -102,6 +102,10 @@ impl RuntimeConfig {
                 .metric
                 .raw_retention_minutes
                 .unwrap_or(crate::DEFAULT_METRIC_RAW_RETENTION_MINUTES),
+            connect_second_window_minutes: config
+                .metric
+                .connect_second_window_minutes
+                .unwrap_or(crate::DEFAULT_METRIC_CONNECT_SECOND_WINDOW_MINUTES),
             rollup_1m_retention_days: config
                 .metric
                 .rollup_1m_retention_days

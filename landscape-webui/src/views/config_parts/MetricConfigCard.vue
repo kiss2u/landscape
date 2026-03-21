@@ -55,6 +55,20 @@ async function handleSaveMetric() {
           </n-form-item>
         </n-gi>
         <n-gi>
+          <n-form-item :label="t('config.connect_second_window_mins')">
+            <n-input-number
+              v-model:value="metricStore.connectSecondWindowMinutes"
+              :min="1"
+              :max="60"
+              placeholder="5"
+              style="width: 100%"
+            />
+            <template #feedback>
+              {{ t("config.connect_second_window_mins_desc") }}
+            </template>
+          </n-form-item>
+        </n-gi>
+        <n-gi>
           <n-form-item :label="t('config.conn_retention_minute_days')">
             <n-input-number
               v-model:value="metricStore.rollup1mRetentionDays"

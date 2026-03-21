@@ -6,6 +6,7 @@ import { get_metric_config_edit, update_metric_config } from "@/api/sys/config";
 export const useMetricConfigStore = defineStore("metric_config", () => {
   const enabled = ref<boolean>(true);
   const rawRetentionMinutes = ref<number | undefined>(undefined);
+  const connectSecondWindowMinutes = ref<number | undefined>(undefined);
   const rollup1mRetentionDays = ref<number | undefined>(undefined);
   const rollup1hRetentionDays = ref<number | undefined>(undefined);
   const rollup1dRetentionDays = ref<number | undefined>(undefined);
@@ -24,6 +25,8 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
     const { metric, hash } = await get_metric_config_edit();
     enabled.value = metric.enable ?? true;
     rawRetentionMinutes.value = metric.raw_retention_minutes ?? undefined;
+    connectSecondWindowMinutes.value =
+      metric.connect_second_window_minutes ?? undefined;
     rollup1mRetentionDays.value = metric.rollup_1m_retention_days ?? undefined;
     rollup1hRetentionDays.value = metric.rollup_1h_retention_days ?? undefined;
     rollup1dRetentionDays.value = metric.rollup_1d_retention_days ?? undefined;
@@ -45,6 +48,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
     const new_metric: LandscapeMetricConfig = {
       enable: enabled.value,
       raw_retention_minutes: rawRetentionMinutes.value,
+      connect_second_window_minutes: connectSecondWindowMinutes.value,
       rollup_1m_retention_days: rollup1mRetentionDays.value,
       rollup_1h_retention_days: rollup1hRetentionDays.value,
       rollup_1d_retention_days: rollup1dRetentionDays.value,
@@ -71,6 +75,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
   return {
     enabled,
     rawRetentionMinutes,
+    connectSecondWindowMinutes,
     rollup1mRetentionDays,
     rollup1hRetentionDays,
     rollup1dRetentionDays,
