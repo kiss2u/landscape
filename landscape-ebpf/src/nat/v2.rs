@@ -9,7 +9,10 @@ use libbpf_rs::{
 use tokio::sync::oneshot;
 
 use crate::MAP_PATHS;
-use crate::{landscape::TcHookProxy, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY};
+use crate::{
+    landscape::{pin_and_reuse_map, TcHookProxy},
+    NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY,
+};
 
 pub(crate) mod land_nat_v2 {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_nat_v2.skel.rs"));
@@ -25,35 +28,45 @@ pub fn init_nat(
     // landscape_builder.obj_builder.debug(true);
 
     let mut open_object = MaybeUninit::uninit();
-    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    let mut landscape_open =
+        crate::bpf_ctx!(landscape_builder.open(&mut open_object), "nat_v2 open skeleton failed")
+            .unwrap();
     // println!("reuse_pinned_map: {:?}", MAP_PATHS.wan_ip);
 
-    landscape_open.maps.wan_ip_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
-    landscape_open.maps.wan_ip_binding.reuse_pinned_map(&MAP_PATHS.wan_ip).unwrap();
-
-    landscape_open.maps.nat6_static_mappings.set_pin_path(&MAP_PATHS.nat6_static_mappings).unwrap();
-    landscape_open
-        .maps
-        .nat6_static_mappings
-        .reuse_pinned_map(&MAP_PATHS.nat6_static_mappings)
-        .unwrap();
-
-    landscape_open.maps.nat4_mappings.set_pin_path(&MAP_PATHS.nat4_mappings).unwrap();
-    landscape_open.maps.nat4_mappings.reuse_pinned_map(&MAP_PATHS.nat4_mappings).unwrap();
-
-    landscape_open.maps.nat4_mapping_timer.set_pin_path(&MAP_PATHS.nat4_mapping_timer).unwrap();
-    landscape_open.maps.nat4_mapping_timer.reuse_pinned_map(&MAP_PATHS.nat4_mapping_timer).unwrap();
-
-    landscape_open
-        .maps
-        .nat_conn_metric_events
-        .set_pin_path(&MAP_PATHS.nat_conn_metric_events)
-        .unwrap();
-    landscape_open
-        .maps
-        .nat_conn_metric_events
-        .reuse_pinned_map(&MAP_PATHS.nat_conn_metric_events)
-        .unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut landscape_open.maps.wan_ip_binding, &MAP_PATHS.wan_ip),
+        "nat_v2 prepare wan_ip_binding failed"
+    )
+    .unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(
+            &mut landscape_open.maps.nat6_static_mappings,
+            &MAP_PATHS.nat6_static_mappings
+        ),
+        "nat_v2 prepare nat6_static_mappings failed"
+    )
+    .unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut landscape_open.maps.nat4_mappings, &MAP_PATHS.nat4_mappings),
+        "nat_v2 prepare nat4_mappings failed"
+    )
+    .unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(
+            &mut landscape_open.maps.nat4_mapping_timer,
+            &MAP_PATHS.nat4_mapping_timer
+        ),
+        "nat_v2 prepare nat4_mapping_timer failed"
+    )
+    .unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(
+            &mut landscape_open.maps.nat_conn_metric_events,
+            &MAP_PATHS.nat_conn_metric_events
+        ),
+        "nat_v2 prepare nat_conn_metric_events failed"
+    )
+    .unwrap();
 
     let rodata_data =
         landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
@@ -70,7 +83,8 @@ pub fn init_nat(
         rodata_data.current_l3_offset = 0;
     }
 
-    let landscape_skel = landscape_open.load().unwrap();
+    let landscape_skel =
+        crate::bpf_ctx!(landscape_open.load(), "nat_v2 load skeleton failed").unwrap();
 
     // let (nat_conn_events_tx, mut nat_conn_events_rx) =
     //     tokio::sync::mpsc::unbounded_channel::<Box<NatEvent>>();

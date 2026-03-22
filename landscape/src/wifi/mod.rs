@@ -64,11 +64,11 @@ pub async fn create_wifi_service(iface_name: String, config: String, service_sta
     let clone_service_status = service_status.clone();
     spawn_task_with_resource(task_label::task::WIFI_STOP, iface_name.clone(), async move {
         let stop_wait = clone_service_status.wait_to_stopping();
-        tracing::info!("等待外部停止信号");
+        tracing::info!("Waiting for external stop signal");
         let _ = stop_wait.await;
-        tracing::info!("接收外部停止信号");
+        tracing::info!("Received external stop signal");
         let _ = tx.send(());
-        tracing::info!("向内部发送停止信号");
+        tracing::info!("Sent internal stop signal");
     });
 
     let Ok(config_path) = write_config(&iface_name, &config) else {
@@ -77,9 +77,9 @@ pub async fn create_wifi_service(iface_name: String, config: String, service_sta
         return;
     };
 
-    tracing::info!("hostapd 配置写入成功");
+    tracing::info!("hostapd config written successfully");
     spawn_named_thread(short_thread_name(thread_name::prefix::WIFI, &iface_name), move || {
-        tracing::info!("hostapd 启动中");
+        tracing::info!("Starting hostapd");
         let mut child = match Command::new("hostapd")
             .arg("-i")
             .arg(&iface_name)
@@ -123,14 +123,14 @@ pub async fn create_wifi_service(iface_name: String, config: String, service_sta
             }
         }
         let _ = child.kill();
-        tracing::info!("向外部线程发送解除阻塞信号");
+        tracing::info!("Sent worker thread exit signal");
         let _ = other_tx.send(());
         delete_config(&iface_name);
     })
     .expect("failed to spawn wifi worker thread");
 
     let _ = other_rx.await;
-    tracing::info!("结束外部线程阻塞");
+    tracing::info!("Worker thread exited");
 
     service_status.just_change_status(ServiceStatus::Stop);
 }

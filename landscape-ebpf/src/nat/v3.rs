@@ -1,4 +1,3 @@
-use std::mem::MaybeUninit;
 use std::os::fd::AsRawFd;
 
 use land_nat_v3::*;
@@ -7,13 +6,44 @@ use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     MapCore, TC_EGRESS, TC_INGRESS,
 };
-use tokio::sync::oneshot;
 
 use crate::MAP_PATHS;
-use crate::{landscape::TcHookProxy, NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY};
+use crate::{
+    bpf_error::LdEbpfResult,
+    landscape::{pin_and_reuse_map, OwnedOpenObject, TcHookProxy},
+    NAT_EGRESS_PRIORITY, NAT_INGRESS_PRIORITY,
+};
 
 pub(crate) mod land_nat_v3 {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_nat_v3.skel.rs"));
+}
+
+pub struct NatV3Handle {
+    _backing: OwnedOpenObject,
+    skel: Option<LandNatV3Skel<'static>>,
+    ingress_hook: Option<TcHookProxy>,
+    egress_hook: Option<TcHookProxy>,
+}
+
+unsafe impl Send for NatV3Handle {}
+unsafe impl Sync for NatV3Handle {}
+
+impl NatV3Handle {
+    pub fn skel(&self) -> &LandNatV3Skel<'static> {
+        self.skel.as_ref().expect("nat v3 skeleton missing")
+    }
+
+    pub fn skel_mut(&mut self) -> &mut LandNatV3Skel<'static> {
+        self.skel.as_mut().expect("nat v3 skeleton missing")
+    }
+}
+
+impl Drop for NatV3Handle {
+    fn drop(&mut self) {
+        self.ingress_hook.take();
+        self.egress_hook.take();
+        self.skel.take();
+    }
 }
 
 fn seed_port_queue<M>(map: &M, start: u16, end: u16)
@@ -52,45 +82,45 @@ fn seed_runtime_queues<M1, M2, M3>(
     seed_port_queue(icmp_queue, config.icmp_in_range.start, config.icmp_in_range.end);
 }
 
-pub fn init_nat(
-    ifindex: i32,
-    has_mac: bool,
-    service_status: oneshot::Receiver<()>,
-    config: NatConfig,
-) {
+pub fn init_nat(ifindex: i32, has_mac: bool, config: NatConfig) -> LdEbpfResult<NatV3Handle> {
     let landscape_builder = LandNatV3SkelBuilder::default();
-    let mut open_object = MaybeUninit::uninit();
-    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    let (backing, open_object) = OwnedOpenObject::new();
+    let mut landscape_open =
+        crate::bpf_ctx!(landscape_builder.open(open_object), "nat_v3 open skeleton failed")?;
 
-    landscape_open.maps.wan_ip_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
-    landscape_open.maps.wan_ip_binding.reuse_pinned_map(&MAP_PATHS.wan_ip).unwrap();
-
-    landscape_open.maps.nat6_static_mappings.set_pin_path(&MAP_PATHS.nat6_static_mappings).unwrap();
-    landscape_open
-        .maps
-        .nat6_static_mappings
-        .reuse_pinned_map(&MAP_PATHS.nat6_static_mappings)
-        .unwrap();
-
-    landscape_open.maps.nat4_st_map.set_pin_path(&MAP_PATHS.nat4_st_map).unwrap();
-    landscape_open.maps.nat4_st_map.reuse_pinned_map(&MAP_PATHS.nat4_st_map).unwrap();
-
-    landscape_open.maps.nat4_mappings.set_pin_path(&MAP_PATHS.nat4_mappings).unwrap();
-    landscape_open.maps.nat4_mappings.reuse_pinned_map(&MAP_PATHS.nat4_mappings).unwrap();
-
-    landscape_open.maps.nat4_mapping_timer.set_pin_path(&MAP_PATHS.nat4_mapping_timer).unwrap();
-    landscape_open.maps.nat4_mapping_timer.reuse_pinned_map(&MAP_PATHS.nat4_mapping_timer).unwrap();
-
-    landscape_open
-        .maps
-        .nat_conn_metric_events
-        .set_pin_path(&MAP_PATHS.nat_conn_metric_events)
-        .unwrap();
-    landscape_open
-        .maps
-        .nat_conn_metric_events
-        .reuse_pinned_map(&MAP_PATHS.nat_conn_metric_events)
-        .unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut landscape_open.maps.wan_ip_binding, &MAP_PATHS.wan_ip),
+        "nat_v3 prepare wan_ip_binding failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(
+            &mut landscape_open.maps.nat6_static_mappings,
+            &MAP_PATHS.nat6_static_mappings
+        ),
+        "nat_v3 prepare nat6_static_mappings failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut landscape_open.maps.nat4_st_map, &MAP_PATHS.nat4_st_map),
+        "nat_v3 prepare nat4_st_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut landscape_open.maps.nat4_mappings, &MAP_PATHS.nat4_mappings),
+        "nat_v3 prepare nat4_mappings failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(
+            &mut landscape_open.maps.nat4_mapping_timer,
+            &MAP_PATHS.nat4_mapping_timer
+        ),
+        "nat_v3 prepare nat4_mapping_timer failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(
+            &mut landscape_open.maps.nat_conn_metric_events,
+            &MAP_PATHS.nat_conn_metric_events
+        ),
+        "nat_v3 prepare nat_conn_metric_events failed"
+    )?;
 
     let rodata_data =
         landscape_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
@@ -106,7 +136,7 @@ pub fn init_nat(
         rodata_data.current_l3_offset = 0;
     }
 
-    let landscape_skel = landscape_open.load().unwrap();
+    let landscape_skel = crate::bpf_ctx!(landscape_open.load(), "nat_v3 load skeleton failed")?;
 
     seed_runtime_queues(
         &landscape_skel.maps.nat4_tcp_free_ports_v3,
@@ -115,17 +145,22 @@ pub fn init_nat(
         &config,
     );
 
-    let nat_egress = landscape_skel.progs.egress_nat;
-    let nat_ingress = landscape_skel.progs.ingress_nat;
-
     let mut nat_egress_hook =
-        TcHookProxy::new(&nat_egress, ifindex, TC_EGRESS, NAT_EGRESS_PRIORITY);
-    let mut nat_ingress_hook =
-        TcHookProxy::new(&nat_ingress, ifindex, TC_INGRESS, NAT_INGRESS_PRIORITY);
+        TcHookProxy::new(&landscape_skel.progs.egress_nat, ifindex, TC_EGRESS, NAT_EGRESS_PRIORITY);
+    let mut nat_ingress_hook = TcHookProxy::new(
+        &landscape_skel.progs.ingress_nat,
+        ifindex,
+        TC_INGRESS,
+        NAT_INGRESS_PRIORITY,
+    );
 
     nat_egress_hook.attach();
     nat_ingress_hook.attach();
-    let _ = service_status.blocking_recv();
-    drop(nat_egress_hook);
-    drop(nat_ingress_hook);
+
+    Ok(NatV3Handle {
+        _backing: backing,
+        skel: Some(landscape_skel),
+        ingress_hook: Some(nat_ingress_hook),
+        egress_hook: Some(nat_egress_hook),
+    })
 }

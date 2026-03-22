@@ -1,22 +1,13 @@
-use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use clap::Parser;
 use landscape::iface::get_iface_by_name;
 use landscape_common::{
-    concurrency::{short_thread_name, spawn_named_thread, thread_name},
     firewall::{FirewallRuleItem, FirewallRuleMark},
     flow::mark::FlowMark,
     network::LandscapeIpProtocolCode,
 };
 use landscape_ebpf::map_setting::add_firewall_rule;
-use tokio::{sync::oneshot, time::sleep};
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -33,44 +24,23 @@ pub async fn main() {
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
-
-    let (tx, rx) = oneshot::channel::<()>();
-    let (other_tx, other_rx) = oneshot::channel::<()>();
-
     add_firewall_rule(get_allow_icmp_echo());
-    if let Some(iface) = get_iface_by_name(&args.iface_name).await {
-        spawn_named_thread(
-            short_thread_name(thread_name::prefix::FIREWALL, &args.iface_name),
-            move || {
-                println!("启动 firewall 在 ifindex: {:?}", iface.index);
-                if let Err(e) = landscape_ebpf::firewall::new_firewall(
-                    iface.index as i32,
-                    iface.mac.is_some(),
-                    rx,
-                ) {
-                    tracing::debug!("error: {e:?}");
-                }
-                println!("向外部线程发送解除阻塞信号");
-                let _ = other_tx.send(());
-            },
-        )
-        .expect("failed to spawn firewall test thread");
+    let firewall = if let Some(iface) = get_iface_by_name(&args.iface_name).await {
+        println!("Starting firewall on ifindex: {:?}", iface.index);
+        match landscape_ebpf::firewall::new_firewall(iface.index as i32, iface.mac.is_some()) {
+            Ok(handle) => Some(handle),
+            Err(err) => {
+                tracing::debug!("error: {err:?}");
+                None
+            }
+        }
     } else {
-        let _ = other_tx.send(());
-    }
+        None
+    };
 
-    while running.load(Ordering::SeqCst) {
-        sleep(Duration::new(1, 0)).await;
-    }
+    let _ = tokio::signal::ctrl_c().await;
 
-    let _ = tx.send(());
-    let _ = other_rx.await;
+    drop(firewall);
 }
 
 fn get_allow_icmp_echo() -> Vec<FirewallRuleMark> {

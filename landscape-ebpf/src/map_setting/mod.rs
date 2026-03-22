@@ -136,7 +136,11 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     let landscape_builder = ShareMapSkelBuilder::default();
     // landscape_builder.obj_builder.debug(true);
     let mut open_object = MaybeUninit::uninit();
-    let mut landscape_open = landscape_builder.open(&mut open_object).unwrap();
+    let mut landscape_open = crate::bpf_ctx!(
+        landscape_builder.open(&mut open_object),
+        "map_setting open shared maps skeleton failed"
+    )
+    .unwrap();
 
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.wan_ip_binding, &paths.wan_ip);
     // NAT
@@ -195,7 +199,9 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.ip_mac_v4, &paths.ip_mac_v4);
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.ip_mac_v6, &paths.ip_mac_v6);
 
-    let _landscape_skel = landscape_open.load().unwrap();
+    let _landscape_skel =
+        crate::bpf_ctx!(landscape_open.load(), "map_setting load shared maps skeleton failed")
+            .unwrap();
     route::cache::init_route_wan_cache_inner_map(paths);
     route::cache::init_route_lan_cache_inner_map(paths);
 }

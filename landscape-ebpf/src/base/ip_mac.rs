@@ -17,20 +17,24 @@ use neigh_update::*;
 
 use crate::base::ip_mac::neigh_update::types::mac_key_v4;
 use crate::base::ip_mac::neigh_update::types::mac_value_v4;
-use crate::{bpf_error::LdEbpfResult, MAP_PATHS};
+use crate::{bpf_error::LdEbpfResult, landscape::pin_and_reuse_map, MAP_PATHS};
 
 pub fn neigh_update(mut service_status: oneshot::Receiver<()>) -> LdEbpfResult<()> {
     let mut open_object = MaybeUninit::zeroed();
     let builder = NeighUpdateSkelBuilder::default();
-    let mut open_skel = builder.open(&mut open_object)?;
+    let mut open_skel =
+        crate::bpf_ctx!(builder.open(&mut open_object), "neigh_update open skeleton failed")?;
 
-    open_skel.maps.ip_mac_v4.set_pin_path(&MAP_PATHS.ip_mac_v4).unwrap();
-    open_skel.maps.ip_mac_v4.reuse_pinned_map(&MAP_PATHS.ip_mac_v4).unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.ip_mac_v4, &MAP_PATHS.ip_mac_v4),
+        "neigh_update prepare ip_mac_v4 failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.ip_mac_v6, &MAP_PATHS.ip_mac_v6),
+        "neigh_update prepare ip_mac_v6 failed"
+    )?;
 
-    open_skel.maps.ip_mac_v6.set_pin_path(&MAP_PATHS.ip_mac_v6).unwrap();
-    open_skel.maps.ip_mac_v6.reuse_pinned_map(&MAP_PATHS.ip_mac_v6).unwrap();
-
-    let skel = open_skel.load()?;
+    let skel = crate::bpf_ctx!(open_skel.load(), "neigh_update load skeleton failed")?;
     let kprobe_neigh_update = skel.progs.kprobe_neigh_update;
 
     let _link = match kprobe_neigh_update.attach_kprobe(false, "neigh_update") {

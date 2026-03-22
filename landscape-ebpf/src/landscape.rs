@@ -1,6 +1,44 @@
-use std::os::fd::AsFd;
+use std::{mem::MaybeUninit, os::fd::AsFd, ptr::NonNull};
 
-use libbpf_rs::{Program, TcAttachPoint, TcHook, TcHookBuilder};
+use libbpf_rs::{OpenMapMut, OpenObject, Program, TcAttachPoint, TcHook, TcHookBuilder};
+
+pub(crate) struct OwnedOpenObject {
+    ptr: NonNull<MaybeUninit<OpenObject>>,
+}
+
+impl OwnedOpenObject {
+    pub fn new() -> (Self, &'static mut MaybeUninit<OpenObject>) {
+        let ptr = NonNull::from(Box::leak(Box::new(MaybeUninit::<OpenObject>::uninit())));
+        let object = unsafe { ptr.as_ptr().as_mut().expect("backing open object pointer is null") };
+        (Self { ptr }, object)
+    }
+}
+
+impl Drop for OwnedOpenObject {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.ptr.as_ptr()));
+        }
+    }
+}
+
+unsafe impl Send for OwnedOpenObject {}
+unsafe impl Sync for OwnedOpenObject {}
+
+pub(crate) fn pin_and_reuse_map(
+    map: &mut OpenMapMut<'_>,
+    path: &std::path::Path,
+) -> crate::bpf_error::LdEbpfResult<()> {
+    map.set_pin_path(path).map_err(|source| crate::bpf_error::LandscapeEbpfError::Context {
+        context: "set_pin_path failed".to_string(),
+        source,
+    })?;
+    map.reuse_pinned_map(path).map_err(|source| crate::bpf_error::LandscapeEbpfError::Context {
+        context: "reuse_pinned_map failed".to_string(),
+        source,
+    })?;
+    Ok(())
+}
 
 pub struct TcHookProxy {
     hook: Option<TcHook>,
@@ -42,13 +80,7 @@ impl Drop for TcHookProxy {
                     tracing::debug!("detach success");
                 }
             }
-            // if let Err(e) = hook.destroy() {
-            //     tracing::debug!("destroy error: {:?}", e);
-            // }
         }
-        // if let Ok(_) = self.query() {
-        //     self.detach().unwrap();
-        // }
     }
 }
 

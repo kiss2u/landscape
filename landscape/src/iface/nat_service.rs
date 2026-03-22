@@ -3,16 +3,13 @@ use landscape_common::observer::IfaceObserverAction;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::manager::ServiceManager;
 use landscape_common::{
-    concurrency::{
-        short_thread_name, spawn_named_thread, spawn_task, spawn_task_with_resource, task_label,
-        thread_name,
-    },
+    concurrency::{spawn_task, spawn_task_with_resource, task_label},
     iface::nat::{NatConfig, NatServiceConfig},
     service::{manager::ServiceStarterTrait, ServiceStatus, WatchService},
 };
 use landscape_database::nat::repository::NatServiceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::broadcast;
 
 use crate::iface::get_iface_by_name;
 
@@ -25,10 +22,8 @@ impl ServiceStarterTrait for NatService {
 
     async fn start(&self, config: NatServiceConfig) -> WatchService {
         let service_status = WatchService::new();
-        // service_status.just_change_status(ServiceStatus::Staring);
 
         if config.enable {
-            // 具体的 NAT 服务启动逻辑
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let status_clone = service_status.clone();
                 let iface_name = config.iface_name.clone();
@@ -63,26 +58,23 @@ pub async fn create_nat_service(
     service_status: WatchService,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
-    let (tx, rx) = oneshot::channel::<()>();
-    let (other_tx, other_rx) = oneshot::channel::<()>();
+
+    let nat = match landscape_ebpf::nat::v3::init_nat(ifindex, has_mac, nat_config) {
+        Ok(handle) => handle,
+        Err(err) => {
+            tracing::error!("failed to start nat for {iface_name}: {err}");
+            service_status.just_change_status(ServiceStatus::Stop);
+            return;
+        }
+    };
+
     service_status.just_change_status(ServiceStatus::Running);
-    let service_status_clone = service_status.clone();
-    spawn_task_with_resource(task_label::task::NAT_STOP, iface_name.clone(), async move {
-        let stop_wait = service_status_clone.wait_to_stopping();
-        tracing::info!("等待外部停止信号");
-        let _ = stop_wait.await;
-        tracing::info!("接收外部停止信号");
-        let _ = tx.send(());
-        tracing::info!("向内部发送停止信号");
-    });
-    spawn_named_thread(short_thread_name(thread_name::prefix::NAT, &iface_name), move || {
-        landscape_ebpf::nat::v3::init_nat(ifindex, has_mac, rx, nat_config);
-        tracing::info!("向外部线程发送解除阻塞信号");
-        let _ = other_tx.send(());
-    })
-    .expect("failed to spawn nat worker thread");
-    let _ = other_rx.await;
-    tracing::info!("结束外部线程阻塞");
+    tracing::info!("Waiting for external stop signal");
+    let _ = service_status.wait_to_stopping().await;
+    tracing::info!("Received external stop signal");
+
+    drop(nat);
+
     service_status.just_change_status(ServiceStatus::Stop);
 }
 

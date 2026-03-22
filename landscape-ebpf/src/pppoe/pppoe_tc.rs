@@ -28,12 +28,14 @@ pub async fn create_pppoe_tc_ebpf<'a>(
 
     // pppoe_builder.obj_builder.debug(true);
 
-    let mut pppoe_open: OpenPppoeSkel<'a> = pppoe_builder.open(obj).unwrap();
+    let mut pppoe_open: OpenPppoeSkel<'a> =
+        crate::bpf_ctx!(pppoe_builder.open(obj), "pppoe_tc open skeleton failed").unwrap();
     let rodata_data =
         pppoe_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
 
     rodata_data.session_id = session_id;
-    let pppoe_skel: PppoeSkel<'a> = pppoe_open.load().unwrap();
+    let pppoe_skel: PppoeSkel<'a> =
+        crate::bpf_ctx!(pppoe_open.load(), "pppoe_tc load skeleton failed").unwrap();
 
     // let pppoe_pnet_progs = pppoe_skel.progs;
 
@@ -195,13 +197,19 @@ pub async fn create_pppoe_tc_ebpf_3(
         let builder = PppoeSkelBuilder::default(); // 假设你可以直接使用它
                                                    // 在新线程中执行逻辑
         let mut open_object = MaybeUninit::uninit();
-        let mut pppoe_open = builder.open(&mut open_object).unwrap();
+        let mut pppoe_open = crate::bpf_ctx!(
+            builder.open(&mut open_object),
+            "pppoe_tc icmp-notice open skeleton failed"
+        )
+        .unwrap();
         let rodata_data =
             pppoe_open.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
         rodata_data.session_id = session_id;
         rodata_data.pppoe_mtu = mtu;
 
-        let pppoe_skel = pppoe_open.load().unwrap();
+        let pppoe_skel =
+            crate::bpf_ctx!(pppoe_open.load(), "pppoe_tc icmp-notice load skeleton failed")
+                .unwrap();
 
         let callback = |data: &[u8]| -> i32 {
             let _ = icmp_msg_tx.send(Box::new(data.to_vec()));

@@ -4,6 +4,7 @@ pub(crate) mod land_dns_dispatcher {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/land_dns_dispatcher.skel.rs"));
 }
 use crate::bpf_error::LdEbpfResult;
+use crate::landscape::pin_and_reuse_map;
 use crate::MAP_PATHS;
 use land_dns_dispatcher::*;
 use libbpf_rs::skel::{OpenSkel, SkelBuilder};
@@ -15,15 +16,19 @@ use std::os::fd::AsRawFd;
 pub fn attach_reuseport_ebpf(sock_fd: i32) -> LdEbpfResult<()> {
     let mut open_object = MaybeUninit::zeroed();
     let builder = LandDnsDispatcherSkelBuilder::default();
-    let mut open_skel = builder.open(&mut open_object)?;
+    let mut open_skel =
+        crate::bpf_ctx!(builder.open(&mut open_object), "dns_dispatcher open skeleton failed")?;
 
-    open_skel.maps.dns_flow_socks.set_pin_path(&MAP_PATHS.dns_flow_socks)?;
-    open_skel.maps.dns_flow_socks.reuse_pinned_map(&MAP_PATHS.dns_flow_socks)?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.dns_flow_socks, &MAP_PATHS.dns_flow_socks),
+        "dns_dispatcher prepare dns_flow_socks failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.flow_match_map, &MAP_PATHS.flow_match_map),
+        "dns_dispatcher prepare flow_match_map failed"
+    )?;
 
-    open_skel.maps.flow_match_map.set_pin_path(&MAP_PATHS.flow_match_map)?;
-    open_skel.maps.flow_match_map.reuse_pinned_map(&MAP_PATHS.flow_match_map)?;
-
-    let skel = open_skel.load()?;
+    let skel = crate::bpf_ctx!(open_skel.load(), "dns_dispatcher load skeleton failed")?;
 
     let reuseport_dns_dispatcher = skel.progs.reuseport_dns_dispatcher;
     let prog_fd: i32 = reuseport_dns_dispatcher.as_fd().as_raw_fd();

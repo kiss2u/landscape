@@ -1,10 +1,7 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::route::lan::RouteLanServiceConfig;
 use landscape_common::{
-    concurrency::{
-        short_thread_name, spawn_named_thread, spawn_task, spawn_task_with_resource, task_label,
-        thread_name,
-    },
+    concurrency::{spawn_task, spawn_task_with_resource, task_label},
     observer::IfaceObserverAction,
     service::{
         controller::ControllerService,
@@ -14,7 +11,7 @@ use landscape_common::{
 };
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::route_lan::repository::RouteLanServiceRepository;
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::broadcast;
 
 use crate::iface::get_iface_by_name;
 use crate::route::IpRouteService;
@@ -85,27 +82,24 @@ pub async fn create_route_lan_service(
     service_status: WatchService,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
-    let (tx, rx) = oneshot::channel::<()>();
-    let (other_tx, other_rx) = oneshot::channel::<()>();
+    tracing::info!("start attach_match_flow at ifindex: {ifindex}");
+
+    let route_lan = match landscape_ebpf::route::lan_v2::route_lan(ifindex, has_mac) {
+        Ok(handle) => handle,
+        Err(err) => {
+            tracing::error!("failed to start route lan for {iface_name}: {err}");
+            service_status.just_change_status(ServiceStatus::Stop);
+            return;
+        }
+    };
+
     service_status.just_change_status(ServiceStatus::Running);
-    let service_status_clone = service_status.clone();
-    spawn_task_with_resource(task_label::task::ROUTE_LAN_STOP, iface_name.clone(), async move {
-        let stop_wait = service_status_clone.wait_to_stopping();
-        tracing::info!("Waiting for external stop signal");
-        let _ = stop_wait.await;
-        tracing::info!("Receiving external stop signal");
-        let _ = tx.send(());
-        tracing::info!("Send a stop signal internally");
-    });
-    spawn_named_thread(short_thread_name(thread_name::prefix::ROUTE_LAN, &iface_name), move || {
-        tracing::info!("start attach_match_flow at ifindex: {:?}", ifindex);
-        landscape_ebpf::route::lan_v2::route_lan(ifindex, has_mac, rx).unwrap();
-        tracing::info!("Send an unblocking signal to an external thread");
-        let _ = other_tx.send(());
-    })
-    .expect("failed to spawn route lan worker thread");
-    let _ = other_rx.await;
-    tracing::info!("End external thread blocking");
+    tracing::info!("Waiting for external stop signal");
+    let _ = service_status.wait_to_stopping().await;
+    tracing::info!("Receiving external stop signal");
+
+    drop(route_lan);
+
     service_status.just_change_status(ServiceStatus::Stop);
 }
 

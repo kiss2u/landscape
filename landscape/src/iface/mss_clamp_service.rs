@@ -1,9 +1,6 @@
 use landscape_common::database::LandscapeStore;
 use landscape_common::{
-    concurrency::{
-        short_thread_name, spawn_named_thread, spawn_task, spawn_task_with_resource, task_label,
-        thread_name,
-    },
+    concurrency::{spawn_task, spawn_task_with_resource, task_label},
     iface::mss_clamp::MSSClampServiceConfig,
     observer::IfaceObserverAction,
     service::{
@@ -15,7 +12,7 @@ use landscape_common::{
 use landscape_database::{
     mss_clamp::repository::MssClampServiceRepository, provider::LandscapeDBServiceProvider,
 };
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::broadcast;
 
 use crate::iface::get_iface_by_name;
 
@@ -64,26 +61,23 @@ pub async fn run_mss_clamp(
     service_status: WatchService,
 ) {
     service_status.just_change_status(ServiceStatus::Staring);
-    let (tx, rx) = oneshot::channel::<()>();
-    let (other_tx, other_rx) = oneshot::channel::<()>();
+
+    let mss_clamp = match landscape_ebpf::mss_clamp::run_mss_clamp(ifindex, mtu_size, has_mac) {
+        Ok(handle) => handle,
+        Err(err) => {
+            tracing::error!("failed to start mss clamp for {iface_name}: {err}");
+            service_status.just_change_status(ServiceStatus::Stop);
+            return;
+        }
+    };
+
     service_status.just_change_status(ServiceStatus::Running);
-    let service_status_clone = service_status.clone();
-    spawn_task_with_resource(task_label::task::MSS_CLAMP_STOP, iface_name.clone(), async move {
-        let stop_wait = service_status_clone.wait_to_stopping();
-        tracing::info!("等待外部停止信号");
-        let _ = stop_wait.await;
-        tracing::info!("接收外部停止信号");
-        let _ = tx.send(());
-        tracing::info!("向内部发送停止信号");
-    });
-    spawn_named_thread(short_thread_name(thread_name::prefix::MSS_CLAMP, &iface_name), move || {
-        landscape_ebpf::mss_clamp::run_mss_clamp(ifindex, mtu_size, has_mac, rx);
-        tracing::info!("向外部线程发送解除阻塞信号");
-        let _ = other_tx.send(());
-    })
-    .expect("failed to spawn mss clamp worker thread");
-    let _ = other_rx.await;
-    tracing::info!("结束外部线程阻塞");
+    tracing::info!("Waiting for external stop signal");
+    let _ = service_status.wait_to_stopping().await;
+    tracing::info!("Received external stop signal");
+
+    drop(mss_clamp);
+
     service_status.just_change_status(ServiceStatus::Stop);
 }
 

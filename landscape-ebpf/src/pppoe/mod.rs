@@ -46,8 +46,11 @@ pub async fn start(
     // pppoe_builder.obj_builder.debug(true);
 
     let mut open_object = MaybeUninit::uninit();
-    let pppoe_open = pppoe_builder.open(&mut open_object).unwrap();
-    let pppoe_skel = pppoe_open.load().unwrap();
+    let pppoe_open =
+        crate::bpf_ctx!(pppoe_builder.open(&mut open_object), "pppoe_client open skeleton failed")
+            .unwrap();
+    let pppoe_skel =
+        crate::bpf_ctx!(pppoe_open.load(), "pppoe_client load skeleton failed").unwrap();
 
     let pppoe_pnet_progs = pppoe_skel.progs;
 

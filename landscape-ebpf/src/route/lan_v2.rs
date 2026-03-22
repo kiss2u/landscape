@@ -1,5 +1,3 @@
-use std::mem::MaybeUninit;
-
 pub(crate) mod route_lan {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/route_lan.skel.rs"));
 }
@@ -9,63 +7,103 @@ use libbpf_rs::{
     TC_EGRESS, TC_INGRESS,
 };
 use route_lan::*;
-use tokio::sync::oneshot;
 
 use crate::{
-    bpf_error::LdEbpfResult, landscape::TcHookProxy, LAN_ROUTE_EGRESS_PRIORITY,
-    LAN_ROUTE_INGRESS_PRIORITY, MAP_PATHS,
+    bpf_error::LdEbpfResult,
+    landscape::{pin_and_reuse_map, OwnedOpenObject, TcHookProxy},
+    LAN_ROUTE_EGRESS_PRIORITY, LAN_ROUTE_INGRESS_PRIORITY, MAP_PATHS,
 };
 
-pub fn route_lan(
-    ifindex: u32,
-    has_mac: bool,
-    service_status: oneshot::Receiver<()>,
-) -> LdEbpfResult<()> {
-    let mut open_object = MaybeUninit::zeroed();
+pub struct RouteLanHandle {
+    _backing: OwnedOpenObject,
+    skel: Option<RouteLanSkel<'static>>,
+    ingress_hook: Option<TcHookProxy>,
+    egress_hook: Option<TcHookProxy>,
+}
+
+unsafe impl Send for RouteLanHandle {}
+unsafe impl Sync for RouteLanHandle {}
+
+impl RouteLanHandle {
+    pub fn skel(&self) -> &RouteLanSkel<'static> {
+        self.skel.as_ref().expect("route lan skeleton missing")
+    }
+
+    pub fn skel_mut(&mut self) -> &mut RouteLanSkel<'static> {
+        self.skel.as_mut().expect("route lan skeleton missing")
+    }
+}
+
+impl Drop for RouteLanHandle {
+    fn drop(&mut self) {
+        self.ingress_hook.take();
+        self.egress_hook.take();
+        self.skel.take();
+    }
+}
+
+pub fn route_lan(ifindex: u32, has_mac: bool) -> LdEbpfResult<RouteLanHandle> {
     let firewall_builder = RouteLanSkelBuilder::default();
-    let mut open_skel = firewall_builder.open(&mut open_object).unwrap();
+    let (backing, open_object) = OwnedOpenObject::new();
+    let mut open_skel =
+        crate::bpf_ctx!(firewall_builder.open(open_object), "route_lan open skeleton failed")?;
 
-    open_skel.maps.flow_match_map.set_pin_path(&MAP_PATHS.flow_match_map).unwrap();
-    open_skel.maps.flow_match_map.reuse_pinned_map(&MAP_PATHS.flow_match_map).unwrap();
-
-    open_skel.maps.wan_ip_binding.set_pin_path(&MAP_PATHS.wan_ip).unwrap();
-    open_skel.maps.wan_ip_binding.reuse_pinned_map(&MAP_PATHS.wan_ip).unwrap();
-
-    open_skel.maps.rt4_lan_map.set_pin_path(&MAP_PATHS.rt4_lan_map).unwrap();
-    open_skel.maps.rt4_lan_map.reuse_pinned_map(&MAP_PATHS.rt4_lan_map).unwrap();
-
-    open_skel.maps.rt6_lan_map.set_pin_path(&MAP_PATHS.rt6_lan_map).unwrap();
-    open_skel.maps.rt6_lan_map.reuse_pinned_map(&MAP_PATHS.rt6_lan_map).unwrap();
-
-    open_skel.maps.rt4_target_map.set_pin_path(&MAP_PATHS.rt4_target_map).unwrap();
-    open_skel.maps.rt4_target_map.reuse_pinned_map(&MAP_PATHS.rt4_target_map).unwrap();
-
-    open_skel.maps.rt6_target_map.set_pin_path(&MAP_PATHS.rt6_target_map).unwrap();
-    open_skel.maps.rt6_target_map.reuse_pinned_map(&MAP_PATHS.rt6_target_map).unwrap();
-
-    open_skel.maps.flow4_dns_map.set_pin_path(&MAP_PATHS.flow4_dns_map).unwrap();
-    open_skel.maps.flow4_dns_map.reuse_pinned_map(&MAP_PATHS.flow4_dns_map).unwrap();
-
-    open_skel.maps.flow6_dns_map.set_pin_path(&MAP_PATHS.flow6_dns_map).unwrap();
-    open_skel.maps.flow6_dns_map.reuse_pinned_map(&MAP_PATHS.flow6_dns_map).unwrap();
-
-    open_skel.maps.flow4_ip_map.set_pin_path(&MAP_PATHS.flow4_ip_map).unwrap();
-    open_skel.maps.flow4_ip_map.reuse_pinned_map(&MAP_PATHS.flow4_ip_map).unwrap();
-
-    open_skel.maps.flow6_ip_map.set_pin_path(&MAP_PATHS.flow6_ip_map).unwrap();
-    open_skel.maps.flow6_ip_map.reuse_pinned_map(&MAP_PATHS.flow6_ip_map).unwrap();
-
-    open_skel.maps.rt4_cache_map.set_pin_path(&MAP_PATHS.rt4_cache_map).unwrap();
-    open_skel.maps.rt4_cache_map.reuse_pinned_map(&MAP_PATHS.rt4_cache_map).unwrap();
-
-    open_skel.maps.rt6_cache_map.set_pin_path(&MAP_PATHS.rt6_cache_map).unwrap();
-    open_skel.maps.rt6_cache_map.reuse_pinned_map(&MAP_PATHS.rt6_cache_map).unwrap();
-
-    open_skel.maps.ip_mac_v4.set_pin_path(&MAP_PATHS.ip_mac_v4).unwrap();
-    open_skel.maps.ip_mac_v4.reuse_pinned_map(&MAP_PATHS.ip_mac_v4).unwrap();
-
-    open_skel.maps.ip_mac_v6.set_pin_path(&MAP_PATHS.ip_mac_v6).unwrap();
-    open_skel.maps.ip_mac_v6.reuse_pinned_map(&MAP_PATHS.ip_mac_v6).unwrap();
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.flow_match_map, &MAP_PATHS.flow_match_map),
+        "route_lan prepare flow_match_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.wan_ip_binding, &MAP_PATHS.wan_ip),
+        "route_lan prepare wan_ip_binding failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.rt4_lan_map, &MAP_PATHS.rt4_lan_map),
+        "route_lan prepare rt4_lan_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.rt6_lan_map, &MAP_PATHS.rt6_lan_map),
+        "route_lan prepare rt6_lan_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.rt4_target_map, &MAP_PATHS.rt4_target_map),
+        "route_lan prepare rt4_target_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.rt6_target_map, &MAP_PATHS.rt6_target_map),
+        "route_lan prepare rt6_target_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.flow4_dns_map, &MAP_PATHS.flow4_dns_map),
+        "route_lan prepare flow4_dns_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.flow6_dns_map, &MAP_PATHS.flow6_dns_map),
+        "route_lan prepare flow6_dns_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.flow4_ip_map, &MAP_PATHS.flow4_ip_map),
+        "route_lan prepare flow4_ip_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.flow6_ip_map, &MAP_PATHS.flow6_ip_map),
+        "route_lan prepare flow6_ip_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.rt4_cache_map, &MAP_PATHS.rt4_cache_map),
+        "route_lan prepare rt4_cache_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.rt6_cache_map, &MAP_PATHS.rt6_cache_map),
+        "route_lan prepare rt6_cache_map failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.ip_mac_v4, &MAP_PATHS.ip_mac_v4),
+        "route_lan prepare ip_mac_v4 failed"
+    )?;
+    crate::bpf_ctx!(
+        pin_and_reuse_map(&mut open_skel.maps.ip_mac_v6, &MAP_PATHS.ip_mac_v6),
+        "route_lan prepare ip_mac_v6 failed"
+    )?;
 
     let rodata_data =
         open_skel.maps.rodata_data.as_deref_mut().expect("`rodata` is not memery mapped");
@@ -73,24 +111,28 @@ pub fn route_lan(
         rodata_data.current_l3_offset = 0;
     }
 
-    let skel = open_skel.load().unwrap();
-    let route_lan_ingress = skel.progs.route_lan_ingress;
-    let lan_route_egress = skel.progs.route_lan_egress;
-
+    let skel = crate::bpf_ctx!(open_skel.load(), "route_lan load skeleton failed")?;
     let mut flow_ingress_hook = TcHookProxy::new(
-        &route_lan_ingress,
+        &skel.progs.route_lan_ingress,
         ifindex as i32,
         TC_INGRESS,
         LAN_ROUTE_INGRESS_PRIORITY,
     );
 
-    let mut lan_route_egress_hook =
-        TcHookProxy::new(&lan_route_egress, ifindex as i32, TC_EGRESS, LAN_ROUTE_EGRESS_PRIORITY);
+    let mut lan_route_egress_hook = TcHookProxy::new(
+        &skel.progs.route_lan_egress,
+        ifindex as i32,
+        TC_EGRESS,
+        LAN_ROUTE_EGRESS_PRIORITY,
+    );
 
     flow_ingress_hook.attach();
     lan_route_egress_hook.attach();
-    let _ = service_status.blocking_recv();
-    drop(flow_ingress_hook);
-    drop(lan_route_egress_hook);
-    Ok(())
+
+    Ok(RouteLanHandle {
+        _backing: backing,
+        skel: Some(skel),
+        ingress_hook: Some(flow_ingress_hook),
+        egress_hook: Some(lan_route_egress_hook),
+    })
 }

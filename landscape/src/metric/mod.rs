@@ -389,11 +389,11 @@ pub async fn create_metric_service(metric_service: MetricService, service_status
     let service_status_clone = service_status.clone();
     spawn_task(task_label::task::METRIC_SERVICE_STOP, async move {
         let stop_wait = service_status_clone.wait_to_stopping();
-        tracing::info!("等待外部停止信号");
+        tracing::info!("Waiting for external stop signal");
         let _ = stop_wait.await;
-        tracing::info!("接收外部停止信号");
+        tracing::info!("Received external stop signal");
         let _ = tx.send(());
-        tracing::info!("向内部发送停止信号");
+        tracing::info!("Sent internal stop signal");
     });
 
     let connect_msg_tx = metric_service.get_connect_msg_channel();
@@ -403,6 +403,6 @@ pub async fn create_metric_service(metric_service: MetricService, service_status
     })
     .expect("failed to spawn metric event thread");
     let _ = other_rx.await;
-    tracing::info!("结束外部线程阻塞");
+    tracing::info!("Worker thread exited");
     service_status.just_change_status(ServiceStatus::Stop);
 }

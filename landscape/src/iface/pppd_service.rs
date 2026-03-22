@@ -121,11 +121,11 @@ pub async fn create_pppd_thread(
     let service_status_clone = service_status.clone();
     spawn_task_with_resource(task_label::task::PPPD_STOP, ppp_iface_name.clone(), async move {
         let stop_wait = service_status_clone.wait_to_stopping();
-        tracing::debug!("等待外部停止信号");
+        tracing::debug!("Waiting for external stop signal");
         let _ = stop_wait.await;
-        tracing::info!("接收外部停止信号");
+        tracing::info!("Received external stop signal");
         let _ = tx.send(());
-        tracing::info!("向内部发送停止信号");
+        tracing::info!("Sent internal stop signal");
     });
 
     let Ok(_) = pppd_conf.write_config(&attach_iface_name, &ppp_iface_name) else {
@@ -205,7 +205,7 @@ pub async fn create_pppd_thread(
         },
     );
 
-    tracing::info!("pppd 配置写入成功");
+    tracing::info!("PPPD config written successfully");
     let iface_name = ppp_iface_name.clone();
     spawn_named_thread(short_thread_name(thread_name::prefix::PPPD, &ppp_iface_name), move || {
         let mut connect_failure_count: u32 = 0;
@@ -216,7 +216,7 @@ pub async fn create_pppd_thread(
                 break;
             }
 
-            tracing::info!("pppd 启动中");
+            tracing::info!("Starting PPPD");
             let mut child = match Command::new("pppd")
                 .arg("nodetach")
                 .arg("call")
@@ -270,7 +270,7 @@ pub async fn create_pppd_thread(
                 match rx.try_recv() {
                     Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
                     Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                        tracing::info!("收到停止 pppd 信号");
+                        tracing::info!("Received stop signal for PPPD");
                         should_stop = true;
                         break;
                     }
@@ -293,14 +293,14 @@ pub async fn create_pppd_thread(
             }
         }
 
-        tracing::info!("向外部线程发送解除阻塞信号");
+        tracing::info!("Sent worker thread exit signal");
         let _ = other_tx.send(());
         pppd_conf.delete_config(&ppp_iface_name);
     })
     .expect("failed to spawn pppd worker thread");
 
     let _ = other_rx.await;
-    tracing::info!("结束外部线程阻塞");
+    tracing::info!("Worker thread exited");
     if as_router {
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
