@@ -44,7 +44,7 @@ impl ActiveModelBehavior for ActiveModel {
 impl From<Model> for FirewallRuleConfig {
     fn from(entity: Model) -> Self {
         FirewallRuleConfig {
-            id: Some(entity.id),
+            id: entity.id,
             index: entity.index,
             enable: entity.enable,
             remark: entity.remark,
@@ -57,10 +57,7 @@ impl From<Model> for FirewallRuleConfig {
 
 impl Into<ActiveModel> for FirewallRuleConfig {
     fn into(self) -> ActiveModel {
-        let mut active = ActiveModel {
-            id: Set(self.id.unwrap_or_else(Uuid::new_v4)),
-            ..Default::default()
-        };
+        let mut active = ActiveModel { id: Set(self.id), ..Default::default() };
         self.update(&mut active);
         active
     }

@@ -11,7 +11,7 @@ pub struct FirewallServiceConfig {
     pub iface_name: String,
     pub enable: bool,
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 

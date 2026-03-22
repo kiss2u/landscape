@@ -22,13 +22,15 @@ pub enum FirewallRuleError {
 }
 
 use crate::database::repository::LandscapeDBStore;
+use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FirewallRuleConfig {
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub id: Option<Uuid>,
+    #[serde(default = "gen_database_uuid")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub id: Uuid,
     // 优先级
     pub index: u32,
     pub enable: bool,
@@ -41,7 +43,7 @@ pub struct FirewallRuleConfig {
     pub mark: FlowMark,
 
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 
@@ -53,7 +55,7 @@ impl LandscapeStore for FirewallRuleConfig {
 
 impl LandscapeDBStore<Uuid> for FirewallRuleConfig {
     fn get_id(&self) -> Uuid {
-        self.id.unwrap_or(Uuid::new_v4())
+        self.id
     }
     fn get_update_at(&self) -> f64 {
         self.update_at
@@ -181,7 +183,7 @@ pub fn insert_default_firewall_rule() -> Option<FirewallRuleConfig> {
         None
     } else {
         Some(FirewallRuleConfig {
-            id: None,
+            id: gen_database_uuid(),
             index: 1,
             enable: true,
             remark: "Landscape Router Default Firewall Rule".to_string(),

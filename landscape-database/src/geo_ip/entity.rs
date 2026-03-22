@@ -41,7 +41,7 @@ impl ActiveModelBehavior for ActiveModel {
 impl From<Model> for GeoIpSourceConfig {
     fn from(entity: Model) -> Self {
         GeoIpSourceConfig {
-            id: Some(entity.id),
+            id: entity.id,
             update_at: entity.update_at,
             name: entity.name,
             enable: entity.enable,
@@ -52,10 +52,7 @@ impl From<Model> for GeoIpSourceConfig {
 
 impl Into<ActiveModel> for GeoIpSourceConfig {
     fn into(self) -> ActiveModel {
-        let mut active = ActiveModel {
-            id: Set(self.id.unwrap_or_else(Uuid::new_v4)),
-            ..Default::default()
-        };
+        let mut active = ActiveModel { id: Set(self.id), ..Default::default() };
         self.update(&mut active);
         active
     }

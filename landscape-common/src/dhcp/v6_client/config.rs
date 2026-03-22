@@ -13,7 +13,7 @@ pub struct IPV6PDServiceConfig {
     pub enable: bool,
     pub config: IPV6PDConfig,
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 

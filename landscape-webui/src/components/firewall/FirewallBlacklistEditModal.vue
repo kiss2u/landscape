@@ -43,7 +43,6 @@ async function enter() {
       enable: true,
       source: [],
       remark: "",
-      update_at: Date.now(),
     };
   }
   origin_json.value = JSON.stringify(config.value);

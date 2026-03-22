@@ -24,7 +24,7 @@ pub struct DHCPv4ServiceConfig {
     pub config: DHCPv4ServerConfig,
     /// 最近一次编译时间
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 

@@ -15,7 +15,7 @@ pub struct MSSClampServiceConfig {
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub clamp_size: u16,
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 

@@ -276,7 +276,7 @@ mod tests {
         let geo_service = test_geo_service().await;
         geo_service
             .set(GeoSiteSourceConfig {
-                id: None,
+                id: uuid::Uuid::new_v4(),
                 update_at: 0.0,
                 name: "shared".into(),
                 enable: true,

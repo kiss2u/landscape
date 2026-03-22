@@ -9,6 +9,8 @@ use crate::database::repository::LandscapeDBStore;
 use crate::dns::rule::{DomainConfig, DomainMatchType};
 use crate::ip_mark::IpConfig;
 use crate::store::storev4::LandscapeStoreTrait;
+use crate::utils::id::gen_database_uuid;
+use crate::utils::time::get_f64_timestamp;
 
 #[derive(thiserror::Error, Debug, LdApiError)]
 #[api_error(crate_path = "crate")]
@@ -65,8 +67,11 @@ pub enum GeoIpFileFormat {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GeoSiteSourceConfig {
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub id: Option<Uuid>,
+    #[serde(default = "gen_database_uuid")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub id: Uuid,
+    #[serde(default = "get_f64_timestamp")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
     pub name: String,
     pub enable: bool,
@@ -90,7 +95,7 @@ pub struct GeoSiteDirectItem {
 
 impl LandscapeDBStore<Uuid> for GeoSiteSourceConfig {
     fn get_id(&self) -> Uuid {
-        self.id.unwrap_or(Uuid::new_v4())
+        self.id
     }
     fn get_update_at(&self) -> f64 {
         self.update_at
@@ -173,8 +178,11 @@ pub struct QueryGeoDomainConfig {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GeoIpSourceConfig {
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub id: Option<Uuid>,
+    #[serde(default = "gen_database_uuid")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub id: Uuid,
+    #[serde(default = "get_f64_timestamp")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
     pub name: String,
     pub enable: bool,
@@ -207,7 +215,7 @@ pub struct GeoIpDirectItem {
 
 impl LandscapeDBStore<Uuid> for GeoIpSourceConfig {
     fn get_id(&self) -> Uuid {
-        self.id.unwrap_or(Uuid::new_v4())
+        self.id
     }
     fn get_update_at(&self) -> f64 {
         self.update_at

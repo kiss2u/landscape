@@ -47,7 +47,7 @@ impl ActiveModelBehavior for ActiveModel {
 impl From<Model> for WanIpRuleConfig {
     fn from(entity: Model) -> Self {
         WanIpRuleConfig {
-            id: Some(entity.id),
+            id: entity.id,
             index: entity.index,
             enable: entity.enable,
             mark: entity.mark.into(),
@@ -62,10 +62,7 @@ impl From<Model> for WanIpRuleConfig {
 
 impl Into<ActiveModel> for WanIpRuleConfig {
     fn into(self) -> ActiveModel {
-        let mut active = ActiveModel {
-            id: Set(self.id.unwrap_or_else(Uuid::new_v4)),
-            ..Default::default()
-        };
+        let mut active = ActiveModel { id: Set(self.id), ..Default::default() };
         self.update(&mut active);
         active
     }

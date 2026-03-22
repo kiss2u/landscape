@@ -4,6 +4,7 @@ use landscape_macro::LdApiError;
 
 use crate::config::ConfigId;
 use crate::geo::GeoConfigKey;
+use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 use crate::{database::repository::LandscapeDBStore, flow::mark::FlowMark};
 use serde::{Deserialize, Serialize};
@@ -21,8 +22,9 @@ pub enum DstIpRuleError {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 /// 对于外部 IP 规则
 pub struct WanIpRuleConfig {
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub id: Option<Uuid>,
+    #[serde(default = "gen_database_uuid")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub id: Uuid,
     // 优先级 用作存储主键
     pub index: u32,
     // 是否启用
@@ -47,7 +49,7 @@ pub struct WanIpRuleConfig {
     pub override_dns: bool,
 
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 
@@ -57,7 +59,7 @@ fn default_flow_id() -> u32 {
 
 impl LandscapeDBStore<Uuid> for WanIpRuleConfig {
     fn get_id(&self) -> Uuid {
-        self.id.unwrap_or(Uuid::new_v4())
+        self.id
     }
     fn get_update_at(&self) -> f64 {
         self.update_at

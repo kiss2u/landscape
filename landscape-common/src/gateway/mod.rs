@@ -59,6 +59,7 @@ pub enum GatewayError {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct HttpUpstreamRuleConfig {
     #[serde(default = "gen_database_uuid")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
     pub enable: bool,
     pub name: String,
@@ -67,6 +68,7 @@ pub struct HttpUpstreamRuleConfig {
     pub match_rule: HttpUpstreamMatchRule,
     pub upstream: HttpUpstreamConfig,
     #[serde(default = "get_f64_timestamp")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 

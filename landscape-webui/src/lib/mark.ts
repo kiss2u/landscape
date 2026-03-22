@@ -6,7 +6,7 @@ import type {
   WanIpRuleConfig,
 } from "@landscape-router/types/api/schemas";
 export class WanIpRuleConfigClass implements WanIpRuleConfig {
-  id: string | null;
+  id?: string;
   index: number;
   enable: boolean;
   mark: FlowMark;
@@ -14,10 +14,10 @@ export class WanIpRuleConfigClass implements WanIpRuleConfig {
   remark: string;
   flow_id: number;
   override_dns: boolean;
-  update_at: number;
+  update_at?: number;
 
   constructor(obj: Partial<WanIpRuleConfig> = {}) {
-    this.id = obj?.id ?? null;
+    this.id = obj?.id;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
     this.mark = convert_flow_mark(obj.mark);
@@ -25,7 +25,7 @@ export class WanIpRuleConfigClass implements WanIpRuleConfig {
     this.remark = obj?.remark ?? "";
     this.flow_id = obj?.flow_id ?? 0;
     this.override_dns = obj?.override_dns ?? false;
-    this.update_at = obj?.update_at ?? new Date().getTime();
+    this.update_at = obj?.update_at;
   }
 }
 

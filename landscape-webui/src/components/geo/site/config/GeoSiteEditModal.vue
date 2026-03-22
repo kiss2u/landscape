@@ -32,8 +32,6 @@ async function enter() {
   } else {
     sourceType.value = "url";
     rule.value = {
-      id: null,
-      update_at: new Date().getTime(),
       name: "",
       enable: true,
       source: { t: "url", url: "", next_update_at: 0, geo_keys: [] },

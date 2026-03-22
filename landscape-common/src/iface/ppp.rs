@@ -36,7 +36,7 @@ pub struct PPPDServiceConfig {
     pub enable: bool,
     pub pppd_config: PPPDConfig,
     #[serde(default = "get_f64_timestamp")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
 }
 
