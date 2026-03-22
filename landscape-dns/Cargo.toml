@@ -27,7 +27,6 @@ hickory-proto = { workspace = true, features = [
 uuid = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-ctrlc = { workspace = true }
 socket2 = { workspace = true }
 arc-swap = { workspace = true }
 

@@ -1,10 +1,6 @@
 use std::{
     net::{IpAddr, Ipv6Addr},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
+    sync::Arc,
 };
 
 use clap::Parser;
@@ -41,13 +37,6 @@ async fn main() {
 
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
-
     let Some(mac_addr) = MacAddr::from_str(&args.mac) else {
         tracing::error!("mac parse error, mac is: {:?}", args.mac);
         return;
@@ -123,9 +112,7 @@ async fn main() {
         }
     });
 
-    while running.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::new(1, 0)).await;
-    }
+    tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
 
     dhcp_service_status.just_change_status(ServiceStatus::Stopping);
     icmp_service_status.just_change_status(ServiceStatus::Stopping);

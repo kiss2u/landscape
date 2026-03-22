@@ -43,7 +43,6 @@ paste = "1.0.15"
 rand = "0.10.0"
 colored = "3.0.0"
 dotenvy = "0.15.7"
-ctrlc = "3.5.1"
 uuid = { version = "1.19.0", features = ["v4", "serde"] }
 clap = { version = "4.5.53", default-features = false, features = [
     "std",

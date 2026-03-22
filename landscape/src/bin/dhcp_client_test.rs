@@ -1,11 +1,3 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
-
 use landscape::{dhcp_client::v4::dhcp_v4_client, iface::get_iface_by_name, route::IpRouteService};
 use landscape_common::{
     service::{ServiceStatus, WatchService},
@@ -33,13 +25,6 @@ async fn main() {
     let db_store_provider = LandscapeDBServiceProvider::mem_test_db().await;
     let flow_repo = db_store_provider.flow_rule_store();
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
-
     let service_status = WatchService::new();
 
     let status = service_status.clone();
@@ -63,9 +48,7 @@ async fn main() {
         }
     });
 
-    while running.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::new(1, 0)).await;
-    }
+    tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
 
     service_status.just_change_status(ServiceStatus::Stopping);
 

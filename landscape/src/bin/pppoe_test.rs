@@ -1,11 +1,3 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
-
 use clap::Parser;
 use landscape_common::service::ServiceStatus;
 use tokio::sync::oneshot;
@@ -54,16 +46,7 @@ async fn main() {
         }
     });
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
-
-    while running.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::new(1, 0)).await;
-    }
+    tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
     println!("开始断连");
 
     service_status.send_replace(ServiceStatus::Stopping);

@@ -1,11 +1,4 @@
-use std::{
-    net::{IpAddr, Ipv6Addr},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::net::{IpAddr, Ipv6Addr};
 
 use clap::Parser;
 use landscape::{dhcp_client::v6::dhcp_v6_pd_client, iface::get_iface_by_name};
@@ -32,13 +25,6 @@ async fn main() {
 
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
-
     let iface =
         get_iface_by_name(&args.iface_name).await.expect("could nt find iface by iface name");
 
@@ -76,9 +62,7 @@ async fn main() {
         .await;
     });
 
-    while running.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::new(1, 0)).await;
-    }
+    tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
 
     service_status.just_change_status(ServiceStatus::Stopping);
 

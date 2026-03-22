@@ -44,7 +44,6 @@ wl-nl80211 = { workspace = true }
 libc = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
-ctrlc = { workspace = true }
 
 cidr = { workspace = true }
 

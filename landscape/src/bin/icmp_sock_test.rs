@@ -1,10 +1,4 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::sync::Arc;
 
 use clap::Parser;
 use landscape::ipv6::prefix::IPv6PrefixRuntime;
@@ -33,13 +27,6 @@ async fn main() {
 
     let args = Args::parse();
     tracing::info!("using args is: {:#?}", args);
-
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
 
     let service_status = WatchService::new();
     let status = service_status.clone();
@@ -77,9 +64,7 @@ async fn main() {
         }
     });
 
-    while running.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::new(1, 0)).await;
-    }
+    tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
 
     service_status.just_change_status(ServiceStatus::Stopping);
 

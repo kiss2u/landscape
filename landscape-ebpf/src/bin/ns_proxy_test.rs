@@ -1,15 +1,5 @@
 use clap::Parser;
-use std::{
-    fs::File,
-    mem::MaybeUninit,
-    net::Ipv4Addr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread::sleep,
-    time::Duration,
-};
+use std::{fs::File, mem::MaybeUninit, net::Ipv4Addr};
 
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
@@ -49,7 +39,8 @@ pub struct Params {
     listen_port: u16,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // ip netns add tpns
     // ip link add veth0 type veth peer name veth1
     // ip link set veth1 netns tpns
@@ -79,13 +70,6 @@ fn main() {
 
     println!("parmas: {:?}", params);
     bump_memlock_rlimit();
-
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })
-    .unwrap();
 
     let landscape_builder = NsProxySkelBuilder::default();
     // landscape_builder.obj_builder.debug(true);
@@ -144,9 +128,7 @@ fn main() {
     let xdp = inner_xdp.attach_xdp(params.ns_index - 1).unwrap();
 
     sched::setns(&current_ns, sched::CloneFlags::CLONE_NEWNET).unwrap();
-    while running.load(Ordering::SeqCst) {
-        sleep(Duration::new(1, 0));
-    }
+    tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
 
     enter_namespace("/var/run/netns/tpns").unwrap();
     drop(ns_inner_ingress_hook);
