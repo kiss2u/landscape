@@ -1,4 +1,10 @@
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use axum::{
     handler::HandlerWithoutStateExt, http::StatusCode, response::IntoResponse, routing::get, Router,
@@ -278,63 +284,114 @@ impl LandscapeApp {
     }
 }
 
+fn log_startup_phase(phase: &str, phase_start: Instant, startup_start: Instant) {
+    tracing::info!(
+        "startup phase={} elapsed_ms={} since_run_ms={}",
+        phase,
+        phase_start.elapsed().as_millis(),
+        startup_start.elapsed().as_millis()
+    );
+}
+
 async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
-    let need_init_config = boot_check(&home_path)?;
+    let startup_start = Instant::now();
+
+    macro_rules! startup_phase {
+        ($name:literal, $expr:expr) => {{
+            let phase_start = Instant::now();
+            let value = $expr;
+            log_startup_phase($name, phase_start, startup_start);
+            value
+        }};
+    }
+
+    let need_init_config = startup_phase!("boot_check", boot_check(&home_path)?);
 
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
 
-    let db_store_provider = LandscapeDBServiceProvider::new(&config.store).await;
+    let db_store_provider = startup_phase!(
+        "db_store_provider.new",
+        LandscapeDBServiceProvider::new(&config.store).await
+    );
 
-    db_store_provider.truncate_and_fit_from(need_init_config).await;
+    startup_phase!(
+        "db_store_provider.truncate_and_fit_from",
+        db_store_provider.truncate_and_fit_from(need_init_config).await
+    );
 
     // 初始化 App
 
-    let dev_obs = landscape::observer::dev_observer().await;
+    let dev_obs =
+        startup_phase!("observer.dev_observer", landscape::observer::dev_observer().await);
 
     let (dns_service_tx, dns_service_rx) = mpsc::channel(DNS_EVENT_CHANNEL_SIZE);
     let (route_service_tx, route_service_rx) = mpsc::channel(ROUTE_EVENT_CHANNEL_SIZE);
     let (dst_ip_service_tx, _) = tokio::sync::broadcast::channel(DST_IP_EVENT_CHANNEL_SIZE);
 
-    let geo_site_service =
-        GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let geo_site_service = startup_phase!(
+        "geo_site_service.new",
+        GeoSiteService::new(db_store_provider.clone(), dns_service_tx.clone()).await
+    );
 
-    let dns_upstream_service =
-        DnsUpstreamService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let dns_upstream_service = startup_phase!(
+        "dns_upstream_service.new",
+        DnsUpstreamService::new(db_store_provider.clone(), dns_service_tx.clone()).await
+    );
 
-    let dns_rule_service = DNSRuleService::new(
-        db_store_provider.clone(),
-        dns_service_tx.clone(),
-        dns_upstream_service.clone(),
-    )
-    .await;
+    let dns_rule_service = startup_phase!(
+        "dns_rule_service.new",
+        DNSRuleService::new(
+            db_store_provider.clone(),
+            dns_service_tx.clone(),
+            dns_upstream_service.clone(),
+        )
+        .await
+    );
 
-    let flow_rule_service = FlowRuleService::new(
-        db_store_provider.clone(),
-        dns_service_tx.clone(),
-        route_service_tx.clone(),
-    )
-    .await;
+    let flow_rule_service = startup_phase!(
+        "flow_rule_service.new",
+        FlowRuleService::new(
+            db_store_provider.clone(),
+            dns_service_tx.clone(),
+            route_service_tx.clone(),
+        )
+        .await
+    );
 
-    let dns_redirect_service =
-        DNSRedirectService::new(db_store_provider.clone(), dns_service_tx.clone()).await;
+    let dns_redirect_service = startup_phase!(
+        "dns_redirect_service.new",
+        DNSRedirectService::new(db_store_provider.clone(), dns_service_tx.clone()).await
+    );
 
-    let metric_service = MetricService::new(home_path.clone(), config.metric.clone()).await;
+    let metric_service = startup_phase!(
+        "metric_service.new",
+        MetricService::new(home_path.clone(), config.metric.clone()).await
+    );
 
-    let cert_account_service = CertAccountService::new(db_store_provider.clone()).await;
-    let cert_service = CertService::new(
-        db_store_provider.clone(),
-        cert_account_service.clone(),
-        Some(dns_redirect_service.clone()),
-    )
-    .await;
+    let cert_account_service = startup_phase!(
+        "cert_account_service.new",
+        CertAccountService::new(db_store_provider.clone()).await
+    );
+    let cert_service = startup_phase!(
+        "cert_service.new",
+        CertService::new(
+            db_store_provider.clone(),
+            cert_account_service.clone(),
+            Some(dns_redirect_service.clone()),
+        )
+        .await
+    );
+    let phase_start = Instant::now();
     if let Err(e) = cert_service.reload_api_tls_mapping().await {
         return Err(landscape_common::error::LdError::ConfigError(format!(
             "failed to load api tls certificates: {e}"
         )));
     }
+    log_startup_phase("cert_service.reload_api_tls_mapping", phase_start, startup_start);
     #[cfg(feature = "gateway")]
     let gateway_tls_config = {
+        let phase_start = Instant::now();
         let gateway_tls_mapping_count = match cert_service.reload_gateway_tls_mapping().await {
             Ok(count) => count,
             Err(e) => {
@@ -351,6 +408,7 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         let mut gateway_server_config =
             build_tls_server_config_with_shared_resolver(cert_service.gateway_tls_resolver());
         gateway_server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        log_startup_phase("cert_service.reload_gateway_tls_mapping", phase_start, startup_start);
         Some(GatewayTlsConfig::new(std::sync::Arc::new(gateway_server_config)))
     };
     #[cfg(not(feature = "gateway"))]
@@ -358,23 +416,28 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
 
     // Gateway
     let gateway_store = db_store_provider.gateway_http_upstream_store();
-    let gateway_service =
+    let gateway_service = startup_phase!(
+        "gateway_service.init_service",
         GatewayService::init_service(gateway_store, config.gateway.clone(), gateway_tls_config)
-            .await;
+            .await
+    );
 
     let route_service = IpRouteService::new(route_service_rx, db_store_provider.flow_rule_store());
-    let dns_service = LandscapeDnsService::new(
-        dns_service_rx,
-        dns_rule_service.clone(),
-        dns_redirect_service.clone(),
-        geo_site_service.clone(),
-        dns_upstream_service.clone(),
-        route_service.clone(),
-        config.dns.clone(),
-        cert_service.clone(),
-        metric_service.get_dns_metric_channel(),
-    )
-    .await;
+    let dns_service = startup_phase!(
+        "dns_service.new",
+        LandscapeDnsService::new(
+            dns_service_rx,
+            dns_rule_service.clone(),
+            dns_redirect_service.clone(),
+            geo_site_service.clone(),
+            dns_upstream_service.clone(),
+            route_service.clone(),
+            config.dns.clone(),
+            cert_service.clone(),
+            metric_service.get_dns_metric_channel(),
+        )
+        .await
+    );
     let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
 
     let geo_ip_service =
@@ -460,9 +523,12 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     )
     .await;
 
-    docker_service.start_to_listen_event().await;
+    startup_phase!(
+        "docker_service.start_to_listen_event",
+        docker_service.start_to_listen_event().await
+    );
 
-    metric_service.start_service().await;
+    startup_phase!("metric_service.start_service", metric_service.start_service().await);
     let landscape_app_status = LandscapeApp {
         home_path: home_path.clone(),
         dns_service,

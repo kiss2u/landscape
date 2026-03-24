@@ -76,6 +76,7 @@ portable-pty = { workspace = true }
 
 duckdb = { workspace = true, optional = true }
 r2d2 = { workspace = true, optional = true }
+sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio-rustls"], optional = true }
 
 etherparse = { workspace = true }
 [dependencies.pnet]
@@ -83,8 +84,9 @@ workspace = true
 
 [features]
 default = []
-metric-duckdb = ["dep:duckdb", "dep:r2d2"]
+metric-duckdb = ["dep:duckdb", "dep:r2d2", "dep:sqlx"]
 duckdb-bundled = ["metric-duckdb", "duckdb/bundled"]
 
 [dev-dependencies]
 axum = { workspace = true }
+tempfile = { workspace = true }

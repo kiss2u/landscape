@@ -20,8 +20,10 @@ pub mod thread_name {
         pub const GATEWAY_MAIN: &str = "ld-gw-main";
         /// Driver thread that owns the secondary HTTPS gateway runtime.
         pub const GATEWAY_HTTPS_DRIVER: &str = "ld-gwh-drv";
-        /// Single DuckDB writer/maintenance actor thread.
+        /// Single SQLite hot-store writer thread.
         pub const METRIC_DB_WRITER: &str = "ld-mdb";
+        /// Background DuckDB cold-store sync thread.
+        pub const METRIC_DB_COLD: &str = "ld-mdc";
         /// eBPF metric event reader thread that feeds userspace metric channels.
         pub const METRIC_EVENT_READER: &str = "ld-mevt";
         /// eBPF neighbor update listener thread.

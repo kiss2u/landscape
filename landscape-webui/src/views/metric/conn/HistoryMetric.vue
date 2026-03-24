@@ -302,9 +302,11 @@ onMounted(() => {
             </template>
             {{ t("metric.connect.stats.last_summary_time") }}:
             <n-time
+              v-if="globalStats.last_calculate_time > 0"
               :time="globalStats.last_calculate_time"
               format="yyyy-MM-dd HH:mm:ss"
             />
+            <span v-else>--</span>
           </n-tooltip>
         </n-flex>
         <div v-else style="height: 34px"></div>

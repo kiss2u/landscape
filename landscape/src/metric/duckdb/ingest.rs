@@ -1,18 +1,11 @@
-use duckdb::{params, Appender, Connection, DuckdbConnectionManager};
 use landscape_common::config::MetricRuntimeConfig;
-use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
     ConnectKey, ConnectMetric, ConnectMetricPoint, ConnectRealtimeStatus, ConnectStatusType,
     IpAggregatedStats, IpRealtimeStat,
 };
-use r2d2::PooledConnection;
 use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc;
-
-use super::connect::{cleanup, schema as connect_schema};
-use super::dns::schema as dns_schema;
 
 pub(crate) const CHANNEL_CAPACITY: usize = 1024;
 pub(crate) const MS_PER_MINUTE: u64 = 60 * 1000;
@@ -90,6 +83,59 @@ fn metric_to_realtime(metric: &ConnectMetric) -> ConnectRealtimeStatus {
         egress_pps: 0,
         last_report_time: metric.report_time,
         status: metric.status.clone(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BucketKind {
+    Minute,
+    Hour,
+    Day,
+}
+
+impl BucketKind {
+    pub(crate) fn table_name(self) -> &'static str {
+        match self {
+            Self::Minute => "conn_metrics_1m",
+            Self::Hour => "conn_metrics_1h",
+            Self::Day => "conn_metrics_1d",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BucketWrite {
+    pub kind: BucketKind,
+    pub metric: ConnectMetric,
+    pub bucket_report_time: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct PersistenceBatch {
+    pub summary_metrics: Vec<ConnectMetric>,
+    pub bucket_writes: Vec<BucketWrite>,
+}
+
+impl PersistenceBatch {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.summary_metrics.is_empty() && self.bucket_writes.is_empty()
+    }
+
+    pub(crate) fn op_count(&self) -> usize {
+        self.summary_metrics.len() + self.bucket_writes.len()
+    }
+
+    pub(crate) fn extend(&mut self, other: Self) {
+        self.summary_metrics.extend(other.summary_metrics);
+        self.bucket_writes.extend(other.bucket_writes);
+    }
+
+    fn push_summary(&mut self, metric: ConnectMetric) {
+        self.summary_metrics.push(metric);
+    }
+
+    fn push_bucket(&mut self, kind: BucketKind, metric: ConnectMetric, bucket_report_time: u64) {
+        self.bucket_writes.push(BucketWrite { kind, metric, bucket_report_time });
     }
 }
 
@@ -193,38 +239,7 @@ impl FlowState {
 
 pub(crate) type FlowCache = Arc<RwLock<HashMap<ConnectKey, FlowState>>>;
 
-fn upsert_bucket_row(
-    conn: &Connection,
-    table: &str,
-    metric: &ConnectMetric,
-    bucket_report_time: u64,
-) {
-    if let Err(error) =
-        connect_schema::upsert_metric_bucket(conn, table, metric, bucket_report_time)
-    {
-        tracing::error!(
-            "failed to upsert {} bucket for {}:{} at {}: {}",
-            table,
-            metric.key.create_time,
-            metric.key.cpu_id,
-            bucket_report_time,
-            error,
-        );
-    }
-}
-
-fn upsert_summary_row(conn: &Connection, metric: &ConnectMetric) {
-    if let Err(error) = connect_schema::upsert_summary(conn, metric) {
-        tracing::error!(
-            "failed to upsert summary for {}:{}: {}",
-            metric.key.create_time,
-            metric.key.cpu_id,
-            error,
-        );
-    }
-}
-
-pub(crate) fn finalize_state(conn: &Connection, state: &mut FlowState, mark_disabled: bool) {
+fn finalize_state_batch(state: &mut FlowState, mark_disabled: bool, batch: &mut PersistenceBatch) {
     if state.finalized {
         return;
     }
@@ -236,40 +251,38 @@ pub(crate) fn finalize_state(conn: &Connection, state: &mut FlowState, mark_disa
         state.realtime.status = ConnectStatusType::Disabled;
     }
 
-    upsert_bucket_row(conn, "conn_metrics_1m", &metric, minute_slot(metric.report_time));
-    upsert_bucket_row(
-        conn,
-        "conn_metrics_1h",
-        &metric,
+    batch.push_bucket(BucketKind::Minute, metric.clone(), minute_slot(metric.report_time));
+    batch.push_bucket(
+        BucketKind::Hour,
+        metric.clone(),
         bucket_start(metric.report_time, MS_PER_HOUR),
     );
-    upsert_bucket_row(
-        conn,
-        "conn_metrics_1d",
-        &metric,
+    batch.push_bucket(
+        BucketKind::Day,
+        metric.clone(),
         bucket_start(metric.report_time, MS_PER_DAY),
     );
-    upsert_summary_row(conn, &metric);
+    batch.push_summary(metric);
     state.finalized = true;
 }
 
 pub(crate) fn process_connect_metric(
-    conn: &Connection,
     flow_cache: &FlowCache,
     metric: ConnectMetric,
     second_window_ms: u64,
     second_ring_cap: usize,
-) {
+) -> PersistenceBatch {
     let curr_minute_slot = minute_slot(metric.report_time);
     let curr_hour_refresh_slot = hour_refresh_slot(metric.report_time);
     let curr_day_refresh_slot = day_refresh_slot(metric.report_time);
 
+    let mut batch = PersistenceBatch::default();
     let mut cache = flow_cache.write().expect("metric flow cache poisoned");
     match cache.entry(metric.key.clone()) {
         std::collections::hash_map::Entry::Occupied(mut entry) => {
             let state = entry.get_mut();
             if metric.report_time < state.last_metric.report_time {
-                return;
+                return batch;
             }
 
             let previous_minute_bucket = minute_slot(state.last_metric.report_time);
@@ -277,34 +290,36 @@ pub(crate) fn process_connect_metric(
             let previous_day_bucket = bucket_start(state.last_metric.report_time, MS_PER_DAY);
 
             if curr_minute_slot > state.last_minute_slot {
-                upsert_bucket_row(conn, "conn_metrics_1m", &metric, previous_minute_bucket);
-                upsert_summary_row(conn, &metric);
+                batch.push_bucket(BucketKind::Minute, metric.clone(), previous_minute_bucket);
+                batch.push_summary(metric.clone());
                 state.last_minute_slot = curr_minute_slot;
             }
             if curr_hour_refresh_slot > state.last_hour_refresh_slot {
-                upsert_bucket_row(conn, "conn_metrics_1h", &metric, previous_hour_bucket);
+                batch.push_bucket(BucketKind::Hour, metric.clone(), previous_hour_bucket);
                 state.last_hour_refresh_slot = curr_hour_refresh_slot;
             }
             if curr_day_refresh_slot > state.last_day_refresh_slot {
-                upsert_bucket_row(conn, "conn_metrics_1d", &metric, previous_day_bucket);
+                batch.push_bucket(BucketKind::Day, metric.clone(), previous_day_bucket);
                 state.last_day_refresh_slot = curr_day_refresh_slot;
             }
 
             let should_finalize = metric.status == ConnectStatusType::Disabled;
             state.update_from_metric(metric, second_window_ms, second_ring_cap);
             if should_finalize {
-                finalize_state(conn, state, true);
+                finalize_state_batch(state, true, &mut batch);
             }
         }
         std::collections::hash_map::Entry::Vacant(entry) => {
             let should_finalize = metric.status == ConnectStatusType::Disabled;
             let mut state = FlowState::new(metric, second_window_ms, second_ring_cap);
             if should_finalize {
-                finalize_state(conn, &mut state, true);
+                finalize_state_batch(&mut state, true, &mut batch);
             }
             entry.insert(state);
         }
     }
+
+    batch
 }
 
 #[derive(Default)]
@@ -316,21 +331,21 @@ pub(crate) struct FlowCacheStats {
 }
 
 pub(crate) fn cleanup_flow_cache(
-    conn: &Connection,
     flow_cache: &FlowCache,
     now_ms: u64,
     second_window_ms: u64,
-) -> FlowCacheStats {
+) -> (FlowCacheStats, PersistenceBatch) {
     let stale_cutoff = now_ms.saturating_sub(STALE_TIMEOUT_MS);
     let window_cutoff = now_ms.saturating_sub(second_window_ms);
 
     let mut cache = flow_cache.write().expect("metric flow cache poisoned");
     let mut expired_keys = Vec::new();
     let mut stats = FlowCacheStats::default();
+    let mut batch = PersistenceBatch::default();
 
     for (key, state) in cache.iter_mut() {
         if !state.finalized && state.realtime.last_report_time < stale_cutoff {
-            finalize_state(conn, state, true);
+            finalize_state_batch(state, true, &mut batch);
             stats.finalized_in_run += 1;
         }
 
@@ -352,14 +367,16 @@ pub(crate) fn cleanup_flow_cache(
         cache.remove(&key);
     }
 
-    stats
+    (stats, batch)
 }
 
-fn finalize_all_flows(conn: &Connection, flow_cache: &FlowCache) {
+pub(crate) fn finalize_all_flows(flow_cache: &FlowCache) -> PersistenceBatch {
     let mut cache = flow_cache.write().expect("metric flow cache poisoned");
+    let mut batch = PersistenceBatch::default();
     for state in cache.values_mut() {
-        finalize_state(conn, state, true);
+        finalize_state_batch(state, true, &mut batch);
     }
+    batch
 }
 
 pub(crate) fn collect_connect_infos(
@@ -404,130 +421,4 @@ pub(crate) fn second_points_by_key(
 ) -> Vec<ConnectMetricPoint> {
     let cache = flow_cache.read().expect("metric flow cache poisoned");
     cache.get(key).map(|state| state.second_points_since(cutoff)).unwrap_or_default()
-}
-
-pub(crate) fn start_db_thread(
-    mut connect_rx: mpsc::Receiver<ConnectMessage>,
-    mut dns_rx: mpsc::Receiver<DnsMetricMessage>,
-    metric_config: MetricRuntimeConfig,
-    disk_pool: r2d2::Pool<DuckdbConnectionManager>,
-    conn_dns: PooledConnection<DuckdbConnectionManager>,
-    conn_connect_writer: PooledConnection<DuckdbConnectionManager>,
-    flow_cache: FlowCache,
-) {
-    let flush_interval_duration =
-        std::time::Duration::from_secs(metric_config.write_flush_interval_secs.max(1));
-    let cleanup_interval_duration =
-        std::time::Duration::from_secs(metric_config.cleanup_interval_secs.max(1));
-    let second_window_ms = second_window_ms(&metric_config);
-    let second_ring_cap = second_ring_capacity(&metric_config);
-
-    let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
-    rt.block_on(async move {
-        let mut dns_appender: Option<Appender> = Some(conn_dns.appender("dns_metrics").unwrap());
-        let mut dns_batch_count = 0usize;
-        let mut flush_interval = tokio::time::interval(flush_interval_duration);
-        let mut cleanup_interval = tokio::time::interval(cleanup_interval_duration);
-        let mut connect_closed = false;
-        let mut dns_closed = false;
-
-        loop {
-            tokio::select! {
-                _ = flush_interval.tick() => {
-                    if let Some(ref mut appender) = dns_appender {
-                        let _ = appender.flush();
-                    }
-                }
-                _ = cleanup_interval.tick() => {
-                    if let Some(ref mut appender) = dns_appender {
-                        let _ = appender.flush();
-                    }
-
-                    let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-                    let flow_stats =
-                        cleanup_flow_cache(&conn_connect_writer, &flow_cache, now_ms, second_window_ms);
-
-                    let cutoff_1m = now_ms.saturating_sub(metric_config.connect_1m_retention_days * MS_PER_DAY);
-                    let cutoff_1h = now_ms.saturating_sub(metric_config.connect_1h_retention_days * MS_PER_DAY);
-                    let cutoff_1d = now_ms.saturating_sub(metric_config.connect_1d_retention_days * MS_PER_DAY);
-                    let cutoff_dns = now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
-
-                    dns_schema::cleanup_old_dns_metrics(&conn_dns, cutoff_dns);
-                    if let Ok(conn_agg) = disk_pool.get() {
-                        let stats = cleanup::cleanup_old_metrics_only(
-                            &conn_agg,
-                            cutoff_1m,
-                            cutoff_1h,
-                            cutoff_1d,
-                            metric_config.cleanup_time_budget_ms,
-                            metric_config.cleanup_slice_window_secs,
-                        );
-                        tracing::info!(
-                            "phase=cleanup elapsed_ms={} budget_hit={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_summaries={} active_flows={} finalized_flows={} finalized_in_run={} second_ring_points={}",
-                            stats.elapsed_ms,
-                            stats.budget_hit,
-                            stats.deleted_1m,
-                            stats.deleted_1h,
-                            stats.deleted_1d,
-                            stats.deleted_summaries,
-                            flow_stats.active_flows,
-                            flow_stats.finalized_flows,
-                            flow_stats.finalized_in_run,
-                            flow_stats.second_ring_points,
-                        );
-                    }
-                }
-                msg_opt = connect_rx.recv(), if !connect_closed => {
-                    match msg_opt {
-                        Some(ConnectMessage::Metric(metric)) => {
-                            process_connect_metric(
-                                &conn_connect_writer,
-                                &flow_cache,
-                                metric,
-                                second_window_ms,
-                                second_ring_cap,
-                            );
-                        }
-                        None => connect_closed = true,
-                    }
-                }
-                msg_opt = dns_rx.recv(), if !dns_closed => {
-                    match msg_opt {
-                        Some(DnsMetricMessage::Metric(metric)) => {
-                            if let Some(ref mut appender) = dns_appender {
-                                let _ = appender.append_row(params![
-                                    metric.flow_id as i64,
-                                    metric.domain,
-                                    metric.query_type,
-                                    metric.response_code,
-                                    metric.report_time as i64,
-                                    metric.duration_ms as i64,
-                                    clean_ip_string(&metric.src_ip),
-                                    serde_json::to_string(&metric.answers).unwrap_or_default(),
-                                    serde_json::to_string(&metric.status).unwrap_or_default(),
-                                ]);
-                            }
-                            dns_batch_count += 1;
-                            if dns_batch_count >= metric_config.write_batch_size.max(1) {
-                                if let Some(ref mut appender) = dns_appender {
-                                    let _ = appender.flush();
-                                }
-                                dns_batch_count = 0;
-                            }
-                        }
-                        None => dns_closed = true,
-                    }
-                }
-            }
-
-            if connect_closed && dns_closed {
-                break;
-            }
-        }
-
-        finalize_all_flows(&conn_connect_writer, &flow_cache);
-        if let Some(ref mut appender) = dns_appender {
-            let _ = appender.flush();
-        }
-    });
 }

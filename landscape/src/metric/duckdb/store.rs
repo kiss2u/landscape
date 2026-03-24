@@ -7,38 +7,47 @@ use landscape_common::metric::connect::{
     ConnectRealtimeStatus, IpHistoryStat, IpRealtimeStat, MetricResolution,
 };
 use landscape_common::metric::dns::{
-    DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse,
+    DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
     DnsSummaryQueryParams, DnsSummaryResponse,
 };
-use r2d2::{self, PooledConnection};
+use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use tokio::sync::{mpsc, Mutex};
-use tokio_util::sync::CancellationToken;
+use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, watch};
 
-use super::connect::{query as connect_query, schema as connect_schema};
+use super::connect::{cleanup, query as connect_query, schema as connect_schema};
 use super::dns::{history as dns_history, schema as dns_schema, summary as dns_summary};
-use super::global_stats::spawn_global_stats_refresh_task;
+use super::hot_sqlite;
 use super::ingest::{
-    collect_connect_infos, collect_realtime_ip_stats, second_points_by_key, second_window_ms,
-    start_db_thread, FlowCache, CHANNEL_CAPACITY,
+    cleanup_flow_cache, collect_connect_infos, collect_realtime_ip_stats, finalize_all_flows,
+    process_connect_metric, second_points_by_key, second_ring_capacity, second_window_ms,
+    BucketWrite, FlowCache, PersistenceBatch, CHANNEL_CAPACITY, MS_PER_DAY,
 };
 
 #[derive(Clone)]
 pub struct DuckMetricStore {
     connect_tx: mpsc::Sender<ConnectMessage>,
     dns_tx: mpsc::Sender<DnsMetricMessage>,
+    shutdown_tx: watch::Sender<bool>,
     pub config: MetricRuntimeConfig,
-    pub disk_pool: r2d2::Pool<DuckdbConnectionManager>,
+    pub(crate) hot_pool: SqlitePool,
+    pub(crate) cold_pool: Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
     pub(crate) flow_cache: FlowCache,
-    pub(crate) global_stats_cache:
-        Arc<RwLock<landscape_common::metric::connect::ConnectGlobalStats>>,
-    pub(crate) global_stats_refresh_lock: Arc<Mutex<()>>,
-    pub(crate) global_stats_refresh_shutdown: CancellationToken,
 }
 
 type StoreInitResult<T> = Result<T, String>;
+
+const DUCKDB_POOL_MAX_SIZE: u32 = 8;
+const DUCKDB_POOL_MIN_IDLE: u32 = 1;
+const COLD_RETRY_DELAY_SECS: u64 = 5;
+
+#[derive(Debug)]
+enum ColdEvent {
+    Buckets(Vec<BucketWrite>),
+    Dns(DnsMetric),
+}
 
 fn build_duckdb_config(config: &MetricRuntimeConfig) -> StoreInitResult<duckdb::Config> {
     duckdb::Config::default()
@@ -99,81 +108,124 @@ fn join_display_paths(paths: &[PathBuf]) -> String {
     paths.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(", ")
 }
 
-fn build_disk_pool(
+fn build_cold_pool(
     db_path: &Path,
     config: &MetricRuntimeConfig,
 ) -> StoreInitResult<r2d2::Pool<DuckdbConnectionManager>> {
-    let disk_manager =
-        DuckdbConnectionManager::file_with_flags(db_path, build_duckdb_config(config)?).map_err(
-            |error| format!("failed to open metric duckdb file {}: {}", db_path.display(), error),
-        )?;
+    let phase_start = Instant::now();
+    let duckdb_config = build_duckdb_config(config)?;
+    tracing::info!(
+        "metric startup phase=duckdb.cold.build_config db_path={} elapsed_ms={}",
+        db_path.display(),
+        phase_start.elapsed().as_millis()
+    );
 
-    r2d2::Pool::builder()
-        .max_size(8)
-        .max_lifetime(Some(std::time::Duration::from_secs(120)))
+    let phase_start = Instant::now();
+    let disk_manager =
+        DuckdbConnectionManager::file_with_flags(db_path, duckdb_config).map_err(|error| {
+            format!("failed to open metric duckdb file {}: {}", db_path.display(), error)
+        })?;
+    tracing::info!(
+        "metric startup phase=duckdb.cold.open_manager db_path={} elapsed_ms={}",
+        db_path.display(),
+        phase_start.elapsed().as_millis()
+    );
+
+    let phase_start = Instant::now();
+    let disk_pool = r2d2::Pool::builder()
+        .max_size(DUCKDB_POOL_MAX_SIZE)
+        .min_idle(Some(DUCKDB_POOL_MIN_IDLE))
+        .max_lifetime(Some(Duration::from_secs(120)))
         .build(disk_manager)
-        .map_err(|error| format!("failed to create metric duckdb pool: {}", error))
+        .map_err(|error| format!("failed to create metric duckdb pool: {}", error))?;
+    tracing::info!(
+        "metric startup phase=duckdb.cold.pool_build_initial_idle db_path={} min_idle={} max_size={} elapsed_ms={}",
+        db_path.display(),
+        DUCKDB_POOL_MIN_IDLE,
+        DUCKDB_POOL_MAX_SIZE,
+        phase_start.elapsed().as_millis()
+    );
+
+    Ok(disk_pool)
 }
 
-fn initialize_disk_storage(
+fn initialize_cold_storage(
     db_path: &Path,
     config: &MetricRuntimeConfig,
-) -> StoreInitResult<(
-    r2d2::Pool<DuckdbConnectionManager>,
-    landscape_common::metric::connect::ConnectGlobalStats,
-)> {
-    let disk_pool = build_disk_pool(db_path, config)?;
+) -> StoreInitResult<r2d2::Pool<DuckdbConnectionManager>> {
+    let total_start = Instant::now();
+
+    let phase_start = Instant::now();
+    let disk_pool = build_cold_pool(db_path, config)?;
+    tracing::info!(
+        "metric startup phase=duckdb.cold.build_pool db_path={} elapsed_ms={}",
+        db_path.display(),
+        phase_start.elapsed().as_millis()
+    );
+
+    let phase_start = Instant::now();
     let conn_disk = disk_pool
         .get()
         .map_err(|error| format!("failed to get metric duckdb connection: {}", error))?;
-    let _ = conn_disk.execute("PRAGMA wal_autocheckpoint='256MB'", []);
+    tracing::info!(
+        "metric startup phase=duckdb.cold.acquire_init_connection db_path={} elapsed_ms={}",
+        db_path.display(),
+        phase_start.elapsed().as_millis()
+    );
+    let _ = conn_disk.execute("PRAGMA wal_autocheckpoint='16MB'", []);
 
-    connect_schema::create_summaries_table(&conn_disk)
-        .map_err(|error| format!("failed to create connect summaries table: {}", error))?;
+    let phase_start = Instant::now();
     connect_schema::create_metrics_table(&conn_disk)
         .map_err(|error| format!("failed to create connect metrics tables: {}", error))?;
+    tracing::info!(
+        "metric startup phase=duckdb.cold.create_metrics_table db_path={} elapsed_ms={}",
+        db_path.display(),
+        phase_start.elapsed().as_millis()
+    );
+
+    let phase_start = Instant::now();
     dns_schema::create_dns_table(&conn_disk)
         .map_err(|error| format!("failed to create dns metrics table: {}", error))?;
+    tracing::info!(
+        "metric startup phase=duckdb.cold.create_dns_table db_path={} elapsed_ms={}",
+        db_path.display(),
+        phase_start.elapsed().as_millis()
+    );
 
-    let initial_global_stats = match connect_query::query_global_stats(&conn_disk) {
-        Ok(stats) => stats,
-        Err(error) => {
-            tracing::error!("failed to prewarm connect global stats cache: {}", error);
-            landscape_common::metric::connect::ConnectGlobalStats::default()
-        }
-    };
+    tracing::info!(
+        "metric startup phase=duckdb.cold.initialize_storage db_path={} elapsed_ms={}",
+        db_path.display(),
+        total_start.elapsed().as_millis()
+    );
 
-    Ok((disk_pool, initial_global_stats))
+    Ok(disk_pool)
 }
 
-fn initialize_disk_storage_with_recovery(
+fn initialize_cold_storage_with_recovery(
     db_path: &Path,
     config: &MetricRuntimeConfig,
-) -> StoreInitResult<(
-    r2d2::Pool<DuckdbConnectionManager>,
-    landscape_common::metric::connect::ConnectGlobalStats,
-)> {
-    match initialize_disk_storage(db_path, config) {
+) -> StoreInitResult<r2d2::Pool<DuckdbConnectionManager>> {
+    match initialize_cold_storage(db_path, config) {
         Ok(result) => Ok(result),
         Err(initial_error) => {
             tracing::warn!(
-                "failed to initialize metric duckdb at {}: {}; attempting recovery by deleting the metric wal",
+                "failed to initialize metric duckdb cold store at {}: {}; attempting recovery by deleting the metric wal",
                 db_path.display(),
                 initial_error
             );
 
             if remove_metric_db_wal(db_path)? {
-                match initialize_disk_storage(db_path, config) {
+                match initialize_cold_storage(db_path, config) {
                     Ok(result) => {
                         tracing::warn!(
-                            "metric duckdb recovered after deleting wal {}",
+                            "metric duckdb cold store recovered after deleting wal {}",
                             metric_db_wal_path(db_path).display()
                         );
                         return Ok(result);
                     }
                     Err(wal_retry_error) => {
                         tracing::warn!(
-                            "metric duckdb still failed after deleting wal at {}: {}; removing the metric database and rebuilding",
+                            "metric duckdb cold store still failed after deleting wal at {}: {}; removing the metric database and rebuilding",
                             db_path.display(),
                             wal_retry_error
                         );
@@ -181,7 +233,7 @@ fn initialize_disk_storage_with_recovery(
                 }
             } else {
                 tracing::warn!(
-                    "metric duckdb wal {} was not present; removing the metric database and rebuilding",
+                    "metric duckdb cold wal {} was not present; removing the metric database and rebuilding",
                     metric_db_wal_path(db_path).display()
                 );
             }
@@ -191,13 +243,13 @@ fn initialize_disk_storage_with_recovery(
                 return Err(initial_error);
             }
             tracing::warn!(
-                "removed metric database artifacts: {}",
+                "removed metric cold database artifacts: {}",
                 join_display_paths(&removed_paths)
             );
 
-            initialize_disk_storage(db_path, config).map_err(|retry_error| {
+            initialize_cold_storage(db_path, config).map_err(|retry_error| {
                 format!(
-                    "failed to recreate metric duckdb after deleting metric database artifacts at {}: {}",
+                    "failed to recreate metric duckdb cold store after deleting artifacts at {}: {}",
                     db_path.display(),
                     retry_error
                 )
@@ -206,67 +258,454 @@ fn initialize_disk_storage_with_recovery(
     }
 }
 
-impl DuckMetricStore {
-    pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Result<Self, String> {
-        let db_path = base_path
-            .join(format!("metrics_v{}.duckdb", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
-        if let Some(parent) = db_path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    format!(
-                        "failed to create metric base directory {}: {}",
-                        parent.display(),
-                        error
-                    )
-                })?;
+async fn apply_hot_batch(pool: &SqlitePool, batch: &PersistenceBatch) {
+    if batch.is_empty() {
+        return;
+    }
+
+    if let Err(error) = hot_sqlite::apply_persistence_batch(pool, batch).await {
+        tracing::error!("failed to persist hot metric batch to sqlite: {}", error);
+    }
+}
+
+async fn flush_pending_hot_batch(
+    hot_pool: &SqlitePool,
+    cold_tx: &mpsc::Sender<ColdEvent>,
+    cold_pool_cell: &Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
+    pending_batch: &mut PersistenceBatch,
+) {
+    if pending_batch.is_empty() {
+        return;
+    }
+
+    let batch = std::mem::take(pending_batch);
+    let bucket_writes = batch.bucket_writes.clone();
+    apply_hot_batch(hot_pool, &batch).await;
+    try_enqueue_cold_buckets(cold_tx, cold_pool_cell, bucket_writes);
+}
+
+fn cold_store_ready(
+    cold_pool_cell: &Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
+) -> bool {
+    cold_pool_cell.read().expect("metric cold pool poisoned").is_some()
+}
+
+fn try_enqueue_cold_buckets(
+    cold_tx: &mpsc::Sender<ColdEvent>,
+    cold_pool_cell: &Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
+    bucket_writes: Vec<BucketWrite>,
+) {
+    if bucket_writes.is_empty() || !cold_store_ready(cold_pool_cell) {
+        return;
+    }
+
+    if let Err(error) = cold_tx.try_send(ColdEvent::Buckets(bucket_writes)) {
+        tracing::debug!("dropping cold metric bucket batch: {:?}", error);
+    }
+}
+
+fn try_enqueue_cold_dns(
+    cold_tx: &mpsc::Sender<ColdEvent>,
+    cold_pool_cell: &Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
+    metric: DnsMetric,
+) {
+    if !cold_store_ready(cold_pool_cell) {
+        return;
+    }
+
+    if let Err(error) = cold_tx.try_send(ColdEvent::Dns(metric)) {
+        tracing::debug!("dropping cold dns metric: {:?}", error);
+    }
+}
+
+async fn run_hot_thread(
+    mut connect_rx: mpsc::Receiver<ConnectMessage>,
+    mut dns_rx: mpsc::Receiver<DnsMetricMessage>,
+    hot_pool: SqlitePool,
+    cold_pool_cell: Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
+    cold_tx: mpsc::Sender<ColdEvent>,
+    metric_config: MetricRuntimeConfig,
+    flow_cache: FlowCache,
+    mut shutdown_rx: watch::Receiver<bool>,
+) {
+    let cleanup_interval_duration = Duration::from_secs(metric_config.cleanup_interval_secs.max(1));
+    let flush_interval_duration =
+        Duration::from_secs(metric_config.write_flush_interval_secs.max(1));
+    let write_batch_size = metric_config.write_batch_size.max(1);
+    let second_window = second_window_ms(&metric_config);
+    let second_ring_cap = second_ring_capacity(&metric_config);
+
+    let mut cleanup_interval = tokio::time::interval(cleanup_interval_duration);
+    cleanup_interval.tick().await;
+    let mut flush_interval = tokio::time::interval(flush_interval_duration);
+    flush_interval.tick().await;
+
+    let mut pending_batch = PersistenceBatch::default();
+    let mut connect_closed = false;
+    let mut dns_closed = false;
+
+    loop {
+        tokio::select! {
+            _ = cleanup_interval.tick() => {
+                flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+
+                let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+                let (flow_stats, batch) = cleanup_flow_cache(&flow_cache, now_ms, second_window);
+                pending_batch.extend(batch);
+                flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+
+                let summary_cutoff = now_ms.saturating_sub(metric_config.connect_1d_retention_days * MS_PER_DAY);
+                if let Err(error) = hot_sqlite::cleanup_old_summaries(&hot_pool, summary_cutoff).await {
+                    tracing::error!("failed to cleanup hot conn_summaries: {}", error);
+                }
+
+                tracing::info!(
+                    "phase=hot_sqlite.cleanup active_flows={} finalized_flows={} finalized_in_run={} second_ring_points={}",
+                    flow_stats.active_flows,
+                    flow_stats.finalized_flows,
+                    flow_stats.finalized_in_run,
+                    flow_stats.second_ring_points,
+                );
+            }
+            _ = flush_interval.tick() => {
+                flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+            }
+            changed = shutdown_rx.changed() => {
+                if changed.is_err() || *shutdown_rx.borrow() {
+                    break;
+                }
+            }
+            msg_opt = connect_rx.recv(), if !connect_closed => {
+                match msg_opt {
+                    Some(ConnectMessage::Metric(metric)) => {
+                        let batch = process_connect_metric(
+                            &flow_cache,
+                            metric,
+                            second_window,
+                            second_ring_cap,
+                        );
+                        pending_batch.extend(batch);
+                        if pending_batch.op_count() >= write_batch_size {
+                            flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+                        }
+                    }
+                    None => connect_closed = true,
+                }
+            }
+            msg_opt = dns_rx.recv(), if !dns_closed => {
+                match msg_opt {
+                    Some(DnsMetricMessage::Metric(metric)) => {
+                        try_enqueue_cold_dns(&cold_tx, &cold_pool_cell, metric);
+                    }
+                    None => dns_closed = true,
+                }
             }
         }
 
+        if connect_closed && dns_closed {
+            break;
+        }
+    }
+
+    flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+
+    let final_batch = finalize_all_flows(&flow_cache);
+    pending_batch.extend(final_batch);
+    flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+    hot_pool.close().await;
+}
+
+fn persist_cold_bucket_writes(
+    cold_pool: &r2d2::Pool<DuckdbConnectionManager>,
+    bucket_writes: &[BucketWrite],
+) -> StoreInitResult<()> {
+    if bucket_writes.is_empty() {
+        return Ok(());
+    }
+
+    let conn = cold_pool.get().map_err(|error| {
+        format!("failed to get cold duckdb connection for bucket write: {}", error)
+    })?;
+
+    for bucket in bucket_writes {
+        let status: u8 = bucket.metric.status.clone().into();
+        connect_schema::upsert_metric_bucket_values(
+            &conn,
+            bucket.kind.table_name(),
+            bucket.metric.key.create_time,
+            bucket.metric.key.cpu_id,
+            bucket.bucket_report_time,
+            bucket.metric.ingress_bytes,
+            bucket.metric.ingress_packets,
+            bucket.metric.egress_bytes,
+            bucket.metric.egress_packets,
+            status,
+            bucket.metric.create_time_ms,
+        )
+        .map_err(|error| {
+            format!("failed to write cold bucket row into {}: {}", bucket.kind.table_name(), error)
+        })?;
+    }
+
+    Ok(())
+}
+
+fn persist_cold_dns_metric(
+    cold_pool: &r2d2::Pool<DuckdbConnectionManager>,
+    metric: &DnsMetric,
+) -> StoreInitResult<()> {
+    let conn = cold_pool.get().map_err(|error| {
+        format!("failed to get cold duckdb connection for dns write: {}", error)
+    })?;
+
+    let answers_json = serde_json::to_string(&metric.answers).unwrap_or_default();
+    let status_json = serde_json::to_string(&metric.status).unwrap_or_default();
+    dns_schema::insert_dns_row(
+        &conn,
+        metric.flow_id,
+        &metric.domain,
+        &metric.query_type,
+        &metric.response_code,
+        metric.report_time,
+        metric.duration_ms,
+        &super::ingest::clean_ip_string(&metric.src_ip),
+        &answers_json,
+        &status_json,
+    )
+    .map_err(|error| format!("failed to write cold dns row: {}", error))?;
+
+    Ok(())
+}
+
+fn persist_cold_event(
+    cold_pool: &r2d2::Pool<DuckdbConnectionManager>,
+    event: ColdEvent,
+) -> StoreInitResult<()> {
+    match event {
+        ColdEvent::Buckets(bucket_writes) => persist_cold_bucket_writes(cold_pool, &bucket_writes),
+        ColdEvent::Dns(metric) => persist_cold_dns_metric(cold_pool, &metric),
+    }
+}
+
+fn cleanup_cold_store(
+    cold_pool: &r2d2::Pool<DuckdbConnectionManager>,
+    metric_config: &MetricRuntimeConfig,
+) -> StoreInitResult<()> {
+    let conn = cold_pool
+        .get()
+        .map_err(|error| format!("failed to get cold duckdb connection for cleanup: {}", error))?;
+    let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+    let cutoff_1m = now_ms.saturating_sub(metric_config.connect_1m_retention_days * MS_PER_DAY);
+    let cutoff_1h = now_ms.saturating_sub(metric_config.connect_1h_retention_days * MS_PER_DAY);
+    let cutoff_1d = now_ms.saturating_sub(metric_config.connect_1d_retention_days * MS_PER_DAY);
+    let cutoff_dns = now_ms.saturating_sub(metric_config.dns_retention_days * MS_PER_DAY);
+
+    dns_schema::cleanup_old_dns_metrics(&conn, cutoff_dns);
+    let stats = cleanup::cleanup_old_cold_metrics_only(
+        &conn,
+        cutoff_1m,
+        cutoff_1h,
+        cutoff_1d,
+        metric_config.cleanup_time_budget_ms,
+        metric_config.cleanup_slice_window_secs,
+    );
+    tracing::info!(
+        "phase=cold_duckdb.cleanup elapsed_ms={} budget_hit={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_dns_before={}",
+        stats.elapsed_ms,
+        stats.budget_hit,
+        stats.deleted_1m,
+        stats.deleted_1h,
+        stats.deleted_1d,
+        cutoff_dns,
+    );
+    if let Err(error) = conn.execute("CHECKPOINT", []) {
+        tracing::warn!("failed to checkpoint cold metric duckdb during cleanup: {}", error);
+    }
+
+    Ok(())
+}
+
+async fn run_cold_thread(
+    mut cold_rx: mpsc::Receiver<ColdEvent>,
+    cold_pool_cell: Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
+    cold_db_path: PathBuf,
+    metric_config: MetricRuntimeConfig,
+    mut shutdown_rx: watch::Receiver<bool>,
+) {
+    let cleanup_interval_duration = Duration::from_secs(metric_config.cleanup_interval_secs.max(1));
+    let mut cleanup_interval = tokio::time::interval(cleanup_interval_duration);
+    let mut cold_pool: Option<r2d2::Pool<DuckdbConnectionManager>> = None;
+
+    loop {
+        if *shutdown_rx.borrow() {
+            break;
+        }
+
+        if cold_pool.is_none() {
+            match initialize_cold_storage_with_recovery(&cold_db_path, &metric_config) {
+                Ok(pool) => {
+                    tracing::info!("metric cold duckdb ready at {}", cold_db_path.display());
+                    *cold_pool_cell.write().expect("metric cold pool poisoned") =
+                        Some(pool.clone());
+                    cold_pool = Some(pool);
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        "failed to initialize metric cold duckdb at {}: {}; retrying in {}s",
+                        cold_db_path.display(),
+                        error,
+                        COLD_RETRY_DELAY_SECS,
+                    );
+                    tokio::select! {
+                        _ = tokio::time::sleep(Duration::from_secs(COLD_RETRY_DELAY_SECS)) => {}
+                        changed = shutdown_rx.changed() => {
+                            if changed.is_err() || *shutdown_rx.borrow() {
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+        }
+
+        let active_pool = cold_pool.clone().expect("cold pool set above");
+        tokio::select! {
+            _ = cleanup_interval.tick() => {
+                if let Err(error) = cleanup_cold_store(&active_pool, &metric_config) {
+                    tracing::error!("cold metric cleanup failed: {}", error);
+                    *cold_pool_cell.write().expect("metric cold pool poisoned") = None;
+                    cold_pool = None;
+                }
+            }
+            msg_opt = cold_rx.recv() => {
+                match msg_opt {
+                    Some(event) => {
+                        if let Err(error) = persist_cold_event(&active_pool, event) {
+                            tracing::error!("cold metric write failed: {}", error);
+                            *cold_pool_cell.write().expect("metric cold pool poisoned") = None;
+                            cold_pool = None;
+                        }
+                    }
+                    None => break,
+                }
+            }
+            changed = shutdown_rx.changed() => {
+                if changed.is_err() || *shutdown_rx.borrow() {
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Some(pool) =
+        cold_pool.or_else(|| cold_pool_cell.read().expect("metric cold pool poisoned").clone())
+    {
+        if let Ok(conn) = pool.get() {
+            if let Err(error) = conn.execute("CHECKPOINT", []) {
+                tracing::warn!("failed to checkpoint cold metric duckdb on shutdown: {}", error);
+            } else {
+                tracing::info!("checkpointed cold metric duckdb on shutdown");
+            }
+        }
+    }
+    *cold_pool_cell.write().expect("metric cold pool poisoned") = None;
+}
+
+impl DuckMetricStore {
+    pub async fn new(base_path: PathBuf, config: MetricRuntimeConfig) -> Result<Self, String> {
+        let total_start = Instant::now();
+        if !base_path.exists() {
+            std::fs::create_dir_all(&base_path).map_err(|error| {
+                format!("failed to create metric base directory {}: {}", base_path.display(), error)
+            })?;
+        }
+
+        let hot_db_path = base_path
+            .join(format!("metrics_v{}.sqlite", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
+        let cold_db_path = base_path
+            .join(format!("metrics_v{}.duckdb", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
+
         let (connect_tx, connect_rx) = mpsc::channel::<ConnectMessage>(CHANNEL_CAPACITY);
         let (dns_tx, dns_rx) = mpsc::channel::<DnsMetricMessage>(CHANNEL_CAPACITY);
-        let config_clone = config.clone();
+        let (cold_tx, cold_rx) = mpsc::channel::<ColdEvent>(CHANNEL_CAPACITY);
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-        let (disk_pool, initial_global_stats) =
-            initialize_disk_storage_with_recovery(&db_path, &config)?;
+        let phase_start = Instant::now();
+        let hot_pool = hot_sqlite::open_hot_pool(&hot_db_path).await?;
+        tracing::info!(
+            "metric startup phase=hot_sqlite.open db_path={} elapsed_ms={}",
+            hot_db_path.display(),
+            phase_start.elapsed().as_millis()
+        );
 
-        let thread_disk_pool = disk_pool.clone();
-        let conn_dns: PooledConnection<DuckdbConnectionManager> = disk_pool
-            .get()
-            .map_err(|error| format!("failed to get dns writer connection: {}", error))?;
-        let conn_connect_writer = disk_pool
-            .get()
-            .map_err(|error| format!("failed to get connect writer connection: {}", error))?;
         let flow_cache: FlowCache = Arc::new(RwLock::new(HashMap::new()));
-        let thread_flow_cache = flow_cache.clone();
-        let global_stats_cache = Arc::new(RwLock::new(initial_global_stats));
-        let global_stats_refresh_lock = Arc::new(Mutex::new(()));
-        let global_stats_refresh_shutdown = CancellationToken::new();
+        let cold_pool = Arc::new(RwLock::new(None));
 
+        let hot_thread_pool = hot_pool.clone();
+        let hot_thread_cache = flow_cache.clone();
+        let hot_thread_cold_pool = cold_pool.clone();
+        let hot_thread_cold_tx = cold_tx;
+        let hot_thread_config = config.clone();
+        let hot_thread_shutdown = shutdown_rx.clone();
+        let phase_start = Instant::now();
         spawn_named_thread(thread_name::fixed::METRIC_DB_WRITER, move || {
-            start_db_thread(
+            let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+            rt.block_on(run_hot_thread(
                 connect_rx,
                 dns_rx,
-                config_clone,
-                thread_disk_pool,
-                conn_dns,
-                conn_connect_writer,
-                thread_flow_cache,
-            );
+                hot_thread_pool,
+                hot_thread_cold_pool,
+                hot_thread_cold_tx,
+                hot_thread_config,
+                hot_thread_cache,
+                hot_thread_shutdown,
+            ));
         })
-        .map_err(|error| format!("failed to spawn metric db thread: {}", error))?;
+        .map_err(|error| format!("failed to spawn metric hot writer thread: {}", error))?;
+        tracing::info!(
+            "metric startup phase=hot_sqlite.spawn_writer db_path={} elapsed_ms={}",
+            hot_db_path.display(),
+            phase_start.elapsed().as_millis()
+        );
 
-        let store = DuckMetricStore {
+        let cold_thread_cell = cold_pool.clone();
+        let cold_thread_config = config.clone();
+        let cold_thread_shutdown = shutdown_rx.clone();
+        let cold_thread_db_path = cold_db_path.clone();
+        let phase_start = Instant::now();
+        spawn_named_thread(thread_name::fixed::METRIC_DB_COLD, move || {
+            let rt = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+            rt.block_on(run_cold_thread(
+                cold_rx,
+                cold_thread_cell,
+                cold_db_path,
+                cold_thread_config,
+                cold_thread_shutdown,
+            ));
+        })
+        .map_err(|error| format!("failed to spawn metric cold writer thread: {}", error))?;
+        tracing::info!(
+            "metric startup phase=duckdb.cold.spawn_worker db_path={} elapsed_ms={}",
+            cold_thread_db_path.display(),
+            phase_start.elapsed().as_millis()
+        );
+
+        tracing::info!(
+            "metric startup phase=duckdb.new hybrid=sqlite+duckdb hot_db={} elapsed_ms={}",
+            hot_db_path.display(),
+            total_start.elapsed().as_millis()
+        );
+
+        Ok(Self {
             connect_tx,
             dns_tx,
+            shutdown_tx,
             config,
-            disk_pool,
+            hot_pool,
+            cold_pool,
             flow_cache,
-            global_stats_cache,
-            global_stats_refresh_lock,
-            global_stats_refresh_shutdown,
-        };
-        spawn_global_stats_refresh_task(store.clone());
-        Ok(store)
+        })
     }
 
     pub fn get_connect_msg_channel(&self) -> mpsc::Sender<ConnectMessage> {
@@ -278,7 +717,7 @@ impl DuckMetricStore {
     }
 
     pub fn shutdown(&self) {
-        self.global_stats_refresh_shutdown.cancel();
+        let _ = self.shutdown_tx.send(true);
     }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
@@ -303,8 +742,10 @@ impl DuckMetricStore {
             return second_points_by_key(&self.flow_cache, &key, cutoff);
         }
 
-        self.run_query_default(task_label::op::METRIC_QUERY_BY_KEY, move |store| {
-            let conn = store.get_disk_conn();
+        self.run_cold_query_default(task_label::op::METRIC_QUERY_BY_KEY, move |pool| {
+            let Ok(conn) = pool.get() else {
+                return Vec::new();
+            };
             connect_query::query_metric_by_key(&conn, &key, resolution)
         })
         .await
@@ -314,46 +755,56 @@ impl DuckMetricStore {
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<ConnectHistoryStatus> {
-        self.run_query_default(task_label::op::METRIC_HISTORY_SUMMARIES, move |store| {
-            let conn = store.get_disk_conn();
-            connect_query::query_historical_summaries_complex(&conn, params)
-        })
-        .await
+        match hot_sqlite::query_historical_summaries_complex(&self.hot_pool, params).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                tracing::error!("failed to query hot sqlite connection summaries: {}", error);
+                Vec::new()
+            }
+        }
     }
 
     pub async fn history_src_ip_stats(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<IpHistoryStat> {
-        self.run_query_default(task_label::op::METRIC_HISTORY_SRC_IP, move |store| {
-            let conn = store.get_disk_conn();
-            connect_query::query_connection_ip_history(&conn, params, true)
-        })
-        .await
+        match hot_sqlite::query_connection_ip_history(&self.hot_pool, params, true).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                tracing::error!("failed to query hot sqlite src ip stats: {}", error);
+                Vec::new()
+            }
+        }
     }
 
     pub async fn history_dst_ip_stats(
         &self,
         params: ConnectHistoryQueryParams,
     ) -> Vec<IpHistoryStat> {
-        self.run_query_default(task_label::op::METRIC_HISTORY_DST_IP, move |store| {
-            let conn = store.get_disk_conn();
-            connect_query::query_connection_ip_history(&conn, params, false)
-        })
-        .await
+        match hot_sqlite::query_connection_ip_history(&self.hot_pool, params, false).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                tracing::error!("failed to query hot sqlite dst ip stats: {}", error);
+                Vec::new()
+            }
+        }
     }
 
     pub async fn query_dns_history(&self, params: DnsHistoryQueryParams) -> DnsHistoryResponse {
-        self.run_query_default(task_label::op::METRIC_DNS_HISTORY, move |store| {
-            let conn = store.get_disk_conn();
+        self.run_cold_query_default(task_label::op::METRIC_DNS_HISTORY, move |pool| {
+            let Ok(conn) = pool.get() else {
+                return DnsHistoryResponse::default();
+            };
             dns_history::query_dns_history(&conn, params)
         })
         .await
     }
 
     pub async fn get_dns_summary(&self, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
-        self.run_query_default(task_label::op::METRIC_DNS_SUMMARY, move |store| {
-            let conn = store.get_disk_conn();
+        self.run_cold_query_default(task_label::op::METRIC_DNS_SUMMARY, move |pool| {
+            let Ok(conn) = pool.get() else {
+                return DnsSummaryResponse::default();
+            };
             dns_summary::query_dns_summary(&conn, params)
         })
         .await
@@ -363,10 +814,277 @@ impl DuckMetricStore {
         &self,
         params: DnsSummaryQueryParams,
     ) -> DnsLightweightSummaryResponse {
-        self.run_query_default(task_label::op::METRIC_DNS_LIGHTWEIGHT_SUMMARY, move |store| {
-            let conn = store.get_disk_conn();
+        self.run_cold_query_default(task_label::op::METRIC_DNS_LIGHTWEIGHT_SUMMARY, move |pool| {
+            let Ok(conn) = pool.get() else {
+                return DnsLightweightSummaryResponse::default();
+            };
             dns_summary::query_dns_lightweight_summary(&conn, params)
         })
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metric::duckdb::ingest::PersistenceBatch;
+    use landscape_common::config::MetricMode;
+    use landscape_common::metric::connect::{ConnectGlobalStats, ConnectMetric, ConnectStatusType};
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::sync::Once;
+    use tempfile::tempdir;
+
+    fn init_test_tracing() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            landscape_common::init_tracing!();
+        });
+    }
+
+    fn test_metric_config() -> MetricRuntimeConfig {
+        MetricRuntimeConfig {
+            mode: MetricMode::Duckdb,
+            connect_second_window_minutes: 1,
+            connect_1m_retention_days: 7,
+            connect_1h_retention_days: 30,
+            connect_1d_retention_days: 90,
+            dns_retention_days: 7,
+            write_batch_size: 16,
+            write_flush_interval_secs: 1,
+            db_max_memory_mb: 128,
+            db_max_threads: 1,
+            cleanup_interval_secs: 3600,
+            cleanup_time_budget_ms: 1_000,
+            cleanup_slice_window_secs: 60,
+        }
+    }
+
+    fn test_metric(
+        create_time: u64,
+        cpu_id: u32,
+        report_time: u64,
+        ingress_bytes: u64,
+        ingress_packets: u64,
+        egress_bytes: u64,
+        egress_packets: u64,
+    ) -> ConnectMetric {
+        ConnectMetric {
+            key: ConnectKey { create_time, cpu_id },
+            src_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, cpu_id as u8 + 1)),
+            dst_ip: IpAddr::V4(Ipv4Addr::new(10, 0, 1, cpu_id as u8 + 1)),
+            src_port: 10_000 + cpu_id as u16,
+            dst_port: 20_000 + cpu_id as u16,
+            l4_proto: 6,
+            l3_proto: 4,
+            flow_id: cpu_id as u8,
+            trace_id: cpu_id as u8,
+            gress: 0,
+            report_time,
+            create_time_ms: create_time,
+            ingress_bytes,
+            ingress_packets,
+            egress_bytes,
+            egress_packets,
+            status: ConnectStatusType::Disabled,
+        }
+    }
+
+    fn assert_stats_match(actual: &ConnectGlobalStats, expected: &ConnectGlobalStats) {
+        assert_eq!(actual.total_ingress_bytes, expected.total_ingress_bytes);
+        assert_eq!(actual.total_egress_bytes, expected.total_egress_bytes);
+        assert_eq!(actual.total_ingress_pkts, expected.total_ingress_pkts);
+        assert_eq!(actual.total_egress_pkts, expected.total_egress_pkts);
+        assert_eq!(actual.total_connect_count, expected.total_connect_count);
+        assert!(
+            actual.last_calculate_time > 0,
+            "expected startup rebuild to stamp last_calculate_time, got {:?}",
+            actual
+        );
+    }
+
+    async fn wait_for_global_stats(
+        store: &DuckMetricStore,
+        predicate: impl Fn(&ConnectGlobalStats) -> bool,
+    ) -> ConnectGlobalStats {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let stats = store.get_global_stats(false).await.unwrap();
+            if predicate(&stats) {
+                return stats;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timed out waiting for global stats update: {:?}",
+                stats
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    async fn wait_for_minute_points(
+        store: &DuckMetricStore,
+        key: ConnectKey,
+        expected_len: usize,
+    ) -> Vec<ConnectMetricPoint> {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let points = store.query_metric_by_key(key.clone(), MetricResolution::Minute).await;
+            if points.len() == expected_len {
+                return points;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timed out waiting for minute points: {:?}",
+                points
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    async fn wait_for_cold_ready(store: &DuckMetricStore) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if store.get_cold_pool().is_some() {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timed out waiting for cold duckdb to become ready"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_rebuilds_global_stats_cache_from_existing_summaries() {
+        init_test_tracing();
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path().to_path_buf();
+        let sqlite_path = base_path
+            .join(format!("metrics_v{}.sqlite", landscape_common::LANDSCAPE_METRIC_DB_VERSION));
+        let hot_pool = hot_sqlite::open_hot_pool(&sqlite_path).await.unwrap();
+
+        let metric_a_initial = test_metric(1_000, 0, 60_000, 100, 10, 200, 20);
+        let metric_a_latest = test_metric(1_000, 0, 120_000, 150, 15, 250, 25);
+        let metric_b = test_metric(2_000, 1, 180_000, 300, 30, 400, 40);
+        let batch = PersistenceBatch {
+            summary_metrics: vec![metric_a_initial, metric_a_latest, metric_b],
+            bucket_writes: Vec::new(),
+        };
+        hot_sqlite::apply_persistence_batch(&hot_pool, &batch).await.unwrap();
+        sqlx::query(
+            "UPDATE conn_global_stats_cache
+             SET total_ingress_bytes = 0,
+                 total_egress_bytes = 0,
+                 total_ingress_pkts = 0,
+                 total_egress_pkts = 0,
+                 total_connect_count = 0,
+                 last_calculate_time = 0
+             WHERE cache_key = 1",
+        )
+        .execute(&hot_pool)
+        .await
+        .unwrap();
+        hot_pool.close().await;
+
+        let store = DuckMetricStore::new(base_path, test_metric_config()).await.unwrap();
+        let stats = store.get_global_stats(false).await.unwrap();
+        let expected = ConnectGlobalStats {
+            total_ingress_bytes: 450,
+            total_egress_bytes: 650,
+            total_ingress_pkts: 45,
+            total_egress_pkts: 65,
+            total_connect_count: 2,
+            last_calculate_time: stats.last_calculate_time,
+        };
+        assert_stats_match(&stats, &expected);
+
+        store.shutdown();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    #[tokio::test]
+    async fn startup_rebuilds_zero_global_stats_cache_for_empty_database() {
+        init_test_tracing();
+        let temp_dir = tempdir().unwrap();
+        let store = DuckMetricStore::new(temp_dir.path().to_path_buf(), test_metric_config())
+            .await
+            .unwrap();
+
+        let stats = store.get_global_stats(false).await.unwrap();
+        let expected = ConnectGlobalStats {
+            total_ingress_bytes: 0,
+            total_egress_bytes: 0,
+            total_ingress_pkts: 0,
+            total_egress_pkts: 0,
+            total_connect_count: 0,
+            last_calculate_time: stats.last_calculate_time,
+        };
+        assert_stats_match(&stats, &expected);
+
+        store.shutdown();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    #[tokio::test]
+    async fn startup_incrementally_updates_global_stats_when_new_connection_arrives() {
+        init_test_tracing();
+        let temp_dir = tempdir().unwrap();
+        let store = DuckMetricStore::new(temp_dir.path().to_path_buf(), test_metric_config())
+            .await
+            .unwrap();
+        let connect_tx = store.get_connect_msg_channel();
+
+        connect_tx
+            .send(ConnectMessage::Metric(test_metric(3_000, 2, 240_000, 100, 10, 150, 15)))
+            .await
+            .unwrap();
+        let stats = wait_for_global_stats(&store, |stats| stats.total_connect_count == 1).await;
+        assert_eq!(stats.total_ingress_bytes, 100);
+        assert_eq!(stats.total_egress_bytes, 150);
+        assert_eq!(stats.total_ingress_pkts, 10);
+        assert_eq!(stats.total_egress_pkts, 15);
+
+        connect_tx
+            .send(ConnectMessage::Metric(test_metric(3_000, 2, 300_000, 125, 12, 225, 22)))
+            .await
+            .unwrap();
+        let stats = wait_for_global_stats(&store, |stats| {
+            stats.total_connect_count == 1
+                && stats.total_ingress_bytes == 125
+                && stats.total_egress_bytes == 225
+        })
+        .await;
+        assert_eq!(stats.total_ingress_pkts, 12);
+        assert_eq!(stats.total_egress_pkts, 22);
+
+        store.shutdown();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    #[tokio::test]
+    async fn cold_store_persists_minute_buckets_after_cold_ready() {
+        init_test_tracing();
+        let temp_dir = tempdir().unwrap();
+        let store = DuckMetricStore::new(temp_dir.path().to_path_buf(), test_metric_config())
+            .await
+            .unwrap();
+        let connect_tx = store.get_connect_msg_channel();
+
+        wait_for_cold_ready(&store).await;
+
+        let metric = test_metric(4_000, 3, 360_000, 333, 33, 444, 44);
+        let key = metric.key.clone();
+        connect_tx.send(ConnectMessage::Metric(metric)).await.unwrap();
+
+        let points = wait_for_minute_points(&store, key, 1).await;
+        assert_eq!(points[0].report_time, 360_000);
+        assert_eq!(points[0].ingress_bytes, 333);
+        assert_eq!(points[0].egress_bytes, 444);
+        assert_eq!(points[0].ingress_packets, 33);
+        assert_eq!(points[0].egress_packets, 44);
+
+        store.shutdown();
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }

@@ -6,7 +6,6 @@ pub struct CleanupStats {
     pub deleted_1m: usize,
     pub deleted_1h: usize,
     pub deleted_1d: usize,
-    pub deleted_summaries: usize,
     pub budget_hit: bool,
     pub elapsed_ms: u128,
 }
@@ -47,9 +46,10 @@ fn delete_table_in_slices(
 
         let slice_end = (slice_start.saturating_add(slice_window_ms)).min(cutoff_exclusive);
         let sql = format!("DELETE FROM {table} WHERE {time_column} >= ?1 AND {time_column} < ?2");
-        let deleted =
-            conn.execute(&sql, params![slice_start as i64, slice_end as i64]).unwrap_or_else(|e| {
-                tracing::error!("Failed to delete slice from {}: {}", table, e);
+        let deleted = conn
+            .execute(&sql, params![slice_start as i64, slice_end as i64])
+            .unwrap_or_else(|error| {
+                tracing::error!("failed to delete slice from {}: {}", table, error);
                 0
             });
         deleted_total += deleted;
@@ -60,7 +60,7 @@ fn delete_table_in_slices(
     (deleted_total, false)
 }
 
-pub fn cleanup_old_metrics_only(
+pub fn cleanup_old_cold_metrics_only(
     conn: &Connection,
     cutoff_1m: u64,
     cutoff_1h: u64,
@@ -115,22 +115,6 @@ pub fn cleanup_old_metrics_only(
     );
     stats.deleted_1d = deleted_1d;
     stats.budget_hit = budget_hit;
-    if stats.budget_hit {
-        stats.elapsed_ms = start.elapsed().as_millis();
-        return stats;
-    }
-
-    let (deleted_summaries, budget_hit) = delete_table_in_slices(
-        conn,
-        "conn_summaries",
-        "last_report_time",
-        cutoff_1d,
-        slice_window_ms,
-        deadline,
-    );
-    stats.deleted_summaries = deleted_summaries;
-    stats.budget_hit = budget_hit;
     stats.elapsed_ms = start.elapsed().as_millis();
-
     stats
 }
