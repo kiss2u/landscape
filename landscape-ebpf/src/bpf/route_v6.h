@@ -27,7 +27,7 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
     struct lan_route_info_v6 *lan_info = bpf_map_lookup_elem(&rt6_lan_map, &lan_search_key);
 
     if (lan_info == NULL) {
-        // bpf_log_info("lan_info is null, address is: %pI6", context->daddr.bytes);
+        // ld_bpf_log("lan_info is null, address is: %pI6", context->daddr.bytes);
         return TC_ACT_OK;
     }
 
@@ -66,9 +66,9 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
             if (!ret) {
                 return bpf_redirect(lan_info->ifindex, 0);
             }
-            bpf_log_info("store_mac_v6 err: %d", ret);
+            ld_bpf_log("store_mac_v6 err: %d", ret);
         } else {
-            bpf_log_info("can't find mac, IP: %pI6", &mac_key_search.addr);
+            ld_bpf_log("can't find mac, IP: %pI6", &mac_key_search.addr);
         }
     } else {
         return bpf_redirect(lan_info->ifindex, 0);
@@ -84,22 +84,22 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
     }
 
     ret = bpf_redirect_neigh(lan_info->ifindex, &param, sizeof(param), 0);
-    // bpf_log_info("lan_info->ifindex:  %d", lan_info->ifindex);
-    // bpf_log_info("is_ipv4:  %d", is_ipv4);
-    // bpf_log_info("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
+    // ld_bpf_log("lan_info->ifindex:  %d", lan_info->ifindex);
+    // ld_bpf_log("is_ipv4:  %d", is_ipv4);
+    // ld_bpf_log("bpf_redirect_neigh ip:  %pI6", lan_search_key.addr.in6_u.u6_addr8);
     if (unlikely(ret != 7)) {
-        bpf_log_info("bpf_redirect_neigh error: %d", ret);
+        ld_bpf_log("bpf_redirect_neigh error: %d", ret);
     }
-    // bpf_log_info("bpf_redirect_neigh result: %d", ret);
+    // ld_bpf_log("bpf_redirect_neigh result: %d", ret);
 
     return ret;
 
-    // bpf_log_info("lan_info pad: %d", lan_search_key._pad[0]);
-    // bpf_log_info("lan_info pad: %d", lan_search_key._pad[1]);
-    // bpf_log_info("lan_info pad: %d", lan_search_key._pad[2]);
-    // bpf_log_info("lan_info prefixlen: %d", lan_search_key.prefixlen);
-    // bpf_log_info("lan_info l3_protocol: %d", lan_search_key.l3_protocol);
-    // bpf_log_info("lan_info ip: %pI4", lan_search_key.addr.in6_u.u6_addr8);
+    // ld_bpf_log("lan_info pad: %d", lan_search_key._pad[0]);
+    // ld_bpf_log("lan_info pad: %d", lan_search_key._pad[1]);
+    // ld_bpf_log("lan_info pad: %d", lan_search_key._pad[2]);
+    // ld_bpf_log("lan_info prefixlen: %d", lan_search_key.prefixlen);
+    // ld_bpf_log("lan_info l3_protocol: %d", lan_search_key.l3_protocol);
+    // ld_bpf_log("lan_info ip: %pI4", lan_search_key.addr.in6_u.u6_addr8);
 
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
@@ -131,17 +131,17 @@ static __always_inline int flow_verdict_v6(struct __sk_buff *skb, u32 current_l3
         if (ip_flow_mark_value != NULL) {
             flow_mark_action = ip_flow_mark_value->mark;
             priority = ip_flow_mark_value->priority;
-            //     bpf_log_info("find ip map mark: %d", flow_mark_action);
-            //     bpf_log_info("get_flow_allow_reuse_port: %d",
+            //     ld_bpf_log("find ip map mark: %d", flow_mark_action);
+            //     ld_bpf_log("get_flow_allow_reuse_port: %d",
             //                  get_flow_allow_reuse_port(flow_mark_action));
             // } else {
-            //     bpf_log_info("map id: %d", ip_rules_map);
-            //     bpf_log_info("flow_id: %d,inner ip map is empty", flow_id);
-            //     bpf_log_info("222 ip: %pI4", ip_trie_key.addr);
-            //     bpf_log_info("prefixlen: %d", ip_trie_key.prefixlen);
+            //     ld_bpf_log("map id: %d", ip_rules_map);
+            //     ld_bpf_log("flow_id: %d,inner ip map is empty", flow_id);
+            //     ld_bpf_log("222 ip: %pI4", ip_trie_key.addr);
+            //     ld_bpf_log("prefixlen: %d", ip_trie_key.prefixlen);
         }
         // } else {
-        // bpf_log_info("flow_id: %d, ip map is empty", flow_id);
+        // ld_bpf_log("flow_id: %d, ip map is empty", flow_id);
     }
 
     struct flow_dns_match_key_v6 key = {0};
@@ -158,43 +158,43 @@ static __always_inline int flow_verdict_v6(struct __sk_buff *skb, u32 current_l3
                 flow_mark_action = dns_rule_value->mark;
                 priority = dns_rule_value->priority;
             }
-            // bpf_log_info("dns_flow_mark is:%d for: %pI4", flow_mark_action,
+            // ld_bpf_log("dns_flow_mark is:%d for: %pI4", flow_mark_action,
             // &cache_key.dst_addr.ip);
             // } else {
-            // bpf_log_info("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
+            // ld_bpf_log("dns_flow_mark is none for: %pI4", &cache_key.dst_addr.ip);
         }
     } else {
-        // bpf_log_info("flow_id: %d, dns map is empty", *flow_id_ptr);
+        // ld_bpf_log("flow_id: %d, dns map is empty", *flow_id_ptr);
     }
 
-    // bpf_log_info("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
+    // ld_bpf_log("flow_id %d, flow_mark_action: %u", flow_id, flow_mark_action);
     flow_action = get_flow_action(flow_mark_action);
     // dns_flow_id = get_flow_id(flow_mark_action);
-    // bpf_log_info("flow_id %d, flow_action: %d ", flow_id, flow_action);
+    // ld_bpf_log("flow_id %d, flow_action: %d ", flow_id, flow_action);
     if (flow_action == FLOW_KEEP_GOING) {
         // 无动作
-        // bpf_log_info("FLOW_KEEP_GOING ip: %pI4", context->daddr.in6_u.u6_addr32);
+        // ld_bpf_log("FLOW_KEEP_GOING ip: %pI4", context->daddr.in6_u.u6_addr32);
         flow_mark_action = replace_flow_id(flow_mark_action, flow_id & 0xFF);
     } else if (flow_action == FLOW_DIRECT) {
-        // bpf_log_info("FLOW_DIRECT ip: %pI4", context->daddr.in6_u.u6_addr32);
+        // ld_bpf_log("FLOW_DIRECT ip: %pI4", context->daddr.in6_u.u6_addr32);
         // RESET Flow ID
         // flow_id = 0;
         flow_mark_action = replace_flow_id(flow_mark_action, 0);
         goto keep_going;
     } else if (flow_action == FLOW_DROP) {
-        // bpf_log_info("FLOW_DROP ip: %pI4", context->daddr.in6_u.u6_addr32);
+        // ld_bpf_log("FLOW_DROP ip: %pI4", context->daddr.in6_u.u6_addr32);
         return TC_ACT_SHOT;
     } else if (flow_action == FLOW_REDIRECT) {
-        // bpf_log_info("FLOW_REDIRECT ip: %pI4, flow_id: %d", context->daddr.in6_u.u6_addr32,
+        // ld_bpf_log("FLOW_REDIRECT ip: %pI4, flow_id: %d", context->daddr.in6_u.u6_addr32,
         //              dns_flow_id);
         // flow_id = dns_flow_id;
     }
 
 keep_going:
     // if (flow_mark_action != 0) {
-    //     bpf_log_info("flow_mark_action value is : %u", flow_mark_action);
-    //     bpf_log_info("get_flow_id value is : %u", get_flow_id(flow_mark_action));
-    //     bpf_log_info("dst ip: %pI4", context->daddr.in6_u.u6_addr32);
+    //     ld_bpf_log("flow_mark_action value is : %u", flow_mark_action);
+    //     ld_bpf_log("get_flow_id value is : %u", get_flow_id(flow_mark_action));
+    //     ld_bpf_log("dst ip: %pI4", context->daddr.in6_u.u6_addr32);
     // }
     *init_flow_id_ = flow_mark_action;
     return TC_ACT_OK;
@@ -219,7 +219,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
             // Default flow PASS
             return TC_ACT_UNSPEC;
         } else {
-            bpf_log_info("DROP flow_id v6: %d", wan_key.flow_id);
+            ld_bpf_log("DROP flow_id v6: %d", wan_key.flow_id);
             // Other DROP
             return TC_ACT_SHOT;
         }
@@ -232,7 +232,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
 
     if (current_l3_offset == 0 && target_info->has_mac) {
         if (prepend_dummy_mac_v6(skb) != 0) {
-            bpf_log_error("add dummy_mac fail");
+            ld_bpf_log("add dummy_mac fail");
             return TC_ACT_SHOT;
         }
     }
@@ -240,17 +240,17 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
     if (target_info->is_docker) {
         ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, get_flow_vlan_id(wan_key.flow_id));
         if (ret) {
-            bpf_log_info("bpf_skb_vlan_push error");
+            ld_bpf_log("bpf_skb_vlan_push error");
         }
         ret = bpf_redirect(target_info->ifindex, 0);
         if (ret != 7) {
-            bpf_log_info("bpf_redirect docker error: %d", ret);
+            ld_bpf_log("bpf_redirect docker error: %d", ret);
         }
         return ret;
     }
 
-    // bpf_log_info("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
-    // bpf_log_info("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
+    // ld_bpf_log("wan_route_info ip: %pI4 ", target_info->gate_addr.in6_u.u6_addr8);
+    // ld_bpf_log("wan_route_info target_info->ifindex: %d ",target_info->ifindex);
 
     bool target_has_mac = target_info->has_mac;
 
@@ -264,7 +264,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
                 return bpf_redirect(target_info->ifindex, 0);
             }
         } else {
-            bpf_log_info("can't find mac by: %pI6", &target_info->gate_addr);
+            ld_bpf_log("can't find mac by: %pI6", &target_info->gate_addr);
         }
     }
 
@@ -274,7 +274,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
     COPY_ADDR_FROM(param.ipv6_nh, target_info->gate_addr.bytes);
     ret = bpf_redirect_neigh(target_info->ifindex, &param, sizeof(param), 0);
     if (ret != 7) {
-        bpf_log_info("bpf_redirect_neigh error: %d", ret);
+        ld_bpf_log("bpf_redirect_neigh error: %d", ret);
     }
     return ret;
 
@@ -292,7 +292,7 @@ static __always_inline int is_current_wan_packet_v6(struct __sk_buff *skb, u32 c
     struct wan_ip_info_value *wan_ip_info = bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
     if (wan_ip_info != NULL) {
         // Check if the current DST IP is the IP that enters the WAN network card
-        // bpf_log_info("wan_ip_info ip: %pI6", &wan_ip_info->addr);
+        // ld_bpf_log("wan_ip_info ip: %pI6", &wan_ip_info->addr);
         if (ip_addr_equal(&wan_ip_info->addr, &context->daddr)) {
             return TC_ACT_UNSPEC;
         }
@@ -395,10 +395,10 @@ static __always_inline int setting_cache_in_wan_v6(const struct route_context_v6
         target = bpf_map_lookup_elem(lan_cache, &search_key);
         if (target) {
             // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-            //     bpf_log_info("Already cached %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
+            //     ld_bpf_log("Already cached %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
             //                 search_key.remote_addr.in6_u.u6_addr8);
             // } else {
-            //     bpf_log_info("Already cached %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
+            //     ld_bpf_log("Already cached %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
             //                 search_key.remote_addr.in6_u.u6_addr8);
             // }
             return TC_ACT_OK;
@@ -420,14 +420,14 @@ static __always_inline int setting_cache_in_wan_v6(const struct route_context_v6
         }
 
         // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-        //     bpf_log_info("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
+        //     ld_bpf_log("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
         //                  search_key.remote_addr.in6_u.u6_addr8);
         // } else {
-        //     bpf_log_info("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
+        //     ld_bpf_log("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
         //                  search_key.remote_addr.in6_u.u6_addr8);
         // }
     } else {
-        bpf_log_info("could not find wan_cache: %d", key);
+        ld_bpf_log("could not find wan_cache: %d", key);
     }
 
     return TC_ACT_OK;
@@ -465,10 +465,10 @@ static __always_inline int setting_cache_in_lan_v6(const struct route_context_v6
         }
 
         // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-        //     bpf_log_info("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
+        //     ld_bpf_log("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
         //                  search_key.remote_addr.in6_u.u6_addr8);
         // } else {
-        //     bpf_log_info("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
+        //     ld_bpf_log("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
         //                  search_key.remote_addr.in6_u.u6_addr8);
         // }
     }

@@ -7,11 +7,7 @@
 
 #include "landscape.h"
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
-
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -73,7 +69,7 @@ int pppoe_egress_pkt_size_filter(struct __sk_buff *skb) {
         return TC_ACT_PIPE;
     }
 
-    bpf_log_info("try send icmp large size is: %u, current mtu: %u", skb->len, pppoe_mtu);
+    ld_bpf_log("try send icmp large size is: %u, current mtu: %u", skb->len, pppoe_mtu);
 
     void *data_end = (void *)(long)skb->data_end;
     void *data = (void *)(long)skb->data;
@@ -107,18 +103,18 @@ int pppoe_egress_pkt_size_filter(struct __sk_buff *skb) {
         eth_proto = 1;
     }
 
-    // bpf_log_info("has packet large then mtu, protocol: %d, msg_size: %d", protocol, msg_size);
+    // ld_bpf_log("has packet large then mtu, protocol: %d, msg_size: %d", protocol, msg_size);
 
     struct icmp_send_event *e;
     u16 reserve_size = msg_size + sizeof(struct icmp_send_event);
     e = bpf_ringbuf_reserve(&icmp_notice_events, reserve_size, 0);
     if (e == NULL) {
-        bpf_log_error("ring buff reserve error: %d", e);
+        ld_bpf_log("ring buff reserve error: %d", e);
         return TC_ACT_SHOT;
     }
     e->eth_proto = eth_proto;
     if (bpf_skb_load_bytes(skb, 14, e->data, msg_size)) {
-        bpf_log_error("bpf_skb_load_bytes error");
+        ld_bpf_log("bpf_skb_load_bytes error");
         bpf_ringbuf_discard(e, 0);
     } else {
         bpf_ringbuf_submit(e, 0);
@@ -137,23 +133,23 @@ int pppoe_egress_pkt_size_filter(struct __sk_buff *skb) {
 
 //     struct ethhdr *eth = (struct ethhdr *)(data);
 //     if ((void *)(eth + 1) > data_end) {
-//         bpf_log_info("ingress packet less then 14 byte");
+//         ld_bpf_log("ingress packet less then 14 byte");
 //         return TC_ACT_SHOT;
 //     }
 
 //     if (eth->h_proto != ETH_PPP) {
-//         bpf_log_info("ingress eth proto is error: %x", eth->h_proto);
+//         ld_bpf_log("ingress eth proto is error: %x", eth->h_proto);
 //         return TC_ACT_UNSPEC;
 //     }
 
 //     struct pppoe_header *pppoe_h = (struct pppoe_header *)(eth + 1);
 //     if ((void *)(pppoe_h + 1) > data_end) {
-//         bpf_log_info("ingress pppoe_header out of range");
+//         ld_bpf_log("ingress pppoe_header out of range");
 //         return TC_ACT_SHOT;
 //     }
 
 //     if (pppoe_h->protocol != ETH_PPP_IPV4 && pppoe_h->protocol != ETH_PPP_IPV6) {
-//         bpf_log_info("ingress is not ppp session");
+//         ld_bpf_log("ingress is not ppp session");
 //         return TC_ACT_UNSPEC;
 //     }
 
@@ -164,10 +160,10 @@ int pppoe_egress_pkt_size_filter(struct __sk_buff *skb) {
 
 //     int l2_proto_result = bpf_skb_store_bytes(skb, 12, &l2_proto, sizeof(u16), 0);
 //     if (l2_proto_result == 0) {
-//         bpf_log_info("ingress modify protocol to: %x success", l2_proto);
-//         bpf_log_info("ingress modify protocol to skb->protocol: %x", skb->protocol);
+//         ld_bpf_log("ingress modify protocol to: %x success", l2_proto);
+//         ld_bpf_log("ingress modify protocol to skb->protocol: %x", skb->protocol);
 //     } else {
-//         bpf_log_info("ingress modify protocol to: %x error, code: %d", l2_proto_result);
+//         ld_bpf_log("ingress modify protocol to: %x error, code: %d", l2_proto_result);
 //     }
 
 //     data_end = (void *)(long)skb->data_end;
@@ -179,16 +175,16 @@ int pppoe_egress_pkt_size_filter(struct __sk_buff *skb) {
 //     if ((void *)(eth + 1) > data_end) {
 //         return TC_ACT_SHOT;
 //     }
-//     bpf_log_info("ingress eth->h_proto is : %x", eth->h_proto);
-//     bpf_log_info("ingress skb->protocol is : %x", skb->protocol);
+//     ld_bpf_log("ingress eth->h_proto is : %x", eth->h_proto);
+//     ld_bpf_log("ingress skb->protocol is : %x", skb->protocol);
 
 //     // bpf_skb_store_bytes(skb, offsetof(struct sk_buff, protocol), &l2_proto, sizeof(u16), 0);
 //     int result = bpf_skb_adjust_room(skb, -8, BPF_ADJ_ROOM_MAC, 0);
 //     if (result) {
-//         bpf_log_info("ingress adjust room error %d", result);
+//         ld_bpf_log("ingress adjust room error %d", result);
 //         return TC_ACT_SHOT;
 //     } else {
-//         bpf_log_info("ingress adjust room success");
+//         ld_bpf_log("ingress adjust room success");
 //     }
 //     return TC_ACT_UNSPEC;
 // #undef BPF_LOG_TOPIC
@@ -228,18 +224,18 @@ static __always_inline void mss_clamp(struct __sk_buff *skb, u32 offset, u16 mss
             if (VALIDATE_READ_DATA(skb, &mss, option_offset + 2, sizeof(*mss))) {
                 return;
             }
-            // bpf_log_info("fond mss: %u", *mss);
-            // bpf_log_info("fond mss: %u", bpf_ntohs(*mss));
+            // ld_bpf_log("fond mss: %u", *mss);
+            // ld_bpf_log("fond mss: %u", bpf_ntohs(*mss));
             if (bpf_ntohs(*mss) > mss_value) {
                 __be16 target_mss = bpf_ntohs(mss_value);
                 if (bpf_l4_csum_replace(skb, offset + offsetof(struct tcphdr, check), *mss,
                                         target_mss, 2 | 0)) {
-                    bpf_log_error("modify checksum error");
+                    ld_bpf_log("modify checksum error");
                     return;
                 }
                 if (bpf_skb_store_bytes(skb, option_offset + 2, &target_mss, sizeof(target_mss),
                                         0)) {
-                    bpf_log_error("modify mss error");
+                    ld_bpf_log("modify mss error");
                     return;
                 }
             }
@@ -309,20 +305,20 @@ int pppoe_egress(struct __sk_buff *skb) {
     u32 pkt_sz = skb->len - 14;
     // // TODO: 消除这个魔法变量
     // if (pkt_sz > pppoe_mtu) {
-    //     bpf_log_info("egress package too large size is: %u", pkt_sz);
+    //     ld_bpf_log("egress package too large size is: %u", pkt_sz);
     //     return TC_ACT_SHOT;
     //     // } else if (pkt_sz == pppoe_mtu) {
-    //     //     bpf_log_info("exactly large size is: %u", pkt_sz);
+    //     //     ld_bpf_log("exactly large size is: %u", pkt_sz);
     // }
 
     struct ethhdr *eth = (struct ethhdr *)(data);
     if ((void *)(eth + 1) > data_end) {
-        bpf_log_info("package size smaller then ethhdr");
+        ld_bpf_log("package size smaller then ethhdr");
         return TC_ACT_SHOT;
     }
 
     if (eth->h_proto != ETH_IPV4 && eth->h_proto != ETH_IPV6) {
-        bpf_log_info("egress eth proto is error: %x", eth->h_proto);
+        ld_bpf_log("egress eth proto is error: %x", eth->h_proto);
         return TC_ACT_PIPE;
     }
 
@@ -363,10 +359,10 @@ int pppoe_egress(struct __sk_buff *skb) {
 
     int result = bpf_skb_adjust_room(skb, 8, BPF_ADJ_ROOM_MAC, adj_room_flag);
     if (result) {
-        bpf_log_info("egress adjust room error %d", result);
+        ld_bpf_log("egress adjust room error %d", result);
         return TC_ACT_SHOT;
         // } else {
-        //     bpf_log_info("egress adjust room success");
+        //     ld_bpf_log("egress adjust room success");
     }
 
     struct pppoe_header pppoe = {
@@ -396,7 +392,7 @@ int pppoe_xdp_ingress(struct xdp_md *ctx) {
 
     struct ethhdr *eth = (struct ethhdr *)(data);
     if ((void *)(eth + 1) > data_end) {
-        bpf_log_info("package size smaller then ethhdr");
+        ld_bpf_log("package size smaller then ethhdr");
         return XDP_DROP;
     }
 
@@ -407,25 +403,25 @@ int pppoe_xdp_ingress(struct xdp_md *ctx) {
 
     // if (src_mac[0] == iface_mac[0] && src_mac[1] == iface_mac[1] && src_mac[2] == iface_mac[2] &&
     //     src_mac[3] == iface_mac[3] && src_mac[4] == iface_mac[4] && src_mac[5] == iface_mac[5]) {
-    //     bpf_log_info("Source MAC matches interface MAC, passing packet.");
+    //     ld_bpf_log("Source MAC matches interface MAC, passing packet.");
     //     return XDP_PASS;  // 允许通过
     // }
 
     if (eth->h_proto != ETH_PPP) {
         if (eth->h_proto != ETH_IPV4 && eth->h_proto != ETH_IPV6 && eth->h_proto != ETH_DROP) {
-            bpf_log_info("is not ppp session packet proto: %x", bpf_htons(eth->h_proto));
+            ld_bpf_log("is not ppp session packet proto: %x", bpf_htons(eth->h_proto));
         }
         return XDP_PASS;
     }
 
     struct pppoe_header *pppoe_h = (struct pppoe_header *)(eth + 1);
     if ((void *)(pppoe_h + 1) > data_end) {
-        bpf_log_info("out of pppoe_header range");
+        ld_bpf_log("out of pppoe_header range");
         return XDP_DROP;
     }
 
     if (pppoe_h->protocol != ETH_PPP_IPV4 && pppoe_h->protocol != ETH_PPP_IPV6) {
-        bpf_log_info("is not ppp ipv4 or ppp ipv6: %x", bpf_htons(pppoe_h->protocol));
+        ld_bpf_log("is not ppp ipv4 or ppp ipv6: %x", bpf_htons(pppoe_h->protocol));
         return XDP_PASS;
     }
 
@@ -435,10 +431,10 @@ int pppoe_xdp_ingress(struct xdp_md *ctx) {
     }
 
     // 打印 MAC 地址
-    // bpf_log_info("before MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0], eth->h_source[1],
+    // ld_bpf_log("before MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0], eth->h_source[1],
     //              eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5]);
 
-    // bpf_log_info("before packet size: %d", pkt_sz);
+    // ld_bpf_log("before packet size: %d", pkt_sz);
     int result = bpf_xdp_adjust_head(ctx, 8);
     if (result != 0) {
         bpf_printk("bpf_xdp_adjust_head result %d", result);
@@ -448,18 +444,18 @@ int pppoe_xdp_ingress(struct xdp_md *ctx) {
     data = (void *)(long)ctx->data;
     data_end = (void *)(long)ctx->data_end;
     int after_pkt_sz = data_end - data;
-    // bpf_log_info("after packet size: %d", after_pkt_sz);
+    // ld_bpf_log("after packet size: %d", after_pkt_sz);
 
     eth = (struct ethhdr *)(data);
     if ((void *)(eth + 1) > data_end) {
-        bpf_log_info("out of ethhdr range2");
+        ld_bpf_log("out of ethhdr range2");
         return XDP_DROP;
     }
 
     __builtin_memcpy(eth->h_source, src_mac, 6);
     __builtin_memcpy(eth->h_dest, dst_mac, 6);
     eth->h_proto = l2_proto;
-    // bpf_log_info("after old eth MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0],
+    // ld_bpf_log("after old eth MAC: %02x:%02x:%02x:%02x:%02x:%02x", eth->h_source[0],
     //              eth->h_source[1], eth->h_source[2], eth->h_source[3], eth->h_source[4],
     //              eth->h_source[5]);
 

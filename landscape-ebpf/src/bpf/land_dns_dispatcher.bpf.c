@@ -10,11 +10,8 @@
 #include "flow_match.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 SEC("sk_reuseport/migrate")
 int reuseport_dns_dispatcher(struct sk_reuseport_md *reuse_md) {
@@ -46,21 +43,21 @@ int reuseport_dns_dispatcher(struct sk_reuseport_md *reuse_md) {
         ret = bpf_skb_load_bytes_relative(reuse_md, offsetof(struct iphdr, saddr),
                                           &match_key.src_addr, 4, BPF_HDR_START_NET);
         if (ret) {
-            bpf_log_info("reuseport_dns_dispatcher, read src IP error: %d", ret);
+            ld_bpf_log("reuseport_dns_dispatcher, read src IP error: %d", ret);
             return SK_DROP;
         }
-        // bpf_log_info("src ip: %pI4", &match_key.src_addr);
+        // ld_bpf_log("src ip: %pI4", &match_key.src_addr);
     } else {
         match_key.prefixlen = FLOW_IP_IPV6_MATCH_LEN;
         match_key.l3_protocol = LANDSCAPE_IPV6_TYPE;
         ret = bpf_skb_load_bytes_relative(reuse_md, offsetof(struct ipv6hdr, saddr),
                                           &match_key.src_addr, 16, BPF_HDR_START_NET);
         if (ret) {
-            bpf_log_info("reuseport_dns_dispatcher, read src IP error: %d", ret);
+            ld_bpf_log("reuseport_dns_dispatcher, read src IP error: %d", ret);
             return SK_DROP;
         }
 
-        // bpf_log_info("src ip: %pI6", &match_key.src_addr);
+        // ld_bpf_log("src ip: %pI6", &match_key.src_addr);
     }
 
     u32 *flow_id_ptr = bpf_map_lookup_elem(&flow_match_map, &match_key);
@@ -75,10 +72,10 @@ int reuseport_dns_dispatcher(struct sk_reuseport_md *reuse_md) {
         flow_sock_key |= 1;
     }
 
-    // bpf_log_info("find flow_id: %d, key: %d", flow_id, flow_sock_key);
+    // ld_bpf_log("find flow_id: %d, key: %d", flow_id, flow_sock_key);
     ret = bpf_sk_select_reuseport(reuse_md, &dns_flow_socks, &flow_sock_key, 0);
     if (ret) {
-        bpf_log_info("bpf_sk_select_reuseport err: %d", ret);
+        ld_bpf_log("bpf_sk_select_reuseport err: %d", ret);
         return SK_DROP;
     }
 

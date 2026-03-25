@@ -10,11 +10,8 @@
 #include "landscape.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 #define IPV4_NAT_EGRESS_PROG_INDEX 0
 #define IPV4_NAT_INGRESS_PROG_INDEX 0

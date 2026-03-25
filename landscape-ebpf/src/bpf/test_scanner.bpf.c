@@ -10,11 +10,8 @@
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 const volatile u32 current_l3_offset = 14;
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 const volatile u32 KEY = 0;
 const volatile u64 VALUE = 0;
@@ -69,7 +66,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, u32 current_
     if (is_ipv4) {
         struct iphdr *iph;
         if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         context->l3_protocol = LANDSCAPE_IPV4_TYPE;
@@ -79,7 +76,7 @@ static __always_inline int get_route_context(struct __sk_buff *skb, u32 current_
     } else {
         struct ipv6hdr *ip6h;
         if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
 
@@ -104,7 +101,7 @@ get_route_context_from_scanner(struct __sk_buff *skb, u32 current_l3_offset,
     if (offset_info->l3_protocol == LANDSCAPE_IPV4_TYPE) {
         struct iphdr *iph;
         if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         context->l3_protocol = LANDSCAPE_IPV4_TYPE;
@@ -115,7 +112,7 @@ get_route_context_from_scanner(struct __sk_buff *skb, u32 current_l3_offset,
         struct ipv6hdr *ip6h;
         if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->l3_offset_when_scan,
                                sizeof(struct ipv6hdr))) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
 
@@ -138,7 +135,7 @@ get_route_context_from_scanner_v2(struct __sk_buff *skb, u32 current_l3_offset,
     if (offset_info->l3_protocol == LANDSCAPE_IPV4_TYPE) {
         struct iphdr *iph;
         if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         context->l3_protocol = LANDSCAPE_IPV4_TYPE;
@@ -149,7 +146,7 @@ get_route_context_from_scanner_v2(struct __sk_buff *skb, u32 current_l3_offset,
         struct ipv6hdr *ip6h;
         if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->l3_offset_when_scan,
                                sizeof(struct ipv6hdr))) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
 
@@ -183,7 +180,7 @@ get_ipv4_route_context_from_scanner(struct __sk_buff *skb, u32 current_l3_offset
     struct iphdr iph;
     ret = bpf_skb_load_bytes(skb, offset_info->l3_offset_when_scan, &iph, sizeof(iph));
     if (ret) {
-        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
         return TC_ACT_SHOT;
     }
     context->l3_protocol = LANDSCAPE_IPV4_TYPE;
@@ -291,7 +288,7 @@ static __always_inline int set_pkg_info_with_offset_info(struct __sk_buff *skb,
     if (offset_info->l3_protocol == LANDSCAPE_IPV4_TYPE) {
         struct iphdr *iph;
         if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         ip_pair->dst_addr.ip = iph->daddr;
@@ -300,7 +297,7 @@ static __always_inline int set_pkg_info_with_offset_info(struct __sk_buff *skb,
         struct ipv6hdr *ip6h;
         if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->l3_offset_when_scan,
                                sizeof(struct ipv6hdr))) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->saddr.in6_u.u6_addr32);

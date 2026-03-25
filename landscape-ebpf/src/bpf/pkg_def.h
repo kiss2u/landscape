@@ -94,23 +94,23 @@ static __always_inline void print_route_context(struct route_context_test *ctx) 
 #define BPF_LOG_TOPIC "print_route_context"
     if (!ctx) return;
 
-    bpf_log_info("==== route_context ====");
+    ld_bpf_log("==== route_context ====");
     if (ctx->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-        bpf_log_info("IPv4");
-        bpf_log_info("saddr: %pI4", ctx->saddr.all);
-        bpf_log_info("daddr: %pI4", ctx->daddr.all);
+        ld_bpf_log("IPv4");
+        ld_bpf_log("saddr: %pI4", ctx->saddr.all);
+        ld_bpf_log("daddr: %pI4", ctx->daddr.all);
     } else if (ctx->l3_protocol == LANDSCAPE_IPV6_TYPE) {
-        bpf_log_info("IPv6");
-        bpf_log_info("saddr: %pI6", ctx->saddr.all);
-        bpf_log_info("daddr: %pI6", ctx->daddr.all);
+        ld_bpf_log("IPv6");
+        ld_bpf_log("saddr: %pI6", ctx->saddr.all);
+        ld_bpf_log("daddr: %pI6", ctx->daddr.all);
     }
-    bpf_log_info("l3_protocol: %u", ctx->l3_protocol);
-    bpf_log_info("l4_protocol: %u", ctx->l4_protocol);
-    bpf_log_info("tos: %u", ctx->tos);
-    // bpf_log_info("smac: %02x:%02x:%02x:%02x:%02x:%02x",
+    ld_bpf_log("l3_protocol: %u", ctx->l3_protocol);
+    ld_bpf_log("l4_protocol: %u", ctx->l4_protocol);
+    ld_bpf_log("tos: %u", ctx->tos);
+    // ld_bpf_log("smac: %02x:%02x:%02x:%02x:%02x:%02x",
     //              ctx->smac[0], ctx->smac[1], ctx->smac[2],
     //              ctx->smac[3], ctx->smac[4], ctx->smac[5]);
-    bpf_log_info("====================");
+    ld_bpf_log("====================");
 #undef BPF_LOG_TOPIC
 }
 

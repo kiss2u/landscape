@@ -11,14 +11,9 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
-
 const volatile u32 current_l3_offset = 14;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
-
 
 #define IPV4_LAN_INGRESS_PROG_INDEX 0
 #define IPV6_LAN_INGRESS_PROG_INDEX 1
@@ -36,7 +31,7 @@ int rt4_lan_ingress(struct __sk_buff *skb) {
     struct iphdr *iph;
 
     if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
-        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
         return TC_ACT_UNSPEC;
     }
 
@@ -47,7 +42,6 @@ int rt4_lan_ingress(struct __sk_buff *skb) {
     if (should_not_forward(context.daddr)) {
         return TC_ACT_UNSPEC;
     }
-
 
     ret = search_route_in_lan_v4(skb, current_l3_offset, &context, &flow_mark);
     if (ret != TC_ACT_OK) {
@@ -77,7 +71,6 @@ int rt4_lan_ingress(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-
 SEC("tc/ingress")
 int rt6_lan_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "rt6_lan_ingress"
@@ -88,7 +81,7 @@ int rt6_lan_ingress(struct __sk_buff *skb) {
     struct ipv6hdr *ip6h;
 
     if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
-        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
         return TC_ACT_UNSPEC;
     }
 
@@ -127,8 +120,6 @@ int rt6_lan_ingress(struct __sk_buff *skb) {
 #undef BPF_LOG_TOPIC
 }
 
-
-
 struct {
     __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
     __uint(max_entries, 2);
@@ -142,7 +133,6 @@ struct {
             [IPV6_LAN_INGRESS_PROG_INDEX] = (void *)&rt6_lan_ingress,
         },
 };
-
 
 SEC("tc/ingress")
 int route_lan_ingress(struct __sk_buff *skb) {
@@ -170,7 +160,7 @@ int route_lan_ingress(struct __sk_buff *skb) {
         bpf_tail_call_static(skb, &ls_lan_tails, IPV6_LAN_INGRESS_PROG_INDEX);
         bpf_printk("bpf_tail_call_static error");
     }
-    
+
     return TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }

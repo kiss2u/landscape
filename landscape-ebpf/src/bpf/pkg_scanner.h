@@ -366,12 +366,12 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
     ctx.l4_offset = current_l3_offset;
     if (is_ipv4) {
         if (scan_ipv4(skb, &ctx)) {
-            bpf_log_info("scan ip v4 err");
+            ld_bpf_log("scan ip v4 err");
             return LD_SCAN_ERR;
         }
     } else {
         if (scan_ipv6(skb, &ctx)) {
-            bpf_log_info("scan ip v6 err");
+            ld_bpf_log("scan ip v6 err");
             return LD_SCAN_ERR;
         }
     }
@@ -394,7 +394,7 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
     if (offset_info->l4_protocol == IPPROTO_ICMP) {
         struct icmphdr *icmph;
         if (VALIDATE_READ_DATA(skb, &icmph, offset_info->l4_offset, sizeof(struct icmphdr))) {
-            bpf_log_info("icmphdr error, offset_info->l4_offset: %u", offset_info->l4_offset);
+            ld_bpf_log("icmphdr error, offset_info->l4_offset: %u", offset_info->l4_offset);
             return LD_SCAN_ERR;
         }
         switch (icmp_msg_type(icmph)) {
@@ -403,13 +403,13 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
             barrier_var(offset_info->icmp_error_l3_offset);
             ctx.l4_offset = offset_info->icmp_error_l3_offset;
             if (scan_ipv4(skb, &ctx)) {
-                bpf_log_info("scan icmp inner ipv4 error: %u", ctx.l4_offset);
+                ld_bpf_log("scan icmp inner ipv4 error: %u", ctx.l4_offset);
                 return LD_SCAN_ERR;
             }
 
             if (ctx.fragment_off) {
                 // icmp 不处理分片导致的 icmp 错误
-                bpf_log_error("could not handle icmp with fragment");
+                ld_bpf_log("could not handle icmp with fragment");
                 return LD_SCAN_ERR;
             }
 
@@ -434,8 +434,8 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
             icmp_src_ip_val = *temp_addr;
 
             if (dst_ip_val != icmp_src_ip_val) {
-                bpf_log_error("IP destination address does not match source "
-                              "address inside ICMP error message");
+                ld_bpf_log("IP destination address does not match source "
+                           "address inside ICMP error message");
                 return LD_SCAN_ERR;
             }
             break;
@@ -446,7 +446,7 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
         case ICMP_ACT_UNSPEC:
             return LD_SCAN_UNSPEC;
         default:
-            bpf_log_error("icmp shot");
+            ld_bpf_log("icmp shot");
             return LD_SCAN_ERR;
         }
     } else if (offset_info->l4_protocol == IPPROTO_ICMPV6) {
@@ -460,7 +460,7 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
             offset_info->icmp_error_l3_offset = offset_info->l4_offset + ICMP_HDR_LEN;
             ctx.l4_offset = offset_info->icmp_error_l3_offset;
             if (scan_ipv6(skb, &ctx)) {
-                bpf_log_info("scan icmpv6 inner ipv6 error: %u", ctx.l4_offset);
+                ld_bpf_log("scan icmpv6 inner ipv6 error: %u", ctx.l4_offset);
                 return LD_SCAN_ERR;
             }
 
@@ -492,8 +492,8 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
             COPY_ADDR_FROM(icmp_src_ip_val.all, temp_addr->all);
 
             if (!ld_ip_addr_equal(&dst_ip_val, &icmp_src_ip_val)) {
-                bpf_log_error("IP destination address does not match source "
-                              "address inside ICMP error message");
+                ld_bpf_log("IP destination address does not match source "
+                           "address inside ICMP error message");
                 return LD_SCAN_ERR;
             }
             break;
@@ -504,7 +504,7 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
         case ICMP_ACT_UNSPEC:
             return LD_SCAN_UNSPEC;
         default:
-            bpf_log_error("icmp shot");
+            ld_bpf_log("icmp shot");
             return LD_SCAN_ERR;
         }
     }
@@ -526,7 +526,7 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
     if (offset_info->l3_protocol == LANDSCAPE_IPV4_TYPE) {
         struct iphdr *iph;
         if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         ip_pair->dst_addr.ip = iph->daddr;
@@ -535,7 +535,7 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         if (offset_info->icmp_error_l3_offset > 0) {
             if (VALIDATE_READ_DATA(skb, &iph, offset_info->icmp_error_l3_offset,
                                    sizeof(struct iphdr))) {
-                bpf_log_info("ipv4 bpf_skb_load_bytes error");
+                ld_bpf_log("ipv4 bpf_skb_load_bytes error");
                 return TC_ACT_SHOT;
             }
             ip_pair->src_addr.ip = iph->daddr;
@@ -544,7 +544,7 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         struct ipv6hdr *ip6h;
         if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->l3_offset_when_scan,
                                sizeof(struct ipv6hdr))) {
-            bpf_log_info("ipv6 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv6 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->saddr.in6_u.u6_addr32);
@@ -553,7 +553,7 @@ static __always_inline int read_packet_info(struct __sk_buff *skb,
         if (offset_info->icmp_error_l3_offset > 0) {
             if (VALIDATE_READ_DATA(skb, &ip6h, offset_info->icmp_error_l3_offset,
                                    sizeof(struct ipv6hdr))) {
-                bpf_log_info("ipv6 bpf_skb_load_bytes error");
+                ld_bpf_log("ipv6 bpf_skb_load_bytes error");
                 return TC_ACT_SHOT;
             }
             COPY_ADDR_FROM(ip_pair->src_addr.all, ip6h->daddr.in6_u.u6_addr32);
@@ -641,7 +641,7 @@ static __always_inline int read_packet_info4(struct __sk_buff *skb,
     int ret;
     struct iphdr *iph;
     if (VALIDATE_READ_DATA(skb, &iph, offset_info->l3_offset_when_scan, sizeof(struct iphdr))) {
-        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
         return TC_ACT_SHOT;
     }
     ip_pair->dst_addr.addr = iph->daddr;
@@ -650,7 +650,7 @@ static __always_inline int read_packet_info4(struct __sk_buff *skb,
     if (offset_info->icmp_error_l3_offset > 0) {
         if (VALIDATE_READ_DATA(skb, &iph, offset_info->icmp_error_l3_offset,
                                sizeof(struct iphdr))) {
-            bpf_log_info("ipv4 bpf_skb_load_bytes error");
+            ld_bpf_log("ipv4 bpf_skb_load_bytes error");
             return TC_ACT_SHOT;
         }
         ip_pair->src_addr.addr = iph->daddr;

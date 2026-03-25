@@ -12,11 +12,8 @@
 #include "land_nat_v4.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 #define IPV4_NAT_EGRESS_PROG_INDEX 0
 #define IPV4_NAT_INGRESS_PROG_INDEX 0
@@ -103,7 +100,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
     }
 
     if (nat_egress_value == NULL) {
-        bpf_log_info("nat_egress_value is null");
+        ld_bpf_log("nat_egress_value is null");
         return TC_ACT_SHOT;
     }
 
@@ -112,7 +109,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
         pkg_offset.l4_protocol != IPPROTO_ICMP) {
         if (ip_pair.dst_addr.addr != nat_egress_value->trigger_addr ||
             ip_pair.dst_port != nat_egress_value->trigger_port) {
-            bpf_log_info("FLOW_ALLOW_REUSE MARK not set, DROP PACKET");
+            ld_bpf_log("FLOW_ALLOW_REUSE MARK not set, DROP PACKET");
             return TC_ACT_SHOT;
         }
     }
@@ -138,7 +135,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
         struct wan_ip_info_value *wan_ip_info =
             bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
         if (!wan_ip_info) {
-            bpf_log_info("can't find the wan ip, using ifindex: %d", skb->ifindex);
+            ld_bpf_log("can't find the wan ip, using ifindex: %d", skb->ifindex);
             return TC_ACT_SHOT;
         }
         nat_addr.addr = wan_ip_info->addr.ip;
@@ -184,7 +181,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
                             &action);
     if (ret) {
-        bpf_log_error("failed to update csum, err:%d", ret);
+        ld_bpf_log("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
     }
 
@@ -236,7 +233,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     }
 
     if (nat_ingress_value == NULL) {
-        bpf_log_info("nat_ingress_value is null");
+        ld_bpf_log("nat_ingress_value is null");
         return TC_ACT_SHOT;
     }
 
@@ -245,7 +242,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
         pkg_offset.l4_protocol != IPPROTO_ICMP) {
         if (ip_pair.src_addr.addr != nat_ingress_value->trigger_addr ||
             ip_pair.src_port != nat_ingress_value->trigger_port) {
-            bpf_log_info("ingress FLOW_ALLOW_REUSE not set, DROP PACKET");
+            ld_bpf_log("ingress FLOW_ALLOW_REUSE not set, DROP PACKET");
             return TC_ACT_SHOT;
         }
     }
@@ -283,7 +280,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     ret = lookup_or_new_ct(skb, pkg_offset.l4_protocol, do_new_ct, &server_nat_pair, &lan_ip,
                            nat_ingress_value->port, NAT_MAPPING_INGRESS, &ct_value);
     if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {
-        bpf_log_info("connect ret :%u", ret);
+        ld_bpf_log("connect ret :%u", ret);
         return TC_ACT_SHOT;
     }
     if (!is_icmpx_error || ct_value != NULL) {
@@ -304,7 +301,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
                             &action);
     if (ret) {
-        bpf_log_error("failed to update csum, err:%d", ret);
+        ld_bpf_log("failed to update csum, err:%d", ret);
         return TC_ACT_SHOT;
     }
 

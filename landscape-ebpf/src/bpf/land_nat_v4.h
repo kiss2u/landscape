@@ -289,7 +289,7 @@ static __always_inline int ct_state_transition(u8 l4proto, u8 pkt_type, u8 gress
     u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
     if (prev_state != TIMER_ACTIVE) {
         if (ct_timer_value->client_port == TEST_PORT) {
-            bpf_log_info("flush status to TIMER_ACTIVE: 20");
+            ld_bpf_log("flush status to TIMER_ACTIVE: 20");
         }
         bpf_timer_start(&ct_timer_value->timer, REPORT_INTERVAL, 0);
     }
@@ -310,18 +310,18 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key_v
     int ret;
 
     if (value->client_port == TEST_PORT) {
-        bpf_log_info("timer_clean_callback: %pI4, current_status: %llu", &value->client_addr.addr,
-                     current_status);
+        ld_bpf_log("timer_clean_callback: %pI4, current_status: %llu", &value->client_addr.addr,
+                   current_status);
     }
 
     if (current_status == TIMER_RELEASE) {
         if (value->client_port == TEST_PORT) {
-            bpf_log_info("release CONNECT");
+            ld_bpf_log("release CONNECT");
         }
 
         ret = nat_metric_try_report_v4(key, value, NAT_CONN_DELETE);
         if (ret) {
-            bpf_log_info("call back report fail");
+            ld_bpf_log("call back report fail");
             bpf_timer_start(&value->timer, next_timeout, 0);
             return 0;
         }
@@ -331,7 +331,7 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key_v
 
     ret = nat_metric_try_report_v4(key, value, NAT_CONN_ACTIVE);
     if (ret) {
-        bpf_log_info("call back report fail");
+        ld_bpf_log("call back report fail");
         bpf_timer_start(&value->timer, next_timeout, 0);
         return 0;
     }
@@ -341,14 +341,14 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key_v
         next_timeout = REPORT_INTERVAL;
 
         if (value->client_port == TEST_PORT) {
-            bpf_log_info("change next status TIMER_TIMEOUT_1");
+            ld_bpf_log("change next status TIMER_TIMEOUT_1");
         }
     } else if (current_status == TIMER_TIMEOUT_1) {
         next_status = TIMER_TIMEOUT_2;
         next_timeout = REPORT_INTERVAL;
 
         if (value->client_port == TEST_PORT) {
-            bpf_log_info("change next status TIMER_TIMEOUT_2");
+            ld_bpf_log("change next status TIMER_TIMEOUT_2");
         }
     } else if (current_status == TIMER_TIMEOUT_2) {
         next_status = TIMER_RELEASE;
@@ -363,7 +363,7 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key_v
         }
         if (value->client_port == TEST_PORT) {
             u64 show = (next_timeout / 1000000000ULL);
-            bpf_log_info("change next status TIMER_RELEASE, next_timeout: %d", show);
+            ld_bpf_log("change next status TIMER_RELEASE, next_timeout: %d", show);
         }
     } else {
         next_status = TIMER_TIMEOUT_2;
@@ -372,8 +372,8 @@ static int timer_clean_callback(void *map_mapping_timer_, struct nat_timer_key_v
 
     if (__sync_val_compare_and_swap(&value->status, current_status, next_status) !=
         current_status) {
-        bpf_log_info("call back modify status fail, current status: %d new status: %d",
-                     current_status, next_status);
+        ld_bpf_log("call back modify status fail, current status: %d new status: %d",
+                   current_status, next_status);
         // 更新状态失败, 说明有新的数据包到达
         bpf_timer_start(&value->timer, REPORT_INTERVAL, 0);
         return 0;
@@ -417,7 +417,7 @@ insert_new_nat_timer(u8 l4proto, const struct nat_timer_key_v4 *key,
 
     int ret = bpf_map_update_elem(&nat4_mapping_timer, key, val, BPF_NOEXIST);
     if (ret) {
-        bpf_log_error("failed to insert conntrack entry, err:%d", ret);
+        ld_bpf_log("failed to insert conntrack entry, err:%d", ret);
         return NULL;
     }
     struct nat_timer_value_v4 *value = bpf_map_lookup_elem(&nat4_mapping_timer, key);
@@ -438,7 +438,7 @@ insert_new_nat_timer(u8 l4proto, const struct nat_timer_key_v4 *key,
 
     return value;
 delete_timer:
-    bpf_log_error("setup timer err:%d", ret);
+    ld_bpf_log("setup timer err:%d", ret);
     bpf_map_delete_elem(&nat4_mapping_timer, key);
     return NULL;
 #undef BPF_LOG_TOPIC
@@ -512,12 +512,12 @@ insert_mappings_v4(const struct nat_mapping_key_v4 *key, const struct nat_mappin
 
     ret = bpf_map_update_elem(&nat4_mappings, key, val, BPF_ANY);
     if (ret) {
-        bpf_log_error("failed to insert binding entry, err:%d", ret);
+        ld_bpf_log("failed to insert binding entry, err:%d", ret);
         goto error_update;
     }
     ret = bpf_map_update_elem(&nat4_mappings, &key_rev, &val_rev, BPF_ANY);
     if (ret) {
-        bpf_log_error("failed to insert reverse binding entry, err:%d", ret);
+        ld_bpf_log("failed to insert reverse binding entry, err:%d", ret);
         goto error_update;
     }
 
@@ -643,7 +643,7 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
             bpf_map_lookup_elem(&wan_ip_binding, &wan_search_key);
 
         if (!wan_ip_info) {
-            bpf_log_info("can't find the wan ip, using ifindex: %d", skb->ifindex);
+            ld_bpf_log("can't find the wan ip, using ifindex: %d", skb->ifindex);
             return TC_ACT_SHOT;
         }
         bool allow_reuse_port = get_flow_allow_reuse_port(skb->mark);
@@ -689,7 +689,7 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
         }
 
         if (ctx.remaining_size == 0) {
-            bpf_log_error("not free port range start: %d end: %d", ctx.range.start, ctx.range.end);
+            ld_bpf_log("not free port range start: %d end: %d", ctx.range.start, ctx.range.end);
             return TC_ACT_SHOT;
         }
 
@@ -706,7 +706,7 @@ egress_lookup_or_new_mapping_v4(struct __sk_buff *skb, u8 ip_protocol, bool allo
         if (ctx.found) {
             new_nat_egress_value.port = ctx.ingress_key.from_port;
         } else {
-            bpf_log_debug("mapping is full");
+            ld_bpf_log("mapping is full");
             return TC_ACT_SHOT;
         }
         nat_egress_value =

@@ -9,11 +9,8 @@
 #include "land_nat_v6.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 const volatile u32 current_l3_offset = 14;
 

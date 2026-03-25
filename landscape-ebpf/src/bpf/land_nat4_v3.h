@@ -277,7 +277,7 @@ static __always_inline int ct_state_transition(u8 pkt_type, u8 gress,
     u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
     if (prev_state != TIMER_ACTIVE) {
         if (ct_timer_value->client_port == TEST_PORT) {
-            bpf_log_info("flush status to TIMER_ACTIVE: 20");
+            ld_bpf_log("flush status to TIMER_ACTIVE: 20");
         }
         bpf_timer_start(&ct_timer_value->timer, REPORT_INTERVAL, 0);
     }

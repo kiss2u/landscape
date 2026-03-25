@@ -8,12 +8,9 @@
 #include "landscape.h"
 #include "pkg_scanner.h"
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 /* Define constants not captured by BTF */
 #define BPF_F_CURRENT_NETNS (-1L)
@@ -56,7 +53,7 @@ static __always_inline int handle_pkg(struct __sk_buff *skb, struct packet_offse
         sk = bpf_skc_lookup_tcp(skb, &server, tuple_len, BPF_F_CURRENT_NETNS, 0);
         if (sk) {
             if (sk->state != BPF_TCP_LISTEN) {
-                // bpf_log_info("reuse exist tcp: %p4I", );
+                // ld_bpf_log("reuse exist tcp: %p4I", );
                 goto assign;
             }
             bpf_sk_release(sk);
@@ -81,20 +78,20 @@ static __always_inline int handle_pkg(struct __sk_buff *skb, struct packet_offse
 
     if (!sk) {
         if (offset->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-            bpf_log_info("can not find sk: l4_protocol: %d ip: %pI4:%u =>  %pI4:%u", l4_protocol,
-                         &server.ipv4.saddr, bpf_ntohs(server.ipv4.sport), &server.ipv4.daddr,
-                         bpf_ntohs(server.ipv4.dport));
+            ld_bpf_log("can not find sk: l4_protocol: %d ip: %pI4:%u =>  %pI4:%u", l4_protocol,
+                       &server.ipv4.saddr, bpf_ntohs(server.ipv4.sport), &server.ipv4.daddr,
+                       bpf_ntohs(server.ipv4.dport));
         } else {
-            bpf_log_info("can not find sk: l4_protocol: %d ip: %pI6:[%u] =>  %pI6:[%u]",
-                         l4_protocol, &server.ipv6.saddr, bpf_ntohs(server.ipv6.sport),
-                         &server.ipv6.daddr, bpf_ntohs(server.ipv6.dport));
+            ld_bpf_log("can not find sk: l4_protocol: %d ip: %pI6:[%u] =>  %pI6:[%u]", l4_protocol,
+                       &server.ipv6.saddr, bpf_ntohs(server.ipv6.sport), &server.ipv6.daddr,
+                       bpf_ntohs(server.ipv6.dport));
         }
         return TC_ACT_SHOT;
     }
 
     if (l4_protocol == IPPROTO_TCP && sk->state != BPF_TCP_LISTEN) {
         bpf_sk_release(sk);
-        bpf_log_info("sk not ready");
+        ld_bpf_log("sk not ready");
         return TC_ACT_SHOT;
     }
 
@@ -102,12 +99,12 @@ assign:
     skb->mark = 1;
     change_type_err = bpf_skb_change_type(skb, PACKET_HOST);
     if (change_type_err) {
-        bpf_log_info("change_type_err %d", change_type_err);
-        bpf_log_info("pkt_type %d", skb->pkt_type);
+        ld_bpf_log("change_type_err %d", change_type_err);
+        ld_bpf_log("pkt_type %d", skb->pkt_type);
     }
     ret = bpf_sk_assign(skb, sk, 0);
     if (ret) {
-        bpf_log_info("bpf_sk_assign ret %d", ret);
+        ld_bpf_log("bpf_sk_assign ret %d", ret);
     }
     bpf_sk_release(sk);
     return ret;
@@ -144,19 +141,19 @@ int tproxy_ingress(struct __sk_buff *skb) {
 
     ret = scan_packet(skb, 14, &pkg_offset);
     if (ret) {
-        bpf_log_info("scan_packet ret %d", ret);
+        ld_bpf_log("scan_packet ret %d", ret);
         return ret;
     }
 
     ret = is_tproxy_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) {
-        bpf_log_info("is_tproxy_handle_protocol ret %d protocol: %u", ret, pkg_offset.l4_protocol);
+        ld_bpf_log("is_tproxy_handle_protocol ret %d protocol: %u", ret, pkg_offset.l4_protocol);
         return ret;
     }
 
     ret = read_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) {
-        bpf_log_info("read_packet_info ret %d", ret);
+        ld_bpf_log("read_packet_info ret %d", ret);
         return ret;
     }
     ret = handle_pkg(skb, &pkg_offset, &ip_pair, be_flow_port);
@@ -175,7 +172,7 @@ int route_mode_ingress(struct __sk_buff *skb) {
     }
     int ret = bpf_skb_vlan_pop(skb);
     if (ret) {
-        bpf_log_info("remove vlan error %d", ret);
+        ld_bpf_log("remove vlan error %d", ret);
         return TC_ACT_SHOT;
     }
 

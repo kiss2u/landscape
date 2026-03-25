@@ -11,13 +11,9 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
-
 const volatile u32 current_l3_offset = 14;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 #define IPV4_WAN_INGRESS_PROG_INDEX 0
 #define IPV6_WAN_INGRESS_PROG_INDEX 1
@@ -35,7 +31,7 @@ int rt4_wan_ingress(struct __sk_buff *skb) {
     struct iphdr *iph;
 
     if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
-        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
         return TC_ACT_UNSPEC;
     }
 
@@ -56,7 +52,7 @@ int rt4_wan_ingress(struct __sk_buff *skb) {
     if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
-            // bpf_log_info("get wan ingress mark: %u", mark);
+            // ld_bpf_log("get wan ingress mark: %u", mark);
             setting_cache_in_wan_v4(&context, current_l3_offset, skb->ifindex);
         }
     }
@@ -75,10 +71,10 @@ int rt4_wan_egress(struct __sk_buff *skb) {
 
     struct iphdr *iph;
     if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
-        bpf_log_info("ipv4 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
         u8 *mac;
         if (VALIDATE_READ_DATA(skb, &mac, 6, 6)) {
-            bpf_log_info("read mac error");
+            ld_bpf_log("read mac error");
             return TC_ACT_SHOT;
         }
         PRINT_MAC_ADDR(mac);
@@ -122,7 +118,7 @@ int rt6_wan_ingress(struct __sk_buff *skb) {
     struct ipv6hdr *ip6h;
 
     if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
-        bpf_log_info("ipv6 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv6 bpf_skb_load_bytes error");
         return TC_ACT_UNSPEC;
     }
 
@@ -130,13 +126,13 @@ int rt6_wan_ingress(struct __sk_buff *skb) {
     COPY_ADDR_FROM(context.daddr.all, ip6h->daddr.in6_u.u6_addr32);
 
     if (is_broadcast_ip6(context.daddr.bytes)) {
-        bpf_log_info("is_broadcast_ip6: %pI6", context.daddr.bytes);
+        ld_bpf_log("is_broadcast_ip6: %pI6", context.daddr.bytes);
         return TC_ACT_UNSPEC;
     }
 
     ret = is_current_wan_packet_v6(skb, current_l3_offset, &context);
     if (ret != TC_ACT_OK) {
-        bpf_log_info("is_current_wan_packet_v6: %pI6", context.daddr.bytes);
+        ld_bpf_log("is_current_wan_packet_v6: %pI6", context.daddr.bytes);
         return ret;
     }
 
@@ -144,12 +140,12 @@ int rt6_wan_ingress(struct __sk_buff *skb) {
     if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
-            // bpf_log_info("get wan ingress mark: %u", mark);
+            // ld_bpf_log("get wan ingress mark: %u", mark);
             setting_cache_in_wan_v6(&context, current_l3_offset, skb->ifindex);
         }
     }
 
-    // bpf_log_info("lan_redirect_check_v6 ret: %d", ret);
+    // ld_bpf_log("lan_redirect_check_v6 ret: %d", ret);
     return ret == TC_ACT_OK ? TC_ACT_UNSPEC : ret;
 #undef BPF_LOG_TOPIC
 }
@@ -165,7 +161,7 @@ int rt6_wan_egress(struct __sk_buff *skb) {
     struct ipv6hdr *ip6h;
 
     if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
-        bpf_log_info("ipv6 bpf_skb_load_bytes error");
+        ld_bpf_log("ipv6 bpf_skb_load_bytes error");
         return TC_ACT_UNSPEC;
     }
 

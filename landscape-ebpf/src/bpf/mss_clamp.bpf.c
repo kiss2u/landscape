@@ -10,11 +10,7 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
-
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 const volatile u16 mtu_size = 1492;
 
@@ -106,12 +102,12 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
                 __be16 target_mss = bpf_htons(mss_value);
                 if (bpf_l4_csum_replace(skb, offset + offsetof(struct tcphdr, check), mss_val,
                                         target_mss, 2 | 0)) {
-                    bpf_log_error("modify checksum error");
+                    ld_bpf_log("modify checksum error");
                     return;
                 }
                 if (bpf_skb_store_bytes(skb, option_offset + 2, &target_mss, sizeof(target_mss),
                                         0)) {
-                    bpf_log_error("modify mss error");
+                    ld_bpf_log("modify mss error");
                     return;
                 }
             }
@@ -124,12 +120,12 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
                 __be16 target_mss = bpf_htons(mss_value);
                 if (bpf_l4_csum_replace(skb, offset + offsetof(struct tcphdr, check), *mss,
                                         target_mss, 2 | 0)) {
-                    bpf_log_error("modify checksum error");
+                    ld_bpf_log("modify checksum error");
                     return;
                 }
                 if (bpf_skb_store_bytes(skb, option_offset + 2, &target_mss, sizeof(target_mss),
                                         0)) {
-                    bpf_log_error("modify mss error");
+                    ld_bpf_log("modify mss error");
                     return;
                 }
             }

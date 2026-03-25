@@ -11,12 +11,9 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
 const volatile u32 current_l3_offset = 14;
 
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 SEC("tc/egress") int ipv4_egress_firewall(struct __sk_buff *skb);
 SEC("tc/ingress") int ipv4_ingress_firewall(struct __sk_buff *skb);
@@ -103,7 +100,7 @@ static __always_inline int fragment_track(struct __sk_buff *skb, struct ip_conte
     } else {
         value = bpf_map_lookup_elem(&fragment_cache, &key);
         if (!value) {
-            bpf_log_warn("fragmentation session of this packet was not tracked");
+            ld_bpf_log("fragmentation session of this packet was not tracked");
             return TC_ACT_SHOT;
         }
         pkt->pair_ip.src_port = value->sport;
@@ -226,7 +223,7 @@ found_upper_layer:
             return TC_ACT_SHOT;
         }
         ip_cxt->fragment_id = bpf_ntohl(frag_hdr->identification);
-        
+
         u16 raw_off = bpf_ntohs(frag_hdr->frag_off);
         ip_cxt->fragment_off = raw_off & IPV6_FRAG_OFFSET;
 
@@ -286,7 +283,7 @@ static __always_inline int extract_imcp_err_info(struct __sk_buff *skb, u32 *l3_
             // ICMP message not parsed
             return TC_ACT_UNSPEC;
         default:
-            bpf_log_error("drop icmp packet");
+            ld_bpf_log("drop icmp packet");
             return TC_ACT_SHOT;
         }
     } else {
@@ -362,7 +359,7 @@ extract_v4_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         }
         pcxt->ip_hdr.pair_ip.src_port = tcph->source;
         pcxt->ip_hdr.pair_ip.dst_port = tcph->dest;
-        // bpf_log_info("packet dst_port: %d", bpf_ntohs(tcph->dest));
+        // ld_bpf_log("packet dst_port: %d", bpf_ntohs(tcph->dest));
         if (tcph->fin) {
             pcxt->ip_hdr.pkt_type = PKT_TCP_FIN_V2;
         } else if (tcph->rst) {
@@ -401,17 +398,17 @@ extract_v4_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
                 return ret;
             }
 
-            bpf_log_trace("ICMP error protocol:%d, %pI4->%pI4, %pI4->%pI4, %d->%d",
-                          pcxt->ip_hdr.ip_protocol, &pcxt->ip_hdr.pair_ip.src_addr,
-                          &pcxt->ip_hdr.pair_ip.dst_addr, &icmp_error_ip_ctx.pair_ip.src_addr.ip,
-                          &icmp_error_ip_ctx.pair_ip.dst_addr.ip,
-                          bpf_ntohs(icmp_error_ip_ctx.pair_ip.src_port),
-                          bpf_ntohs(icmp_error_ip_ctx.pair_ip.dst_port));
+            ld_bpf_log("ICMP error protocol:%d, %pI4->%pI4, %pI4->%pI4, %d->%d",
+                       pcxt->ip_hdr.ip_protocol, &pcxt->ip_hdr.pair_ip.src_addr,
+                       &pcxt->ip_hdr.pair_ip.dst_addr, &icmp_error_ip_ctx.pair_ip.src_addr.ip,
+                       &icmp_error_ip_ctx.pair_ip.dst_addr.ip,
+                       bpf_ntohs(icmp_error_ip_ctx.pair_ip.src_port),
+                       bpf_ntohs(icmp_error_ip_ctx.pair_ip.dst_port));
 
             if (!ip_addr_equal(&pcxt->ip_hdr.pair_ip.dst_addr,
                                &icmp_error_ip_ctx.pair_ip.src_addr)) {
-                bpf_log_error("IP destination address does not match source "
-                              "address inside ICMP error message");
+                ld_bpf_log("IP destination address does not match source "
+                           "address inside ICMP error message");
                 return TC_ACT_SHOT;
             }
 
@@ -424,13 +421,13 @@ extract_v4_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         case ICMP_QUERY_MSG: {
             pcxt->ip_hdr.pair_ip.src_port = pcxt->ip_hdr.pair_ip.dst_port =
                 get_icmpx_query_id(icmph);
-            // bpf_log_info("ICMP query, id:%d", bpf_ntohs(pcxt->ip_hdr.pair_ip.src_port));
+            // ld_bpf_log("ICMP query, id:%d", bpf_ntohs(pcxt->ip_hdr.pair_ip.src_port));
             break;
         }
         case ICMP_ACT_UNSPEC:
             return TC_ACT_UNSPEC;
         default:
-            bpf_log_error("icmp shot");
+            ld_bpf_log("icmp shot");
             return TC_ACT_SHOT;
         }
     }
@@ -466,8 +463,8 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         return TC_ACT_OK;
     }
 
-    // bpf_log_info("pcxt->l4_payload_offset %d", pcxt->l4_payload_offset);
-    // bpf_log_info("pcxt->ip_protocol %d", pcxt->ip_hdr.ip_protocol);
+    // ld_bpf_log("pcxt->l4_payload_offset %d", pcxt->l4_payload_offset);
+    // ld_bpf_log("pcxt->ip_protocol %d", pcxt->ip_hdr.ip_protocol);
     if (pcxt->ip_hdr.ip_protocol == IPPROTO_TCP) {
         struct tcphdr *tcph;
         if (VALIDATE_READ_DATA(skb, &tcph, pcxt->l4_payload_offset, sizeof(*tcph))) {
@@ -475,7 +472,7 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         }
         pcxt->ip_hdr.pair_ip.src_port = tcph->source;
         pcxt->ip_hdr.pair_ip.dst_port = tcph->dest;
-        // bpf_log_info("packet dst_port: %d", bpf_ntohs(tcph->dest));
+        // ld_bpf_log("packet dst_port: %d", bpf_ntohs(tcph->dest));
         if (tcph->fin) {
             pcxt->ip_hdr.pkt_type = PKT_TCP_FIN_V2;
         } else if (tcph->rst) {
@@ -514,17 +511,17 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
                 return ret;
             }
 
-            bpf_log_trace("ICMP error protocol:%d, %pI4->%pI4, %pI4->%pI4, %d->%d",
-                          pcxt->ip_hdr.ip_protocol, &pcxt->ip_hdr.pair_ip.src_addr,
-                          &pcxt->ip_hdr.pair_ip.dst_addr, &icmp_error_ip_ctx.pair_ip.src_addr.ip,
-                          &icmp_error_ip_ctx.pair_ip.dst_addr.ip,
-                          bpf_ntohs(icmp_error_ip_ctx.pair_ip.src_port),
-                          bpf_ntohs(icmp_error_ip_ctx.pair_ip.dst_port));
+            ld_bpf_log("ICMP error protocol:%d, %pI4->%pI4, %pI4->%pI4, %d->%d",
+                       pcxt->ip_hdr.ip_protocol, &pcxt->ip_hdr.pair_ip.src_addr,
+                       &pcxt->ip_hdr.pair_ip.dst_addr, &icmp_error_ip_ctx.pair_ip.src_addr.ip,
+                       &icmp_error_ip_ctx.pair_ip.dst_addr.ip,
+                       bpf_ntohs(icmp_error_ip_ctx.pair_ip.src_port),
+                       bpf_ntohs(icmp_error_ip_ctx.pair_ip.dst_port));
 
             if (!ip_addr_equal(&pcxt->ip_hdr.pair_ip.dst_addr,
                                &icmp_error_ip_ctx.pair_ip.src_addr)) {
-                bpf_log_error("IP destination address does not match source "
-                              "address inside ICMP error message");
+                ld_bpf_log("IP destination address does not match source "
+                           "address inside ICMP error message");
                 return TC_ACT_SHOT;
             }
 
@@ -537,13 +534,13 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         case ICMP_QUERY_MSG: {
             pcxt->ip_hdr.pair_ip.src_port = pcxt->ip_hdr.pair_ip.dst_port =
                 get_icmpx_query_id(icmph);
-            // bpf_log_info("ICMP query, id:%d", bpf_ntohs(pcxt->ip_hdr.pair_ip.src_port));
+            // ld_bpf_log("ICMP query, id:%d", bpf_ntohs(pcxt->ip_hdr.pair_ip.src_port));
             break;
         }
         case ICMP_ACT_UNSPEC:
             return TC_ACT_UNSPEC;
         default:
-            bpf_log_error("icmp shot");
+            ld_bpf_log("icmp shot");
             return TC_ACT_SHOT;
         }
     }
@@ -555,7 +552,7 @@ SEC("tc/egress")
 int ipv4_egress_firewall(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< ipv4_egress_firewall <<<"
 
-    // bpf_log_info("bpf_tail_call ipv4_egress_firewall");
+    // ld_bpf_log("bpf_tail_call ipv4_egress_firewall");
 
     struct packet_context packet_info;
     __builtin_memset(&packet_info, 0, sizeof(packet_info));
@@ -563,7 +560,7 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
 
     if (unlikely(ret != TC_ACT_OK)) {
         if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
+            ld_bpf_log("invalid packet");
         }
         return TC_ACT_UNSPEC;
     }
@@ -577,18 +574,18 @@ int ipv4_egress_firewall(struct __sk_buff *skb) {
     }
 
     // if (bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port) == 68) {
-    //     bpf_log_info(
+    //     ld_bpf_log(
     //         "packet ip_protocol: %u, ip:%pI4:%u->%pI4:%u", packet_info.ip_hdr.ip_protocol,
     //         &packet_info.ip_hdr.pair_ip.src_addr, bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port),
     //         &packet_info.ip_hdr.pair_ip.dst_addr,
     //         bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
     // }
 
-    // bpf_log_info(
+    // ld_bpf_log(
     //     "packet ip_protocol: %u, ip:%pI4:%u->%pI4:%u", packet_info.ip_hdr.ip_protocol,
     //     &packet_info.ip_hdr.pair_ip.src_addr, bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port),
     //     &packet_info.ip_hdr.pair_ip.dst_addr, bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
-    // bpf_log_info("packet ICMP type: %u ", packet_info.ip_hdr.icmp_type);
+    // ld_bpf_log("packet ICMP type: %u ", packet_info.ip_hdr.icmp_type);
     struct ipv4_lpm_key block_search_key = {
         .prefixlen = 32,
         .addr = packet_info.ip_hdr.pair_ip.dst_addr.ip,
@@ -613,7 +610,7 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
     int ret = extract_v4_packet_info(skb, &packet_info, current_l3_offset);
     if (unlikely(ret != TC_ACT_OK)) {
         if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
+            ld_bpf_log("invalid packet");
         }
         return TC_ACT_UNSPEC;
     }
@@ -627,19 +624,19 @@ int ipv4_ingress_firewall(struct __sk_buff *skb) {
     }
 
     // if (packet_info.ip_hdr.ip_protocol == IPPROTO_ICMP) {
-    //     bpf_log_info(
+    //     ld_bpf_log(
     //         "packet ip_protocol: %u, ip:%pI4:%u->%pI4:%u", packet_info.ip_hdr.ip_protocol,
     //         &packet_info.ip_hdr.pair_ip.src_addr, bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port),
     //         &packet_info.ip_hdr.pair_ip.dst_addr,
     //         bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
     // }
 
-    // bpf_log_info("packet ip:%pI4->%pI4", &packet_info.ip_hdr.pair_ip.src_addr,
+    // ld_bpf_log("packet ip:%pI4->%pI4", &packet_info.ip_hdr.pair_ip.src_addr,
     //              &packet_info.ip_hdr.pair_ip.dst_addr);
 
-    // bpf_log_info("packet ip_protocol: %u ", packet_info.ip_hdr.ip_protocol);
-    // bpf_log_info("packet src port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port));
-    // bpf_log_info("packet dst port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
+    // ld_bpf_log("packet ip_protocol: %u ", packet_info.ip_hdr.ip_protocol);
+    // ld_bpf_log("packet src port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port));
+    // ld_bpf_log("packet dst port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
 
     struct ipv4_lpm_key block_search_key = {
         .prefixlen = 32,
@@ -665,7 +662,7 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
     int ret = extract_v6_packet_info(skb, &packet_info, current_l3_offset);
     if (unlikely(ret != TC_ACT_OK)) {
         if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
+            ld_bpf_log("invalid packet");
         }
         return TC_ACT_UNSPEC;
     }
@@ -678,11 +675,11 @@ int ipv6_egress_firewall(struct __sk_buff *skb) {
         }
     }
 
-    // bpf_log_info("packet ip: [%pI6c]->[%pI6c]", &packet_info.ip_hdr.pair_ip.src_addr,
+    // ld_bpf_log("packet ip: [%pI6c]->[%pI6c]", &packet_info.ip_hdr.pair_ip.src_addr,
     //              &packet_info.ip_hdr.pair_ip.dst_addr);
-    // bpf_log_info("packet ip_protocol: %u ", packet_info.ip_hdr.ip_protocol);
-    // bpf_log_info("packet src port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port));
-    // bpf_log_info("packet dst port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
+    // ld_bpf_log("packet ip_protocol: %u ", packet_info.ip_hdr.ip_protocol);
+    // ld_bpf_log("packet src port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port));
+    // ld_bpf_log("packet dst port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
 
     struct ipv6_lpm_key block_search_key = {
         .prefixlen = 128,
@@ -708,7 +705,7 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
     int ret = extract_v6_packet_info(skb, &packet_info, current_l3_offset);
     if (unlikely(ret != TC_ACT_OK)) {
         if (ret == TC_ACT_SHOT) {
-            bpf_log_trace("invalid packet");
+            ld_bpf_log("invalid packet");
         }
         return TC_ACT_UNSPEC;
     }
@@ -721,11 +718,11 @@ int ipv6_ingress_firewall(struct __sk_buff *skb) {
         }
     }
 
-    // bpf_log_info("packet ip: [%pI6c]->[%pI6c]", &packet_info.ip_hdr.pair_ip.src_addr,
+    // ld_bpf_log("packet ip: [%pI6c]->[%pI6c]", &packet_info.ip_hdr.pair_ip.src_addr,
     //              &packet_info.ip_hdr.pair_ip.dst_addr);
-    // bpf_log_info("packet ip_protocol: %u ", packet_info.ip_hdr.ip_protocol);
-    // bpf_log_info("packet src port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port));
-    // bpf_log_info("packet dst port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
+    // ld_bpf_log("packet ip_protocol: %u ", packet_info.ip_hdr.ip_protocol);
+    // ld_bpf_log("packet src port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.src_port));
+    // ld_bpf_log("packet dst port: %u ", bpf_ntohs(packet_info.ip_hdr.pair_ip.dst_port));
 
     struct ipv6_lpm_key block_search_key = {
         .prefixlen = 128,
@@ -759,7 +756,7 @@ int egress_firewall(struct __sk_buff *skb) {
         bpf_tail_call_static(skb, &egress_prog_array, IPV6_FIREWALL_EGRESS_PROG_INDEX);
     }
     // if (ret) {
-    //     bpf_log_info("bpf_tail_call error: %d", ret);
+    //     ld_bpf_log("bpf_tail_call error: %d", ret);
     // }
     return TC_ACT_UNSPEC;
 #undef BPF_LOG_TOPIC

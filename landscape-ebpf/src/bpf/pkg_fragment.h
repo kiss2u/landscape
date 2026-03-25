@@ -57,7 +57,7 @@ static __always_inline int frag_info_track(const struct packet_offset_info *offs
     } else {
         value = (struct fragment_cache_value *)bpf_map_lookup_elem(&fragment_cache, &key);
         if (!value) {
-            bpf_log_warn("fragmentation session of this packet was not tracked");
+            ld_bpf_log("fragmentation session of this packet was not tracked");
             return TC_ACT_SHOT;
         }
         ip_pair->src_port = value->sport;
@@ -68,10 +68,8 @@ static __always_inline int frag_info_track(const struct packet_offset_info *offs
 #undef BPF_LOG_TOPIC
 }
 
-
-
 static __always_inline int frag_info_track_v4(const struct packet_offset_info *offset,
-                                           struct inet4_pair *ip_pair) {
+                                              struct inet4_pair *ip_pair) {
 #define BPF_LOG_TOPIC "frag_info_track"
 
     if (likely(offset->fragment_type == FRAG_SINGLE)) {
@@ -108,7 +106,7 @@ static __always_inline int frag_info_track_v4(const struct packet_offset_info *o
     } else {
         value = (struct fragment_cache_value *)bpf_map_lookup_elem(&fragment_cache, &key);
         if (!value) {
-            bpf_log_warn("fragmentation session of this packet was not tracked");
+            ld_bpf_log("fragmentation session of this packet was not tracked");
             return TC_ACT_SHOT;
         }
         ip_pair->src_port = value->sport;

@@ -7,11 +7,7 @@
 
 #include "landscape.h"
 
-const volatile u8 LOG_LEVEL = BPF_LOG_LEVEL_DEBUG;
-
-#undef BPF_LOG_LEVEL
 #undef BPF_LOG_TOPIC
-#define BPF_LOG_LEVEL LOG_LEVEL
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -58,7 +54,7 @@ int pppoe_pnet_filter(struct __sk_buff *skb) {
         return 0;
     }
 
-    // bpf_log_info("pppoe code: %u, sid: %u, len%u", pppoe.code, pppoe.session_id, pppoe.length);
+    // ld_bpf_log("pppoe code: %u, sid: %u, len%u", pppoe.code, pppoe.session_id, pppoe.length);
 
     return skb->len;
 #undef BPF_LOG_TOPIC

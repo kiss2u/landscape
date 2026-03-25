@@ -113,18 +113,18 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
     int ret;
 
     if (value->trigger_port == TEST_PORT) {
-        bpf_log_info("timer_clean_callback: %pI6, current_status: %llu", &value->trigger_addr.bytes,
-                     current_status);
+        ld_bpf_log("timer_clean_callback: %pI6, current_status: %llu", &value->trigger_addr.bytes,
+                   current_status);
     }
 
     if (current_status == TIMER_RELEASE) {
         if (value->trigger_port == TEST_PORT) {
-            bpf_log_info("release CONNECT");
+            ld_bpf_log("release CONNECT");
         }
 
         ret = nat_metric_try_report_v6(key, value, NAT_CONN_DELETE);
         if (ret) {
-            bpf_log_info("call back report fail");
+            ld_bpf_log("call back report fail");
             bpf_timer_start(&value->timer, next_timeout, 0);
             return 0;
         }
@@ -133,7 +133,7 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
 
     ret = nat_metric_try_report_v6(key, value, NAT_CONN_ACTIVE);
     if (ret) {
-        bpf_log_info("call back report fail");
+        ld_bpf_log("call back report fail");
         bpf_timer_start(&value->timer, next_timeout, 0);
         return 0;
     }
@@ -143,14 +143,14 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
         next_timeout = REPORT_INTERVAL;
 
         if (value->trigger_port == TEST_PORT) {
-            bpf_log_info("change next status TIMER_TIMEOUT_1");
+            ld_bpf_log("change next status TIMER_TIMEOUT_1");
         }
     } else if (current_status == TIMER_TIMEOUT_1) {
         next_status = TIMER_TIMEOUT_2;
         next_timeout = REPORT_INTERVAL;
 
         if (value->trigger_port == TEST_PORT) {
-            bpf_log_info("change next status TIMER_TIMEOUT_2");
+            ld_bpf_log("change next status TIMER_TIMEOUT_2");
         }
     } else if (current_status == TIMER_TIMEOUT_2) {
         next_status = TIMER_RELEASE;
@@ -166,7 +166,7 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
 
         if (value->trigger_port == TEST_PORT) {
             u64 show = (next_timeout / 1000000000ULL);
-            bpf_log_info("change next status TIMER_RELEASE, next_timeout: %d", show);
+            ld_bpf_log("change next status TIMER_RELEASE, next_timeout: %d", show);
         }
     } else {
         next_status = TIMER_TIMEOUT_2;
@@ -175,8 +175,8 @@ static int v6_timer_clean_callback(void *map_mapping_timer_, struct nat_timer_ke
 
     if (__sync_val_compare_and_swap(&value->status, current_status, next_status) !=
         current_status) {
-        bpf_log_info("call back modify status fail, current status: %d new status: %d",
-                     current_status, next_status);
+        ld_bpf_log("call back modify status fail, current status: %d new status: %d",
+                   current_status, next_status);
         bpf_timer_start(&value->timer, REPORT_INTERVAL, 0);
         return 0;
     }
@@ -196,7 +196,7 @@ insert_ct6_timer(const struct nat_timer_key_v6 *key, struct nat_timer_value_v6 *
 
     int ret = bpf_map_update_elem(&nat6_conn_timer, key, val, BPF_NOEXIST);
     if (ret) {
-        bpf_log_error("failed to insert conntrack entry, err:%d", ret);
+        ld_bpf_log("failed to insert conntrack entry, err:%d", ret);
         return NULL;
     }
     struct nat_timer_value_v6 *value = bpf_map_lookup_elem(&nat6_conn_timer, key);
@@ -217,7 +217,7 @@ insert_ct6_timer(const struct nat_timer_key_v6 *key, struct nat_timer_value_v6 *
 
     return value;
 delete_timer:
-    bpf_log_error("setup timer err:%d", ret);
+    ld_bpf_log("setup timer err:%d", ret);
     bpf_map_delete_elem(&nat6_conn_timer, key);
     return NULL;
 #undef BPF_LOG_TOPIC
@@ -259,7 +259,7 @@ static __always_inline int ct6_state_transition(u8 pkt_type, u8 gress,
     u64 prev_state = __sync_lock_test_and_set(&ct_timer_value->status, TIMER_ACTIVE);
     if (prev_state != TIMER_ACTIVE) {
         if (ct_timer_value->trigger_port == TEST_PORT) {
-            bpf_log_info("flush status to TIMER_ACTIVE: 20");
+            ld_bpf_log("flush status to TIMER_ACTIVE: 20");
         }
         bpf_timer_start(&ct_timer_value->timer, REPORT_INTERVAL, 0);
     }
