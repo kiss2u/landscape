@@ -1,96 +1,97 @@
 mod lan;
 mod package;
+#[cfg(test)]
+mod test_route;
 
 #[cfg(test)]
-pub mod tests {
-    use crate::{
-        route::wan_v2::route_wan::RouteWanSkelBuilder, tests::route::package::simple_tcp_syn,
-    };
+mod tests {
     use std::{
         mem::MaybeUninit,
-        net::{IpAddr, Ipv4Addr},
+        net::{IpAddr, Ipv6Addr},
+        str::FromStr,
     };
 
     use landscape_common::{
         flow::mark::FlowMark,
         ip_mark::{IpConfig, IpMarkInfo},
-        net::MacAddr,
         route::RouteTargetInfo,
     };
     use libbpf_rs::{
         skel::{OpenSkel, SkelBuilder as _},
         ProgramInput,
     };
+    use zerocopy::IntoBytes;
+
+    use crate::{
+        map_setting::{flow_wanip::create_inner_flow_match_map_v6, route::add_wan_route_inner_v6},
+        route::wan_v2::route_wan::RouteWanSkelBuilder,
+        tests::{
+            route::package::{isolated_pin_root, simple_ipv6_tcp_syn},
+            TestSkb,
+        },
+    };
+
+    const FLOW_SOURCE_SHIFT: u32 = 24;
+    const FLOW_FROM_WAN: u32 = 4;
+
+    fn local_addr() -> Ipv6Addr {
+        Ipv6Addr::from_str("fd00::10").unwrap()
+    }
+
+    fn remote_addr() -> Ipv6Addr {
+        Ipv6Addr::from_str("2001:db8:2::20").unwrap()
+    }
 
     #[test]
-    fn egress_wan_route() {
-        let mut wan_route_open_object = MaybeUninit::zeroed();
-        let wan_route_builder = RouteWanSkelBuilder::default();
-        let wan_route_open_skel = wan_route_builder.open(&mut wan_route_open_object).unwrap();
-        let skel = wan_route_open_skel.load().unwrap();
+    fn route_wan_egress_v6_sets_flow_from_wan() {
+        let mut builder = RouteWanSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-wan-v6-smoke");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
 
-        let data = vec![IpMarkInfo {
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        let rules = vec![IpMarkInfo {
             mark: FlowMark::from(0x0305),
-            cidr: IpConfig {
-                ip: IpAddr::V4(Ipv4Addr::new(74, 125, 131, 27)),
-                prefix: 24,
-            },
+            cidr: IpConfig { ip: IpAddr::V6(remote_addr()), prefix: 128 },
             priority: 100,
         }];
-        crate::map_setting::flow_wanip::create_inner_flow_match_map_v4(
-            &skel.maps.flow4_ip_map,
-            0,
-            &data,
-        )
-        .unwrap();
+        create_inner_flow_match_map_v6(&skel.maps.flow6_ip_map, 0, &rules).unwrap();
 
-        crate::map_setting::route::add_wan_route_inner_v4(
-            &skel.maps.rt4_target_map,
+        add_wan_route_inner_v6(
+            &skel.maps.rt6_target_map,
             5,
             &RouteTargetInfo {
                 weight: 0,
                 ifindex: 11,
-                mac: Some(MacAddr::dummy()),
+                mac: None,
                 default_route: false,
                 is_docker: false,
-                iface_name: "test".to_string(),
-                iface_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                gateway_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                iface_name: "test-wan".to_string(),
+                iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+                gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
             },
         );
 
-        // let wan_route_egress = skel.progs.wan_route_egress;
+        let mut packet = simple_ipv6_tcp_syn(local_addr(), remote_addr());
+        let mut ctx_in = TestSkb::default();
+        ctx_in.ifindex = 6;
+        ctx_in.ingress_ifindex = 0;
+        let mut ctx_out = TestSkb::default();
 
-        let repeat = 100_000;
-        // let egress_input = ProgramInput {
-        //     data_in: Some(&mut simple_tcp_syn()),
-        //     context_in: None,
-        //     context_out: None,
-        //     data_out: None,
-        //     repeat,
-        //     ..Default::default()
-        // };
-        // let wan_result = wan_route_egress.test_run(egress_input).expect("test_run failed");
+        let result = skel
+            .progs
+            .route_wan_egress
+            .test_run(ProgramInput {
+                data_in: Some(&mut packet),
+                context_in: Some(ctx_in.as_mut_bytes()),
+                context_out: Some(ctx_out.as_mut_bytes()),
+                ..Default::default()
+            })
+            .expect("run route_wan_egress");
 
-        let route_wan_ingress = skel.progs.route_wan_ingress;
-
-        let input = ProgramInput {
-            data_in: Some(&mut simple_tcp_syn()),
-            context_in: None,
-            context_out: None,
-            data_out: None,
-            repeat,
-            ..Default::default()
-        };
-        let lan_result = route_wan_ingress.test_run(input).expect("test_run failed");
-
-        println!("lan_result: {}", lan_result.return_value as i32);
-        // println!("wan_result: {}", wan_result.return_value as i32);
-
-        println!("lan duration: {:?}", lan_result.duration);
-        // println!("wan duration: {:?}", wan_result.duration);
-
-        // assert_eq!(lan_result.return_value as i32, 7);
-        // assert_eq!(wan_result.return_value as i32, 7);
+        assert_eq!(result.return_value as i32, 7);
+        assert_eq!(ctx_out.mark >> FLOW_SOURCE_SHIFT, FLOW_FROM_WAN);
     }
 }

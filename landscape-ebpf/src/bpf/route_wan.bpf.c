@@ -183,7 +183,7 @@ int rt6_wan_egress(struct __sk_buff *skb) {
     }
 
     barrier_var(flow_mark);
-    skb->mark = replace_flow_source(flow_mark, FLOW_FROM_LAN);
+    skb->mark = replace_flow_source(flow_mark, FLOW_FROM_WAN);
 
     ret = pick_wan_and_send_by_flow_id_v6(skb, current_l3_offset, &context, flow_mark);
 

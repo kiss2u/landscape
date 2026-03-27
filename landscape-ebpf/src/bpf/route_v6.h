@@ -310,7 +310,8 @@ static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
     int ret = 0;
     u32 key = WAN_CACHE;
     struct rt_cache_key_v6 search_key = {0};
-    struct mac_value_v4 *mac_value = NULL;
+    struct mac_key_v6 mac_key = {0};
+    struct mac_value_v6 *mac_value = NULL;
     struct rt_cache_value_v6 *target = NULL;
 
     __builtin_memcpy(search_key.local_addr.bytes, context->saddr.bytes, 16);
@@ -336,13 +337,15 @@ static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
                 if (!target_has_mac) {
                     return bpf_redirect(target->ifindex, 0);
                 } else {
-                    mac_value = bpf_map_lookup_elem(&ip_mac_v4, &search_key.remote_addr);
+                    COPY_ADDR_FROM(mac_key.addr.bytes, search_key.remote_addr.bytes);
+                    mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key);
                     if (mac_value) {
                         if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
                             return bpf_redirect(target->ifindex, 0);
                         }
                     } else {
-                        mac_value = bpf_map_lookup_elem(&ip_mac_v4, &wan_ip_info->gateway.ip);
+                        COPY_ADDR_FROM(mac_key.addr.bytes, wan_ip_info->gateway.bits);
+                        mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key);
                         if (mac_value) {
                             if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
                                 return bpf_redirect(target->ifindex, 0);
@@ -384,11 +387,8 @@ static __always_inline int setting_cache_in_wan_v6(const struct route_context_v6
     struct rt_cache_value_v6 *target = NULL;
 
     u32 key = LAN_CACHE;
-    search_key.local_addr = context->daddr;
-    search_key.remote_addr = context->saddr;
-
-    __builtin_memcpy(search_key.local_addr.bytes, context->saddr.bytes, 16);
-    __builtin_memcpy(search_key.remote_addr.bytes, context->daddr.bytes, 16);
+    __builtin_memcpy(search_key.local_addr.bytes, context->daddr.bytes, 16);
+    __builtin_memcpy(search_key.remote_addr.bytes, context->saddr.bytes, 16);
 
     void *lan_cache = bpf_map_lookup_elem(&rt6_cache_map, &key);
     if (lan_cache != NULL) {

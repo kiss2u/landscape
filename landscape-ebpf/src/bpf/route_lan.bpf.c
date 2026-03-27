@@ -113,9 +113,9 @@ int rt6_lan_ingress(struct __sk_buff *skb) {
 
     ret = pick_wan_and_send_by_flow_id_v6(skb, current_l3_offset, &context, flow_mark);
 
-    // if (ret == TC_ACT_REDIRECT) {
-    //     setting_cache_in_lan(&context, flow_mark);
-    // }
+    if (ret == TC_ACT_REDIRECT) {
+        setting_cache_in_lan_v6(&context, flow_mark);
+    }
     return ret;
 #undef BPF_LOG_TOPIC
 }
