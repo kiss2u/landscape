@@ -156,6 +156,6 @@ export default {
     cert: "证书管理",
     "cert-accounts": "ACME 账户",
     certs: "证书管理",
-    gateway: "网关代理",
+    gateway: "内网 HTTP 反代",
   },
 };
