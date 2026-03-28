@@ -33,6 +33,18 @@ const FLOW_ENTRY_MODE_MAC: u8 = 0;
 const FLOW_ENTRY_MODE_IP: u8 = 1;
 const LAN_CACHE: u32 = 1;
 
+fn invalidate_wan_route_cache() {
+    cache::recreate_route_wan_cache_inner_map();
+}
+
+fn invalidate_lan_route_cache_with_outer_maps<T, U>(rt4_cache_map: &T, rt6_cache_map: &U)
+where
+    T: MapCore,
+    U: MapCore,
+{
+    cache::recreate_route_lan_cache_inner_map_with_outer_maps(rt4_cache_map, rt6_cache_map);
+}
+
 /// Step 1: Match source client → flow_id
 pub fn trace_flow_match(req: FlowMatchRequest) -> FlowMatchResult {
     let flow_match_map = match libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_match_map) {
@@ -369,14 +381,45 @@ fn trace_cache_check_v6(
 }
 
 pub fn add_lan_route(lan_info: LanRouteInfo) {
-    // TODO
-    let rt_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_lan_map).unwrap();
-    add_lan_route_inner_v4(&rt_lan_map, &lan_info);
-    let rt_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_lan_map).unwrap();
-    add_lan_route_inner_v6(&rt_lan_map, &lan_info);
+    let rt4_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_lan_map).unwrap();
+    let rt6_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_lan_map).unwrap();
+    let rt4_cache_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_cache_map).unwrap();
+    let rt6_cache_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_cache_map).unwrap();
+
+    let _ = add_lan_route_with_maps(
+        &rt4_lan_map,
+        &rt6_lan_map,
+        &rt4_cache_map,
+        &rt6_cache_map,
+        &lan_info,
+    );
 }
 
-pub(crate) fn add_lan_route_inner_v4<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo)
+pub(crate) fn add_lan_route_with_maps<T, U, V, W>(
+    rt4_lan_map: &T,
+    rt6_lan_map: &U,
+    rt4_cache_map: &V,
+    rt6_cache_map: &W,
+    lan_info: &LanRouteInfo,
+) -> bool
+where
+    T: MapCore,
+    U: MapCore,
+    V: MapCore,
+    W: MapCore,
+{
+    let changed_v4 = add_lan_route_inner_v4(rt4_lan_map, lan_info);
+    let changed_v6 = add_lan_route_inner_v6(rt6_lan_map, lan_info);
+
+    if changed_v4 || changed_v6 {
+        invalidate_lan_route_cache_with_outer_maps(rt4_cache_map, rt6_cache_map);
+        return true;
+    }
+
+    false
+}
+
+pub(crate) fn add_lan_route_inner_v4<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo) -> bool
 where
     T: MapCore,
 {
@@ -390,7 +433,7 @@ where
             value.addr = ipv4_addr.to_bits().to_be();
         }
         std::net::IpAddr::V6(_) => {
-            return;
+            return false;
         }
     }
     let key = unsafe { plain::as_bytes(&key) };
@@ -415,7 +458,7 @@ where
                     value.addr = ipv4_addr.to_bits().to_be();
                 }
                 std::net::IpAddr::V6(_) => {
-                    return;
+                    return false;
                 }
             }
         }
@@ -423,12 +466,21 @@ where
 
     let value = unsafe { plain::as_bytes(&value) };
 
+    if let Ok(Some(existing)) = rt_lan_map.lookup(&key, MapFlags::ANY) {
+        if existing.as_slice() == value {
+            return false;
+        }
+    }
+
     if let Err(e) = rt_lan_map.update(&key, &value, MapFlags::ANY) {
         tracing::error!("add lan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
-pub(crate) fn add_lan_route_inner_v6<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo)
+pub(crate) fn add_lan_route_inner_v6<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo) -> bool
 where
     T: MapCore,
 {
@@ -438,7 +490,7 @@ where
     key.prefixlen = lan_info.prefix as u32;
     match lan_info.iface_ip {
         std::net::IpAddr::V4(_) => {
-            return;
+            return false;
         }
         std::net::IpAddr::V6(ipv6_addr) => {
             key.addr.bytes = ipv6_addr.to_bits().to_be_bytes();
@@ -464,7 +516,7 @@ where
 
             match next_hop_ip {
                 std::net::IpAddr::V4(_) => {
-                    return;
+                    return false;
                 }
                 std::net::IpAddr::V6(ipv6_addr) => {
                     value.addr.bytes = ipv6_addr.to_bits().to_be_bytes();
@@ -475,19 +527,43 @@ where
 
     let value = unsafe { plain::as_bytes(&value) };
 
+    if let Ok(Some(existing)) = rt_lan_map.lookup(&key, MapFlags::ANY) {
+        if existing.as_slice() == value {
+            return false;
+        }
+    }
+
     if let Err(e) = rt_lan_map.update(&key, &value, MapFlags::ANY) {
         tracing::error!("add lan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
 pub fn del_lan_route(lan_info: LanRouteInfo) {
-    let rt_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_lan_map).unwrap();
-    del_lan_route_inner_v4(&rt_lan_map, &lan_info);
-    let rt_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_lan_map).unwrap();
-    del_lan_route_inner_v6(&rt_lan_map, &lan_info);
+    let rt4_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_lan_map).unwrap();
+    let rt6_lan_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_lan_map).unwrap();
+
+    let _ = del_lan_route_with_maps(&rt4_lan_map, &rt6_lan_map, &lan_info);
 }
 
-pub(crate) fn del_lan_route_inner_v4<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo)
+pub(crate) fn del_lan_route_with_maps<T, U>(
+    rt4_lan_map: &T,
+    rt6_lan_map: &U,
+    lan_info: &LanRouteInfo,
+) -> bool
+where
+    T: MapCore,
+    U: MapCore,
+{
+    let changed_v4 = del_lan_route_inner_v4(rt4_lan_map, lan_info);
+    let changed_v6 = del_lan_route_inner_v6(rt6_lan_map, lan_info);
+
+    changed_v4 || changed_v6
+}
+
+pub(crate) fn del_lan_route_inner_v4<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo) -> bool
 where
     T: MapCore,
 {
@@ -498,17 +574,29 @@ where
             key.addr = ipv4_addr.to_bits().to_be();
         }
         std::net::IpAddr::V6(_) => {
-            return;
+            return false;
         }
     }
     let key = unsafe { plain::as_bytes(&key) };
 
+    match rt_lan_map.lookup(&key, MapFlags::ANY) {
+        Ok(Some(_)) => {}
+        Ok(None) => return false,
+        Err(e) => {
+            tracing::error!("lookup lan config before delete error:{e:?}");
+            return false;
+        }
+    }
+
     if let Err(e) = rt_lan_map.delete(&key) {
         tracing::error!("del lan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
-pub(crate) fn del_lan_route_inner_v6<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo)
+pub(crate) fn del_lan_route_inner_v6<'obj, T>(rt_lan_map: &T, lan_info: &LanRouteInfo) -> bool
 where
     T: MapCore,
 {
@@ -516,7 +604,7 @@ where
     key.prefixlen = lan_info.prefix as u32;
     match lan_info.iface_ip {
         std::net::IpAddr::V4(_) => {
-            return;
+            return false;
         }
         std::net::IpAddr::V6(ipv6_addr) => {
             key.addr.bytes = ipv6_addr.to_bits().to_be_bytes();
@@ -524,23 +612,40 @@ where
     }
     let key = unsafe { plain::as_bytes(&key) };
 
+    match rt_lan_map.lookup(&key, MapFlags::ANY) {
+        Ok(Some(_)) => {}
+        Ok(None) => return false,
+        Err(e) => {
+            tracing::error!("lookup lan config before delete error:{e:?}");
+            return false;
+        }
+    }
+
     if let Err(e) = rt_lan_map.delete(&key) {
         tracing::error!("del lan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
 pub fn add_wan_route(flow_id: FlowId, wan_info: RouteTargetInfo) {
     let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_target_map).unwrap();
-    add_wan_route_inner_v4(&rt_target_map, flow_id, &wan_info);
+    let changed_v4 = add_wan_route_inner_v4(&rt_target_map, flow_id, &wan_info);
     let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_target_map).unwrap();
-    add_wan_route_inner_v6(&rt_target_map, flow_id, &wan_info);
+    let changed_v6 = add_wan_route_inner_v6(&rt_target_map, flow_id, &wan_info);
+
+    if changed_v4 || changed_v6 {
+        invalidate_wan_route_cache();
+    }
 }
 
 pub(crate) fn add_wan_route_inner_v4<'obj, T>(
     rt_target_map: &T,
     flow_id: FlowId,
     wan_info: &RouteTargetInfo,
-) where
+) -> bool
+where
     T: MapCore,
 {
     let mut key = route_target_key_v4::default();
@@ -557,7 +662,7 @@ pub(crate) fn add_wan_route_inner_v4<'obj, T>(
     match wan_info.gateway_ip {
         std::net::IpAddr::V4(ipv4_addr) => value.gate_addr = ipv4_addr.to_bits().to_be(),
         std::net::IpAddr::V6(_) => {
-            return;
+            return false;
         }
     }
 
@@ -574,16 +679,26 @@ pub(crate) fn add_wan_route_inner_v4<'obj, T>(
     let key = unsafe { plain::as_bytes(&key) };
     let value = unsafe { plain::as_bytes(&value) };
 
+    if let Ok(Some(existing)) = rt_target_map.lookup(&key, MapFlags::ANY) {
+        if existing.as_slice() == value {
+            return false;
+        }
+    }
+
     if let Err(e) = rt_target_map.update(&key, &value, MapFlags::ANY) {
         tracing::error!("add wan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
 pub(crate) fn add_wan_route_inner_v6<'obj, T>(
     rt_target_map: &T,
     flow_id: FlowId,
     wan_info: &RouteTargetInfo,
-) where
+) -> bool
+where
     T: MapCore,
 {
     let mut key = route_target_key_v6::default();
@@ -599,7 +714,7 @@ pub(crate) fn add_wan_route_inner_v6<'obj, T>(
 
     match wan_info.gateway_ip {
         std::net::IpAddr::V4(_) => {
-            return;
+            return false;
         }
         std::net::IpAddr::V6(ipv6_addr) => {
             value.gate_addr.bytes = ipv6_addr.to_bits().to_be_bytes()
@@ -619,22 +734,35 @@ pub(crate) fn add_wan_route_inner_v6<'obj, T>(
     let key = unsafe { plain::as_bytes(&key) };
     let value = unsafe { plain::as_bytes(&value) };
 
+    if let Ok(Some(existing)) = rt_target_map.lookup(&key, MapFlags::ANY) {
+        if existing.as_slice() == value {
+            return false;
+        }
+    }
+
     if let Err(e) = rt_target_map.update(&key, &value, MapFlags::ANY) {
         tracing::error!("add wan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
 pub fn del_ipv6_wan_route(flow_id: FlowId) {
     let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_target_map).unwrap();
-    del_wan_route_v6(&rt_target_map, flow_id);
+    if del_wan_route_v6(&rt_target_map, flow_id) {
+        invalidate_wan_route_cache();
+    }
 }
 
 pub fn del_ipv4_wan_route(flow_id: FlowId) {
     let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_target_map).unwrap();
-    del_wan_route_v4(&rt_target_map, flow_id);
+    if del_wan_route_v4(&rt_target_map, flow_id) {
+        invalidate_wan_route_cache();
+    }
 }
 
-fn del_wan_route_v4<'obj, T>(rt_target_map: &T, flow_id: FlowId)
+fn del_wan_route_v4<'obj, T>(rt_target_map: &T, flow_id: FlowId) -> bool
 where
     T: MapCore,
 {
@@ -643,12 +771,24 @@ where
 
     let key = unsafe { plain::as_bytes(&key) };
 
+    match rt_target_map.lookup(&key, MapFlags::ANY) {
+        Ok(Some(_)) => {}
+        Ok(None) => return false,
+        Err(e) => {
+            tracing::error!("lookup wan config before delete error:{e:?}");
+            return false;
+        }
+    }
+
     if let Err(e) = rt_target_map.delete(&key) {
         tracing::error!("del wan config error:{e:?}");
+        return false;
     }
+
+    true
 }
 
-fn del_wan_route_v6<'obj, T>(rt_target_map: &T, flow_id: FlowId)
+fn del_wan_route_v6<'obj, T>(rt_target_map: &T, flow_id: FlowId) -> bool
 where
     T: MapCore,
 {
@@ -657,7 +797,19 @@ where
 
     let key = unsafe { plain::as_bytes(&key) };
 
+    match rt_target_map.lookup(&key, MapFlags::ANY) {
+        Ok(Some(_)) => {}
+        Ok(None) => return false,
+        Err(e) => {
+            tracing::error!("lookup wan config before delete error:{e:?}");
+            return false;
+        }
+    }
+
     if let Err(e) = rt_target_map.delete(&key) {
         tracing::error!("del wan config error:{e:?}");
+        return false;
     }
+
+    true
 }

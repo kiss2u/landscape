@@ -13,12 +13,10 @@ const DNS_MATCH_MAX_ENTRIES: u32 = 65536;
 const WAN_CACHE: u32 = 0;
 const LAN_CACHE: u32 = 1;
 
-fn create_inner_map_generic<P, K, V>(path: P, name: String, cache_type: u32)
+fn create_inner_map_generic_with_outer<T, K, V>(outer_map: &T, name: String, cache_type: u32)
 where
-    P: AsRef<std::path::Path>,
+    T: MapCore,
 {
-    tracing::debug!("rt_cache_map at: {:?}, for: {}", path.as_ref().display(), name);
-
     #[allow(clippy::needless_update)]
     let opts = libbpf_sys::bpf_map_create_opts {
         sz: size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
@@ -40,17 +38,42 @@ where
 
     let map_fd = map.as_fd().as_raw_fd();
 
-    let flow_dns_match_map =
-        libbpf_rs::MapHandle::from_pinned_path(path).expect("Failed to load pinned outer map");
-
     let key_value = unsafe { plain::as_bytes(&cache_type) };
     let value_value = unsafe { plain::as_bytes(&map_fd) };
 
-    if let Err(e) = flow_dns_match_map.update(key_value, value_value, MapFlags::ANY) {
+    if let Err(e) = outer_map.update(key_value, value_value, MapFlags::ANY) {
         let last_os_error = std::io::Error::last_os_error();
         tracing::error!("Update outer map failed. Last OS error: {:?}", last_os_error);
         tracing::error!("Libbpf error: {e:?}");
     }
+}
+
+fn create_inner_map_generic<P, K, V>(path: P, name: String, cache_type: u32)
+where
+    P: AsRef<std::path::Path>,
+{
+    tracing::debug!("rt_cache_map at: {:?}, for: {}", path.as_ref().display(), name);
+
+    let outer_map =
+        libbpf_rs::MapHandle::from_pinned_path(path).expect("Failed to load pinned outer map");
+    create_inner_map_generic_with_outer::<_, K, V>(&outer_map, name, cache_type);
+}
+
+fn recreate_route_lan_cache_inner_map_impl<T, U>(rt4_cache_map: &T, rt6_cache_map: &U)
+where
+    T: MapCore,
+    U: MapCore,
+{
+    create_inner_map_generic_with_outer::<_, rt_cache_key_v4, rt_cache_value_v4>(
+        rt4_cache_map,
+        "rt4_cache_lan".into(),
+        LAN_CACHE,
+    );
+    create_inner_map_generic_with_outer::<_, rt_cache_key_v6, rt_cache_value_v6>(
+        rt6_cache_map,
+        "rt6_cache_lan".into(),
+        LAN_CACHE,
+    );
 }
 
 pub(crate) fn init_route_wan_cache_inner_map(path: &LandscapeMapPath) {
@@ -83,6 +106,16 @@ pub(crate) fn init_route_lan_cache_inner_map(path: &LandscapeMapPath) {
     );
 }
 
+pub(crate) fn recreate_route_lan_cache_inner_map_with_outer_maps<T, U>(
+    rt4_cache_map: &T,
+    rt6_cache_map: &U,
+) where
+    T: MapCore,
+    U: MapCore,
+{
+    recreate_route_lan_cache_inner_map_impl(rt4_cache_map, rt6_cache_map);
+}
+
 // 修改了 静态 NAT 需要清理
 pub fn recreate_route_wan_cache_inner_map() {
     create_inner_map_generic::<_, rt_cache_key_v4, rt_cache_value_v4>(
@@ -100,14 +133,10 @@ pub fn recreate_route_wan_cache_inner_map() {
 /// 在修改了 DNS 规则， DST IP 规则。 Flow Match 规则后调用
 /// 使缓存失效
 pub fn recreate_route_lan_cache_inner_map() {
-    create_inner_map_generic::<_, rt_cache_key_v4, rt_cache_value_v4>(
-        &MAP_PATHS.rt4_cache_map,
-        "rt4_cache_lan".into(),
-        LAN_CACHE,
-    );
-    create_inner_map_generic::<_, rt_cache_key_v6, rt_cache_value_v6>(
-        &MAP_PATHS.rt6_cache_map,
-        "rt6_cache_lan".into(),
-        LAN_CACHE,
-    );
+    let rt4_cache_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_cache_map).expect("open rt4_cache");
+    let rt6_cache_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_cache_map).expect("open rt6_cache");
+
+    recreate_route_lan_cache_inner_map_impl(&rt4_cache_map, &rt6_cache_map);
 }

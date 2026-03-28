@@ -10,7 +10,8 @@ use landscape_common::net::MacAddr;
 use libbpf_rs::{libbpf_sys, MapCore, MapFlags, MapHandle, MapType};
 
 use crate::map_setting::share_map::types::{
-    mac_key_v6, mac_value_v6, rt_cache_key_v6, rt_cache_value_v6,
+    mac_key_v6, mac_value_v6, rt_cache_key_v4, rt_cache_key_v6, rt_cache_value_v4,
+    rt_cache_value_v6,
 };
 
 static ROUTE_TEST_PIN_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -39,12 +40,40 @@ pub fn read_unaligned<T: Copy>(bytes: &[u8]) -> T {
 }
 
 pub fn lookup_inner_map<T: MapCore>(outer_map: &T, cache_index: u32) -> MapHandle {
+    let inner_id = lookup_inner_map_id(outer_map, cache_index);
+    MapHandle::from_map_id(inner_id as u32).expect("open route cache inner map")
+}
+
+pub fn lookup_inner_map_id<T: MapCore>(outer_map: &T, cache_index: u32) -> i32 {
     let value = outer_map
         .lookup(as_bytes(&cache_index), MapFlags::ANY)
         .expect("lookup route cache outer map")
         .expect("missing route cache inner map id");
-    let inner_id = read_unaligned::<i32>(&value);
-    MapHandle::from_map_id(inner_id as u32).expect("open route cache inner map")
+    read_unaligned::<i32>(&value)
+}
+
+pub fn create_route_cache_inner_map_v4<T: MapCore>(outer_map: &T, cache_index: u32) {
+    let unique = ROUTE_TEST_PIN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    #[allow(clippy::needless_update)]
+    let opts = libbpf_sys::bpf_map_create_opts {
+        sz: std::mem::size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
+        ..Default::default()
+    };
+
+    let map = MapHandle::create(
+        MapType::LruHash,
+        Some(format!("route_test_rt4_cache_{cache_index}_{unique}")),
+        std::mem::size_of::<rt_cache_key_v4>() as u32,
+        std::mem::size_of::<rt_cache_value_v4>() as u32,
+        65_536,
+        &opts,
+    )
+    .expect("create route v4 cache inner map");
+
+    let map_fd = map.as_fd().as_raw_fd();
+    outer_map
+        .update(as_bytes(&cache_index), as_bytes(&map_fd), MapFlags::ANY)
+        .expect("attach route v4 cache inner map");
 }
 
 pub fn create_route_cache_inner_map_v6<T: MapCore>(outer_map: &T, cache_index: u32) {

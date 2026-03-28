@@ -9,7 +9,7 @@ mod tests {
     use landscape_common::{
         flow::mark::FlowMark,
         ip_mark::{IpConfig, IpMarkInfo},
-        route::RouteTargetInfo,
+        route::{LanRouteInfo, LanRouteMode, RouteTargetInfo},
     };
     use libbpf_rs::{
         skel::{OpenSkel, SkelBuilder as _},
@@ -18,12 +18,16 @@ mod tests {
     use zerocopy::IntoBytes;
 
     use crate::{
-        map_setting::{flow_wanip::create_inner_flow_match_map_v6, route::add_wan_route_inner_v6},
+        map_setting::{
+            flow_wanip::create_inner_flow_match_map_v6,
+            route::{add_lan_route_with_maps, add_wan_route_inner_v6, del_lan_route_with_maps},
+        },
         route::lan_v2::route_lan::RouteLanSkelBuilder,
         tests::{
             route::package::{
-                create_route_cache_inner_map_v6, isolated_pin_root, lookup_rt6_cache_value,
-                simple_ipv6_tcp_syn, LAN_CACHE,
+                create_route_cache_inner_map_v4, create_route_cache_inner_map_v6,
+                isolated_pin_root, lookup_inner_map_id, lookup_rt6_cache_value,
+                simple_ipv6_tcp_syn, LAN_CACHE, WAN_CACHE,
             },
             TestSkb,
         },
@@ -96,5 +100,116 @@ mod tests {
         .expect("LAN cache entry missing after IPv6 redirect");
 
         assert_eq!(unsafe { cache_value.__anon_rt_cache_value_v4_1.mark_value }, 0x0305);
+    }
+
+    #[test]
+    fn add_lan_route_recreates_only_lan_cache() {
+        let mut builder = RouteLanSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-lan-cache-invalidation");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        create_route_cache_inner_map_v4(&skel.maps.rt4_cache_map, WAN_CACHE);
+        create_route_cache_inner_map_v4(&skel.maps.rt4_cache_map, LAN_CACHE);
+        create_route_cache_inner_map_v6(&skel.maps.rt6_cache_map, WAN_CACHE);
+        create_route_cache_inner_map_v6(&skel.maps.rt6_cache_map, LAN_CACHE);
+
+        let rt4_wan_before = lookup_inner_map_id(&skel.maps.rt4_cache_map, WAN_CACHE);
+        let rt4_lan_before = lookup_inner_map_id(&skel.maps.rt4_cache_map, LAN_CACHE);
+        let rt6_wan_before = lookup_inner_map_id(&skel.maps.rt6_cache_map, WAN_CACHE);
+        let rt6_lan_before = lookup_inner_map_id(&skel.maps.rt6_cache_map, LAN_CACHE);
+
+        let lan_info = LanRouteInfo {
+            ifindex: 17,
+            iface_name: "lan-test".to_string(),
+            iface_ip: IpAddr::V6(remote_addr()),
+            mac: None,
+            prefix: 64,
+            mode: LanRouteMode::Reachable,
+        };
+
+        let changed = add_lan_route_with_maps(
+            &skel.maps.rt4_lan_map,
+            &skel.maps.rt6_lan_map,
+            &skel.maps.rt4_cache_map,
+            &skel.maps.rt6_cache_map,
+            &lan_info,
+        );
+        assert!(changed);
+
+        let rt4_wan_after = lookup_inner_map_id(&skel.maps.rt4_cache_map, WAN_CACHE);
+        let rt4_lan_after = lookup_inner_map_id(&skel.maps.rt4_cache_map, LAN_CACHE);
+        let rt6_wan_after = lookup_inner_map_id(&skel.maps.rt6_cache_map, WAN_CACHE);
+        let rt6_lan_after = lookup_inner_map_id(&skel.maps.rt6_cache_map, LAN_CACHE);
+
+        assert_eq!(rt4_wan_after, rt4_wan_before);
+        assert_ne!(rt4_lan_after, rt4_lan_before);
+        assert_eq!(rt6_wan_after, rt6_wan_before);
+        assert_ne!(rt6_lan_after, rt6_lan_before);
+
+        let changed = add_lan_route_with_maps(
+            &skel.maps.rt4_lan_map,
+            &skel.maps.rt6_lan_map,
+            &skel.maps.rt4_cache_map,
+            &skel.maps.rt6_cache_map,
+            &lan_info,
+        );
+        assert!(!changed);
+
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt4_cache_map, WAN_CACHE), rt4_wan_after);
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt4_cache_map, LAN_CACHE), rt4_lan_after);
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt6_cache_map, WAN_CACHE), rt6_wan_after);
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt6_cache_map, LAN_CACHE), rt6_lan_after);
+    }
+
+    #[test]
+    fn del_lan_route_keeps_cache_inner_maps() {
+        let mut builder = RouteLanSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-lan-delete-no-invalidation");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        create_route_cache_inner_map_v4(&skel.maps.rt4_cache_map, WAN_CACHE);
+        create_route_cache_inner_map_v4(&skel.maps.rt4_cache_map, LAN_CACHE);
+        create_route_cache_inner_map_v6(&skel.maps.rt6_cache_map, WAN_CACHE);
+        create_route_cache_inner_map_v6(&skel.maps.rt6_cache_map, LAN_CACHE);
+
+        let lan_info = LanRouteInfo {
+            ifindex: 17,
+            iface_name: "lan-test".to_string(),
+            iface_ip: IpAddr::V6(remote_addr()),
+            mac: None,
+            prefix: 64,
+            mode: LanRouteMode::Reachable,
+        };
+
+        let changed = add_lan_route_with_maps(
+            &skel.maps.rt4_lan_map,
+            &skel.maps.rt6_lan_map,
+            &skel.maps.rt4_cache_map,
+            &skel.maps.rt6_cache_map,
+            &lan_info,
+        );
+        assert!(changed);
+
+        let rt4_wan_before = lookup_inner_map_id(&skel.maps.rt4_cache_map, WAN_CACHE);
+        let rt4_lan_before = lookup_inner_map_id(&skel.maps.rt4_cache_map, LAN_CACHE);
+        let rt6_wan_before = lookup_inner_map_id(&skel.maps.rt6_cache_map, WAN_CACHE);
+        let rt6_lan_before = lookup_inner_map_id(&skel.maps.rt6_cache_map, LAN_CACHE);
+
+        let changed =
+            del_lan_route_with_maps(&skel.maps.rt4_lan_map, &skel.maps.rt6_lan_map, &lan_info);
+        assert!(changed);
+
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt4_cache_map, WAN_CACHE), rt4_wan_before);
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt4_cache_map, LAN_CACHE), rt4_lan_before);
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt6_cache_map, WAN_CACHE), rt6_wan_before);
+        assert_eq!(lookup_inner_map_id(&skel.maps.rt6_cache_map, LAN_CACHE), rt6_lan_before);
     }
 }
