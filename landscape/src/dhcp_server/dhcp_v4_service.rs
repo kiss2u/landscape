@@ -58,8 +58,12 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
     async fn start(&self, mut config: DHCPv4ServiceConfig) -> WatchService {
         let service_status = WatchService::new();
 
+        if !config.enable {
+            self.route_service.remove_ipv4_lan_route(&config.iface_name).await;
+            return service_status;
+        }
+
         if let Some(iface) = get_iface_by_name(&config.iface_name).await {
-            // 无论是否启用 DHCP 服务，只要配置存在且接口存在就设置 LAN route
             let info = LanRouteInfo {
                 ifindex: iface.index,
                 iface_name: config.iface_name.clone(),
@@ -70,94 +74,92 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
             };
             self.route_service.insert_ipv4_lan_route(&config.iface_name, info).await;
 
-            if config.enable {
-                // 获取全局及本接口的 IP-MAC 绑定信息, 并同步到当前 DHCP 服务的静态绑定中
-                use landscape_common::dhcp::v4_server::config::MacBindingRecord;
+            // 获取全局及本接口的 IP-MAC 绑定信息, 并同步到当前 DHCP 服务的静态绑定中
+            use landscape_common::dhcp::v4_server::config::MacBindingRecord;
 
-                let bindings = self
-                    .db_provider
-                    .enrolled_device_store()
-                    .find_dhcp_bindings(
-                        config.iface_name.clone(),
-                        config.config.server_ip_addr,
-                        config.config.network_mask,
-                    )
-                    .await
-                    .unwrap_or_default();
+            let bindings = self
+                .db_provider
+                .enrolled_device_store()
+                .find_dhcp_bindings(
+                    config.iface_name.clone(),
+                    config.config.server_ip_addr,
+                    config.config.network_mask,
+                )
+                .await
+                .unwrap_or_default();
 
-                // 清理原有的静态绑定信息（已迁移到全局设备管理），以全局设备管理库为准
-                config.config.mac_binding_records.clear();
+            // 清理原有的静态绑定信息（已迁移到全局设备管理），以全局设备管理库为准
+            config.config.mac_binding_records.clear();
 
-                for binding in bindings {
-                    if let Some(ipv4) = binding.ipv4 {
-                        config.config.mac_binding_records.push(MacBindingRecord {
-                            mac: binding.mac,
-                            ip: ipv4,
-                            expire_time: 86400,
-                        });
-                    }
+            for binding in bindings {
+                if let Some(ipv4) = binding.ipv4 {
+                    config.config.mac_binding_records.push(MacBindingRecord {
+                        mac: binding.mac,
+                        ip: ipv4,
+                        expire_time: 86400,
+                    });
                 }
+            }
 
-                let store_key = config.get_store_key();
-                let assigned_ips = {
-                    let mut write = self.iface_lease_map.write().await;
+            let store_key = config.get_store_key();
+            let assigned_ips = {
+                let mut write = self.iface_lease_map.write().await;
+                write
+                    .entry(store_key.clone())
+                    .or_insert_with(|| Arc::new(RwLock::new(DHCPv4OfferInfo::default())))
+                    .clone()
+            };
+
+            let status = service_status.clone();
+            let stop_dhcp_server = CancellationToken::new();
+            let stop_dhcp_server_child = stop_dhcp_server.child_token();
+            let server_addr = config.config.server_ip_addr;
+            let network_mask = config.config.network_mask;
+            tokio::spawn(async move {
+                crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
+                    config.iface_name,
+                    config.config,
+                    status,
+                    assigned_ips,
+                )
+                .await;
+                stop_dhcp_server.cancel();
+            });
+
+            if let Some(mac) = iface.mac {
+                // start arp scan
+                let scand_arp_info = {
+                    let mut write = self.iface_scan_map.write().await;
                     write
-                        .entry(store_key.clone())
-                        .or_insert_with(|| Arc::new(RwLock::new(DHCPv4OfferInfo::default())))
+                        .entry(store_key)
+                        .or_insert_with(|| Arc::new(RwLock::new(ArpScanStatus::new())))
                         .clone()
                 };
 
-                let status = service_status.clone();
-                let stop_dhcp_server = CancellationToken::new();
-                let stop_dhcp_server_child = stop_dhcp_server.child_token();
-                let server_addr = config.config.server_ip_addr;
-                let network_mask = config.config.network_mask;
                 tokio::spawn(async move {
-                    crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
-                        config.iface_name,
-                        config.config,
-                        status,
-                        assigned_ips,
-                    )
-                    .await;
-                    stop_dhcp_server.cancel();
-                });
+                    let mut scan_interval =
+                        tokio::time::interval(Duration::from_millis(LAND_ARP_SCAN_INTERVAL));
+                    loop {
+                        tokio::select! {
+                            _ = stop_dhcp_server_child.cancelled() => {
+                                break;
+                            }
+                            _ = scan_interval.tick() => {
+                                let result = crate::arp::scan::scan_ip_info(
+                                    iface.index,
+                                    mac,
+                                    server_addr,
+                                    network_mask,
+                                ).await;
 
-                if let Some(mac) = iface.mac {
-                    // start arp scan
-                    let scand_arp_info = {
-                        let mut write = self.iface_scan_map.write().await;
-                        write
-                            .entry(store_key)
-                            .or_insert_with(|| Arc::new(RwLock::new(ArpScanStatus::new())))
-                            .clone()
-                    };
-
-                    tokio::spawn(async move {
-                        let mut scan_interval =
-                            tokio::time::interval(Duration::from_millis(LAND_ARP_SCAN_INTERVAL));
-                        loop {
-                            tokio::select! {
-                                _ = stop_dhcp_server_child.cancelled() => {
-                                    break;
-                                }
-                                _ = scan_interval.tick() => {
-                                    let result = crate::arp::scan::scan_ip_info(
-                                        iface.index,
-                                        mac,
-                                        server_addr,
-                                        network_mask,
-                                    ).await;
-
-                                    let mut arp_infos = scand_arp_info.write().await;
-                                    arp_infos.insert_new_info(ArpScanInfo::new(result));
-                                }
+                                let mut arp_infos = scand_arp_info.write().await;
+                                arp_infos.insert_new_info(ArpScanInfo::new(result));
                             }
                         }
+                    }
 
-                        tracing::info!("DHCPv4 Server ARP scan stop");
-                    });
-                }
+                    tracing::info!("DHCPv4 Server ARP scan stop");
+                });
             }
         } else {
             tracing::error!("Interface {} not found", config.iface_name);
