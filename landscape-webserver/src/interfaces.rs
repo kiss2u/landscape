@@ -1,13 +1,14 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::iface::{IfaceTopology, IfacesInfo};
-use landscape_common::{
-    iface::config::WifiMode,
-    iface::{AddController, ChangeZone},
-};
+use landscape_common::service::controller::ControllerService;
 use landscape_common::{
     iface::config::{IfaceCpuSoftBalance, NetworkIfaceConfig},
     iface::BridgeCreate,
+};
+use landscape_common::{
+    iface::config::{IfaceZoneType, WifiMode},
+    iface::{AddController, ChangeZone},
 };
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -148,7 +149,17 @@ async fn change_zone(
     State(state): State<LandscapeApp>,
     JsonBody(change_zone): JsonBody<ChangeZone>,
 ) -> LandscapeApiResult<()> {
+    let should_cleanup_dhcp_v4 = matches!(change_zone.zone.clone(), IfaceZoneType::Undefined);
+    let dhcp_v4_cleanup = if should_cleanup_dhcp_v4 {
+        state.dhcp_v4_server_service.get_config_by_name(change_zone.iface_name.clone()).await
+    } else {
+        None
+    };
+
     state.remove_all_iface_service(&change_zone.iface_name).await;
+    if let Some(config) = dhcp_v4_cleanup.as_ref() {
+        state.dhcp_v4_server_service.cleanup_lingering_iface_addr_if_present(config).await;
+    }
     state.iface_config_service.change_zone(change_zone).await;
     LandscapeApiResp::success(())
 }

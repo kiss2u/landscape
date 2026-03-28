@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,6 +28,37 @@ use tokio_util::sync::CancellationToken;
 
 use crate::iface::get_iface_by_name;
 use crate::route::IpRouteService;
+use crate::LandscapeSingleIpInfo;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct IfaceIpv4Cleanup {
+    addr: Ipv4Addr,
+    prefix: u8,
+}
+
+impl IfaceIpv4Cleanup {
+    fn from_dhcp_v4_config(config: &DHCPv4ServiceConfig) -> Self {
+        Self {
+            addr: config.config.server_ip_addr,
+            prefix: config.config.network_mask,
+        }
+    }
+
+    fn matches(&self, addr: &LandscapeSingleIpInfo) -> bool {
+        matches!(addr.address, IpAddr::V4(ipv4) if ipv4 == self.addr)
+            && addr.prefix_len == self.prefix
+    }
+
+    fn delete_args(&self, iface_name: &str) -> Vec<String> {
+        vec![
+            "addr".to_string(),
+            "del".to_string(),
+            format!("{}/{}", self.addr, self.prefix),
+            "dev".to_string(),
+            iface_name.to_string(),
+        ]
+    }
+}
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -263,6 +295,48 @@ impl DHCPv4ServerManagerService {
         Ok(())
     }
 
+    pub async fn cleanup_lingering_iface_addr_if_present(&self, config: &DHCPv4ServiceConfig) {
+        let cleanup = IfaceIpv4Cleanup::from_dhcp_v4_config(config);
+        let iface_name = &config.iface_name;
+        let has_addr = crate::addresses_by_iface_name(iface_name.clone())
+            .await
+            .into_iter()
+            .any(|addr| cleanup.matches(&addr));
+
+        if !has_addr {
+            return;
+        }
+
+        let args = cleanup.delete_args(iface_name);
+        match Command::new("ip").args(&args).output() {
+            Ok(output) if output.status.success() => {
+                tracing::info!(
+                    "Removed lingering DHCPv4 address {}/{} from {} during zone change",
+                    cleanup.addr,
+                    cleanup.prefix,
+                    iface_name
+                );
+            }
+            Ok(output) => {
+                tracing::warn!(
+                    "Failed to remove lingering DHCPv4 address {}/{} from {}: {}",
+                    cleanup.addr,
+                    cleanup.prefix,
+                    iface_name,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "Failed to spawn ip addr cleanup for {}/{} on {}: {error}",
+                    cleanup.addr,
+                    cleanup.prefix,
+                    iface_name
+                );
+            }
+        }
+    }
+
     pub async fn get_assigned_ips(&self) -> HashMap<String, DHCPv4OfferInfo> {
         let mut result = HashMap::new();
 
@@ -357,5 +431,54 @@ impl DHCPv4ServerManagerService {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn iface_ipv4_cleanup_uses_dhcp_server_addr_and_mask() {
+        let cleanup = IfaceIpv4Cleanup::from_dhcp_v4_config(&DHCPv4ServiceConfig::default());
+
+        assert_eq!(cleanup.addr, Ipv4Addr::new(192, 168, 5, 1));
+        assert_eq!(cleanup.prefix, 24);
+    }
+
+    #[test]
+    fn iface_ipv4_cleanup_matches_only_exact_ipv4_and_prefix() {
+        let cleanup = IfaceIpv4Cleanup { addr: Ipv4Addr::new(192, 168, 5, 1), prefix: 24 };
+        let exact = LandscapeSingleIpInfo {
+            address: IpAddr::V4(Ipv4Addr::new(192, 168, 5, 1)),
+            is_permanent: true,
+            prefix_len: 24,
+            ifindex: 7,
+        };
+        let wrong_prefix = LandscapeSingleIpInfo { prefix_len: 16, ..exact.clone() };
+        let wrong_ip = LandscapeSingleIpInfo {
+            address: IpAddr::V4(Ipv4Addr::new(192, 168, 5, 2)),
+            ..exact.clone()
+        };
+
+        assert!(cleanup.matches(&exact));
+        assert!(!cleanup.matches(&wrong_prefix));
+        assert!(!cleanup.matches(&wrong_ip));
+    }
+
+    #[test]
+    fn iface_ipv4_cleanup_builds_delete_args() {
+        let cleanup = IfaceIpv4Cleanup { addr: Ipv4Addr::new(10, 0, 0, 1), prefix: 24 };
+
+        assert_eq!(
+            cleanup.delete_args("br_lan"),
+            vec![
+                "addr".to_string(),
+                "del".to_string(),
+                "10.0.0.1/24".to_string(),
+                "dev".to_string(),
+                "br_lan".to_string(),
+            ]
+        );
     }
 }
