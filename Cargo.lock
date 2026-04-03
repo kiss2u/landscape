@@ -3608,6 +3608,7 @@ version = "0.17.5"
 dependencies = [
  "arc-swap",
  "async-trait",
+ "bytes",
  "landscape-common",
  "landscape-database",
  "pingora",

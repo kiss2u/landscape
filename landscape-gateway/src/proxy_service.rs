@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -7,11 +8,18 @@ use landscape_common::gateway::{
     HttpUpstreamRuleConfig, HttpUpstreamTarget, LoadBalanceMethod, PathRewriteMode,
     ProxyHeaderConflictMode, ProxyRequestHeader,
 };
-use pingora::http::RequestHeader;
-use pingora::proxy::{ProxyHttp, Session};
+use pingora::http::{RequestHeader, ResponseHeader, StatusCode};
+use pingora::proxy::{FailToProxy, ProxyHttp, Session};
 use pingora::upstreams::peer::HttpPeer;
 
 use crate::SharedRules;
+
+const GATEWAY_ROUTE_NOT_MATCHED: pingora::ErrorType =
+    pingora::ErrorType::new_code("GatewayRouteNotMatched", 404);
+const GATEWAY_NO_UPSTREAM_TARGETS: pingora::ErrorType =
+    pingora::ErrorType::new_code("GatewayNoUpstreamTargets", 503);
+const GATEWAY_PATH_REWRITE_FAILED: pingora::ErrorType =
+    pingora::ErrorType::new_code("GatewayPathRewriteFailed", 500);
 
 pub struct LandscapeReverseProxy {
     rules: SharedRules,
@@ -52,8 +60,40 @@ struct ResolvedHttpRoute<'a> {
     matched_prefix: Option<&'a str>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SelectedTarget {
+    address: String,
+    port: u16,
+    tls: bool,
+}
+
+impl SelectedTarget {
+    fn from_target(target: &HttpUpstreamTarget) -> Self {
+        Self {
+            address: target.address.clone(),
+            port: target.port,
+            tls: target.tls,
+        }
+    }
+
+    fn display(&self) -> String {
+        format!("{}:{} tls={}", self.address, self.port, self.tls)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GatewayErrorResponse {
+    status_code: u16,
+    reason_code: &'static str,
+    user_message: &'static str,
+}
+
 pub struct ProxyCtx {
     pub matched_rule_name: Option<String>,
+    request_host: Option<String>,
+    request_path: Option<String>,
+    rewritten_path: Option<String>,
+    selected_target: Option<SelectedTarget>,
     matched_route: Option<MatchedHttpRoute>,
 }
 
@@ -62,7 +102,14 @@ impl ProxyHttp for LandscapeReverseProxy {
     type CTX = ProxyCtx;
 
     fn new_ctx(&self) -> Self::CTX {
-        ProxyCtx { matched_rule_name: None, matched_route: None }
+        ProxyCtx {
+            matched_rule_name: None,
+            request_host: None,
+            request_path: None,
+            rewritten_path: None,
+            selected_target: None,
+            matched_route: None,
+        }
     }
 
     async fn upstream_peer(
@@ -74,19 +121,29 @@ impl ProxyHttp for LandscapeReverseProxy {
         let req = session.req_header();
         let host = extract_host(req);
         let path = req.uri.path();
+        let path_and_query =
+            req.uri.path_and_query().map(|value| value.as_str()).unwrap_or(path).to_string();
 
-        let matched_route = match_http_route(&rules, host.as_deref(), path)
-            .ok_or_else(|| pingora::Error::new_str("No matching upstream rule found"))?;
+        ctx.request_host = host.clone();
+        ctx.request_path = Some(path_and_query);
+        ctx.rewritten_path = None;
+        ctx.selected_target = None;
+
+        let matched_route =
+            match_http_route(&rules, host.as_deref(), path).ok_or_else(route_not_matched_error)?;
 
         ctx.matched_rule_name = Some(matched_route.rule_name.to_string());
         ctx.matched_route = Some(MatchedHttpRoute::from_resolved(&matched_route));
 
-        make_peer(
+        let (peer, selected_target) = make_peer(
             matched_route.upstream,
             &self.round_robin_counter,
             host.as_deref().unwrap_or(""),
             path,
-        )
+        )?;
+        ctx.selected_target = Some(selected_target);
+
+        Ok(peer)
     }
 
     async fn upstream_request_filter(
@@ -99,7 +156,7 @@ impl ProxyHttp for LandscapeReverseProxy {
             return Ok(());
         };
 
-        apply_path_rewrite(upstream_request, matched_route)?;
+        ctx.rewritten_path = apply_path_rewrite(upstream_request, matched_route)?;
 
         if matches!(matched_route.client_ip_headers, ClientIpHeaderPolicy::Standard) {
             if let Some(client_addr) = session.client_addr().and_then(|addr| addr.as_inet()) {
@@ -115,6 +172,47 @@ impl ProxyHttp for LandscapeReverseProxy {
 
         Ok(())
     }
+
+    async fn fail_to_proxy(
+        &self,
+        session: &mut Session,
+        e: &pingora::Error,
+        ctx: &mut Self::CTX,
+    ) -> FailToProxy {
+        let classified = classify_proxy_error(e);
+        log_proxy_error(ctx, e, &classified);
+
+        if classified.status_code > 0 && session.response_written().is_none() {
+            if let Err(write_err) = write_gateway_error_response(session, &classified).await {
+                tracing::error!(
+                    reason_code = classified.reason_code,
+                    error_type = e.etype().as_str(),
+                    error_source = e.esource().as_str(),
+                    original_error = %e,
+                    write_error = %write_err,
+                    "Failed to write gateway error response"
+                );
+            }
+        }
+
+        FailToProxy {
+            error_code: classified.status_code,
+            can_reuse_downstream: false,
+        }
+    }
+}
+
+fn route_not_matched_error() -> pingora::BError {
+    pingora::Error::explain(GATEWAY_ROUTE_NOT_MATCHED, "No matching upstream rule found").into_in()
+}
+
+fn no_upstream_targets_error() -> pingora::BError {
+    pingora::Error::explain(GATEWAY_NO_UPSTREAM_TARGETS, "No upstream targets configured").into_in()
+}
+
+fn path_rewrite_failed_error() -> pingora::BError {
+    pingora::Error::explain(GATEWAY_PATH_REWRITE_FAILED, "Failed to rewrite upstream request path")
+        .into_in()
 }
 
 fn match_http_route<'a>(
@@ -296,13 +394,13 @@ fn match_wildcard(pattern: &str, host: &str) -> bool {
 fn apply_path_rewrite(
     upstream_request: &mut RequestHeader,
     matched_route: &MatchedHttpRoute,
-) -> pingora::Result<()> {
+) -> pingora::Result<Option<String>> {
     if !matches!(matched_route.rewrite_mode, PathRewriteMode::StripPrefix) {
-        return Ok(());
+        return Ok(None);
     }
 
     let Some(prefix) = matched_route.matched_prefix.as_deref() else {
-        return Ok(());
+        return Ok(None);
     };
 
     let path_and_query = upstream_request
@@ -313,14 +411,12 @@ fn apply_path_rewrite(
 
     let rewritten = rewrite_path_and_query(path_and_query, prefix);
     if rewritten == path_and_query {
-        return Ok(());
+        return Ok(None);
     }
 
-    upstream_request
-        .set_raw_path(rewritten.as_bytes())
-        .map_err(|_| pingora::Error::new_str("Failed to rewrite upstream request path"))?;
+    upstream_request.set_raw_path(rewritten.as_bytes()).map_err(|_| path_rewrite_failed_error())?;
 
-    Ok(())
+    Ok(Some(rewritten))
 }
 
 fn rewrite_path_and_query(path_and_query: &str, prefix: &str) -> String {
@@ -415,17 +511,17 @@ fn make_peer(
     counter: &AtomicUsize,
     host: &str,
     path: &str,
-) -> pingora::Result<Box<HttpPeer>> {
+) -> pingora::Result<(Box<HttpPeer>, SelectedTarget)> {
     let targets = &upstream.targets;
     if targets.is_empty() {
-        return Err(pingora::Error::new_str("No upstream targets configured"));
+        return Err(no_upstream_targets_error());
     }
 
     let target = select_target(targets, &upstream.load_balance, counter, host, path);
     let mut peer =
         HttpPeer::new((target.address.as_str(), target.port), target.tls, target.address.clone());
     peer.options.connection_timeout = Some(std::time::Duration::from_secs(10));
-    Ok(Box::new(peer))
+    Ok((Box::new(peer), SelectedTarget::from_target(target)))
 }
 
 fn select_target<'a>(
@@ -477,6 +573,226 @@ fn fnv1a_hash(host: &str, path: &str) -> usize {
         hash = hash.wrapping_mul(FNV_PRIME);
     }
     hash as usize
+}
+
+fn classify_proxy_error(error: &pingora::Error) -> GatewayErrorResponse {
+    if error.etype() == &GATEWAY_ROUTE_NOT_MATCHED {
+        return GatewayErrorResponse {
+            status_code: 404,
+            reason_code: "route_not_matched",
+            user_message: "No gateway route matches this host and path.",
+        };
+    }
+
+    if error.etype() == &GATEWAY_NO_UPSTREAM_TARGETS {
+        return GatewayErrorResponse {
+            status_code: 503,
+            reason_code: "no_upstream_targets",
+            user_message: "The matched route has no upstream targets configured.",
+        };
+    }
+
+    if error.etype() == &GATEWAY_PATH_REWRITE_FAILED {
+        return GatewayErrorResponse {
+            status_code: 500,
+            reason_code: "path_rewrite_failed",
+            user_message: "The gateway failed to rewrite the upstream request path.",
+        };
+    }
+
+    if let pingora::ErrorType::HTTPStatus(code) = error.etype() {
+        return GatewayErrorResponse {
+            status_code: normalize_status_code(*code),
+            reason_code: "http_status",
+            user_message: "The gateway returned an HTTP error response.",
+        };
+    }
+
+    match error.esource() {
+        pingora::ErrorSource::Upstream => classify_upstream_error(error.etype()),
+        pingora::ErrorSource::Downstream => classify_downstream_error(error.etype()),
+        pingora::ErrorSource::Internal | pingora::ErrorSource::Unset => GatewayErrorResponse {
+            status_code: 500,
+            reason_code: "internal_error",
+            user_message: "The gateway encountered an internal error.",
+        },
+    }
+}
+
+fn classify_upstream_error(error_type: &pingora::ErrorType) -> GatewayErrorResponse {
+    match error_type {
+        pingora::ErrorType::ConnectTimedout
+        | pingora::ErrorType::TLSHandshakeTimedout
+        | pingora::ErrorType::ReadTimedout
+        | pingora::ErrorType::WriteTimedout => GatewayErrorResponse {
+            status_code: 504,
+            reason_code: "upstream_timeout",
+            user_message: "The upstream service timed out.",
+        },
+        pingora::ErrorType::ConnectRefused => GatewayErrorResponse {
+            status_code: 503,
+            reason_code: "upstream_connect_refused",
+            user_message: "The upstream service refused the connection.",
+        },
+        pingora::ErrorType::ConnectNoRoute => GatewayErrorResponse {
+            status_code: 503,
+            reason_code: "upstream_no_route",
+            user_message: "The upstream service is unreachable on the network.",
+        },
+        pingora::ErrorType::ConnectError
+        | pingora::ErrorType::SocketError
+        | pingora::ErrorType::ConnectProxyFailure => GatewayErrorResponse {
+            status_code: 503,
+            reason_code: "upstream_connect_failed",
+            user_message: "The gateway could not connect to the upstream service.",
+        },
+        pingora::ErrorType::TLSHandshakeFailure
+        | pingora::ErrorType::InvalidCert
+        | pingora::ErrorType::HandshakeError
+        | pingora::ErrorType::TLSWantX509Lookup => GatewayErrorResponse {
+            status_code: 502,
+            reason_code: "upstream_tls_failed",
+            user_message: "The upstream TLS handshake failed.",
+        },
+        pingora::ErrorType::InvalidHTTPHeader
+        | pingora::ErrorType::H1Error
+        | pingora::ErrorType::H2Error
+        | pingora::ErrorType::InvalidH2
+        | pingora::ErrorType::H2Downgrade => GatewayErrorResponse {
+            status_code: 502,
+            reason_code: "upstream_invalid_response",
+            user_message: "The upstream service returned an invalid HTTP response.",
+        },
+        pingora::ErrorType::ReadError
+        | pingora::ErrorType::WriteError
+        | pingora::ErrorType::ConnectionClosed => GatewayErrorResponse {
+            status_code: 502,
+            reason_code: "upstream_io_failed",
+            user_message: "The upstream connection closed unexpectedly.",
+        },
+        _ => GatewayErrorResponse {
+            status_code: 502,
+            reason_code: "upstream_error",
+            user_message: "The gateway could not complete the upstream request.",
+        },
+    }
+}
+
+fn classify_downstream_error(error_type: &pingora::ErrorType) -> GatewayErrorResponse {
+    match error_type {
+        pingora::ErrorType::ReadError
+        | pingora::ErrorType::WriteError
+        | pingora::ErrorType::ConnectionClosed => GatewayErrorResponse {
+            status_code: 0,
+            reason_code: "downstream_closed",
+            user_message: "The client connection closed before the response was sent.",
+        },
+        _ => GatewayErrorResponse {
+            status_code: 400,
+            reason_code: "downstream_error",
+            user_message: "The client request could not be processed.",
+        },
+    }
+}
+
+fn normalize_status_code(code: u16) -> u16 {
+    if StatusCode::from_u16(code).is_ok() {
+        code
+    } else {
+        500
+    }
+}
+
+fn status_line(code: u16) -> String {
+    match StatusCode::from_u16(code) {
+        Ok(status) => {
+            let reason = status.canonical_reason().unwrap_or("Unknown Status");
+            format!("{} {}", status.as_u16(), reason)
+        }
+        Err(_) => "500 Internal Server Error".to_string(),
+    }
+}
+
+fn build_gateway_error_body(response: &GatewayErrorResponse) -> String {
+    format!(
+        "{}\nReason: {}\n{}\n",
+        status_line(response.status_code),
+        response.reason_code,
+        response.user_message
+    )
+}
+
+fn build_gateway_error_response_header(
+    status_code: u16,
+    body_len: usize,
+) -> pingora::Result<ResponseHeader> {
+    let mut response = ResponseHeader::build(normalize_status_code(status_code), None)
+        .map_err(|e| e.more_context("Failed to build gateway error response header").into_in())?;
+    response
+        .set_content_length(body_len)
+        .map_err(|e| e.more_context("Failed to set Content-Length header").into_in())?;
+    response
+        .insert_header("Content-Type", "text/plain; charset=utf-8")
+        .map_err(|e| e.more_context("Failed to insert Content-Type header").into_in())?;
+    response
+        .insert_header("Cache-Control", "private, no-store")
+        .map_err(|e| e.more_context("Failed to insert Cache-Control header").into_in())?;
+    Ok(response)
+}
+
+async fn write_gateway_error_response(
+    session: &mut Session,
+    response: &GatewayErrorResponse,
+) -> pingora::Result<()> {
+    let body = Bytes::from(build_gateway_error_body(response));
+    let header = build_gateway_error_response_header(response.status_code, body.len())?;
+
+    session.set_keepalive(None);
+    session.write_response_header(Box::new(header), false).await?;
+    session.write_response_body(Some(body), true).await?;
+
+    Ok(())
+}
+
+fn log_proxy_error(ctx: &ProxyCtx, error: &pingora::Error, response: &GatewayErrorResponse) {
+    let matched_rule = ctx.matched_rule_name.as_deref().unwrap_or("-");
+    let request_host = ctx.request_host.as_deref().unwrap_or("-");
+    let request_path = ctx.request_path.as_deref().unwrap_or("-");
+    let rewritten_path = ctx.rewritten_path.as_deref().unwrap_or("-");
+    let selected_target =
+        ctx.selected_target.as_ref().map_or_else(|| "-".to_string(), SelectedTarget::display);
+
+    if matches!(error.esource(), pingora::ErrorSource::Internal | pingora::ErrorSource::Unset)
+        && response.status_code >= 500
+    {
+        tracing::error!(
+            reason_code = response.reason_code,
+            status_code = response.status_code,
+            error_type = error.etype().as_str(),
+            error_source = error.esource().as_str(),
+            matched_rule,
+            request_host,
+            request_path,
+            rewritten_path,
+            selected_target,
+            error = %error,
+            "Gateway proxy request failed"
+        );
+    } else {
+        tracing::warn!(
+            reason_code = response.reason_code,
+            status_code = response.status_code,
+            error_type = error.etype().as_str(),
+            error_source = error.esource().as_str(),
+            matched_rule,
+            request_host,
+            request_path,
+            rewritten_path,
+            selected_target,
+            error = %error,
+            "Gateway proxy request failed"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -665,5 +981,98 @@ mod tests {
 
         let values: Vec<_> = request.headers.get_all("x-test").iter().collect();
         assert_eq!(values, vec!["old", "new"]);
+    }
+
+    #[test]
+    fn classify_proxy_error_maps_route_not_matched_to_404() {
+        let error = route_not_matched_error();
+
+        assert_eq!(
+            classify_proxy_error(&error),
+            GatewayErrorResponse {
+                status_code: 404,
+                reason_code: "route_not_matched",
+                user_message: "No gateway route matches this host and path.",
+            }
+        );
+    }
+
+    #[test]
+    fn classify_proxy_error_maps_no_upstream_targets_to_503() {
+        let error = no_upstream_targets_error();
+
+        assert_eq!(
+            classify_proxy_error(&error),
+            GatewayErrorResponse {
+                status_code: 503,
+                reason_code: "no_upstream_targets",
+                user_message: "The matched route has no upstream targets configured.",
+            }
+        );
+    }
+
+    #[test]
+    fn classify_proxy_error_maps_upstream_timeout_to_504() {
+        let error = pingora::Error::new_up(pingora::ErrorType::ConnectTimedout);
+
+        assert_eq!(
+            classify_proxy_error(&error),
+            GatewayErrorResponse {
+                status_code: 504,
+                reason_code: "upstream_timeout",
+                user_message: "The upstream service timed out.",
+            }
+        );
+    }
+
+    #[test]
+    fn classify_proxy_error_maps_tls_failure_to_502() {
+        let error = pingora::Error::new_up(pingora::ErrorType::TLSHandshakeFailure);
+
+        assert_eq!(
+            classify_proxy_error(&error),
+            GatewayErrorResponse {
+                status_code: 502,
+                reason_code: "upstream_tls_failed",
+                user_message: "The upstream TLS handshake failed.",
+            }
+        );
+    }
+
+    #[test]
+    fn classify_proxy_error_maps_downstream_closed_to_no_response() {
+        let error = pingora::Error::new_down(pingora::ErrorType::ConnectionClosed);
+
+        assert_eq!(
+            classify_proxy_error(&error),
+            GatewayErrorResponse {
+                status_code: 0,
+                reason_code: "downstream_closed",
+                user_message: "The client connection closed before the response was sent.",
+            }
+        );
+    }
+
+    #[test]
+    fn build_gateway_error_body_includes_reason_code() {
+        let body = build_gateway_error_body(&GatewayErrorResponse {
+            status_code: 503,
+            reason_code: "upstream_connect_failed",
+            user_message: "The gateway could not connect to the upstream service.",
+        });
+
+        assert!(body.contains("503 Service Unavailable"));
+        assert!(body.contains("Reason: upstream_connect_failed"));
+        assert!(body.contains("The gateway could not connect to the upstream service."));
+    }
+
+    #[test]
+    fn build_gateway_error_response_header_sets_text_plain_and_no_store() {
+        let response = build_gateway_error_response_header(502, 12).unwrap();
+
+        assert_eq!(response.status, StatusCode::BAD_GATEWAY);
+        assert_eq!(response.headers.get("content-type").unwrap(), "text/plain; charset=utf-8");
+        assert_eq!(response.headers.get("cache-control").unwrap(), "private, no-store");
+        assert_eq!(response.headers.get("content-length").unwrap(), "12");
     }
 }
