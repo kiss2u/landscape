@@ -20,12 +20,7 @@ int BPF_KPROBE(kprobe_neigh_update, struct neighbour *n, const u8 *new_lladdr, u
                u32 update_flags, u32 pid) {
     if (!n) return 0;
 
-    u64 bpf_update_flag = 0;
-    if (update_flags & NEIGH_UPDATE_F_OVERRIDE) {
-        bpf_update_flag = BPF_ANY;
-    } else if (update_flags & NEIGH_UPDATE_F_WEAK_OVERRIDE) {
-        bpf_update_flag = BPF_NOEXIST;
-    } else {
+    if (!(update_flags & (NEIGH_UPDATE_F_OVERRIDE | NEIGH_UPDATE_F_WEAK_OVERRIDE))) {
         return 0;
     }
 
@@ -60,7 +55,7 @@ int BPF_KPROBE(kprobe_neigh_update, struct neighbour *n, const u8 *new_lladdr, u
             }
 
             if (value.mac[0] != 0 || value.mac[1] != 0 || value.mac[5] != 0) {
-                bpf_map_update_elem(&ip_mac_v4, &key, &value, bpf_update_flag);
+                bpf_map_update_elem(&ip_mac_v4, &key, &value, BPF_ANY);
                 // bpf_printk("Update IP:%pI4", &key.addr);
                 // PRINT_MAC_ADDR(value.mac);
             }
@@ -95,7 +90,7 @@ int BPF_KPROBE(kprobe_neigh_update, struct neighbour *n, const u8 *new_lladdr, u
             }
 
             if (value.mac[0] != 0 || value.mac[1] != 0 || value.mac[5] != 0) {
-                bpf_map_update_elem(&ip_mac_v6, &key, &value, bpf_update_flag);
+                bpf_map_update_elem(&ip_mac_v6, &key, &value, BPF_ANY);
                 // bpf_printk("Update: IP is %pI6 | state: %d -> %d", key.addr.bytes,
                 // ctx->nud_state, ctx->new_state);
                 // bpf_printk("IP:%pI6 | Flags:0x%x | %d->%d", key.addr.bytes, ctx->update_flags,
