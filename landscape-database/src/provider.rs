@@ -11,8 +11,9 @@ use migration::{Migrator, MigratorTrait};
 
 use crate::{
     cert::repository::CertRepository, cert_account::repository::CertAccountRepository,
-    dhcp_v4_server::repository::DHCPv4ServerRepository,
+    ddns::repository::DdnsJobRepository, dhcp_v4_server::repository::DHCPv4ServerRepository,
     dhcp_v6_client::repository::DHCPv6ClientRepository,
+    dns_provider_profile::repository::DnsProviderProfileRepository,
     dns_redirect::repository::DNSRedirectRuleRepository, dns_rule::repository::DNSRuleRepository,
     dns_upstream::repository::DnsUpstreamRepository, dst_ip_rule::repository::DstIpRuleRepository,
     enrolled_device::repository::EnrolledDeviceRepository,
@@ -129,6 +130,8 @@ define_store!(
     cert_account_store: (CertAccountRepository, cert_accounts),
     cert_store: (CertRepository, certs),
     gateway_http_upstream_store: (GatewayHttpUpstreamRepository, gateway_rules),
+    ddns_job_store: (DdnsJobRepository, ddns_jobs),
+    dns_provider_profile_store: (DnsProviderProfileRepository, dns_provider_profiles),
 );
 
 #[cfg(test)]

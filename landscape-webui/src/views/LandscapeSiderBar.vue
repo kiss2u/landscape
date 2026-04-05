@@ -172,10 +172,18 @@ const menuOptions = computed<MenuOption[]>(() => [
     icon: renderIcon(Devices),
   },
   {
-    label: t("routes.cert"),
-    key: "cert",
+    label: t("routes.domains"),
+    key: "domains",
     icon: renderIcon(Certificate),
     children: [
+      {
+        label: t("routes.dns-provider-profiles"),
+        key: "dns-provider-profiles",
+      },
+      {
+        label: t("routes.ddns"),
+        key: "ddns",
+      },
       {
         label: t("routes.cert-accounts"),
         key: "cert-accounts",

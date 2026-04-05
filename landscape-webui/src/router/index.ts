@@ -19,6 +19,8 @@ import DnsRedirect from "@/views/dns/DnsRedirect.vue";
 import DnsUpstream from "@/views/dns/DnsUpstream.vue";
 import CertAccounts from "@/views/cert/CertAccounts.vue";
 import CertOrders from "@/views/cert/CertOrders.vue";
+import DdnsJobs from "@/views/domain/DdnsJobs.vue";
+import DnsProviderProfiles from "@/views/domain/DnsProviderProfiles.vue";
 import Gateway from "@/views/Gateway.vue";
 import NotFound from "@/views/error/NotFound.vue";
 
@@ -87,6 +89,16 @@ const inner_zone: Array<RouteRecordRaw> = [
     path: "/mac-binding",
     name: "routes.mac-binding",
     component: EnrolledDevice,
+  },
+  {
+    path: "/dns-provider-profiles",
+    name: "routes.dns-provider-profiles",
+    component: DnsProviderProfiles,
+  },
+  {
+    path: "/ddns",
+    name: "routes.ddns",
+    component: DdnsJobs,
   },
   {
     path: "/cert-accounts",

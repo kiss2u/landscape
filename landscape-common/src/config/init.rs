@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 use crate::cert::account::CertAccountConfig;
 use crate::cert::order::CertConfig;
 use crate::config::settings::LandscapeConfig;
+use crate::ddns::DdnsJob;
 use crate::dhcp::v4_server::config::DHCPv4ServiceConfig;
 use crate::dhcp::v6_client::config::IPV6PDServiceConfig;
 use crate::dns::config::DnsUpstreamConfig;
+use crate::dns::provider_profile::DnsProviderProfile;
 use crate::dns::redirect::DNSRedirectRule;
 use crate::dns::rule::DNSRuleConfig;
 use crate::enrolled_device::EnrolledDevice;
@@ -88,4 +90,8 @@ pub struct InitConfig {
     pub certs: Vec<CertConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub gateway_rules: Vec<HttpUpstreamRuleConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ddns_jobs: Vec<DdnsJob>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub dns_provider_profiles: Vec<DnsProviderProfile>,
 }

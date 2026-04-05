@@ -2,8 +2,10 @@ use sea_orm::prelude::Uuid;
 
 pub mod repository;
 
+pub mod ddns;
 pub mod dhcp_v4_server;
 pub mod dhcp_v6_client;
+pub mod dns_provider_profile;
 pub mod enrolled_device;
 pub mod error;
 pub mod firewall;

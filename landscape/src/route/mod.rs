@@ -490,9 +490,25 @@ impl IpRouteService {
         self.apply_removed_ipv4_wan_route(removed).await;
     }
 
+    pub async fn get_ipv4_wan_route(&self, key: &str) -> Option<RouteTargetInfo> {
+        self.ipv4_wan_ifaces.read().await.get(key).cloned()
+    }
+
+    pub async fn get_all_ipv4_wan_routes(&self) -> HashMap<String, RouteTargetInfo> {
+        self.clone_ipv4_wan_infos().await
+    }
+
     pub async fn remove_ipv6_wan_route(&self, key: &str) {
         let removed = self.ipv6_wan_ifaces.write().await.remove(key);
         self.apply_removed_ipv6_wan_route(removed).await;
+    }
+
+    pub async fn get_ipv6_wan_route(&self, key: &str) -> Option<RouteTargetInfo> {
+        self.ipv6_wan_ifaces.read().await.get(key).cloned()
+    }
+
+    pub async fn get_all_ipv6_wan_routes(&self) -> HashMap<String, RouteTargetInfo> {
+        self.clone_ipv6_wan_infos().await
     }
 
     pub async fn refresh_default_router(&self) {

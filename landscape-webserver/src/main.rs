@@ -19,6 +19,7 @@ use landscape::{
     cert::{account_service::CertAccountService, order_service::CertService},
     dhcp_server::dhcp_v4_service::DHCPv4ServerManagerService,
     dns::{
+        ddns_service::DdnsService, provider_profile_service::DnsProviderProfileService,
         redirect_service::DNSRedirectService, rule_service::DNSRuleService,
         upstream_service::DnsUpstreamService,
     },
@@ -102,6 +103,8 @@ const UPLOAD_GEO_FILE_SIZE_LIMIT: usize = 100 * 1024 * 1024;
 pub struct LandscapeApp {
     pub home_path: PathBuf,
     pub dns_service: LandscapeDnsService,
+    pub ddns_service: DdnsService,
+    pub dns_provider_profile_service: DnsProviderProfileService,
     pub dns_rule_service: DNSRuleService,
     pub flow_rule_service: FlowRuleService,
     pub geo_site_service: GeoSiteService,
@@ -439,6 +442,9 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         .await
     );
     let fire_wall_rule_service = FirewallRuleService::new(db_store_provider.clone()).await;
+    let dns_provider_profile_service =
+        DnsProviderProfileService::new(db_store_provider.clone()).await;
+    let ddns_service = DdnsService::new(db_store_provider.clone(), route_service.clone()).await;
 
     let geo_ip_service =
         GeoIpService::new(db_store_provider.clone(), dst_ip_service_tx.clone()).await;
@@ -532,6 +538,8 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     let landscape_app_status = LandscapeApp {
         home_path: home_path.clone(),
         dns_service,
+        ddns_service,
+        dns_provider_profile_service,
         dns_rule_service,
         flow_rule_service,
         geo_site_service,

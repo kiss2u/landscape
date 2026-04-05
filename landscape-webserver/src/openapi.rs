@@ -7,6 +7,8 @@ use crate::auth::get_auth_openapi_router;
 use crate::cert::accounts::get_cert_account_paths;
 use crate::cert::certs::get_cert_paths;
 use crate::devices::get_enrolled_device_config_paths;
+use crate::dns::ddns::get_ddns_paths;
+use crate::dns::provider_profiles::get_dns_provider_profile_paths;
 use crate::dns::redirects::get_dns_redirect_config_paths;
 use crate::dns::rules::get_dns_rule_config_paths;
 use crate::dns::service::get_dns_service_paths;
@@ -83,6 +85,8 @@ impl Modify for SecurityAddon {
         (name = "LAN IPv6", description = "LAN IPv6 service (RA + DHCPv6)"),
         (name = "NAT Service", description = "NAT service"),
         (name = "DNS Service", description = "DNS service management"),
+        (name = "DDNS", description = "Dynamic DNS job management"),
+        (name = "DNS Provider Profiles", description = "Reusable DNS provider credentials"),
         (name = "DNS Rules", description = "DNS rule configuration"),
         (name = "DNS Redirects", description = "DNS redirect configuration"),
         (name = "DNS Upstreams", description = "DNS upstream configuration"),
@@ -159,6 +163,8 @@ pub fn build_services_openapi_router() -> OpenApiRouter<LandscapeApp> {
 pub fn build_dns_openapi_router() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .merge(get_dns_service_paths())
+        .merge(get_ddns_paths())
+        .merge(get_dns_provider_profile_paths())
         .merge(get_dns_rule_config_paths())
         .merge(get_dns_redirect_config_paths())
         .merge(get_dns_upstream_config_paths())
