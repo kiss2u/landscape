@@ -219,15 +219,35 @@ fn is_ula(addr: Ipv6Addr) -> bool {
     (first_byte & 0xfe) == 0xfc
 }
 
-fn blocks_overlap(_parent_prefix_len: u8, idx_a: u32, len_a: u8, idx_b: u32, len_b: u8) -> bool {
+fn blocks_overlap(_parent_prefix_len: u8, idx_a: u64, len_a: u8, idx_b: u64, len_b: u8) -> bool {
     let max_len = len_a.max(len_b);
     let scale_a = 1u64 << (max_len - len_a) as u64;
-    let start_a = (idx_a as u64) * scale_a;
+    let start_a = idx_a * scale_a;
     let end_a = start_a + scale_a;
     let scale_b = 1u64 << (max_len - len_b) as u64;
-    let start_b = (idx_b as u64) * scale_b;
+    let start_b = idx_b * scale_b;
     let end_b = start_b + scale_b;
     start_a < end_b && start_b < end_a
+}
+
+fn reserved_wan_slots(pool_len: u8) -> u64 {
+    if pool_len <= 64 {
+        1
+    } else {
+        1u64.checked_shl((pool_len - 64) as u32).unwrap_or(u64::MAX)
+    }
+}
+
+fn effective_pool_index(src: &LanIPv6SourceConfig) -> u64 {
+    let base = src.pool_index() as u64;
+    match src {
+        LanIPv6SourceConfig::RaPd { .. }
+        | LanIPv6SourceConfig::NaPd { .. }
+        | LanIPv6SourceConfig::PdPd { .. } => {
+            base.saturating_add(reserved_wan_slots(src.pool_len()))
+        }
+        _ => base,
+    }
 }
 
 impl LanIPv6Config {
@@ -375,7 +395,7 @@ impl LanIPv6Config {
     pub fn new(depend_iface: String) -> Self {
         let sources = vec![LanIPv6SourceConfig::RaPd {
             depend_iface,
-            pool_index: 1,
+            pool_index: 0,
             preferred_lifetime: 300,
             valid_lifetime: 300,
         }];
@@ -463,16 +483,22 @@ fn check_pair_conflict(
     }
 
     let parent_len = get_effective_parent_len(a, b);
-    let idx_a = a.pool_index();
+    let idx_a = effective_pool_index(a);
     let len_a = a.pool_len();
-    let idx_b = b.pool_index();
+    let idx_b = effective_pool_index(b);
     let len_b = b.pool_len();
 
     if blocks_overlap(parent_len, idx_a, len_a, idx_b, len_b) {
         return Err(ServiceConfigError::InvalidConfig {
             reason: format!(
-                "Source conflict under parent {}: (pool_index={}, pool_len={}) overlaps with (pool_index={}, pool_len={})",
-                key, idx_a, len_a, idx_b, len_b
+                "Source conflict under parent {}: (pool_index={}, effective_index={}, pool_len={}) overlaps with (pool_index={}, effective_index={}, pool_len={}); PD-derived sources reserve WAN subnet 0",
+                key,
+                a.pool_index(),
+                idx_a,
+                len_a,
+                b.pool_index(),
+                idx_b,
+                len_b,
             ),
         });
     }
@@ -535,19 +561,21 @@ pub fn validate_cross_interface(
                 let parent_len = get_effective_parent_len(new_src, other_src);
                 if blocks_overlap(
                     parent_len,
-                    new_src.pool_index(),
+                    effective_pool_index(new_src),
                     new_src.pool_len(),
-                    other_src.pool_index(),
+                    effective_pool_index(other_src),
                     other_src.pool_len(),
                 ) {
                     return Err(ServiceConfigError::InvalidConfig {
                         reason: format!(
-                            "Cross-interface conflict: {} source (pool_index={}, pool_len={}) on '{}' overlaps with (pool_index={}, pool_len={}) on '{}'",
+                            "Cross-interface conflict: {} source (pool_index={}, effective_index={}, pool_len={}) on '{}' overlaps with (pool_index={}, effective_index={}, pool_len={}) on '{}'; PD-derived sources reserve WAN subnet 0",
                             new_src.parent_key(),
                             new_src.pool_index(),
+                            effective_pool_index(new_src),
                             new_src.pool_len(),
                             new_iface,
                             other_src.pool_index(),
+                            effective_pool_index(other_src),
                             other_src.pool_len(),
                             other.iface_name,
                         ),

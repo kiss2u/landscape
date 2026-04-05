@@ -58,6 +58,7 @@ async fn main() {
             route_info,
             ip_route,
             prefix_map,
+            std::sync::Arc::new(2),
         )
         .await;
     });

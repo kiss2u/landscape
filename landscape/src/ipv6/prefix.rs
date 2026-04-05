@@ -57,10 +57,26 @@ pub struct PrefixSetupResult {
 /// Runtime config for a PD source, extracted from LanIPv6SourceConfig
 struct PdSourceConfig {
     depend_iface: String,
-    pool_index: u32,
+    lan_slot: u32,
     sub_prefix_len: u8,
     preferred_lifetime: u32,
     valid_lifetime: u32,
+}
+
+fn reserved_wan_slots(target_prefix_len: u8) -> u128 {
+    if target_prefix_len <= 64 {
+        1
+    } else {
+        1u128 << (target_prefix_len - 64)
+    }
+}
+
+fn lan_slot_to_subnet_index(lan_slot: u32, target_prefix_len: u8) -> u128 {
+    u128::from(lan_slot) + reserved_wan_slots(target_prefix_len)
+}
+
+fn can_delegate_from_pd(source_prefix_len: u8, target_prefix_len: u8) -> bool {
+    source_prefix_len < 64 && source_prefix_len < target_prefix_len
 }
 
 /// Set up prefix sources (static + PD) and return runtime data, tokens, and change notifications.
@@ -119,7 +135,7 @@ pub async fn setup_prefix_sources(
                 None,
                 Some(PdSourceConfig {
                     depend_iface: depend_iface.clone(),
-                    pool_index: *pool_index,
+                    lan_slot: *pool_index,
                     sub_prefix_len: 64,
                     preferred_lifetime: *preferred_lifetime,
                     valid_lifetime: *valid_lifetime,
@@ -129,7 +145,7 @@ pub async fn setup_prefix_sources(
                 None,
                 Some(PdSourceConfig {
                     depend_iface: depend_iface.clone(),
-                    pool_index: *pool_index,
+                    lan_slot: *pool_index,
                     sub_prefix_len: 64,
                     preferred_lifetime: 0,
                     valid_lifetime: 0,
@@ -171,12 +187,14 @@ pub async fn setup_prefix_sources(
                 // Check once immediately
                 let ia_prefix = ia_config_watch.borrow().clone();
                 if let Some(ia_prefix) = ia_prefix {
-                    if ia_prefix.prefix_len <= max_source_prefix_len {
+                    if ia_prefix.prefix_len <= max_source_prefix_len
+                        && can_delegate_from_pd(ia_prefix.prefix_len, pool_len)
+                    {
                         let (sub_block, _) = allocate_subnet(
                             ia_prefix.prefix_ip,
                             ia_prefix.prefix_len,
                             pool_len,
-                            pool_index as u128,
+                            lan_slot_to_subnet_index(pool_index, pool_len),
                         );
                         pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
                             prefix: sub_block,
@@ -199,12 +217,14 @@ pub async fn setup_prefix_sources(
                                 }
                                 let ia_prefix = ia_config_watch.borrow().clone();
                                 if let Some(ia_prefix) = ia_prefix {
-                                    if ia_prefix.prefix_len <= max_source_prefix_len {
+                                    if ia_prefix.prefix_len <= max_source_prefix_len
+                                        && can_delegate_from_pd(ia_prefix.prefix_len, pool_len)
+                                    {
                                         let (sub_block, _) = allocate_subnet(
                                             ia_prefix.prefix_ip,
                                             ia_prefix.prefix_len,
                                             pool_len,
-                                            pool_index as u128,
+                                            lan_slot_to_subnet_index(pool_index, pool_len),
                                         );
                                         pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
                                             prefix: sub_block,
@@ -280,17 +300,19 @@ pub async fn setup_prefix_sources(
             // Check once immediately
             let ia_prefix = ia_config_watch.borrow().clone();
             if let Some(ia_prefix) = ia_prefix {
-                pd_prefix_info.store(Arc::new(Some(
-                    update_current_info(
-                        &iface_name_owned,
-                        ia_prefix,
-                        &pd_config,
-                        expire_time.as_mut(),
-                        &lan_info_clone,
-                        &route_service_clone,
-                    )
-                    .await,
-                )));
+                if can_delegate_from_pd(ia_prefix.prefix_len, pd_config.sub_prefix_len) {
+                    pd_prefix_info.store(Arc::new(Some(
+                        update_current_info(
+                            &iface_name_owned,
+                            ia_prefix,
+                            &pd_config,
+                            expire_time.as_mut(),
+                            &lan_info_clone,
+                            &route_service_clone,
+                        )
+                        .await,
+                    )));
+                }
             }
 
             tokio::spawn(async move {
@@ -310,14 +332,20 @@ pub async fn setup_prefix_sources(
                             }
                             let ia_prefix = ia_config_watch.borrow().clone();
                             if let Some(ia_prefix) = ia_prefix {
-                                pd_prefix_info.store(Arc::new(Some(update_current_info(
-                                    &iface_name_owned,
-                                    ia_prefix,
-                                    &pd_config,
-                                    expire_time.as_mut(),
-                                    &lan_info_clone,
-                                    &route_service_clone,
-                                ).await)));
+                                if can_delegate_from_pd(ia_prefix.prefix_len, pd_config.sub_prefix_len) {
+                                    pd_prefix_info.store(Arc::new(Some(update_current_info(
+                                        &iface_name_owned,
+                                        ia_prefix,
+                                        &pd_config,
+                                        expire_time.as_mut(),
+                                        &lan_info_clone,
+                                        &route_service_clone,
+                                    ).await)));
+                                } else {
+                                    pd_prefix_info.store(Arc::new(None));
+                                }
+                            } else {
+                                pd_prefix_info.store(Arc::new(None));
                             }
                             let _ = change_tx_clone.send(());
                         },
@@ -382,7 +410,7 @@ async fn update_current_info(
         ia_prefix.prefix_ip,
         ia_prefix.prefix_len,
         pd_config.sub_prefix_len,
-        pd_config.pool_index as u128,
+        lan_slot_to_subnet_index(pd_config.lan_slot, pd_config.sub_prefix_len),
     );
 
     let mut lan_info = lan_info.clone();
@@ -390,7 +418,7 @@ async fn update_current_info(
     lan_info.prefix = pd_config.sub_prefix_len;
     let lan_info_key = LanIPv6RouteKey {
         iface_name: iface_name.to_string(),
-        subnet_index: pd_config.pool_index,
+        subnet_index: pd_config.lan_slot,
     };
     route_service.insert_ipv6_lan_route(lan_info_key, lan_info).await;
 

@@ -6,14 +6,18 @@ use std::{
 };
 
 use dhcproto::{
-    v6::{self, DhcpOption, DhcpOptions, IAPrefix, Message, OptionCode},
+    v6::{self, DhcpOption, DhcpOptions, Message, OptionCode},
     Decodable, Decoder, Encodable, Encoder,
 };
 
 use socket2::{Domain, Protocol, Type};
 use tokio::{net::UdpSocket, time::Instant};
 
-use crate::{dump::udp_packet::dhcp_v6::get_solicit_options, route::IpRouteService};
+use crate::{
+    dump::udp_packet::dhcp_v6::get_solicit_options,
+    ipv6::prefix::{allocate_subnet, del_iface_ip, set_iface_ip},
+    route::IpRouteService,
+};
 
 use landscape_common::{
     ipv6_pd::IAPrefixMap,
@@ -190,6 +194,7 @@ pub async fn dhcp_v6_pd_client(
     wan_route_info: RouteTargetInfo,
     route_service: IpRouteService,
     prefix_map: IAPrefixMap,
+    shared_wan_iid: Arc<u64>,
 ) {
     prefix_map.init(&iface_name).await;
     let client_id = gen_client_id(config_mac);
@@ -274,6 +279,7 @@ pub async fn dhcp_v6_pd_client(
     let mut status = IpV6PdState::init_status();
     #[cfg(debug_assertions)]
     let time = tokio::time::Instant::now();
+    let mut current_wan_addr: Option<Ipv6Addr> = None;
 
     let mut service_status_subscribe = service_status.subscribe();
     loop {
@@ -320,7 +326,20 @@ pub async fn dhcp_v6_pd_client(
                 // 处理接收到的数据包
                 match message_result {
                     Some(data) => {
-                        let need_reset_time = handle_packet(&iface_name, ifindex, &client_id, &mut status, data, &wan_route_info, &route_service, &prefix_map, &mac_addr).await;
+                        let need_reset_time = handle_packet(
+                            &iface_name,
+                            ifindex,
+                            &client_id,
+                            &mut status,
+                            data,
+                            &wan_route_info,
+                            &route_service,
+                            &prefix_map,
+                            &mac_addr,
+                            shared_wan_iid.as_ref(),
+                            &mut current_wan_addr,
+                        )
+                        .await;
                         if matches!(status, IpV6PdState::Bound { .. }) {
                             connect_failure_count = 0;
                         }
@@ -356,6 +375,10 @@ pub async fn dhcp_v6_pd_client(
     }
 
     route_service.remove_ipv6_wan_route(&iface_name).await;
+    prefix_map.clean(&iface_name).await;
+    if let Some(wan_addr) = current_wan_addr.take() {
+        del_iface_ip(wan_addr, 128, &iface_name);
+    }
     tracing::info!("DHCP V6 Client Stop: {:#?}", service_status);
 
     if !service_status.is_stop() {
@@ -561,6 +584,8 @@ async fn handle_packet(
     route_service: &IpRouteService,
     prefix_map: &IAPrefixMap,
     mac_addr: &Option<MacAddr>,
+    shared_wan_iid: &u64,
+    current_wan_addr: &mut Option<Ipv6Addr>,
 ) -> bool {
     let IpAddr::V6(ipv6addr) = msg_addr.ip() else {
         tracing::error!("unexpected IPV4 packet");
@@ -686,24 +711,36 @@ async fn handle_packet(
                                 bound_time: Instant::now(),
                             };
 
+                            let ia_prefix = landscape_common::ipv6_pd::LDIAPrefix {
+                                preferred_lifetime: ia_prefix.preferred_lifetime,
+                                valid_lifetime: ia_prefix.valid_lifetime,
+                                prefix_len: ia_prefix.prefix_len,
+                                prefix_ip: ia_prefix.prefix_ip,
+                                last_update_time: get_f64_timestamp(),
+                            };
+
                             let mut info = wan_route_info.clone();
-                            // info.iface_ip =
-                            info.gateway_ip = IpAddr::V6(ipv6addr.clone());
+                            if let Some(wan_addr) = derive_wan_pd_addr(&ia_prefix, *shared_wan_iid)
+                            {
+                                if current_wan_addr.as_ref() != Some(&wan_addr) {
+                                    if let Some(old_addr) = current_wan_addr.replace(wan_addr) {
+                                        del_iface_ip(old_addr, 128, iface_name);
+                                    }
+                                }
+
+                                set_iface_ip(
+                                    wan_addr,
+                                    128,
+                                    iface_name,
+                                    Some(ia_prefix.valid_lifetime),
+                                    Some(ia_prefix.preferred_lifetime),
+                                );
+                                info.iface_ip = IpAddr::V6(wan_addr);
+                            }
+                            info.gateway_ip = IpAddr::V6(ipv6addr);
                             route_service.insert_ipv6_wan_route(&iface_name, info).await;
                             replace_ip_route(&ia_prefix, ipv6addr, iface_name, ifindex, mac_addr);
-                            // setting IA prefix to IAPrefixMap
-                            prefix_map
-                                .insert_or_replace(
-                                    iface_name,
-                                    landscape_common::ipv6_pd::LDIAPrefix {
-                                        preferred_lifetime: ia_prefix.preferred_lifetime,
-                                        valid_lifetime: ia_prefix.valid_lifetime,
-                                        prefix_len: ia_prefix.prefix_len,
-                                        prefix_ip: ia_prefix.prefix_ip,
-                                        last_update_time: get_f64_timestamp(),
-                                    },
-                                )
-                                .await;
+                            prefix_map.insert_or_replace(iface_name, ia_prefix).await;
                             tracing::debug!("current status move to: {:#?}", current_status);
                             return true;
                         } else {
@@ -725,7 +762,7 @@ async fn handle_packet(
 }
 
 fn replace_ip_route(
-    iapd: &IAPrefix,
+    iapd: &landscape_common::ipv6_pd::LDIAPrefix,
     route_ip: Ipv6Addr,
     iface_name: &str,
     ifindex: u32,
@@ -758,4 +795,19 @@ fn replace_ip_route(
     if let Err(e) = result {
         tracing::error!("{e:?}");
     }
+}
+
+fn derive_wan_pd_addr(
+    ia_prefix: &landscape_common::ipv6_pd::LDIAPrefix,
+    shared_wan_iid: u64,
+) -> Option<Ipv6Addr> {
+    let wan_prefix = match ia_prefix.prefix_len {
+        0..=63 => allocate_subnet(ia_prefix.prefix_ip, ia_prefix.prefix_len, 64, 0).0,
+        64 => ia_prefix.prefix_ip,
+        _ => return None,
+    };
+
+    let prefix_bits = u128::from(wan_prefix) & (!0u128 << 64);
+    let iid = if shared_wan_iid <= 1 { 2 } else { shared_wan_iid } as u128;
+    Some(Ipv6Addr::from(prefix_bits | iid))
 }

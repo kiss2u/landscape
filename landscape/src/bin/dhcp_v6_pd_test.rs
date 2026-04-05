@@ -72,6 +72,7 @@ async fn main() {
                 route_info,
                 ip_route_service,
                 prefix_map_clone,
+                Arc::new(2),
             )
             .await;
         }

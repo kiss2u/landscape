@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::net::Ipv6Addr;
+use std::sync::Arc;
 
 use landscape_common::ipv6_pd::IAPrefixMap;
 use landscape_common::ipv6_pd::LDIAPrefix;
@@ -26,11 +27,16 @@ use crate::route::IpRouteService;
 pub struct IPV6PDService {
     route_service: IpRouteService,
     prefix_map: IAPrefixMap,
+    shared_wan_iid: Arc<u64>,
 }
 
 impl IPV6PDService {
-    pub fn new(route_service: IpRouteService, prefix_map: IAPrefixMap) -> Self {
-        Self { route_service, prefix_map }
+    pub fn new(
+        route_service: IpRouteService,
+        prefix_map: IAPrefixMap,
+        shared_wan_iid: Arc<u64>,
+    ) -> Self {
+        Self { route_service, prefix_map, shared_wan_iid }
     }
 }
 
@@ -43,6 +49,7 @@ impl ServiceStarterTrait for IPV6PDService {
         if config.enable {
             let route_service = self.route_service.clone();
             let prefix_map = self.prefix_map.clone();
+            let shared_wan_iid = self.shared_wan_iid.clone();
             if let Some(iface) = get_iface_by_name(&config.iface_name).await {
                 let route_info = RouteTargetInfo {
                     ifindex: iface.index,
@@ -66,6 +73,7 @@ impl ServiceStarterTrait for IPV6PDService {
                         route_info,
                         route_service,
                         prefix_map,
+                        shared_wan_iid,
                     )
                     .await;
                 });
@@ -108,7 +116,15 @@ impl DHCPv6ClientManagerService {
         prefix_map: IAPrefixMap,
     ) -> Self {
         let store = store_service.dhcp_v6_client_store();
-        let server_starter = IPV6PDService::new(route_service, prefix_map.clone());
+        let shared_wan_iid = Arc::new({
+            let iid = rand::random::<u64>();
+            if iid <= 1 {
+                2
+            } else {
+                iid
+            }
+        });
+        let server_starter = IPV6PDService::new(route_service, prefix_map.clone(), shared_wan_iid);
         let service = ServiceManager::init(store.list().await.unwrap(), server_starter).await;
 
         let service_clone = service.clone();
