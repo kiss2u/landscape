@@ -150,7 +150,10 @@ pub async fn create_pppd_thread(
                     let update = if let Some(data) = ip4addr { data != new_ip4addr } else { true };
                     if update {
                         if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
-                            set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
+                            // Temporarily disable forcing accept_ra=2 on PPP interfaces
+                            // so we can observe whether PPP IPv6 still behaves correctly
+                            // with the kernel/default setting.
+                            // set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
                             landscape_ebpf::map_setting::add_ipv4_wan_ip(
                                 new_ip4addr.0,
                                 ip.clone(),
@@ -358,6 +361,7 @@ impl PPPDServiceConfigManagerService {
     }
 }
 
+#[allow(dead_code)]
 fn set_iface_ipv6_ra_accept_to_2(iface_name: &str) {
     if let Ok(ctl) = sysctl::Ctl::new(&SYSCTL_IPV6_RA_ACCEPT_PATTERN.replace("{}", iface_name)) {
         match ctl.set_value_string("2") {
