@@ -45,6 +45,7 @@ export default {
   common: {
     private_mode: "Private Mode",
     create: "Create",
+    details: "Details",
     edit: "Edit",
     delete: "Delete",
     confirm_delete: "Confirm deletion?",
@@ -107,6 +108,7 @@ export default {
     remark: "Remark",
     priority: "Priority",
     status: "Status",
+    actions: "Actions",
     type: "Type",
     time: "Time",
     size: "Size",

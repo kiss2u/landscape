@@ -16,6 +16,7 @@ pub struct Model {
     pub name: String,
     pub provider_config: DBJson,
     pub remark: Option<String>,
+    pub ddns_default_ttl: Option<u32>,
     pub update_at: DBTimestamp,
 }
 
@@ -42,6 +43,7 @@ impl From<Model> for DnsProviderProfile {
             name: entity.name,
             provider_config: serde_json::from_value(entity.provider_config).unwrap(),
             remark: entity.remark,
+            ddns_default_ttl: entity.ddns_default_ttl,
             update_at: entity.update_at,
         }
     }
@@ -60,6 +62,7 @@ impl UpdateActiveModel<ActiveModel> for DnsProviderProfile {
         active.name = Set(self.name);
         active.provider_config = Set(serde_json::to_value(self.provider_config).unwrap());
         active.remark = Set(self.remark);
+        active.ddns_default_ttl = Set(self.ddns_default_ttl);
         active.update_at = Set(self.update_at);
     }
 }

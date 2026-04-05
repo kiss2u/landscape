@@ -4,6 +4,7 @@ import {
   getDdnsJob,
   listDdnsJobs,
   listDdnsJobStatus,
+  triggerDdnsJobSync,
   updateDdnsJob,
 } from "@landscape-router/types/api/ddns/ddns";
 import type {
@@ -32,4 +33,8 @@ export async function push_ddns_job(payload: DdnsJob) {
 
 export async function delete_ddns_job(id: string): Promise<void> {
   await deleteDdnsJob(id);
+}
+
+export async function sync_ddns_job(id: string): Promise<DdnsJobRuntime> {
+  return triggerDdnsJobSync(id);
 }

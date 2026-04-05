@@ -18,9 +18,24 @@ pub struct DnsProviderProfile {
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub remark: Option<String>,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub ddns_default_ttl: Option<u32>,
     #[serde(default = "get_f64_timestamp")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
+}
+
+impl DnsProviderProfile {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.name.trim().is_empty() {
+            return Err("DNS provider profile name must not be empty".to_string());
+        }
+        if matches!(self.ddns_default_ttl, Some(0)) {
+            return Err("ddns_default_ttl must be greater than 0 when provided".to_string());
+        }
+        Ok(())
+    }
 }
 
 impl LandscapeDBStore<Uuid> for DnsProviderProfile {

@@ -14,6 +14,7 @@ pub fn get_ddns_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(list_ddns_jobs))
         .routes(routes!(list_ddns_job_status))
         .routes(routes!(create_ddns_job))
+        .routes(routes!(trigger_ddns_job_sync))
         .routes(routes!(get_ddns_job))
         .routes(routes!(update_ddns_job))
         .routes(routes!(delete_ddns_job))
@@ -67,6 +68,20 @@ async fn create_ddns_job(
     JsonBody(payload): JsonBody<DdnsJob>,
 ) -> LandscapeApiResult<DdnsJob> {
     LandscapeApiResp::success(app.ddns_service.checked_set_job(payload).await?)
+}
+
+#[utoipa::path(
+    post,
+    path = "/ddns/{id}/sync",
+    tag = "DDNS",
+    params(("id" = Uuid, Path, description = "DDNS job ID")),
+    responses((status = 200, body = CommonApiResp<DdnsJobRuntime>))
+)]
+async fn trigger_ddns_job_sync(
+    State(app): State<LandscapeApp>,
+    Path(id): Path<ConfigId>,
+) -> LandscapeApiResult<DdnsJobRuntime> {
+    LandscapeApiResp::success(app.ddns_service.sync_job_now(id.into()).await?)
 }
 
 #[utoipa::path(

@@ -5,9 +5,12 @@ import {
   get_ddns_job_status,
   get_ddns_jobs,
   push_ddns_job,
+  sync_ddns_job,
 } from "@/api/domain/ddns";
 import { get_dns_provider_profiles } from "@/api/domain/provider_profile";
+import { useWindowSize } from "@vueuse/core";
 import type {
+  DdnsFamilyRuntime,
   DdnsJob,
   DdnsJobRuntime,
   DdnsRecordConfig,
@@ -28,18 +31,21 @@ type SourceInputItem =
   | { kind: "lan_device"; target_id: string; family: "ipv6" };
 const loading = ref(false);
 const showModal = ref(false);
+const showDetailDrawer = ref(false);
 const saving = ref(false);
+const syncingIds = ref<Set<string>>(new Set());
 const editingId = ref<string | null>(null);
+const detailJobId = ref<string | null>(null);
 const formRef = ref();
 const recordInputs = ref<string[]>([]);
 const sourceInputs = ref<SourceInputItem[]>([]);
+const { width: windowWidth } = useWindowSize();
 const form = ref<DdnsJob>({
   name: "",
   enable: true,
   sources: [],
   zone_name: "",
   provider_profile_id: "",
-  ttl: 120,
   records: [],
 });
 
@@ -77,6 +83,39 @@ const rules = {
 const providerOptions = computed(() =>
   providerProfiles.value.map((item) => ({ label: item.name, value: item.id! })),
 );
+const selectedProviderProfile = computed(
+  () =>
+    providerProfiles.value.find(
+      (item) => item.id === form.value.provider_profile_id,
+    ) ?? null,
+);
+const selectedProviderDefaultTtl = computed(
+  () => selectedProviderProfile.value?.ddns_default_ttl ?? 120,
+);
+const useProfileDefaultTtl = computed({
+  get: () => form.value.ttl == null,
+  set: (useProfileDefault) => {
+    if (useProfileDefault) {
+      form.value.ttl = undefined;
+    } else {
+      form.value.ttl = selectedProviderDefaultTtl.value;
+    }
+  },
+});
+
+const selectedDetailJob = computed(
+  () => items.value.find((item) => item.id === detailJobId.value) ?? null,
+);
+
+const detailDrawerWidth = computed(() => {
+  const width = windowWidth.value || 920;
+  return width < 768 ? width : 920;
+});
+
+const detailDrawerTitle = computed(() => {
+  if (!selectedDetailJob.value) return t("cert.ddns_job_details");
+  return `${selectedDetailJob.value.name} · ${selectedDetailJob.value.zone_name}`;
+});
 
 function resetForm(item?: DdnsJob) {
   form.value = item
@@ -87,7 +126,6 @@ function resetForm(item?: DdnsJob) {
         sources: [],
         zone_name: "",
         provider_profile_id: providerProfiles.value[0]?.id ?? "",
-        ttl: 120,
         records: [],
       };
   editingId.value = item?.id ?? null;
@@ -110,7 +148,7 @@ function resetForm(item?: DdnsJob) {
       family: "ipv6" as IpFamily,
     },
   ];
-  recordInputs.value = item?.records.map((record) => record.name) ?? ["@"];
+  recordInputs.value = item?.records?.map((record) => record.name) ?? ["@"];
 }
 
 async function refresh() {
@@ -164,26 +202,15 @@ function statusType(status?: string) {
 }
 
 function recordsSummary(job: DdnsJob) {
-  return job.records.map((record) => record.name).join(", ");
+  return (job.records ?? []).map((record) => record.name).join(", ");
+}
+
+function getJobRuntime(job: DdnsJob) {
+  return job.id ? runtimeMap.value.get(job.id) : undefined;
 }
 
 function aggregateStatus(job: DdnsJob) {
-  const runtime = runtimeMap.value.get(job.id!);
-  const enabledRecords = runtime?.records ?? [];
-  if (enabledRecords.length === 0) return "idle";
-  const allStatuses = enabledRecords.flatMap((record) => [
-    record.ipv4.status,
-    record.ipv6.status,
-  ]);
-  if (allStatuses.some((status) => status === "error")) return "error";
-  if (allStatuses.some((status) => status === "syncing")) return "syncing";
-  if (
-    allStatuses.every(
-      (status) => status === "success" || status === "idle" || status == null,
-    )
-  )
-    return "success";
-  return "idle";
+  return getJobRuntime(job)?.status ?? "idle";
 }
 
 function renderFamilyStatus(status?: string) {
@@ -202,55 +229,65 @@ function formatError(err?: string | null) {
   return err || "-";
 }
 
-function expandedRowRender(row: DdnsJob) {
-  const runtime = runtimeMap.value.get(row.id!);
-  return h("div", { style: "padding: 8px 0;" }, [
-    h("table", { class: "ddns-detail-table" }, [
-      h("thead", {}, [
-        h("tr", {}, [
-          h("th", {}, t("cert.record_name")),
-          h("th", {}, "IPv4"),
-          h("th", {}, "IPv4 IP"),
-          h("th", {}, "IPv4 Error"),
-          h("th", {}, "IPv6"),
-          h("th", {}, "IPv6 IP"),
-          h("th", {}, "IPv6 Error"),
-        ]),
-      ]),
-      h(
-        "tbody",
-        {},
-        (
-          runtime?.records ??
-          row.records.map((record) => ({
-            name: record.name,
-            ipv4: {
-              status: "idle",
-              last_published_ip: null,
-              last_error: null,
-              last_sync_at: null,
-            },
-            ipv6: {
-              status: "idle",
-              last_published_ip: null,
-              last_error: null,
-              last_sync_at: null,
-            },
-          }))
-        ).map((record) =>
-          h("tr", { key: record.name }, [
-            h("td", {}, record.name),
-            h("td", {}, [renderFamilyStatus(record.ipv4.status)]),
-            h("td", {}, formatIp(record.ipv4.last_published_ip)),
-            h("td", {}, formatError(record.ipv4.last_error)),
-            h("td", {}, [renderFamilyStatus(record.ipv6.status)]),
-            h("td", {}, formatIp(record.ipv6.last_published_ip)),
-            h("td", {}, formatError(record.ipv6.last_error)),
-          ]),
-        ),
-      ),
-    ]),
-  ]);
+function formatTimestamp(ts?: number | null) {
+  if (!ts) return "-";
+  return new Date(ts).toLocaleString();
+}
+
+function runtimeReasonLabel(reason?: string | null) {
+  return reason ? t(`cert.ddns_reason_${reason}`) : "-";
+}
+
+function formatRetry(runtime?: {
+  retryable?: boolean;
+  next_retry_at?: number | null;
+}) {
+  if (!runtime?.retryable) return "-";
+  return runtime.next_retry_at
+    ? formatTimestamp(runtime.next_retry_at)
+    : t("cert.retry_scheduled");
+}
+
+function formatRuntimeSummary(runtime?: {
+  reason?: string | null;
+  retryable?: boolean;
+  next_retry_at?: number | null;
+}) {
+  if (!runtime) return "-";
+  const reason = runtimeReasonLabel(runtime.reason);
+  const retry = formatRetry(runtime);
+  return retry === "-"
+    ? reason
+    : `${reason} · ${t("cert.next_retry_at")}: ${retry}`;
+}
+
+function fallbackFamilyRuntime(
+  jobEnabled: boolean,
+  recordEnabled: boolean,
+): DdnsFamilyRuntime {
+  const enabled = jobEnabled && recordEnabled;
+  return {
+    status: "idle",
+    reason: enabled ? "pending" : "disabled",
+    last_published_ip: undefined,
+    message: undefined,
+    last_error: undefined,
+    last_sync_at: undefined,
+    retryable: false,
+    next_retry_at: undefined,
+  };
+}
+
+function detailRecords(job: DdnsJob | null) {
+  if (!job) return [];
+  return (
+    getJobRuntime(job)?.records ??
+    (job.records ?? []).map((record) => ({
+      name: record.name,
+      ipv4: fallbackFamilyRuntime(job.enable ?? true, record.enable ?? true),
+      ipv6: fallbackFamilyRuntime(job.enable ?? true, record.enable ?? true),
+    }))
+  );
 }
 
 function mergeRecordItems(records: string[], existing: DdnsRecordConfig[]) {
@@ -306,6 +343,13 @@ function updateSourceFamily(index: number, value: IpFamily) {
   }
 }
 
+function updateProviderProfile(value: string) {
+  form.value.provider_profile_id = value;
+  if (!useProfileDefaultTtl.value && form.value.ttl == null) {
+    form.value.ttl = selectedProviderDefaultTtl.value;
+  }
+}
+
 async function save() {
   await formRef.value?.validate();
   saving.value = true;
@@ -342,7 +386,9 @@ async function save() {
       ...form.value,
       id: editingId.value ?? undefined,
       sources,
-      ttl: form.value.ttl || null,
+      ttl: useProfileDefaultTtl.value
+        ? undefined
+        : (form.value.ttl ?? selectedProviderDefaultTtl.value),
       records: mergeRecordItems(recordNames, form.value.records ?? []),
     });
     showModal.value = false;
@@ -357,12 +403,22 @@ async function remove(id: string) {
   await refresh();
 }
 
+async function syncNow(id: string) {
+  syncingIds.value.add(id);
+  try {
+    await sync_ddns_job(id);
+    await refresh();
+  } finally {
+    syncingIds.value.delete(id);
+  }
+}
+
+function openDetailDrawer(job: DdnsJob) {
+  detailJobId.value = job.id ?? null;
+  showDetailDrawer.value = true;
+}
+
 const columns = computed<DataTableColumns<DdnsJob>>(() => [
-  {
-    type: "expand",
-    expandable: () => true,
-    renderExpand: expandedRowRender,
-  },
   { title: t("cert.job_name"), key: "name", minWidth: 120 },
   { title: t("cert.zone_name"), key: "zone_name", minWidth: 160 },
   {
@@ -404,15 +460,44 @@ const columns = computed<DataTableColumns<DdnsJob>>(() => [
       ),
   },
   {
-    title: t("common.status"),
+    title: t("cert.cert_status_message"),
+    key: "status_message",
+    minWidth: 220,
+    render: (row) => formatRuntimeSummary(getJobRuntime(row)),
+  },
+  {
+    title: t("common.actions"),
     key: "actions",
-    width: 180,
+    width: 360,
     render: (row) => [
       h(
         NButton,
         {
           size: "small",
           secondary: true,
+          onClick: () => openDetailDrawer(row),
+        },
+        () => t("common.details"),
+      ),
+      h(
+        NButton,
+        {
+          size: "small",
+          type: "primary",
+          secondary: true,
+          style: "margin-left: 8px",
+          loading: row.id ? syncingIds.value.has(row.id) : false,
+          disabled: !row.enable,
+          onClick: () => row.id && syncNow(row.id),
+        },
+        () => t("cert.sync_now"),
+      ),
+      h(
+        NButton,
+        {
+          size: "small",
+          secondary: true,
+          style: "margin-left: 8px",
           onClick: () => {
             resetForm(row);
             showModal.value = true;
@@ -481,6 +566,85 @@ onMounted(async () => {
       :single-line="false"
     />
 
+    <n-drawer
+      v-model:show="showDetailDrawer"
+      placement="right"
+      :width="detailDrawerWidth"
+    >
+      <n-drawer-content :title="detailDrawerTitle" closable>
+        <template v-if="selectedDetailJob">
+          <n-flex vertical :size="12">
+            <n-flex :size="8" wrap>
+              <n-tag size="small">{{ selectedDetailJob.zone_name }}</n-tag>
+              <n-tag size="small">{{ sourceLabel(selectedDetailJob) }}</n-tag>
+              <n-tag
+                size="small"
+                :type="statusType(aggregateStatus(selectedDetailJob))"
+              >
+                {{ aggregateStatus(selectedDetailJob) }}
+              </n-tag>
+            </n-flex>
+
+            <div>
+              {{ formatRuntimeSummary(getJobRuntime(selectedDetailJob)) }}
+            </div>
+
+            <div class="ddns-detail-table-wrapper">
+              <table class="ddns-detail-table">
+                <thead>
+                  <tr>
+                    <th>{{ t("cert.record_name") }}</th>
+                    <th>IPv4</th>
+                    <th>IPv4 IP</th>
+                    <th>{{ t("cert.cert_status_message") }}</th>
+                    <th>{{ t("cert.next_retry_at") }}</th>
+                    <th>IPv4 Error</th>
+                    <th>IPv6</th>
+                    <th>IPv6 IP</th>
+                    <th>{{ t("cert.cert_status_message") }}</th>
+                    <th>{{ t("cert.next_retry_at") }}</th>
+                    <th>IPv6 Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="record in detailRecords(selectedDetailJob)"
+                    :key="record.name"
+                  >
+                    <td>{{ record.name }}</td>
+                    <td>
+                      <n-tag
+                        size="small"
+                        :type="statusType(record.ipv4.status)"
+                      >
+                        {{ record.ipv4.status ?? "idle" }}
+                      </n-tag>
+                    </td>
+                    <td>{{ formatIp(record.ipv4.last_published_ip) }}</td>
+                    <td>{{ formatRuntimeSummary(record.ipv4) }}</td>
+                    <td>{{ formatRetry(record.ipv4) }}</td>
+                    <td>{{ formatError(record.ipv4.last_error) }}</td>
+                    <td>
+                      <n-tag
+                        size="small"
+                        :type="statusType(record.ipv6.status)"
+                      >
+                        {{ record.ipv6.status ?? "idle" }}
+                      </n-tag>
+                    </td>
+                    <td>{{ formatIp(record.ipv6.last_published_ip) }}</td>
+                    <td>{{ formatRuntimeSummary(record.ipv6) }}</td>
+                    <td>{{ formatRetry(record.ipv6) }}</td>
+                    <td>{{ formatError(record.ipv6.last_error) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </n-flex>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
+
     <n-modal
       v-model:show="showModal"
       preset="card"
@@ -546,17 +710,35 @@ onMounted(async () => {
           path="provider_profile_id"
         >
           <n-select
-            v-model:value="form.provider_profile_id"
+            :value="form.provider_profile_id"
             :options="providerOptions"
+            @update:value="updateProviderProfile"
           />
         </n-form-item>
         <n-form-item :label="t('cert.ttl')">
-          <n-input-number
-            v-model:value="form.ttl"
-            :min="1"
-            :precision="0"
-            style="width: 100%"
-          />
+          <n-flex vertical style="width: 100%" :size="8">
+            <n-switch v-model:value="useProfileDefaultTtl">
+              <template #checked>{{ t("cert.follow_profile_ttl") }}</template>
+              <template #unchecked>{{ t("cert.custom_ttl") }}</template>
+            </n-switch>
+            <n-input-number
+              :value="
+                useProfileDefaultTtl ? selectedProviderDefaultTtl : form.ttl
+              "
+              :disabled="useProfileDefaultTtl"
+              :min="1"
+              :precision="0"
+              style="width: 100%"
+              @update:value="form.ttl = $event ?? undefined"
+            />
+            <div class="ddns-form-hint">
+              {{
+                useProfileDefaultTtl
+                  ? `${t("cert.follow_profile_ttl_hint")} ${selectedProviderDefaultTtl}`
+                  : t("cert.custom_ttl_hint")
+              }}
+            </div>
+          </n-flex>
         </n-form-item>
         <n-form-item :label="t('common.enable')">
           <n-switch v-model:value="form.enable" />
@@ -582,6 +764,15 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.ddns-detail-table-wrapper {
+  overflow-x: auto;
+}
+
+.ddns-form-hint {
+  color: rgba(128, 128, 128, 0.9);
+  font-size: 12px;
+}
+
 .ddns-detail-table {
   width: 100%;
   border-collapse: collapse;

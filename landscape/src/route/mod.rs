@@ -12,6 +12,7 @@ use arc_swap::ArcSwap;
 use hickory_proto::rr::RecordType;
 use landscape_common::{
     config::FlowId,
+    ddns::IpFamily,
     event::route::RouteEvent,
     flow::{config::FlowConfig, FlowTarget},
     route::{LanIPv6RouteKey, LanRouteInfo, LanRouteMode, RouteTargetInfo},
@@ -19,7 +20,7 @@ use landscape_common::{
 use landscape_database::flow_rule::repository::FlowConfigRepository;
 use landscape_dns::server::LocalDnsAnswerProvider;
 use landscape_ebpf::map_setting::route::{add_lan_route, del_lan_route};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 use landscape_common::database::LandscapeStore;
 
@@ -36,6 +37,7 @@ pub struct IpRouteService {
     flow_repo: FlowConfigRepository,
     ipv4_wan_ifaces: ShareRwLock<WanRoutesByOwner>,
     ipv6_wan_ifaces: ShareRwLock<WanRoutesByOwner>,
+    wan_route_events: broadcast::Sender<WanRouteEvent>,
 
     ipv4_lan_ifaces: ShareRwLock<Ipv4LanRoutesByOwner>,
     ipv6_lan_ifaces: ShareRwLock<Ipv6LanRoutesByKey>,
@@ -56,6 +58,19 @@ enum Ipv6LanRouteUpdate {
 enum WanRouteUpdate {
     Noop,
     Changed { refresh_default_router: bool, target: FlowTarget },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WanRouteEventKind {
+    Upserted,
+    Removed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WanRouteEvent {
+    pub owner: String,
+    pub family: IpFamily,
+    pub kind: WanRouteEventKind,
 }
 
 fn reconcile_ipv4_lan_bucket(
@@ -217,10 +232,12 @@ impl IpRouteService {
         route_event_sender: mpsc::Receiver<RouteEvent>,
         flow_repo: FlowConfigRepository,
     ) -> Self {
+        let (wan_route_events, _) = broadcast::channel(64);
         let service = IpRouteService {
             flow_repo,
             ipv4_wan_ifaces: Arc::new(RwLock::new(HashMap::new())),
             ipv6_wan_ifaces: Arc::new(RwLock::new(HashMap::new())),
+            wan_route_events,
             ipv4_lan_ifaces: Arc::new(RwLock::new(HashMap::new())),
             ipv6_lan_ifaces: Arc::new(RwLock::new(HashMap::new())),
             reachable_local_ipv4_addrs: Arc::new(ArcSwap::from_pointee(Vec::new())),
@@ -272,6 +289,11 @@ impl IpRouteService {
 
     async fn clone_ipv6_wan_infos(&self) -> WanRoutesByOwner {
         clone_locked_state(&self.ipv6_wan_ifaces).await
+    }
+
+    fn notify_wan_route_change(&self, owner: &str, family: IpFamily, kind: WanRouteEventKind) {
+        let _ =
+            self.wan_route_events.send(WanRouteEvent { owner: owner.to_string(), family, kind });
     }
 
     async fn apply_ipv4_wan_route_update(&self, update: WanRouteUpdate) {
@@ -472,8 +494,12 @@ impl IpRouteService {
             let mut lock = self.ipv6_wan_ifaces.write().await;
             reconcile_wan_route(&mut lock, key, info)
         };
+        let changed = !matches!(update, WanRouteUpdate::Noop);
 
         self.apply_ipv6_wan_route_update(update).await;
+        if changed {
+            self.notify_wan_route_change(key, IpFamily::Ipv6, WanRouteEventKind::Upserted);
+        }
     }
 
     pub async fn insert_ipv4_wan_route(&self, key: &str, info: RouteTargetInfo) {
@@ -481,13 +507,21 @@ impl IpRouteService {
             let mut lock = self.ipv4_wan_ifaces.write().await;
             reconcile_wan_route(&mut lock, key, info)
         };
+        let changed = !matches!(update, WanRouteUpdate::Noop);
 
         self.apply_ipv4_wan_route_update(update).await;
+        if changed {
+            self.notify_wan_route_change(key, IpFamily::Ipv4, WanRouteEventKind::Upserted);
+        }
     }
 
     pub async fn remove_ipv4_wan_route(&self, key: &str) {
         let removed = self.ipv4_wan_ifaces.write().await.remove(key);
+        let had_removed = removed.is_some();
         self.apply_removed_ipv4_wan_route(removed).await;
+        if had_removed {
+            self.notify_wan_route_change(key, IpFamily::Ipv4, WanRouteEventKind::Removed);
+        }
     }
 
     pub async fn get_ipv4_wan_route(&self, key: &str) -> Option<RouteTargetInfo> {
@@ -500,7 +534,11 @@ impl IpRouteService {
 
     pub async fn remove_ipv6_wan_route(&self, key: &str) {
         let removed = self.ipv6_wan_ifaces.write().await.remove(key);
+        let had_removed = removed.is_some();
         self.apply_removed_ipv6_wan_route(removed).await;
+        if had_removed {
+            self.notify_wan_route_change(key, IpFamily::Ipv6, WanRouteEventKind::Removed);
+        }
     }
 
     pub async fn get_ipv6_wan_route(&self, key: &str) -> Option<RouteTargetInfo> {
@@ -509,6 +547,10 @@ impl IpRouteService {
 
     pub async fn get_all_ipv6_wan_routes(&self) -> HashMap<String, RouteTargetInfo> {
         self.clone_ipv6_wan_infos().await
+    }
+
+    pub fn subscribe_wan_route_events(&self) -> broadcast::Receiver<WanRouteEvent> {
+        self.wan_route_events.subscribe()
     }
 
     pub async fn refresh_default_router(&self) {
@@ -637,6 +679,20 @@ pub async fn test_used_ip_route() -> (mpsc::Sender<RouteEvent>, IpRouteService) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    fn ipv4_wan_route(iface_name: &str, iface_ip: Ipv4Addr) -> RouteTargetInfo {
+        RouteTargetInfo {
+            weight: 1,
+            ifindex: 1,
+            mac: None,
+            default_route: true,
+            is_docker: false,
+            iface_name: iface_name.to_string(),
+            iface_ip: IpAddr::V4(iface_ip),
+            gateway_ip: IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+        }
+    }
 
     fn ipv4_lan_route(
         ifindex: u32,
@@ -674,6 +730,38 @@ mod tests {
 
     fn run_async_test(test: impl std::future::Future<Output = ()>) {
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(test);
+    }
+
+    #[test]
+    fn wan_route_events_only_fire_on_real_changes() {
+        run_async_test(async {
+            let (_tx, service) = test_used_ip_route().await;
+            let mut events = service.subscribe_wan_route_events();
+            let route = ipv4_wan_route("wan0", Ipv4Addr::new(198, 51, 100, 10));
+
+            service.insert_ipv4_wan_route("wan0", route.clone()).await;
+            assert_eq!(
+                events.recv().await.unwrap(),
+                WanRouteEvent {
+                    owner: "wan0".to_string(),
+                    family: IpFamily::Ipv4,
+                    kind: WanRouteEventKind::Upserted,
+                }
+            );
+
+            service.insert_ipv4_wan_route("wan0", route).await;
+            assert!(tokio::time::timeout(Duration::from_millis(50), events.recv()).await.is_err());
+
+            service.remove_ipv4_wan_route("wan0").await;
+            assert_eq!(
+                events.recv().await.unwrap(),
+                WanRouteEvent {
+                    owner: "wan0".to_string(),
+                    family: IpFamily::Ipv4,
+                    kind: WanRouteEventKind::Removed,
+                }
+            );
+        });
     }
 
     #[test]

@@ -45,6 +45,7 @@ export default {
   common: {
     private_mode: "隐私模式",
     create: "创建",
+    details: "详情",
     edit: "编辑",
     delete: "删除",
     confirm_delete: "确定删除吗",
@@ -105,6 +106,7 @@ export default {
     remark: "备注",
     priority: "优先级",
     status: "状态",
+    actions: "操作",
     type: "类型",
     time: "时间",
     size: "大小",

@@ -22,5 +22,6 @@ pub enum DnsProviderProfiles {
     Name,
     ProviderConfig,
     Remark,
+    DdnsDefaultTtl,
     UpdateAt,
 }

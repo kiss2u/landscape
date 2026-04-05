@@ -38,6 +38,7 @@ mod m20260302_060012_cert_management;
 mod m20260308_101225_gateway_http_upstream;
 mod m20260314_120000_dns_redirect_answer_mode;
 mod m20260405_160000_ddns;
+mod m20260405_220000_move_ddns_ttl_to_profile;
 mod tables;
 
 pub struct Migrator;
@@ -84,6 +85,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260308_101225_gateway_http_upstream::Migration),
             Box::new(m20260314_120000_dns_redirect_answer_mode::Migration),
             Box::new(m20260405_160000_ddns::Migration),
+            Box::new(m20260405_220000_move_ddns_ttl_to_profile::Migration),
         ]
     }
 }

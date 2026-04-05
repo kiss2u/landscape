@@ -39,6 +39,35 @@ impl Default for DdnsJobStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DdnsRuntimeReason {
+    Disabled,
+    NotConfigured,
+    Pending,
+    Publishing,
+    Published,
+    UpToDate,
+    WaitingWanIp,
+    NoMatchingSource,
+    SourceNotImplemented,
+    ProviderProfileMissing,
+    ProviderUnsupported,
+    AuthFailed,
+    RateLimited,
+    Timeout,
+    NetworkError,
+    RemoteRejected,
+    UnknownError,
+}
+
+impl Default for DdnsRuntimeReason {
+    fn default() -> Self {
+        Self::Pending
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DdnsRecordConfig {
@@ -58,9 +87,19 @@ pub struct DdnsFamilyRuntime {
     pub last_sync_at: Option<f64>,
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub message: Option<String>,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub last_error: Option<String>,
     #[serde(default)]
     pub status: DdnsJobStatus,
+    #[serde(default)]
+    pub reason: DdnsRuntimeReason,
+    #[serde(default)]
+    pub retryable: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub next_retry_at: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -77,7 +116,16 @@ pub struct DdnsJobRuntime {
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub job_id: Uuid,
     pub status: DdnsJobStatus,
+    pub reason: DdnsRuntimeReason,
     pub records: Vec<DdnsRecordRuntime>,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub retryable: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub next_retry_at: Option<f64>,
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
     pub last_update_at: Option<f64>,
@@ -124,6 +172,14 @@ impl LandscapeDBStore<Uuid> for DdnsJob {
 }
 
 impl DdnsJob {
+    pub fn has_source_for_family(&self, wanted_family: IpFamily) -> bool {
+        self.sources.iter().any(|source| match source {
+            DdnsSource::LocalWan { family, .. } | DdnsSource::EnrolledDevice { family, .. } => {
+                *family == wanted_family
+            }
+        })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         let zone_name = normalize_zone_name(&self.zone_name)?;
         if let Some(ttl) = self.ttl {
@@ -165,29 +221,55 @@ impl DdnsJob {
 
 impl DdnsJobRuntime {
     pub fn from_config(job: &DdnsJob) -> Self {
+        let reason = if job.enable && job.records.iter().any(|record| record.enable) {
+            DdnsRuntimeReason::Pending
+        } else {
+            DdnsRuntimeReason::Disabled
+        };
         Self {
             job_id: job.id,
             status: DdnsJobStatus::Idle,
+            reason,
             records: job
                 .records
                 .iter()
                 .map(|record| DdnsRecordRuntime {
                     name: record.name.clone(),
-                    ipv4: DdnsFamilyRuntime {
-                        last_published_ip: None,
-                        last_sync_at: None,
-                        last_error: None,
-                        status: DdnsJobStatus::Idle,
-                    },
-                    ipv6: DdnsFamilyRuntime {
-                        last_published_ip: None,
-                        last_sync_at: None,
-                        last_error: None,
-                        status: DdnsJobStatus::Idle,
-                    },
+                    ipv4: DdnsFamilyRuntime::from_tracking(
+                        job.enable && record.enable,
+                        job.has_source_for_family(IpFamily::Ipv4),
+                    ),
+                    ipv6: DdnsFamilyRuntime::from_tracking(
+                        job.enable && record.enable,
+                        job.has_source_for_family(IpFamily::Ipv6),
+                    ),
                 })
                 .collect(),
+            message: None,
+            retryable: false,
+            next_retry_at: None,
             last_update_at: None,
+        }
+    }
+}
+
+impl DdnsFamilyRuntime {
+    pub fn from_enabled(enabled: bool) -> Self {
+        Self::from_tracking(enabled, true)
+    }
+
+    pub fn from_tracking(enabled: bool, configured: bool) -> Self {
+        let reason = if enabled { DdnsRuntimeReason::Pending } else { DdnsRuntimeReason::Disabled };
+        let reason = if enabled && !configured { DdnsRuntimeReason::NotConfigured } else { reason };
+        Self {
+            last_published_ip: None,
+            last_sync_at: None,
+            message: None,
+            last_error: None,
+            status: DdnsJobStatus::Idle,
+            reason,
+            retryable: false,
+            next_retry_at: None,
         }
     }
 }

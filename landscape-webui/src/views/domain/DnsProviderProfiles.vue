@@ -22,6 +22,7 @@ const formRef = ref();
 const form = ref<DnsProviderProfile>({
   name: "",
   provider_config: { cloudflare: { api_token: "" } },
+  ddns_default_ttl: defaultDdnsTtlForProvider("cloudflare"),
   remark: "",
 });
 const providerType = ref("cloudflare");
@@ -34,6 +35,15 @@ const providerOptions = [
   { label: "Google Cloud DNS", value: "google" },
 ];
 
+function defaultDdnsTtlForProvider(type: string): number {
+  switch (type) {
+    case "aliyun":
+      return 600;
+    default:
+      return 120;
+  }
+}
+
 const rules = {
   name: {
     required: true,
@@ -42,7 +52,10 @@ const rules = {
   },
 };
 
-function getProviderType(config: DnsProviderConfig): string {
+function getProviderType(config?: DnsProviderConfig): string {
+  if (!config) {
+    return "cloudflare";
+  }
   if (typeof config === "string") {
     return "cloudflare";
   }
@@ -102,24 +115,40 @@ function buildProviderConfig(
 }
 
 function setProviderType(type: string) {
+  const previousType = providerType.value;
   providerType.value = type;
   form.value.provider_config = buildProviderConfig(
     type,
     form.value.provider_config,
   );
+
+  const previousDefaultTtl = defaultDdnsTtlForProvider(previousType);
+  if (
+    form.value.ddns_default_ttl == null ||
+    form.value.ddns_default_ttl === previousDefaultTtl
+  ) {
+    form.value.ddns_default_ttl = defaultDdnsTtlForProvider(type);
+  }
 }
 
-function providerLabel(config: DnsProviderConfig) {
+function providerLabel(config?: DnsProviderConfig) {
   const type = getProviderType(config);
   return providerOptions.find((item) => item.value === type)?.label ?? type;
 }
 
 function resetForm(item?: DnsProviderProfile) {
   form.value = item
-    ? { ...item, remark: item.remark ?? "" }
+    ? {
+        ...item,
+        remark: item.remark ?? "",
+        ddns_default_ttl:
+          item.ddns_default_ttl ??
+          defaultDdnsTtlForProvider(getProviderType(item.provider_config)),
+      }
     : {
         name: "",
         provider_config: { cloudflare: { api_token: "" } },
+        ddns_default_ttl: defaultDdnsTtlForProvider("cloudflare"),
         remark: "",
       };
   editingId.value = item?.id ?? null;
@@ -142,7 +171,10 @@ async function save() {
     await push_dns_provider_profile({
       ...form.value,
       id: editingId.value ?? undefined,
-      remark: form.value.remark || null,
+      provider_config:
+        form.value.provider_config ?? buildProviderConfig(providerType.value),
+      ddns_default_ttl: form.value.ddns_default_ttl || undefined,
+      remark: form.value.remark || undefined,
     });
     showModal.value = false;
     await refresh();
@@ -171,6 +203,12 @@ const columns = computed<DataTableColumns<DnsProviderProfile>>(() => [
         },
         () => providerLabel(row.provider_config),
       ),
+  },
+  {
+    title: t("cert.ddns_default_ttl"),
+    key: "ddns_default_ttl",
+    width: 120,
+    render: (row) => row.ddns_default_ttl ?? 120,
   },
   {
     title: t("common.remark"),
@@ -343,6 +381,19 @@ onMounted(refresh);
               :autosize="{ minRows: 5, maxRows: 10 }"
           /></n-form-item>
         </template>
+
+        <n-form-item :label="t('cert.ddns_default_ttl')">
+          <n-input-number
+            v-model:value="form.ddns_default_ttl"
+            :min="1"
+            :precision="0"
+            style="width: 100%"
+          />
+        </n-form-item>
+
+        <n-alert type="info" :show-icon="false" style="margin-bottom: 12px">
+          {{ t("cert.ddns_default_ttl_hint") }}
+        </n-alert>
 
         <n-form-item :label="t('common.remark')">
           <n-input

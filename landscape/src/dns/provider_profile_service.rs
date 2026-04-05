@@ -22,6 +22,7 @@ impl DnsProviderProfileService {
         &self,
         config: DnsProviderProfile,
     ) -> Result<DnsProviderProfile, LdError> {
+        config.validate().map_err(LdError::ConfigError)?;
         if matches!(config.provider_config, DnsProviderConfig::Manual) {
             return Err(LdError::ConfigError(
                 "manual DNS provider cannot be used as a reusable DNS provider profile".to_string(),
