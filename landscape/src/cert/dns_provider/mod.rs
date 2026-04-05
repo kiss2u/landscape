@@ -1,9 +1,9 @@
-mod aliyun;
+pub(crate) mod aliyun;
 mod aws;
 mod cloudflare;
 mod common;
 mod google;
-mod tencent;
+pub(crate) mod tencent;
 
 use landscape_common::cert::order::{ChallengeType, DnsProviderConfig};
 use landscape_common::cert::CertError;
@@ -14,6 +14,18 @@ pub trait DnsChallengeSolver: Send + Sync {
     async fn create_txt_record(&self, domain: &str, value: &str) -> Result<(), CertError>;
     /// Remove the TXT record after validation
     async fn cleanup_txt_record(&self, domain: &str, value: &str) -> Result<(), CertError>;
+}
+
+#[async_trait::async_trait]
+pub trait DnsRecordUpdater: Send + Sync {
+    async fn upsert_record(
+        &self,
+        zone_name: &str,
+        record_name: &str,
+        value: &str,
+        record_type: &str,
+        ttl: u32,
+    ) -> Result<(), CertError>;
 }
 
 /// Factory: build solver from order's challenge_type config
@@ -48,6 +60,28 @@ pub fn build_solver(
         ChallengeType::Http { .. } => {
             Err(CertError::DnsChallengeSetupFailed("only DNS-01 challenge is supported".into()))
         }
+    }
+}
+
+pub fn build_record_updater(
+    provider: &DnsProviderConfig,
+) -> Result<Box<dyn DnsRecordUpdater>, CertError> {
+    match provider {
+        DnsProviderConfig::Cloudflare { api_token } => {
+            Ok(Box::new(cloudflare::CloudflareSolver::new(api_token.clone())))
+        }
+        DnsProviderConfig::Aliyun { access_key_id, access_key_secret } => Ok(Box::new(
+            aliyun::AliyunSolver::new(access_key_id.clone(), access_key_secret.clone()),
+        )),
+        DnsProviderConfig::Tencent { secret_id, secret_key } => {
+            Ok(Box::new(tencent::TencentSolver::new(secret_id.clone(), secret_key.clone())))
+        }
+        DnsProviderConfig::Manual => Err(CertError::DnsChallengeSetupFailed(
+            "manual DNS provider does not support DDNS updates".into(),
+        )),
+        _ => Err(CertError::DnsChallengeSetupFailed(
+            "selected DNS provider does not support DDNS updates yet".into(),
+        )),
     }
 }
 

@@ -358,6 +358,11 @@ async function remove(id: string) {
 }
 
 const columns = computed<DataTableColumns<DdnsJob>>(() => [
+  {
+    type: "expand",
+    expandable: () => true,
+    renderExpand: expandedRowRender,
+  },
   { title: t("cert.job_name"), key: "name", minWidth: 120 },
   { title: t("cert.zone_name"), key: "zone_name", minWidth: 160 },
   {
@@ -474,7 +479,6 @@ onMounted(async () => {
       :data="items"
       :bordered="false"
       :single-line="false"
-      :render-expand="expandedRowRender"
     />
 
     <n-modal

@@ -22,6 +22,7 @@ use tokio::sync::RwLock;
 use tokio::time::MissedTickBehavior;
 use uuid::Uuid;
 
+use crate::cert::dns_provider::build_record_updater;
 use crate::route::IpRouteService;
 
 const DDNS_SYNC_INTERVAL_SECS: u64 = 60;
@@ -295,6 +296,17 @@ fn aggregate_runtime_status(runtime: &DdnsJobRuntime) -> DdnsJobStatus {
     }
 }
 
+fn relative_record_name_for_ddns(zone_name: &str, record_name: &str) -> Result<String, String> {
+    let fqdn = fqdn_for_zone_record(zone_name, record_name)?;
+    if fqdn == zone_name {
+        Ok("@".to_string())
+    } else {
+        fqdn.strip_suffix(&format!(".{zone_name}"))
+            .map(|prefix| prefix.to_string())
+            .ok_or_else(|| format!("record '{record_name}' does not belong to zone '{zone_name}'"))
+    }
+}
+
 async fn update_dns_record(
     client: &Client,
     provider: &DnsProviderConfig,
@@ -307,13 +319,29 @@ async fn update_dns_record(
         DnsProviderConfig::Cloudflare { api_token } => {
             update_cloudflare_record(client, api_token, zone_name, record_name, ip, ttl).await
         }
+        DnsProviderConfig::Aliyun { .. } | DnsProviderConfig::Tencent { .. } => {
+            let record_type = match ip {
+                IpAddr::V4(_) => "A",
+                IpAddr::V6(_) => "AAAA",
+            };
+            let updater = build_record_updater(provider).map_err(|e| e.to_string())?;
+            updater
+                .upsert_record(
+                    zone_name,
+                    &relative_record_name_for_ddns(zone_name, record_name)?,
+                    &ip.to_string(),
+                    record_type,
+                    ttl.unwrap_or(120),
+                )
+                .await
+                .map_err(|e| e.to_string())
+        }
         DnsProviderConfig::Manual => {
             Err("manual DNS provider does not support DDNS updates".to_string())
         }
         _ => Err("selected DNS provider does not support DDNS updates yet".to_string()),
     }
 }
-
 async fn update_cloudflare_record(
     client: &Client,
     api_token: &str,

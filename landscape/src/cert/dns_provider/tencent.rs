@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::common::{candidate_zones, relative_record_name, RecordStore};
-use super::DnsChallengeSolver;
+use super::{DnsChallengeSolver, DnsRecordUpdater};
 
 const TENCENT_API_BASE: &str = "https://dnspod.tencentcloudapi.com/";
 const TENCENT_API_HOST: &str = "dnspod.tencentcloudapi.com";
@@ -72,6 +72,22 @@ struct TencentCreateRecordBody {
 
 #[derive(Debug, Deserialize)]
 struct TencentEmptyBody {}
+
+#[derive(Debug, Deserialize)]
+struct TencentDescribeRecordListBody {
+    #[serde(rename = "RecordList", default)]
+    record_list: Vec<TencentRecordItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TencentRecordItem {
+    #[serde(rename = "RecordId")]
+    record_id: u64,
+    #[serde(rename = "Name")]
+    name: String,
+    #[serde(rename = "Type")]
+    record_type: String,
+}
 
 impl TencentSolver {
     pub fn new(secret_id: String, secret_key: String) -> Self {
@@ -218,6 +234,75 @@ impl TencentSolver {
         Err(CertError::DnsChallengeSetupFailed(format!(
             "Could not find Tencent DNS zone for domain: {domain}"
         )))
+    }
+
+    async fn upsert_dns_record(
+        &self,
+        zone_name: &str,
+        sub_domain: &str,
+        record_type: &str,
+        value: &str,
+        ttl: u32,
+    ) -> Result<(), CertError> {
+        let list: TencentDescribeRecordListBody = self
+            .request(
+                "DescribeRecordList",
+                json!({ "Domain": zone_name, "Subdomain": sub_domain, "RecordType": record_type }),
+            )
+            .await?;
+
+        if let Some(record_id) = list
+            .record_list
+            .into_iter()
+            .find(|item| item.name == sub_domain && item.record_type == record_type)
+            .map(|item| item.record_id)
+        {
+            let _: TencentEmptyBody = self
+                .request(
+                    "ModifyRecord",
+                    json!({
+                        "Domain": zone_name,
+                        "RecordId": record_id,
+                        "SubDomain": sub_domain,
+                        "RecordType": record_type,
+                        "RecordLine": "默认",
+                        "RecordLineId": "0",
+                        "Value": value,
+                        "TTL": ttl
+                    }),
+                )
+                .await?;
+        } else {
+            let _: TencentCreateRecordBody = self
+                .request(
+                    "CreateRecord",
+                    json!({
+                        "Domain": zone_name,
+                        "SubDomain": sub_domain,
+                        "RecordType": record_type,
+                        "RecordLine": "默认",
+                        "RecordLineId": "0",
+                        "Value": value,
+                        "TTL": ttl
+                    }),
+                )
+                .await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl DnsRecordUpdater for TencentSolver {
+    async fn upsert_record(
+        &self,
+        zone_name: &str,
+        record_name: &str,
+        value: &str,
+        record_type: &str,
+        ttl: u32,
+    ) -> Result<(), CertError> {
+        self.upsert_dns_record(zone_name, record_name, record_type, value, ttl).await
     }
 }
 

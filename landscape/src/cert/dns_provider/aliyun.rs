@@ -10,7 +10,7 @@ use sha1::Sha1;
 use uuid::Uuid;
 
 use super::common::{candidate_zones, relative_record_name, RecordStore};
-use super::DnsChallengeSolver;
+use super::{DnsChallengeSolver, DnsRecordUpdater};
 
 const ALIYUN_API_BASE: &str = "https://alidns.aliyuncs.com/";
 const ALIYUN_API_VERSION: &str = "2015-01-09";
@@ -164,6 +164,74 @@ impl AliyunSolver {
         Err(CertError::DnsChallengeSetupFailed(format!(
             "Could not find Aliyun DNS zone for domain: {domain}"
         )))
+    }
+
+    async fn upsert_dns_record(
+        &self,
+        zone_name: &str,
+        rr: &str,
+        fqdn: &str,
+        record_type: &str,
+        value: &str,
+        ttl: u32,
+    ) -> Result<(), CertError> {
+        let query = self
+            .request(
+                "DescribeSubDomainRecords",
+                vec![
+                    ("SubDomain".to_string(), fqdn.to_string()),
+                    ("Type".to_string(), record_type.to_string()),
+                    ("PageSize".to_string(), "1".to_string()),
+                ],
+            )
+            .await?;
+
+        let existing_id = query
+            .get("DomainRecords")
+            .and_then(|v| v.get("Record"))
+            .and_then(Value::as_array)
+            .and_then(|records| records.first())
+            .and_then(|record| record.get("RecordId"))
+            .and_then(|id| match id {
+                Value::String(s) => Some(s.clone()),
+                Value::Number(n) => Some(n.to_string()),
+                _ => None,
+            });
+
+        let mut params = vec![
+            ("RR".to_string(), rr.to_string()),
+            ("Type".to_string(), record_type.to_string()),
+            ("Value".to_string(), value.to_string()),
+            ("TTL".to_string(), ttl.to_string()),
+        ];
+
+        if let Some(record_id) = existing_id {
+            params.push(("RecordId".to_string(), record_id));
+            self.request("UpdateDomainRecord", params).await?;
+        } else {
+            params.push(("DomainName".to_string(), zone_name.to_string()));
+            self.request("AddDomainRecord", params).await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl DnsRecordUpdater for AliyunSolver {
+    async fn upsert_record(
+        &self,
+        zone_name: &str,
+        record_name: &str,
+        value: &str,
+        record_type: &str,
+        ttl: u32,
+    ) -> Result<(), CertError> {
+        let fqdn = if record_name == "@" {
+            zone_name.to_string()
+        } else {
+            format!("{record_name}.{zone_name}")
+        };
+        self.upsert_dns_record(zone_name, record_name, &fqdn, record_type, value, ttl).await
     }
 }
 
