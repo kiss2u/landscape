@@ -65,6 +65,7 @@ export default {
     cache_mismatch_alert:
       "Cached result is inconsistent with current configuration; route cache cleanup may be required.",
     dns_no_records: "DNS resolution returned no records",
+    dns_filtered: "DNS results were filtered by rule",
     cache_cleared: "Cache cleared",
     action_keep_going: "KeepGoing",
     action_direct: "Direct",

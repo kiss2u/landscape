@@ -5,8 +5,8 @@ use landscape_common::{
     flow::mark::FlowMark,
     route::{
         trace::{
-            FlowMatchRequest, FlowMatchResult, FlowRuleMatchResult, FlowVerdictRequest,
-            FlowVerdictResult, SingleVerdictResult,
+            FlowMatchRequest, FlowMatchResult, FlowMatchSource, FlowRuleMatchResult,
+            FlowVerdictRequest, FlowVerdictResult, FlowVerdictSource, SingleVerdictResult,
         },
         LanRouteInfo, RouteTargetInfo,
     },
@@ -31,6 +31,8 @@ pub mod cache;
 
 const FLOW_ENTRY_MODE_MAC: u8 = 0;
 const FLOW_ENTRY_MODE_IP: u8 = 1;
+const FLOW_ID_MASK: u32 = 0x000000FF;
+const FLOW_ACTION_MASK: u32 = 0x00007F00;
 const LAN_CACHE: u32 = 1;
 
 fn invalidate_wan_route_cache() {
@@ -45,6 +47,22 @@ where
     cache::recreate_route_lan_cache_inner_map_with_outer_maps(rt4_cache_map, rt6_cache_map);
 }
 
+fn pick_effective_flow(
+    flow_id_by_mac: Option<u32>,
+    flow_id_by_ip: Option<u32>,
+    ip_source: FlowMatchSource,
+) -> (u32, FlowMatchSource) {
+    if let Some(flow_id) = flow_id_by_ip {
+        return (flow_id, ip_source);
+    }
+
+    if let Some(flow_id) = flow_id_by_mac {
+        return (flow_id, FlowMatchSource::Mac);
+    }
+
+    (0, FlowMatchSource::Default)
+}
+
 /// Step 1: Match source client → flow_id
 pub fn trace_flow_match(req: FlowMatchRequest) -> FlowMatchResult {
     let flow_match_map = match libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.flow_match_map) {
@@ -54,7 +72,14 @@ pub fn trace_flow_match(req: FlowMatchRequest) -> FlowMatchResult {
             return FlowMatchResult {
                 flow_id_by_mac: None,
                 flow_id_by_ip: None,
+                flow_id_by_ipv4: None,
+                flow_id_by_ipv6: None,
                 effective_flow_id: 0,
+                effective_flow_id_v4: 0,
+                effective_flow_id_v6: 0,
+                effective_flow_source: FlowMatchSource::Default,
+                effective_flow_source_v4: FlowMatchSource::Default,
+                effective_flow_source_v6: FlowMatchSource::Default,
             };
         }
     };
@@ -112,9 +137,32 @@ pub fn trace_flow_match(req: FlowMatchRequest) -> FlowMatchResult {
 
     // IP match: IPv4 takes precedence over IPv6
     let flow_id_by_ip = flow_id_by_ipv4.or(flow_id_by_ipv6);
-    let effective_flow_id = flow_id_by_ip.or(flow_id_by_mac).unwrap_or(0);
+    let (effective_flow_id_v4, effective_flow_source_v4) =
+        pick_effective_flow(flow_id_by_mac, flow_id_by_ipv4, FlowMatchSource::Ipv4);
+    let (effective_flow_id_v6, effective_flow_source_v6) =
+        pick_effective_flow(flow_id_by_mac, flow_id_by_ipv6, FlowMatchSource::Ipv6);
+    let (effective_flow_id, effective_flow_source) = if flow_id_by_ipv4.is_some() {
+        (effective_flow_id_v4, FlowMatchSource::Ipv4)
+    } else if flow_id_by_ipv6.is_some() {
+        (effective_flow_id_v6, FlowMatchSource::Ipv6)
+    } else if flow_id_by_mac.is_some() {
+        (effective_flow_id_v4, FlowMatchSource::Mac)
+    } else {
+        (0, FlowMatchSource::Default)
+    };
 
-    FlowMatchResult { flow_id_by_mac, flow_id_by_ip, effective_flow_id }
+    FlowMatchResult {
+        flow_id_by_mac,
+        flow_id_by_ip,
+        flow_id_by_ipv4,
+        flow_id_by_ipv6,
+        effective_flow_id,
+        effective_flow_id_v4,
+        effective_flow_id_v6,
+        effective_flow_source,
+        effective_flow_source_v4,
+        effective_flow_source_v6,
+    }
 }
 
 /// Step 2: Flow verdict on multiple dst_ips (supports both IPv4 and IPv6)
@@ -124,10 +172,11 @@ pub fn trace_flow_verdict(req: FlowVerdictRequest) -> FlowVerdictResult {
         .iter()
         .map(|dst_ip| match dst_ip {
             IpAddr::V4(v4) => {
-                let (ip_rule_match, dns_rule_match, effective_mark) =
+                let (ip_rule_match, dns_rule_match, effective_rule_source, effective_mark) =
                     trace_flow_verdict_single_v4(req.flow_id, *v4);
+                let expected_cache_mark = expected_cache_mark_value(req.flow_id, &effective_mark);
                 let (has_cache, cached_mark, cache_consistent) = if let Some(src) = req.src_ipv4 {
-                    trace_cache_check_v4(src, *v4, &effective_mark)
+                    trace_cache_check_v4(src, *v4, expected_cache_mark)
                 } else {
                     (false, None, true)
                 };
@@ -136,17 +185,20 @@ pub fn trace_flow_verdict(req: FlowVerdictRequest) -> FlowVerdictResult {
                     dst_ip: *dst_ip,
                     ip_rule_match,
                     dns_rule_match,
+                    effective_rule_source,
                     effective_mark,
+                    expected_cache_mark,
                     has_cache,
                     cached_mark,
                     cache_consistent,
                 }
             }
             IpAddr::V6(v6) => {
-                let (ip_rule_match, dns_rule_match, effective_mark) =
+                let (ip_rule_match, dns_rule_match, effective_rule_source, effective_mark) =
                     trace_flow_verdict_single_v6(req.flow_id, *v6);
+                let expected_cache_mark = expected_cache_mark_value(req.flow_id, &effective_mark);
                 let (has_cache, cached_mark, cache_consistent) = if let Some(src) = req.src_ipv6 {
-                    trace_cache_check_v6(src, *v6, &effective_mark)
+                    trace_cache_check_v6(src, *v6, expected_cache_mark)
                 } else {
                     (false, None, true)
                 };
@@ -155,7 +207,9 @@ pub fn trace_flow_verdict(req: FlowVerdictRequest) -> FlowVerdictResult {
                     dst_ip: *dst_ip,
                     ip_rule_match,
                     dns_rule_match,
+                    effective_rule_source,
                     effective_mark,
+                    expected_cache_mark,
                     has_cache,
                     cached_mark,
                     cache_consistent,
@@ -183,25 +237,36 @@ fn lookup_inner_map(
 fn compute_effective_mark(
     ip_rule_match: &Option<FlowRuleMatchResult>,
     dns_rule_match: &Option<FlowRuleMatchResult>,
-) -> FlowMark {
+) -> (FlowVerdictSource, FlowMark) {
     match (ip_rule_match, dns_rule_match) {
         (Some(ip), Some(dns)) => {
             if dns.priority <= ip.priority {
-                dns.mark
+                (FlowVerdictSource::DnsRule, dns.mark)
             } else {
-                ip.mark
+                (FlowVerdictSource::IpRule, ip.mark)
             }
         }
-        (Some(ip), None) => ip.mark,
-        (None, Some(dns)) => dns.mark,
-        (None, None) => FlowMark::default(),
+        (Some(ip), None) => (FlowVerdictSource::IpRule, ip.mark),
+        (None, Some(dns)) => (FlowVerdictSource::DnsRule, dns.mark),
+        (None, None) => (FlowVerdictSource::Default, FlowMark::default()),
     }
+}
+
+fn expected_cache_mark_value(flow_id: u32, effective_mark: &FlowMark) -> u32 {
+    let mark_value: u32 = (*effective_mark).into();
+    let raw_action = ((mark_value & FLOW_ACTION_MASK) >> 8) as u8;
+
+    if raw_action == 0 {
+        return (mark_value & !FLOW_ID_MASK) | (flow_id & FLOW_ID_MASK);
+    }
+
+    mark_value
 }
 
 fn trace_flow_verdict_single_v4(
     flow_id: u32,
     dst_ip: Ipv4Addr,
-) -> (Option<FlowRuleMatchResult>, Option<FlowRuleMatchResult>, FlowMark) {
+) -> (Option<FlowRuleMatchResult>, Option<FlowRuleMatchResult>, FlowVerdictSource, FlowMark) {
     let flow_id_key = unsafe { plain::as_bytes(&flow_id) };
 
     // IP trie lookup
@@ -248,14 +313,15 @@ fn trace_flow_verdict_single_v4(
         })
     })();
 
-    let effective_mark = compute_effective_mark(&ip_rule_match, &dns_rule_match);
-    (ip_rule_match, dns_rule_match, effective_mark)
+    let (effective_rule_source, effective_mark) =
+        compute_effective_mark(&ip_rule_match, &dns_rule_match);
+    (ip_rule_match, dns_rule_match, effective_rule_source, effective_mark)
 }
 
 fn trace_flow_verdict_single_v6(
     flow_id: u32,
     dst_ip: Ipv6Addr,
-) -> (Option<FlowRuleMatchResult>, Option<FlowRuleMatchResult>, FlowMark) {
+) -> (Option<FlowRuleMatchResult>, Option<FlowRuleMatchResult>, FlowVerdictSource, FlowMark) {
     let flow_id_key = unsafe { plain::as_bytes(&flow_id) };
 
     // IP trie lookup
@@ -302,14 +368,15 @@ fn trace_flow_verdict_single_v6(
         })
     })();
 
-    let effective_mark = compute_effective_mark(&ip_rule_match, &dns_rule_match);
-    (ip_rule_match, dns_rule_match, effective_mark)
+    let (effective_rule_source, effective_mark) =
+        compute_effective_mark(&ip_rule_match, &dns_rule_match);
+    (ip_rule_match, dns_rule_match, effective_rule_source, effective_mark)
 }
 
 fn trace_cache_check_v4(
     src_ip: Ipv4Addr,
     dst_ip: Ipv4Addr,
-    effective_mark: &FlowMark,
+    expected_cache_mark: u32,
 ) -> (bool, Option<u32>, bool) {
     let result = (|| -> Option<(bool, Option<u32>, bool)> {
         let outer = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_cache_map).ok()?;
@@ -332,8 +399,7 @@ fn trace_cache_check_v4(
                     std::ptr::read_unaligned(val_bytes.as_ptr() as *const rt_cache_value_v4)
                 };
                 let cached_mark_value = unsafe { val.__anon_rt_cache_value_v4_1.mark_value };
-                let effective_u32: u32 = effective_mark.clone().into();
-                let consistent = cached_mark_value == effective_u32;
+                let consistent = cached_mark_value == expected_cache_mark;
                 Some((true, Some(cached_mark_value), consistent))
             }
             _ => Some((false, None, true)),
@@ -346,7 +412,7 @@ fn trace_cache_check_v4(
 fn trace_cache_check_v6(
     src_ip: Ipv6Addr,
     dst_ip: Ipv6Addr,
-    effective_mark: &FlowMark,
+    expected_cache_mark: u32,
 ) -> (bool, Option<u32>, bool) {
     let result = (|| -> Option<(bool, Option<u32>, bool)> {
         let outer = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_cache_map).ok()?;
@@ -369,8 +435,7 @@ fn trace_cache_check_v6(
                     std::ptr::read_unaligned(val_bytes.as_ptr() as *const rt_cache_value_v6)
                 };
                 let cached_mark_value = unsafe { val.__anon_rt_cache_value_v4_1.mark_value };
-                let effective_u32: u32 = effective_mark.clone().into();
-                let consistent = cached_mark_value == effective_u32;
+                let consistent = cached_mark_value == expected_cache_mark;
                 Some((true, Some(cached_mark_value), consistent))
             }
             _ => Some((false, None, true)),
@@ -812,4 +877,48 @@ where
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pick_effective_flow_prefers_ip_then_mac_then_default() {
+        assert_eq!(
+            pick_effective_flow(Some(3), Some(7), FlowMatchSource::Ipv4),
+            (7, FlowMatchSource::Ipv4)
+        );
+        assert_eq!(
+            pick_effective_flow(Some(3), None, FlowMatchSource::Ipv4),
+            (3, FlowMatchSource::Mac)
+        );
+        assert_eq!(
+            pick_effective_flow(None, None, FlowMatchSource::Ipv4),
+            (0, FlowMatchSource::Default)
+        );
+    }
+
+    #[test]
+    fn expected_cache_mark_value_expands_keep_going_flow_id() {
+        let keep_going = FlowMark::from(0x0000);
+        let direct = FlowMark::from(0x0100);
+        let redirect = FlowMark::from(0x0305);
+
+        assert_eq!(expected_cache_mark_value(9, &keep_going), 0x0009);
+        assert_eq!(expected_cache_mark_value(9, &direct), 0x0100);
+        assert_eq!(expected_cache_mark_value(9, &redirect), 0x0305);
+    }
+
+    #[test]
+    fn compute_effective_mark_prefers_dns_on_equal_priority() {
+        let ip_rule = Some(FlowRuleMatchResult { mark: FlowMark::from(0x0100), priority: 10 });
+        let dns_rule = Some(FlowRuleMatchResult { mark: FlowMark::from(0x0305), priority: 10 });
+
+        let (source, mark) = compute_effective_mark(&ip_rule, &dns_rule);
+        let mark_value: u32 = mark.into();
+
+        assert_eq!(source, FlowVerdictSource::DnsRule);
+        assert_eq!(mark_value, 0x0305);
+    }
 }

@@ -60,6 +60,7 @@ export default {
     cache_mismatch_alert:
       "缓存与当前配置计算的结果不一致，可能需要清理路由缓存。",
     dns_no_records: "DNS 解析未返回任何记录",
+    dns_filtered: "DNS 结果已按规则过滤",
     cache_cleared: "缓存已清除",
     action_keep_going: "KeepGoing (继续)",
     action_direct: "Direct (直连)",

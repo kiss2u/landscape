@@ -57,8 +57,14 @@ async fn stop_dns_service(State(state): State<LandscapeApp>) -> LandscapeApiResu
     path = "/service/check",
     tag = "DNS Service",
     operation_id = "check_domain",
+    summary = "Inspect DNS resolution for a flow",
+    description = "Returns DNS rule matching metadata together with query results. Use `apply_filter=false` to inspect the full upstream/cache result while still seeing whether the query would be filtered by rule. Use `apply_filter=true` when you want returned records to match runtime filtering behavior.",
     params(CheckDnsReq),
-    responses((status = 200, body = CommonApiResp<CheckChainDnsResult>))
+    responses((
+        status = 200,
+        description = "DNS inspection result with optional rule-filtered records",
+        body = CommonApiResp<CheckChainDnsResult>
+    ))
 )]
 async fn check_domain(
     State(state): State<LandscapeApp>,

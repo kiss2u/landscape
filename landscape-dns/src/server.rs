@@ -209,7 +209,13 @@ impl LandscapeDnsServer {
         let handler = entry
             .and_then(|entry| entry.runtime.load_full().map(|runtime| runtime.handler.clone()));
         if let Some(handler) = handler {
-            handler.check_domain(&req.get_domain(), convert_record_type(req.record_type)).await
+            handler
+                .check_domain(
+                    &req.get_domain(),
+                    convert_record_type(req.record_type),
+                    req.apply_filter,
+                )
+                .await
         } else {
             CheckChainDnsResult::default()
         }

@@ -103,13 +103,16 @@ async function doVerdictByDomain() {
   resolvedDomain.value = domainInput.value.trim();
   try {
     const ips: string[] = [];
+    let dnsFiltered = false;
 
     // Query A records
     const dnsResultA = await check_domain({
       flow_id: matchResult.value.effective_flow_id,
       domain,
       record_type: "A",
+      apply_filter: true,
     });
+    dnsFiltered ||= dnsResultA.query_filtered === true;
     if (dnsResultA.records) {
       for (const r of dnsResultA.records) {
         if (r.rr_type === "A") {
@@ -125,7 +128,9 @@ async function doVerdictByDomain() {
           flow_id: matchResult.value.effective_flow_id,
           domain,
           record_type: "AAAA",
+          apply_filter: true,
         });
+        dnsFiltered ||= dnsResultAAAA.query_filtered === true;
         if (dnsResultAAAA.records) {
           for (const r of dnsResultAAAA.records) {
             if (r.rr_type === "AAAA") {
@@ -139,7 +144,11 @@ async function doVerdictByDomain() {
     }
 
     if (ips.length === 0) {
-      window.$message?.warning(t("flow.trace.dns_no_records"));
+      window.$message?.warning(
+        dnsFiltered
+          ? t("flow.trace.dns_filtered")
+          : t("flow.trace.dns_no_records"),
+      );
       return;
     }
 
@@ -217,17 +226,7 @@ function onOpen() {
 }
 
 function isCacheConsistent(v: SingleVerdictResult): boolean {
-  if (v.cache_consistent) return true;
-  if (!v.has_cache || v.cached_mark == null || !matchResult.value) return true;
-  // When effective action is KeepGoing, BPF writes the matched flow_id into
-  // the mark's lower 8 bits (replace_flow_id). The backend comparison doesn't
-  // account for this, causing a false "inconsistent". Check that the cached
-  // mark's flow_id matches the client's matched flow_id instead.
-  if (v.effective_mark.action.t === "keep_going") {
-    const cachedFlowId = v.cached_mark & 0xff;
-    return cachedFlowId === (matchResult.value.effective_flow_id & 0xff);
-  }
-  return false;
+  return v.cache_consistent;
 }
 
 function formatAction(mark: { action: { t: string }; flow_id: number }) {

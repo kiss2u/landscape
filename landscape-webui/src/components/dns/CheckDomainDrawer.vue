@@ -97,7 +97,11 @@ async function query() {
     try {
       config_rule.value = undefined;
       redirect_rule.value = undefined;
-      result.value = await check_domain({ ...req.value, domain });
+      result.value = await check_domain({
+        ...req.value,
+        domain,
+        apply_filter: false,
+      });
       if (result.value.rule_id) {
         config_rule.value = new DnsRule(await getDnsRule(result.value.rule_id));
       }

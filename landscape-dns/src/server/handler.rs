@@ -251,7 +251,12 @@ impl DnsRequestHandler {
         None
     }
 
-    pub async fn check_domain(&self, domain: &str, query_type: RecordType) -> CheckChainDnsResult {
+    pub async fn check_domain(
+        &self,
+        domain: &str,
+        query_type: RecordType,
+        apply_filter: bool,
+    ) -> CheckChainDnsResult {
         let mut result = CheckChainDnsResult::default();
 
         if let Some((records, _status, id, dynamic_source)) =
@@ -265,20 +270,44 @@ impl DnsRequestHandler {
             for (_index, resolver) in resolves.iter() {
                 if resolver.is_match(domain) {
                     result.rule_id = Some(resolver.get_config_id());
+                    let filter = resolver.filter_mode();
+                    result.rule_filter = Some(filter.clone());
+
+                    result.query_filtered = is_type_filtered(query_type, &filter);
+                    if result.query_filtered && apply_filter {
+                        result.records = Some(vec![]);
+                        break;
+                    }
 
                     if let Ok(rdata_vec) =
                         with_lookup_timeout(resolver.lookup(domain, query_type), LOOKUP_TIMEOUT)
                             .await
                     {
-                        result.records = Some(crate::to_common_records(rdata_vec));
+                        let records = if apply_filter {
+                            filter_result(rdata_vec, &filter)
+                        } else {
+                            rdata_vec
+                        };
+                        result.records = Some(crate::to_common_records(records));
                     }
                     break;
                 }
             }
         }
 
-        if let Some((records, _, _)) = self.lookup_cache(domain, query_type).await {
-            result.cache_records = Some(crate::to_common_records(records));
+        if let Some((records, filter, _)) = self.lookup_cache(domain, query_type).await {
+            let query_filtered = is_type_filtered(query_type, &filter);
+            result.query_filtered |= query_filtered;
+            if result.rule_filter.is_none() {
+                result.rule_filter = Some(filter.clone());
+            }
+            result.cache_records = Some(if query_filtered && apply_filter {
+                vec![]
+            } else if apply_filter {
+                crate::to_common_records(filter_result(records, &filter))
+            } else {
+                crate::to_common_records(records)
+            });
         }
 
         result
@@ -797,6 +826,101 @@ mod tests {
             .await;
 
             assert_eq!(result.unwrap(), vec![1_u8, 2_u8]);
+        });
+    }
+
+    #[test]
+    fn check_domain_applies_filter_when_requested() {
+        run_async_test(async {
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo {
+                    dns_rules: vec![DNSRuntimeRule {
+                        filter: FilterResult::OnlyIPv6,
+                        source: vec![DomainConfig {
+                            match_type: DomainMatchType::Full,
+                            value: "example.com".to_string(),
+                        }],
+                        ..test_runtime_rule()
+                    }],
+                    redirect_rules: vec![],
+                }
+                .into(),
+                shared_cache_runtime_config(5),
+                1,
+                Arc::new(ArcSwapOption::new(None)),
+                None,
+            );
+
+            let result = handler.check_domain("example.com.", RecordType::A, true).await;
+
+            assert_eq!(result.rule_filter, Some(FilterResult::OnlyIPv6));
+            assert!(result.query_filtered);
+            assert!(result.records.as_ref().is_some_and(Vec::is_empty));
+            assert!(result.cache_records.is_none());
+        });
+    }
+
+    #[test]
+    fn check_domain_filters_cached_records_when_requested() {
+        run_async_test(async {
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo::default().into(),
+                shared_cache_runtime_config(5),
+                1,
+                Arc::new(ArcSwapOption::new(None)),
+                None,
+            );
+
+            handler
+                .insert(
+                    "cached-filter.example.",
+                    RecordType::A,
+                    vec![sample_a_record("cached-filter.example.", 60, Ipv4Addr::new(1, 1, 1, 1))],
+                    ResponseCode::NoError,
+                    &DnsRuntimeMarkInfo { mark: FlowMark::default(), priority: 0 },
+                    FilterResult::OnlyIPv6,
+                    None,
+                    None,
+                )
+                .await;
+
+            let result = handler.check_domain("cached-filter.example.", RecordType::A, true).await;
+
+            assert_eq!(result.rule_filter, Some(FilterResult::OnlyIPv6));
+            assert!(result.query_filtered);
+            assert!(result.cache_records.as_ref().is_some_and(Vec::is_empty));
+        });
+    }
+
+    #[test]
+    fn check_domain_keeps_full_cached_records_without_filter_flag() {
+        run_async_test(async {
+            let handler = DnsRequestHandler::new(
+                ChainDnsServerInitInfo::default().into(),
+                shared_cache_runtime_config(5),
+                1,
+                Arc::new(ArcSwapOption::new(None)),
+                None,
+            );
+
+            handler
+                .insert(
+                    "cached-full.example.",
+                    RecordType::A,
+                    vec![sample_a_record("cached-full.example.", 60, Ipv4Addr::new(1, 1, 1, 1))],
+                    ResponseCode::NoError,
+                    &DnsRuntimeMarkInfo { mark: FlowMark::default(), priority: 0 },
+                    FilterResult::OnlyIPv6,
+                    None,
+                    None,
+                )
+                .await;
+
+            let result = handler.check_domain("cached-full.example.", RecordType::A, false).await;
+
+            assert_eq!(result.rule_filter, Some(FilterResult::OnlyIPv6));
+            assert!(result.query_filtered);
+            assert_eq!(result.cache_records.as_ref().map(Vec::len), Some(1));
         });
     }
 
