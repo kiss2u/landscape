@@ -48,6 +48,34 @@ function request_time(item: DHCPv4OfferInfoItem): number {
   return item.relative_active_time * 1000 + props.info.boot_time;
 }
 
+function ipv4_to_number(ip: string): number {
+  const parts = ip.split(".").map(Number);
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => Number.isNaN(part) || part < 0 || part > 255)
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return (
+    parts[0] * 256 * 256 * 256 +
+    parts[1] * 256 * 256 +
+    parts[2] * 256 +
+    parts[3]
+  );
+}
+
+function compare_ipv4(a: string, b: string): number {
+  const aNum = ipv4_to_number(a);
+  const bNum = ipv4_to_number(b);
+
+  if (aNum === bNum) {
+    return a.localeCompare(b);
+  }
+
+  return aNum - bNum;
+}
+
 const show_item = computed(() => {
   let reuslt = [];
   for (const each of props.info.offered_ips) {
@@ -58,6 +86,7 @@ const show_item = computed(() => {
       mac: mac_as_string(each.mac),
     });
   }
+  reuslt.sort((a, b) => compare_ipv4(a.ip, b.ip));
   return reuslt;
 });
 
@@ -72,6 +101,7 @@ const not_current_round_ips = computed(() => {
       });
     }
   }
+  not_current_round_ips.sort((a, b) => compare_ipv4(a.ip, b.ip));
   return not_current_round_ips;
 });
 
