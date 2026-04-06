@@ -3,20 +3,31 @@ import {
   delete_dns_provider_profile,
   get_dns_provider_profiles,
   push_dns_provider_profile,
+  validate_dns_provider_profile_credentials,
 } from "@/api/domain/provider_profile";
 import type {
+  DnsProviderCredentialCheckRequest,
   DnsProviderConfig,
   DnsProviderProfile,
 } from "@landscape-router/types/api/schemas";
 import { computed, h, onMounted, ref } from "vue";
-import { NButton, NPopconfirm, NTag, type DataTableColumns } from "naive-ui";
+import {
+  NButton,
+  NPopconfirm,
+  NTag,
+  useMessage,
+  type DataTableColumns,
+} from "naive-ui";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
+const message = useMessage();
 const items = ref<DnsProviderProfile[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
 const saving = ref(false);
+const validating = ref(false);
+const validatingIds = ref<Set<string>>(new Set());
 const editingId = ref<string | null>(null);
 const formRef = ref();
 const form = ref<DnsProviderProfile>({
@@ -188,6 +199,45 @@ async function remove(id: string) {
   await refresh();
 }
 
+async function validateCredentials() {
+  validating.value = true;
+  try {
+    await runProviderValidation(
+      form.value.provider_config ??
+        buildProviderConfig(providerType.value, form.value.provider_config),
+    );
+  } catch (error: any) {
+    message.error(error?.message || t("cert.provider_validation_failed"));
+  } finally {
+    validating.value = false;
+  }
+}
+
+async function runProviderValidation(providerConfig: DnsProviderConfig) {
+  const result = await validate_dns_provider_profile_credentials({
+    provider_config: providerConfig,
+  } as DnsProviderCredentialCheckRequest);
+  message.success(result.message);
+}
+
+async function validateRowCredentials(row: DnsProviderProfile) {
+  if (!row.id) return;
+  validatingIds.value.add(row.id);
+  try {
+    await runProviderValidation(
+      row.provider_config ??
+        buildProviderConfig(
+          getProviderType(row.provider_config),
+          row.provider_config,
+        ),
+    );
+  } catch (error: any) {
+    message.error(error?.message || t("cert.provider_validation_failed"));
+  } finally {
+    validatingIds.value.delete(row.id);
+  }
+}
+
 const columns = computed<DataTableColumns<DnsProviderProfile>>(() => [
   { title: t("cert.profile_name"), key: "name", minWidth: 140 },
   {
@@ -219,13 +269,24 @@ const columns = computed<DataTableColumns<DnsProviderProfile>>(() => [
   {
     title: t("common.status"),
     key: "actions",
-    width: 180,
+    width: 260,
     render: (row) => [
       h(
         NButton,
         {
           size: "small",
           secondary: true,
+          loading: row.id ? validatingIds.value.has(row.id) : false,
+          onClick: () => validateRowCredentials(row),
+        },
+        () => t("cert.action_verify"),
+      ),
+      h(
+        NButton,
+        {
+          size: "small",
+          secondary: true,
+          style: "margin-left: 8px",
           onClick: () => {
             resetForm(row);
             showModal.value = true;
@@ -406,9 +467,19 @@ onMounted(refresh);
 
       <template #footer>
         <n-flex justify="space-between">
-          <n-button @click="showModal = false">{{
-            t("common.cancel")
-          }}</n-button>
+          <n-flex :size="8">
+            <n-button
+              secondary
+              :loading="validating"
+              :disabled="saving"
+              @click="validateCredentials"
+            >
+              {{ t("cert.action_verify") }}
+            </n-button>
+            <n-button @click="showModal = false">{{
+              t("common.cancel")
+            }}</n-button>
+          </n-flex>
           <n-button type="primary" :loading="saving" @click="save">{{
             t("common.save")
           }}</n-button>

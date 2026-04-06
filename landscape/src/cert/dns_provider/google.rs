@@ -285,6 +285,45 @@ impl GoogleSolver {
         })
     }
 
+    async fn validate_credentials(&self) -> Result<(), CertError> {
+        self.request::<GoogleManagedZonesResponse>(
+            reqwest::Method::GET,
+            &format!("projects/{}/managedZones", self.account.project_id),
+            vec![("maxResults".to_string(), "1".to_string())],
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn validate_zone_access(&self, zone_name: &str) -> Result<(), CertError> {
+        let response: GoogleManagedZonesResponse = self
+            .request(
+                reqwest::Method::GET,
+                &format!("projects/{}/managedZones", self.account.project_id),
+                vec![("dnsName".to_string(), fqdn(zone_name))],
+                None,
+            )
+            .await?;
+        if response.managed_zones.into_iter().any(|zone| {
+            zone.dns_name == fqdn(zone_name)
+                && !zone
+                    .visibility
+                    .as_deref()
+                    .is_some_and(|visibility| visibility.eq_ignore_ascii_case("private"))
+        }) {
+            Ok(())
+        } else {
+            Err(CertError::DnsChallengeSetupFailed(format!(
+                "Could not find Google Cloud DNS managed zone: {zone_name}"
+            )))
+        }
+    }
+
+    async fn validate_domain_access(&self, domain: &str) -> Result<(), CertError> {
+        self.find_managed_zone(domain).await.map(|_| ())
+    }
+
     async fn find_managed_zone(&self, domain: &str) -> Result<GoogleManagedZone, CertError> {
         for candidate in candidate_zones(domain) {
             let response: GoogleManagedZonesResponse = self
@@ -391,6 +430,24 @@ impl GoogleSolver {
             .await?;
         Ok(())
     }
+}
+
+pub async fn validate_credentials(service_account_json: &str) -> Result<(), CertError> {
+    GoogleSolver::new(service_account_json.to_string())?.validate_credentials().await
+}
+
+pub async fn validate_zone_access(
+    service_account_json: &str,
+    zone_name: &str,
+) -> Result<(), CertError> {
+    GoogleSolver::new(service_account_json.to_string())?.validate_zone_access(zone_name).await
+}
+
+pub async fn validate_domain_access(
+    service_account_json: &str,
+    domain: &str,
+) -> Result<(), CertError> {
+    GoogleSolver::new(service_account_json.to_string())?.validate_domain_access(domain).await
 }
 
 #[async_trait::async_trait]

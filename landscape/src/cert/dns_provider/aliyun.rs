@@ -141,6 +141,28 @@ impl AliyunSolver {
         )))
     }
 
+    async fn validate_credentials(&self) -> Result<(), CertError> {
+        self.request(
+            "DescribeDomains",
+            vec![
+                ("PageNumber".to_string(), "1".to_string()),
+                ("PageSize".to_string(), "1".to_string()),
+            ],
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn validate_zone_access(&self, zone_name: &str) -> Result<(), CertError> {
+        self.request("DescribeDomainInfo", vec![("DomainName".to_string(), zone_name.to_string())])
+            .await
+            .map(|_| ())
+    }
+
+    async fn validate_domain_access(&self, domain: &str) -> Result<(), CertError> {
+        self.find_zone_name(domain).await.map(|_| ())
+    }
+
     fn is_domain_not_found(err: &CertError) -> bool {
         let text = err.to_string().to_ascii_lowercase();
         text.contains("domainnamenotexist")
@@ -214,6 +236,35 @@ impl AliyunSolver {
         }
         Ok(())
     }
+}
+
+pub async fn validate_credentials(
+    access_key_id: &str,
+    access_key_secret: &str,
+) -> Result<(), CertError> {
+    AliyunSolver::new(access_key_id.to_string(), access_key_secret.to_string())
+        .validate_credentials()
+        .await
+}
+
+pub async fn validate_zone_access(
+    access_key_id: &str,
+    access_key_secret: &str,
+    zone_name: &str,
+) -> Result<(), CertError> {
+    AliyunSolver::new(access_key_id.to_string(), access_key_secret.to_string())
+        .validate_zone_access(zone_name)
+        .await
+}
+
+pub async fn validate_domain_access(
+    access_key_id: &str,
+    access_key_secret: &str,
+    domain: &str,
+) -> Result<(), CertError> {
+    AliyunSolver::new(access_key_id.to_string(), access_key_secret.to_string())
+        .validate_domain_access(domain)
+        .await
 }
 
 #[async_trait::async_trait]

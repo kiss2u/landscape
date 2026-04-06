@@ -1,7 +1,9 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
-use landscape_common::dns::provider_profile::DnsProviderProfile;
+use landscape_common::dns::provider_profile::{
+    DnsProviderCredentialCheckRequest, DnsProviderCredentialCheckResult, DnsProviderProfile,
+};
 use landscape_common::service::controller::ConfigController;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -12,6 +14,7 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult, LandscapeApp};
 pub fn get_dns_provider_profile_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .routes(routes!(list_provider_profiles, create_provider_profile))
+        .routes(routes!(validate_provider_profile))
         .routes(routes!(get_provider_profile, update_provider_profile, delete_provider_profile))
 }
 
@@ -53,6 +56,20 @@ async fn create_provider_profile(
     JsonBody(payload): JsonBody<DnsProviderProfile>,
 ) -> LandscapeApiResult<DnsProviderProfile> {
     LandscapeApiResp::success(app.dns_provider_profile_service.checked_set_profile(payload).await?)
+}
+
+#[utoipa::path(
+    post,
+    path = "/provider_profiles/validate",
+    tag = "DNS Provider Profiles",
+    request_body = DnsProviderCredentialCheckRequest,
+    responses((status = 200, body = CommonApiResp<DnsProviderCredentialCheckResult>))
+)]
+async fn validate_provider_profile(
+    State(app): State<LandscapeApp>,
+    JsonBody(payload): JsonBody<DnsProviderCredentialCheckRequest>,
+) -> LandscapeApiResult<DnsProviderCredentialCheckResult> {
+    LandscapeApiResp::success(app.dns_provider_profile_service.validate_credentials(payload).await?)
 }
 
 #[utoipa::path(

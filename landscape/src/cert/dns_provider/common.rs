@@ -39,6 +39,10 @@ pub fn candidate_zones(domain: &str) -> Vec<String> {
     (0..labels.len().saturating_sub(1)).map(|i| labels[i..].join(".")).collect()
 }
 
+pub fn normalize_validation_domain(domain: &str) -> String {
+    domain.trim().trim_end_matches('.').trim_start_matches("*.").to_ascii_lowercase()
+}
+
 pub fn relative_record_name(domain: &str, zone: &str) -> Result<String, CertError> {
     if domain == zone {
         return Ok("_acme-challenge".to_string());

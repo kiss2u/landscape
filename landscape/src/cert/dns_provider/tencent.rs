@@ -211,6 +211,22 @@ impl TencentSolver {
         Ok(envelope.response.body)
     }
 
+    async fn validate_credentials(&self) -> Result<(), CertError> {
+        self.request::<Value>("DescribeDomainList", json!({ "Offset": 0, "Limit": 1 }))
+            .await
+            .map(|_| ())
+    }
+
+    async fn validate_zone_access(&self, zone_name: &str) -> Result<(), CertError> {
+        self.request::<TencentDomainInfo>("DescribeDomain", json!({ "Domain": zone_name }))
+            .await
+            .map(|_| ())
+    }
+
+    async fn validate_domain_access(&self, domain: &str) -> Result<(), CertError> {
+        self.find_zone_name(domain).await.map(|_| ())
+    }
+
     fn is_domain_not_found(err: &CertError) -> bool {
         let text = err.to_string().to_ascii_lowercase();
         text.contains("nodataofdomain")
@@ -290,6 +306,30 @@ impl TencentSolver {
         }
         Ok(())
     }
+}
+
+pub async fn validate_credentials(secret_id: &str, secret_key: &str) -> Result<(), CertError> {
+    TencentSolver::new(secret_id.to_string(), secret_key.to_string()).validate_credentials().await
+}
+
+pub async fn validate_zone_access(
+    secret_id: &str,
+    secret_key: &str,
+    zone_name: &str,
+) -> Result<(), CertError> {
+    TencentSolver::new(secret_id.to_string(), secret_key.to_string())
+        .validate_zone_access(zone_name)
+        .await
+}
+
+pub async fn validate_domain_access(
+    secret_id: &str,
+    secret_key: &str,
+    domain: &str,
+) -> Result<(), CertError> {
+    TencentSolver::new(secret_id.to_string(), secret_key.to_string())
+        .validate_domain_access(domain)
+        .await
 }
 
 #[async_trait::async_trait]

@@ -270,6 +270,50 @@ impl AwsSolver {
         Ok(text)
     }
 
+    async fn validate_credentials(&self) -> Result<(), CertError> {
+        self.signed_request(
+            Method::GET,
+            "/2013-04-01/hostedzones",
+            vec![("maxitems".to_string(), "1".to_string())],
+            String::new(),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn validate_zone_access(&self, zone_name: &str) -> Result<(), CertError> {
+        let response = self
+            .signed_request(
+                Method::GET,
+                "/2013-04-01/hostedzonesbyname",
+                vec![
+                    ("dnsname".to_string(), fqdn(zone_name)),
+                    ("maxitems".to_string(), "100".to_string()),
+                ],
+                String::new(),
+            )
+            .await?;
+        let parsed: AwsHostedZonesByNameResponse = from_xml_str(&response).map_err(|e| {
+            CertError::DnsChallengeSetupFailed(format!(
+                "Failed to parse AWS hosted zone response: {e}"
+            ))
+        })?;
+        if parsed.hosted_zones.items.into_iter().any(|zone| {
+            zone.name == fqdn(zone_name)
+                && !zone.config.as_ref().and_then(|config| config.private_zone).unwrap_or(false)
+        }) {
+            Ok(())
+        } else {
+            Err(CertError::DnsChallengeSetupFailed(format!(
+                "Could not find AWS Route53 hosted zone: {zone_name}"
+            )))
+        }
+    }
+
+    async fn validate_domain_access(&self, domain: &str) -> Result<(), CertError> {
+        self.find_zone_id(domain).await.map(|_| ())
+    }
+
     async fn find_zone_id(&self, domain: &str) -> Result<String, CertError> {
         for candidate in candidate_zones(domain) {
             let response = self
@@ -388,6 +432,38 @@ impl AwsSolver {
         .await?;
         Ok(())
     }
+}
+
+pub async fn validate_credentials(
+    access_key_id: &str,
+    secret_access_key: &str,
+    region: &str,
+) -> Result<(), CertError> {
+    AwsSolver::new(access_key_id.to_string(), secret_access_key.to_string(), region.to_string())
+        .validate_credentials()
+        .await
+}
+
+pub async fn validate_zone_access(
+    access_key_id: &str,
+    secret_access_key: &str,
+    region: &str,
+    zone_name: &str,
+) -> Result<(), CertError> {
+    AwsSolver::new(access_key_id.to_string(), secret_access_key.to_string(), region.to_string())
+        .validate_zone_access(zone_name)
+        .await
+}
+
+pub async fn validate_domain_access(
+    access_key_id: &str,
+    secret_access_key: &str,
+    region: &str,
+    domain: &str,
+) -> Result<(), CertError> {
+    AwsSolver::new(access_key_id.to_string(), secret_access_key.to_string(), region.to_string())
+        .validate_domain_access(domain)
+        .await
 }
 
 #[async_trait::async_trait]

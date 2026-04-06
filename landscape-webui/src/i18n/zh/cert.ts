@@ -153,6 +153,7 @@ export default {
   record_names_placeholder: "每行一个子记录，例如\nroot\nhome\n*",
   provider_profile: "服务商配置",
   provider_profile_required: "请选择 DNS 服务商配置",
+  provider_validation_failed: "DNS 服务商凭据校验失败",
   source: "来源",
   sources: "来源列表",
   source_required: "至少需要一个来源",

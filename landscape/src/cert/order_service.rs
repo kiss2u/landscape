@@ -14,7 +14,7 @@ use instant_acme::{
 };
 use landscape_common::cert::account::AccountStatus;
 use landscape_common::cert::order::{
-    CertConfig, CertParsedInfo, CertStatus, CertType, ChallengeType,
+    AcmeCertConfig, CertConfig, CertParsedInfo, CertStatus, CertType, ChallengeType,
 };
 use landscape_common::cert::CertError;
 use landscape_common::database::LandscapeStore;
@@ -324,10 +324,13 @@ impl CertService {
                 }
             }
             CertType::Acme(acme) => {
-                if let ChallengeType::Dns { provider_profile_id } = &acme.challenge_type {
-                    let profile = self.resolve_dns_provider_profile(*provider_profile_id).await?;
-                    dns_provider::build_solver(&profile.provider_config)?;
+                config.domains = normalize_cert_domains(&config.domains);
+                if config.domains.is_empty() {
+                    return Err(CertError::InvalidStatusTransition(
+                        "ACME certificate requires at least one domain".to_string(),
+                    ));
                 }
+                self.validate_acme_dns_access(acme, &config.domains).await?;
             }
         }
 
@@ -391,6 +394,25 @@ impl CertService {
             .await
             .map_err(|e| CertError::DnsChallengeSetupFailed(e.to_string()))?
             .ok_or(CertError::DnsProviderProfileNotFound(provider_profile_id))
+    }
+
+    async fn validate_acme_dns_access(
+        &self,
+        acme: &AcmeCertConfig,
+        domains: &[String],
+    ) -> Result<(), CertError> {
+        match &acme.challenge_type {
+            ChallengeType::Dns { provider_profile_id } => {
+                let profile = self.resolve_dns_provider_profile(*provider_profile_id).await?;
+                dns_provider::build_solver(&profile.provider_config)?;
+                for domain in domains {
+                    dns_provider::validate_provider_domain_access(&profile.provider_config, domain)
+                        .await?;
+                }
+                Ok(())
+            }
+            ChallengeType::Http { .. } => Ok(()),
+        }
     }
 
     async fn enqueue_issuance_task(&self, id: Uuid) -> Result<(), CertError> {
@@ -490,7 +512,9 @@ impl CertService {
 
         // Guard: must be ACME type
         match &config.cert_type {
-            CertType::Acme(_) => {}
+            CertType::Acme(acme) => {
+                self.validate_acme_dns_access(acme, &config.domains).await?;
+            }
             _ => {
                 return Err(CertError::InvalidStatusTransition(
                     "not an ACME certificate".to_string(),

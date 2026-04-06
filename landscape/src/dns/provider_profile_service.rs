@@ -1,7 +1,9 @@
 use landscape_common::{
     cert::order::{CertType, ChallengeType, DnsProviderConfig},
     database::LandscapeStore,
-    dns::provider_profile::DnsProviderProfile,
+    dns::provider_profile::{
+        DnsProviderCredentialCheckRequest, DnsProviderCredentialCheckResult, DnsProviderProfile,
+    },
     error::LdError,
     service::controller::ConfigController,
 };
@@ -11,6 +13,8 @@ use landscape_database::{
     provider::LandscapeDBServiceProvider,
 };
 use uuid::Uuid;
+
+use crate::cert::dns_provider;
 
 #[derive(Clone)]
 pub struct DnsProviderProfileService {
@@ -47,6 +51,25 @@ impl DnsProviderProfileService {
             }
         }
         self.checked_set(config).await
+    }
+
+    pub async fn validate_credentials(
+        &self,
+        request: DnsProviderCredentialCheckRequest,
+    ) -> Result<DnsProviderCredentialCheckResult, LdError> {
+        if matches!(&request.provider_config, DnsProviderConfig::Manual) {
+            return Err(LdError::ConfigError(
+                "manual DNS provider cannot be used as a reusable DNS provider profile".to_string(),
+            ));
+        }
+
+        dns_provider::validate_provider_credentials(&request.provider_config)
+            .await
+            .map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+        Ok(DnsProviderCredentialCheckResult {
+            message: "DNS provider credentials validated successfully".to_string(),
+        })
     }
 
     pub async fn delete_profile(&self, id: Uuid) -> Result<(), LdError> {

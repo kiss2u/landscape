@@ -154,6 +154,7 @@ export default {
   record_names_placeholder: "One relative record per line, e.g.\nroot\nhome\n*",
   provider_profile: "Provider Profile",
   provider_profile_required: "Provider profile is required",
+  provider_validation_failed: "DNS provider credential validation failed",
   source: "Source",
   sources: "Sources",
   source_required: "At least one source is required",

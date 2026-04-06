@@ -76,6 +76,82 @@ pub fn build_record_updater(
     }
 }
 
+pub async fn validate_provider_credentials(provider: &DnsProviderConfig) -> Result<(), CertError> {
+    match provider {
+        DnsProviderConfig::Cloudflare { api_token } => {
+            cloudflare::validate_credentials(api_token).await
+        }
+        DnsProviderConfig::Aliyun { access_key_id, access_key_secret } => {
+            aliyun::validate_credentials(access_key_id, access_key_secret).await
+        }
+        DnsProviderConfig::Tencent { secret_id, secret_key } => {
+            tencent::validate_credentials(secret_id, secret_key).await
+        }
+        DnsProviderConfig::Aws { access_key_id, secret_access_key, region } => {
+            aws::validate_credentials(access_key_id, secret_access_key, region).await
+        }
+        DnsProviderConfig::Google { service_account_json } => {
+            google::validate_credentials(service_account_json).await
+        }
+        DnsProviderConfig::Manual => Err(CertError::DnsChallengeSetupFailed(
+            "manual DNS provider cannot be validated as a reusable profile".to_string(),
+        )),
+    }
+}
+
+pub async fn validate_provider_zone_access(
+    provider: &DnsProviderConfig,
+    zone_name: &str,
+) -> Result<(), CertError> {
+    match provider {
+        DnsProviderConfig::Cloudflare { api_token } => {
+            cloudflare::validate_zone_access(api_token, zone_name).await
+        }
+        DnsProviderConfig::Aliyun { access_key_id, access_key_secret } => {
+            aliyun::validate_zone_access(access_key_id, access_key_secret, zone_name).await
+        }
+        DnsProviderConfig::Tencent { secret_id, secret_key } => {
+            tencent::validate_zone_access(secret_id, secret_key, zone_name).await
+        }
+        DnsProviderConfig::Aws { access_key_id, secret_access_key, region } => {
+            aws::validate_zone_access(access_key_id, secret_access_key, region, zone_name).await
+        }
+        DnsProviderConfig::Google { service_account_json } => {
+            google::validate_zone_access(service_account_json, zone_name).await
+        }
+        DnsProviderConfig::Manual => Err(CertError::DnsChallengeSetupFailed(
+            "manual DNS provider cannot manage hosted zones".to_string(),
+        )),
+    }
+}
+
+pub async fn validate_provider_domain_access(
+    provider: &DnsProviderConfig,
+    domain: &str,
+) -> Result<(), CertError> {
+    let domain = common::normalize_validation_domain(domain);
+    match provider {
+        DnsProviderConfig::Cloudflare { api_token } => {
+            cloudflare::validate_domain_access(api_token, &domain).await
+        }
+        DnsProviderConfig::Aliyun { access_key_id, access_key_secret } => {
+            aliyun::validate_domain_access(access_key_id, access_key_secret, &domain).await
+        }
+        DnsProviderConfig::Tencent { secret_id, secret_key } => {
+            tencent::validate_domain_access(secret_id, secret_key, &domain).await
+        }
+        DnsProviderConfig::Aws { access_key_id, secret_access_key, region } => {
+            aws::validate_domain_access(access_key_id, secret_access_key, region, &domain).await
+        }
+        DnsProviderConfig::Google { service_account_json } => {
+            google::validate_domain_access(service_account_json, &domain).await
+        }
+        DnsProviderConfig::Manual => Err(CertError::DnsChallengeSetupFailed(
+            "manual DNS provider cannot manage DNS challenge domains".to_string(),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

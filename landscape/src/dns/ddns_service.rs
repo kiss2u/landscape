@@ -23,7 +23,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::time::MissedTickBehavior;
 use uuid::Uuid;
 
-use crate::cert::dns_provider::build_record_updater;
+use crate::cert::dns_provider::{build_record_updater, validate_provider_zone_access};
 use crate::route::{IpRouteService, WanRouteEvent};
 
 const DDNS_SYNC_INTERVAL_SECS: u64 = 60;
@@ -143,14 +143,21 @@ impl DdnsService {
         });
     }
 
-    pub async fn checked_set_job(&self, config: DdnsJob) -> Result<DdnsJob, LdError> {
+    pub async fn checked_set_job(&self, mut config: DdnsJob) -> Result<DdnsJob, LdError> {
+        config.normalize_for_save().map_err(LdError::ConfigError)?;
         config.validate().map_err(LdError::ConfigError)?;
-        self.profile_store.find_by_id(config.provider_profile_id).await?.ok_or_else(|| {
-            LdError::ConfigError(format!(
-                "DNS provider profile {} not found",
-                config.provider_profile_id
-            ))
-        })?;
+        let profile =
+            self.profile_store.find_by_id(config.provider_profile_id).await?.ok_or_else(|| {
+                LdError::ConfigError(format!(
+                    "DNS provider profile {} not found",
+                    config.provider_profile_id
+                ))
+            })?;
+        build_record_updater(&profile.provider_config)
+            .map_err(|e| LdError::ConfigError(e.to_string()))?;
+        validate_provider_zone_access(&profile.provider_config, &config.zone_name)
+            .await
+            .map_err(|e| LdError::ConfigError(e.to_string()))?;
         let saved = self.checked_set(config).await?;
         if saved.enable {
             self.sync_enabled_job_now(&saved).await;

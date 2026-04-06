@@ -172,6 +172,14 @@ impl LandscapeDBStore<Uuid> for DdnsJob {
 }
 
 impl DdnsJob {
+    pub fn normalize_for_save(&mut self) -> Result<(), String> {
+        self.zone_name = normalize_zone_name(&self.zone_name)?;
+        for record in &mut self.records {
+            record.name = normalize_record_name(&record.name)?;
+        }
+        Ok(())
+    }
+
     pub fn has_source_for_family(&self, wanted_family: IpFamily) -> bool {
         self.sources.iter().any(|source| match source {
             DdnsSource::LocalWan { family, .. } | DdnsSource::EnrolledDevice { family, .. } => {
@@ -324,5 +332,33 @@ pub fn fqdn_for_zone_record(zone_name: &str, record_name: &str) -> Result<String
         Ok(zone_name)
     } else {
         Ok(format!("{record_name}.{zone_name}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_for_save_canonicalizes_zone_and_record_names() {
+        let mut job = DdnsJob {
+            id: Uuid::nil(),
+            name: "test".to_string(),
+            enable: true,
+            sources: vec![DdnsSource::LocalWan {
+                iface_name: "wan0".to_string(),
+                family: IpFamily::Ipv4,
+            }],
+            zone_name: " Example.COM. ".to_string(),
+            provider_profile_id: Uuid::nil(),
+            ttl: Some(120),
+            records: vec![DdnsRecordConfig { name: "WWW.".to_string(), enable: true }],
+            update_at: 0.0,
+        };
+
+        job.normalize_for_save().unwrap();
+
+        assert_eq!(job.zone_name, "example.com");
+        assert_eq!(job.records[0].name, "www");
     }
 }

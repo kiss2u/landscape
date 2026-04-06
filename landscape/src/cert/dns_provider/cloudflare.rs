@@ -65,37 +65,87 @@ impl CloudflareSolver {
             .unwrap_or_else(|| "unknown Cloudflare API error".to_string())
     }
 
-    async fn find_zone_id(&self, domain: &str) -> Result<String, CertError> {
-        for candidate in super::common::candidate_zones(domain) {
-            let url = self.api_url(&format!("/zones?name={candidate}"));
-            let resp = self
-                .client
-                .get(url)
-                .header(AUTHORIZATION, self.auth_header())
-                .send()
-                .await
-                .map_err(|e| {
+    async fn lookup_zone_id(&self, zone_name: &str) -> Result<Option<String>, CertError> {
+        let url = self.api_url(&format!("/zones?name={zone_name}"));
+        let resp =
+            self.client.get(url).header(AUTHORIZATION, self.auth_header()).send().await.map_err(
+                |e| {
                     CertError::DnsChallengeSetupFailed(format!(
                         "Cloudflare API request failed: {e}"
                     ))
-                })?;
+                },
+            )?;
 
-            let text = resp.text().await.map_err(|e| {
-                CertError::DnsChallengeSetupFailed(format!(
-                    "Failed to read Cloudflare response: {e}"
-                ))
-            })?;
+        let text = resp.text().await.map_err(|e| {
+            CertError::DnsChallengeSetupFailed(format!("Failed to read Cloudflare response: {e}"))
+        })?;
 
-            let body: CfResponse<Vec<CfZone>> = serde_json::from_str(&text).map_err(|e| {
-                CertError::DnsChallengeSetupFailed(format!(
-                    "Failed to parse Cloudflare response: {e}"
-                ))
-            })?;
+        let body: CfResponse<Vec<CfZone>> = serde_json::from_str(&text).map_err(|e| {
+            CertError::DnsChallengeSetupFailed(format!("Failed to parse Cloudflare response: {e}"))
+        })?;
 
-            if body.success {
-                if let Some(zone) = body.result.and_then(|zones| zones.into_iter().next()) {
-                    return Ok(zone.id);
-                }
+        if !body.success {
+            return Err(CertError::DnsChallengeSetupFailed(format!(
+                "Cloudflare zone lookup failed: {}",
+                Self::cf_error(&body.errors)
+            )));
+        }
+
+        Ok(body.result.and_then(|zones| zones.into_iter().next()).map(|zone| zone.id))
+    }
+
+    async fn validate_credentials(&self) -> Result<(), CertError> {
+        let url = self.api_url("/zones?page=1&per_page=1");
+        let resp =
+            self.client.get(url).header(AUTHORIZATION, self.auth_header()).send().await.map_err(
+                |e| {
+                    CertError::DnsChallengeSetupFailed(format!(
+                        "Cloudflare API request failed: {e}"
+                    ))
+                },
+            )?;
+        let text = resp.text().await.map_err(|e| {
+            CertError::DnsChallengeSetupFailed(format!("Failed to read Cloudflare response: {e}"))
+        })?;
+        let body: CfResponse<Vec<CfZone>> = serde_json::from_str(&text).map_err(|e| {
+            CertError::DnsChallengeSetupFailed(format!("Failed to parse Cloudflare response: {e}"))
+        })?;
+        if body.success {
+            Ok(())
+        } else {
+            Err(CertError::DnsChallengeSetupFailed(format!(
+                "Cloudflare credential validation failed: {}",
+                Self::cf_error(&body.errors)
+            )))
+        }
+    }
+
+    async fn validate_zone_access(&self, zone_name: &str) -> Result<(), CertError> {
+        if self.lookup_zone_id(zone_name).await?.is_some() {
+            Ok(())
+        } else {
+            Err(CertError::DnsChallengeSetupFailed(format!(
+                "Could not find Cloudflare zone: {zone_name}"
+            )))
+        }
+    }
+
+    async fn validate_domain_access(&self, domain: &str) -> Result<(), CertError> {
+        for candidate in super::common::candidate_zones(domain) {
+            if self.lookup_zone_id(&candidate).await?.is_some() {
+                return Ok(());
+            }
+        }
+
+        Err(CertError::DnsChallengeSetupFailed(format!(
+            "Could not find Cloudflare zone for domain: {domain}"
+        )))
+    }
+
+    async fn find_zone_id(&self, domain: &str) -> Result<String, CertError> {
+        for candidate in super::common::candidate_zones(domain) {
+            if let Some(zone_id) = self.lookup_zone_id(&candidate).await? {
+                return Ok(zone_id);
             }
         }
 
@@ -185,6 +235,18 @@ impl CloudflareSolver {
             )))
         }
     }
+}
+
+pub async fn validate_credentials(api_token: &str) -> Result<(), CertError> {
+    CloudflareSolver::new(api_token.to_string()).validate_credentials().await
+}
+
+pub async fn validate_zone_access(api_token: &str, zone_name: &str) -> Result<(), CertError> {
+    CloudflareSolver::new(api_token.to_string()).validate_zone_access(zone_name).await
+}
+
+pub async fn validate_domain_access(api_token: &str, domain: &str) -> Result<(), CertError> {
+    CloudflareSolver::new(api_token.to_string()).validate_domain_access(domain).await
 }
 
 #[async_trait::async_trait]
