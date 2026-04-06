@@ -5,7 +5,7 @@ mod common;
 mod google;
 pub(crate) mod tencent;
 
-use landscape_common::cert::order::{ChallengeType, DnsProviderConfig};
+use landscape_common::cert::order::DnsProviderConfig;
 use landscape_common::cert::CertError;
 
 #[async_trait::async_trait]
@@ -28,38 +28,29 @@ pub trait DnsRecordUpdater: Send + Sync {
     ) -> Result<(), CertError>;
 }
 
-/// Factory: build solver from order's challenge_type config
+/// Factory: build solver from reusable DNS provider profile config.
 pub fn build_solver(
-    challenge_type: &ChallengeType,
+    provider: &DnsProviderConfig,
 ) -> Result<Box<dyn DnsChallengeSolver>, CertError> {
-    match challenge_type {
-        ChallengeType::Dns { dns_provider } => match dns_provider {
-            DnsProviderConfig::Cloudflare { api_token } => {
-                Ok(Box::new(cloudflare::CloudflareSolver::new(api_token.clone())))
-            }
-            DnsProviderConfig::Aliyun { access_key_id, access_key_secret } => Ok(Box::new(
-                aliyun::AliyunSolver::new(access_key_id.clone(), access_key_secret.clone()),
-            )),
-            DnsProviderConfig::Tencent { secret_id, secret_key } => {
-                Ok(Box::new(tencent::TencentSolver::new(secret_id.clone(), secret_key.clone())))
-            }
-            DnsProviderConfig::Aws { access_key_id, secret_access_key, region } => {
-                Ok(Box::new(aws::AwsSolver::new(
-                    access_key_id.clone(),
-                    secret_access_key.clone(),
-                    region.clone(),
-                )))
-            }
-            DnsProviderConfig::Google { service_account_json } => {
-                Ok(Box::new(google::GoogleSolver::new(service_account_json.clone())?))
-            }
-            DnsProviderConfig::Manual => Err(CertError::DnsChallengeSetupFailed(
-                "manual DNS not supported for async issuance".into(),
-            )),
-        },
-        ChallengeType::Http { .. } => {
-            Err(CertError::DnsChallengeSetupFailed("only DNS-01 challenge is supported".into()))
+    match provider {
+        DnsProviderConfig::Cloudflare { api_token } => {
+            Ok(Box::new(cloudflare::CloudflareSolver::new(api_token.clone())))
         }
+        DnsProviderConfig::Aliyun { access_key_id, access_key_secret } => Ok(Box::new(
+            aliyun::AliyunSolver::new(access_key_id.clone(), access_key_secret.clone()),
+        )),
+        DnsProviderConfig::Tencent { secret_id, secret_key } => {
+            Ok(Box::new(tencent::TencentSolver::new(secret_id.clone(), secret_key.clone())))
+        }
+        DnsProviderConfig::Aws { access_key_id, secret_access_key, region } => Ok(Box::new(
+            aws::AwsSolver::new(access_key_id.clone(), secret_access_key.clone(), region.clone()),
+        )),
+        DnsProviderConfig::Google { service_account_json } => {
+            Ok(Box::new(google::GoogleSolver::new(service_account_json.clone())?))
+        }
+        DnsProviderConfig::Manual => Err(CertError::DnsChallengeSetupFailed(
+            "manual DNS not supported for async issuance".into(),
+        )),
     }
 }
 
@@ -96,7 +87,6 @@ mod tests {
     use axum::response::IntoResponse;
     use axum::routing::{delete, get, post};
     use axum::{Json, Router};
-    use landscape_common::cert::order::ChallengeType;
     use serde_json::{json, Value};
 
     use super::common::unquote_txt_value;
@@ -115,39 +105,29 @@ mod tests {
     #[test]
     fn build_solver_supports_common_dns_providers() {
         let configs = [
-            ChallengeType::Dns {
-                dns_provider: landscape_common::cert::order::DnsProviderConfig::Cloudflare {
-                    api_token: "token".into(),
-                },
+            landscape_common::cert::order::DnsProviderConfig::Cloudflare {
+                api_token: "token".into(),
             },
-            ChallengeType::Dns {
-                dns_provider: landscape_common::cert::order::DnsProviderConfig::Aliyun {
-                    access_key_id: "id".into(),
-                    access_key_secret: "secret".into(),
-                },
+            landscape_common::cert::order::DnsProviderConfig::Aliyun {
+                access_key_id: "id".into(),
+                access_key_secret: "secret".into(),
             },
-            ChallengeType::Dns {
-                dns_provider: landscape_common::cert::order::DnsProviderConfig::Tencent {
-                    secret_id: "id".into(),
-                    secret_key: "secret".into(),
-                },
+            landscape_common::cert::order::DnsProviderConfig::Tencent {
+                secret_id: "id".into(),
+                secret_key: "secret".into(),
             },
-            ChallengeType::Dns {
-                dns_provider: landscape_common::cert::order::DnsProviderConfig::Aws {
-                    access_key_id: "id".into(),
-                    secret_access_key: "secret".into(),
-                    region: "us-east-1".into(),
-                },
+            landscape_common::cert::order::DnsProviderConfig::Aws {
+                access_key_id: "id".into(),
+                secret_access_key: "secret".into(),
+                region: "us-east-1".into(),
             },
-            ChallengeType::Dns {
-                dns_provider: landscape_common::cert::order::DnsProviderConfig::Google {
-                    service_account_json: json!({
-                        "project_id": "test-project",
-                        "client_email": "test@example.com",
-                        "private_key": "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----"
-                    })
-                    .to_string(),
-                },
+            landscape_common::cert::order::DnsProviderConfig::Google {
+                service_account_json: json!({
+                    "project_id": "test-project",
+                    "client_email": "test@example.com",
+                    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----"
+                })
+                .to_string(),
             },
         ];
 

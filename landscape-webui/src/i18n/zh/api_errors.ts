@@ -38,6 +38,7 @@ export default {
   "docker.run_cmd_failed": "通过命令运行容器失败",
   "cert.account_not_found": "找不到证书账户 (ID: {0})",
   "cert.cert_not_found": "找不到证书 (ID: {0})",
+  "cert.provider_profile_not_found": "找不到 DNS 服务商配置 (ID: {0})",
   "cert.registration_failed": "ACME 账户注册失败: {0}",
   "cert.deactivation_failed": "ACME 账户注销失败: {0}",
   "cert.verification_failed": "ACME 账户验证失败: {0}",

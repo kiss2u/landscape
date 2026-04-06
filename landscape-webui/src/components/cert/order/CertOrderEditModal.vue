@@ -4,9 +4,11 @@ import type {
   CertAccountConfig,
   CertConfig,
   CertType,
+  DnsProviderProfile,
 } from "@landscape-router/types/api/schemas";
 import { get_cert, push_cert } from "@/api/cert/order";
 import { get_cert_accounts } from "@/api/cert/account";
+import { get_dns_provider_profiles } from "@/api/domain/provider_profile";
 import { useI18n } from "vue-i18n";
 
 type Props = {
@@ -23,6 +25,7 @@ const origin_json = ref("");
 const commit_spin = ref(false);
 const formRef = ref();
 const accounts = ref<CertAccountConfig[]>([]);
+const providerProfiles = ref<DnsProviderProfile[]>([]);
 
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_json.value;
@@ -43,7 +46,7 @@ function buildDefaultAcmeCertType(): CertType {
     t: "acme",
     account_id: accounts.value[0]?.id ?? "",
     challenge_type: {
-      dns: { dns_provider: { cloudflare: { api_token: "" } } },
+      dns: { provider_profile_id: providerProfiles.value[0]?.id ?? "" },
     },
     key_type: "ecdsa_p256",
     auto_renew: true,
@@ -108,6 +111,13 @@ const account_options = computed(() =>
   })),
 );
 
+const provider_profile_options = computed(() =>
+  providerProfiles.value.map((profile) => ({
+    label: profile.name,
+    value: profile.id!,
+  })),
+);
+
 const challenge_options = [{ label: "DNS-01", value: "dns" }];
 
 const key_type_options = [
@@ -115,22 +125,6 @@ const key_type_options = [
   { label: "ECDSA P-384", value: "ecdsa_p384" },
   { label: "RSA 2048", value: "rsa2048" },
   { label: "RSA 4096", value: "rsa4096" },
-];
-
-const supported_dns_providers = [
-  "cloudflare",
-  "aliyun",
-  "tencent",
-  "aws",
-  "google",
-] as const;
-
-const dns_provider_options = [
-  { label: t("cert.dns_provider_cloudflare"), value: "cloudflare" },
-  { label: t("cert.dns_provider_aliyun"), value: "aliyun" },
-  { label: t("cert.dns_provider_tencent"), value: "tencent" },
-  { label: t("cert.dns_provider_aws"), value: "aws" },
-  { label: t("cert.dns_provider_google"), value: "google" },
 ];
 
 const cert_type_options = [
@@ -169,103 +163,27 @@ const httpPort = computed({
   },
 });
 
-// --- Externally tagged dns_provider helpers ---
-
-function getDnsProviderKey(ct: any): string {
-  if (!ct || typeof ct !== "object" || !("dns" in ct)) return "manual";
-  const dns = (ct as { dns: { dns_provider?: unknown } }).dns;
-  if (!dns?.dns_provider) return "manual";
-  const dp = dns.dns_provider;
-  if (typeof dp === "string") return dp;
-  if (typeof dp === "object" && dp !== null) {
-    const keys = Object.keys(dp);
-    return keys.length > 0 ? keys[0] : "manual";
-  }
-  return "manual";
+function getDnsProviderProfileId(ct: any): string {
+  if (!ct || typeof ct !== "object" || !("dns" in ct)) return "";
+  const dns = (ct as { dns: { provider_profile_id?: string } }).dns;
+  return dns?.provider_profile_id ?? "";
 }
 
-function getDnsProviderFields(ct: any): Record<string, string> {
-  if (!ct || typeof ct !== "object" || !("dns" in ct)) return {};
-  const dns = (ct as { dns: { dns_provider?: unknown } }).dns;
-  if (!dns?.dns_provider) return {};
-  const dp = dns.dns_provider;
-  if (typeof dp === "string") return {};
-  if (typeof dp === "object" && dp !== null) {
-    const keys = Object.keys(dp);
-    if (keys.length > 0) {
-      return (dp as Record<string, Record<string, string>>)[keys[0]] ?? {};
-    }
-  }
-  return {};
-}
-
-const dnsProviderKey = computed(() =>
-  getDnsProviderKey(getAcmeField("challenge_type")),
+const dnsProviderProfileId = computed(() =>
+  getDnsProviderProfileId(getAcmeField("challenge_type")),
 );
 
-function setDnsProvider(key: string, fields: Record<string, string>) {
-  let dp: unknown;
-  if (key === "manual") {
-    dp = "manual";
-  } else {
-    dp = { [key]: fields };
-  }
-  setAcmeField("challenge_type", { dns: { dns_provider: dp } });
-}
-
-// Computed getters/setters for DNS provider fields
-function dnsField(fieldName: string): string {
-  return getDnsProviderFields(getAcmeField("challenge_type"))[fieldName] ?? "";
-}
-
-function setDnsField(fieldName: string, val: string) {
-  const fields = { ...getDnsProviderFields(getAcmeField("challenge_type")) };
-  fields[fieldName] = val;
-  setDnsProvider(dnsProviderKey.value, fields);
-}
-
-function requiredDnsFields(provider: string): string[] {
-  switch (provider) {
-    case "cloudflare":
-      return ["api_token"];
-    case "aliyun":
-      return ["access_key_id", "access_key_secret"];
-    case "tencent":
-      return ["secret_id", "secret_key"];
-    case "aws":
-      return ["access_key_id", "secret_access_key", "region"];
-    case "google":
-      return ["service_account_json"];
-    default:
-      return [];
-  }
-}
-
-function dnsFieldLabel(fieldName: string): string {
-  switch (fieldName) {
-    case "api_token":
-      return "API Token";
-    case "access_key_id":
-      return "Access Key ID";
-    case "access_key_secret":
-      return "Access Key Secret";
-    case "secret_id":
-      return "Secret ID";
-    case "secret_key":
-      return "Secret Key";
-    case "secret_access_key":
-      return "Secret Access Key";
-    case "region":
-      return "Region";
-    case "service_account_json":
-      return "Service Account JSON";
-    default:
-      return fieldName;
-  }
+function setDnsProviderProfileId(profileId: string) {
+  setAcmeField("challenge_type", { dns: { provider_profile_id: profileId } });
 }
 
 async function enter() {
-  accounts.value = await get_cert_accounts();
+  const [certAccounts, dnsProfiles] = await Promise.all([
+    get_cert_accounts(),
+    get_dns_provider_profiles(),
+  ]);
+  accounts.value = certAccounts;
+  providerProfiles.value = dnsProfiles;
   if (props.rule_id) {
     rule.value = await get_cert(props.rule_id);
   } else {
@@ -283,12 +201,11 @@ async function enter() {
     const challenge = getChallengeKind(getAcmeField("challenge_type"));
     if (challenge !== "dns") {
       setAcmeField("challenge_type", {
-        dns: { dns_provider: { cloudflare: { api_token: "" } } },
+        dns: { provider_profile_id: providerProfiles.value[0]?.id ?? "" },
       });
     }
-    const provider = getDnsProviderKey(getAcmeField("challenge_type"));
-    if (!supported_dns_providers.includes(provider as any)) {
-      setDnsProvider("cloudflare", { api_token: "" });
+    if (!getDnsProviderProfileId(getAcmeField("challenge_type"))) {
+      setDnsProviderProfileId(providerProfiles.value[0]?.id ?? "");
     }
   }
   origin_json.value = JSON.stringify(rule.value);
@@ -297,36 +214,10 @@ async function enter() {
 function on_challenge_change(val: string) {
   if (val === "dns") {
     setAcmeField("challenge_type", {
-      dns: { dns_provider: { cloudflare: { api_token: "" } } },
+      dns: { provider_profile_id: providerProfiles.value[0]?.id ?? "" },
     });
   } else {
     setAcmeField("challenge_type", { http: { port: 80 } });
-  }
-}
-
-function on_dns_provider_change(val: string) {
-  switch (val) {
-    case "cloudflare":
-      setDnsProvider("cloudflare", { api_token: "" });
-      break;
-    case "aliyun":
-      setDnsProvider("aliyun", { access_key_id: "", access_key_secret: "" });
-      break;
-    case "tencent":
-      setDnsProvider("tencent", { secret_id: "", secret_key: "" });
-      break;
-    case "aws":
-      setDnsProvider("aws", {
-        access_key_id: "",
-        secret_access_key: "",
-        region: "",
-      });
-      break;
-    case "google":
-      setDnsProvider("google", { service_account_json: "" });
-      break;
-    default:
-      setDnsProvider("cloudflare", { api_token: "" });
   }
 }
 
@@ -377,11 +268,8 @@ const rules = {
     trigger: ["blur", "change"],
     validator() {
       if (!is_acme.value || !is_dns.value) return true;
-      const provider = dnsProviderKey.value;
-      for (const field of requiredDnsFields(provider)) {
-        if (!dnsField(field).trim()) {
-          return new Error(`${dnsFieldLabel(field)} is required`);
-        }
+      if (!dnsProviderProfileId.value) {
+        return new Error(t("cert.provider_profile_required"));
       }
       return true;
     },
@@ -509,102 +397,16 @@ async function save() {
 
         <template v-if="is_dns">
           <n-form-item
-            :label="t('cert.dns_provider')"
+            :label="t('cert.provider_profile')"
             path="cert_type.challenge_type"
           >
             <n-select
-              :value="dnsProviderKey"
-              :options="dns_provider_options"
-              @update:value="on_dns_provider_change"
+              :value="dnsProviderProfileId"
+              :options="provider_profile_options"
+              :placeholder="t('cert.provider_profile_required')"
+              @update:value="setDnsProviderProfileId"
             />
           </n-form-item>
-
-          <!-- Cloudflare -->
-          <template v-if="dnsProviderKey === 'cloudflare'">
-            <n-form-item label="API Token">
-              <n-input
-                :value="dnsField('api_token')"
-                @update:value="(v: string) => setDnsField('api_token', v)"
-                type="password"
-                show-password-on="click"
-              />
-            </n-form-item>
-          </template>
-
-          <template v-if="dnsProviderKey === 'aliyun'">
-            <n-form-item label="Access Key ID">
-              <n-input
-                :value="dnsField('access_key_id')"
-                @update:value="(v: string) => setDnsField('access_key_id', v)"
-              />
-            </n-form-item>
-            <n-form-item label="Access Key Secret">
-              <n-input
-                :value="dnsField('access_key_secret')"
-                @update:value="
-                  (v: string) => setDnsField('access_key_secret', v)
-                "
-                type="password"
-                show-password-on="click"
-              />
-            </n-form-item>
-          </template>
-
-          <template v-if="dnsProviderKey === 'tencent'">
-            <n-form-item label="Secret ID">
-              <n-input
-                :value="dnsField('secret_id')"
-                @update:value="(v: string) => setDnsField('secret_id', v)"
-              />
-            </n-form-item>
-            <n-form-item label="Secret Key">
-              <n-input
-                :value="dnsField('secret_key')"
-                @update:value="(v: string) => setDnsField('secret_key', v)"
-                type="password"
-                show-password-on="click"
-              />
-            </n-form-item>
-          </template>
-
-          <template v-if="dnsProviderKey === 'aws'">
-            <n-form-item label="Access Key ID">
-              <n-input
-                :value="dnsField('access_key_id')"
-                @update:value="(v: string) => setDnsField('access_key_id', v)"
-              />
-            </n-form-item>
-            <n-form-item label="Secret Access Key">
-              <n-input
-                :value="dnsField('secret_access_key')"
-                @update:value="
-                  (v: string) => setDnsField('secret_access_key', v)
-                "
-                type="password"
-                show-password-on="click"
-              />
-            </n-form-item>
-            <n-form-item label="Region">
-              <n-input
-                :value="dnsField('region')"
-                @update:value="(v: string) => setDnsField('region', v)"
-                placeholder="us-east-1"
-              />
-            </n-form-item>
-          </template>
-
-          <template v-if="dnsProviderKey === 'google'">
-            <n-form-item label="Service Account JSON">
-              <n-input
-                :value="dnsField('service_account_json')"
-                @update:value="
-                  (v: string) => setDnsField('service_account_json', v)
-                "
-                type="textarea"
-                :rows="3"
-              />
-            </n-form-item>
-          </template>
         </template>
 
         <n-form-item :label="t('cert.acme_auto_renew')">

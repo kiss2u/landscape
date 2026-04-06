@@ -13,14 +13,19 @@ use instant_acme::{
     RevocationRequest,
 };
 use landscape_common::cert::account::AccountStatus;
-use landscape_common::cert::order::{CertConfig, CertParsedInfo, CertStatus, CertType};
+use landscape_common::cert::order::{
+    CertConfig, CertParsedInfo, CertStatus, CertType, ChallengeType,
+};
 use landscape_common::cert::CertError;
+use landscape_common::database::LandscapeStore;
+use landscape_common::dns::provider_profile::DnsProviderProfile;
 use landscape_common::dns::redirect::{
     DnsRedirectAnswerMode, DynamicDnsMatch, DynamicDnsRedirectBatch, DynamicDnsRedirectRecord,
     DynamicDnsRedirectScope, DEFAULT_STATIC_DNS_REDIRECT_TTL_SECS,
 };
 use landscape_common::service::controller::ConfigController;
 use landscape_database::cert::repository::CertRepository;
+use landscape_database::dns_provider_profile::repository::DnsProviderProfileRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use rcgen::{
     date_time_ymd, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, KeyPair,
@@ -40,6 +45,7 @@ const API_CERT_DYNAMIC_DNS_REDIRECT_SOURCE_ID: &str = "cert-api-local-ips";
 pub struct CertService {
     store: CertRepository,
     account_service: CertAccountService,
+    profile_store: DnsProviderProfileRepository,
     api_tls_resolver: SharedSniResolver,
     gateway_tls_resolver: SharedSniResolver,
     api_dns_redirect_service: Option<DNSRedirectService>,
@@ -75,6 +81,7 @@ impl CertService {
         let service = Self {
             store,
             account_service,
+            profile_store: store_provider.dns_provider_profile_store(),
             api_tls_resolver: SharedSniResolver::new(),
             gateway_tls_resolver: SharedSniResolver::new(),
             api_dns_redirect_service,
@@ -316,7 +323,12 @@ impl CertService {
                     config.status = CertStatus::Valid;
                 }
             }
-            CertType::Acme(_) => {}
+            CertType::Acme(acme) => {
+                if let ChallengeType::Dns { provider_profile_id } = &acme.challenge_type {
+                    let profile = self.resolve_dns_provider_profile(*provider_profile_id).await?;
+                    dns_provider::build_solver(&profile.provider_config)?;
+                }
+            }
         }
 
         self.validate_for_api_domain_conflicts(&config).await?;
@@ -368,6 +380,17 @@ impl CertService {
             "for_api domain conflict: {}",
             conflict_list.join(", ")
         )))
+    }
+
+    async fn resolve_dns_provider_profile(
+        &self,
+        provider_profile_id: Uuid,
+    ) -> Result<DnsProviderProfile, CertError> {
+        self.profile_store
+            .find_by_id(provider_profile_id)
+            .await
+            .map_err(|e| CertError::DnsChallengeSetupFailed(e.to_string()))?
+            .ok_or(CertError::DnsProviderProfileNotFound(provider_profile_id))
     }
 
     async fn enqueue_issuance_task(&self, id: Uuid) -> Result<(), CertError> {
@@ -537,7 +560,17 @@ impl CertService {
             if cancel.is_cancelled() {
                 return Ok(DoIssueResult::Cancelled);
             }
-            let solver = dns_provider::build_solver(&acme.challenge_type)?;
+            let solver = match acme.challenge_type {
+                ChallengeType::Dns { provider_profile_id } => {
+                    let profile = self.resolve_dns_provider_profile(provider_profile_id).await?;
+                    dns_provider::build_solver(&profile.provider_config)?
+                }
+                ChallengeType::Http { .. } => {
+                    return Err(CertError::DnsChallengeSetupFailed(
+                        "only DNS-01 challenge is supported".to_string(),
+                    ));
+                }
+            };
 
             let account_config = self
                 .account_service

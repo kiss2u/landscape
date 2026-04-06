@@ -26,8 +26,7 @@ pub enum ChallengeType {
         port: u16,
     },
     Dns {
-        #[serde(default)]
-        dns_provider: DnsProviderConfig,
+        provider_profile_id: Uuid,
     },
 }
 

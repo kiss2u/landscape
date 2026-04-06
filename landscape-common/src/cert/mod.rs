@@ -16,6 +16,10 @@ pub enum CertError {
     #[api_error(id = "cert.cert_not_found", status = 404)]
     CertNotFound(ConfigId),
 
+    #[error("DNS provider profile '{0}' not found")]
+    #[api_error(id = "cert.provider_profile_not_found", status = 404)]
+    DnsProviderProfileNotFound(ConfigId),
+
     #[error("ACME registration failed: {0}")]
     #[api_error(id = "cert.registration_failed", status = 500)]
     RegistrationFailed(String),

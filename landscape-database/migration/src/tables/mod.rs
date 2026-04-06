@@ -21,6 +21,7 @@ pub mod route;
 
 pub mod cert;
 pub mod ddns;
+pub mod dns_provider_profile;
 pub mod enrolled_device;
 pub mod firewall_blacklist;
 pub mod gateway;

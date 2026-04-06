@@ -14,14 +14,3 @@ pub enum DdnsJobs {
     Records,
     UpdateAt,
 }
-
-#[derive(Iden)]
-pub enum DnsProviderProfiles {
-    Table,
-    Id,
-    Name,
-    ProviderConfig,
-    Remark,
-    DdnsDefaultTtl,
-    UpdateAt,
-}

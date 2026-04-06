@@ -83,6 +83,6 @@ async fn delete_provider_profile(
     State(app): State<LandscapeApp>,
     Path(id): Path<ConfigId>,
 ) -> LandscapeApiResult<()> {
-    app.dns_provider_profile_service.delete(id.into()).await;
+    app.dns_provider_profile_service.delete_profile(id.into()).await?;
     LandscapeApiResp::success(())
 }

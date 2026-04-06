@@ -38,6 +38,7 @@ export default {
   "docker.run_cmd_failed": "Failed to run container by command",
   "cert.account_not_found": "Certificate account not found (ID: {0})",
   "cert.cert_not_found": "Certificate not found (ID: {0})",
+  "cert.provider_profile_not_found": "DNS provider profile not found (ID: {0})",
   "cert.registration_failed": "ACME account registration failed: {0}",
   "cert.deactivation_failed": "ACME account deactivation failed: {0}",
   "cert.verification_failed": "ACME account verification failed: {0}",
