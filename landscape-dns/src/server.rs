@@ -6,6 +6,7 @@ use std::{
 };
 
 use arc_swap::{ArcSwap, ArcSwapOption};
+use landscape_common::dns::check::DnsCheckError;
 use landscape_common::{dns::FlowDnsDesiredState, event::DnsMetricMessage, service::WatchService};
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
@@ -201,10 +202,7 @@ impl LandscapeDnsServer {
     }
 
     pub async fn check_domain(&self, req: CheckDnsReq) -> CheckChainDnsResult {
-        let entry = {
-            let flow_server = self.flow_dns_server.lock().await;
-            flow_server.get(&req.flow_id).cloned()
-        };
+        let entry = self.get_entry(req.flow_id).await;
 
         let handler = entry
             .and_then(|entry| entry.runtime.load_full().map(|runtime| runtime.handler.clone()));
@@ -219,6 +217,42 @@ impl LandscapeDnsServer {
         } else {
             CheckChainDnsResult::default()
         }
+    }
+
+    pub async fn invalidate_domain_cache(
+        &self,
+        req: CheckDnsReq,
+    ) -> Result<CheckChainDnsResult, DnsCheckError> {
+        let domain = req.get_domain();
+        let query_type = convert_record_type(req.record_type);
+        let entry =
+            self.get_entry(req.flow_id).await.ok_or(DnsCheckError::FlowNotFound(req.flow_id))?;
+
+        let _refresh_guard = entry.refresh_lock.lock().await;
+        let runtime = entry.runtime.load_full().ok_or(DnsCheckError::FlowNotFound(req.flow_id))?;
+
+        runtime.handler.invalidate_cache_entry(&domain, query_type).await;
+        Ok(runtime.handler.check_domain(&domain, query_type, req.apply_filter).await)
+    }
+
+    pub async fn refresh_domain_cache(
+        &self,
+        req: CheckDnsReq,
+    ) -> Result<CheckChainDnsResult, DnsCheckError> {
+        let domain = req.get_domain();
+        let query_type = convert_record_type(req.record_type);
+        let entry =
+            self.get_entry(req.flow_id).await.ok_or(DnsCheckError::FlowNotFound(req.flow_id))?;
+
+        let _refresh_guard = entry.refresh_lock.lock().await;
+        let runtime = entry.runtime.load_full().ok_or(DnsCheckError::FlowNotFound(req.flow_id))?;
+
+        runtime.handler.refresh_cache_entry(&domain, query_type, req.apply_filter).await
+    }
+
+    async fn get_entry(&self, flow_id: u32) -> Option<Arc<FlowServerEntry>> {
+        let flow_server = self.flow_dns_server.lock().await;
+        flow_server.get(&flow_id).cloned()
     }
 
     async fn get_or_create_entry(&self, flow_id: u32) -> Arc<FlowServerEntry> {

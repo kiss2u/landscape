@@ -1,8 +1,29 @@
+use landscape_macro::LdApiError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::config::FlowId;
 use crate::dns::rule::{DNSRuntimeRule, FilterResult, LandscapeDnsRecordType};
+
+#[derive(thiserror::Error, Debug, LdApiError)]
+#[api_error(crate_path = "crate")]
+pub enum DnsCheckError {
+    #[error("DNS flow '{0}' not found")]
+    #[api_error(id = "dns_check.flow_not_found", status = 404)]
+    FlowNotFound(FlowId),
+
+    #[error("DNS cache refresh requires a matched upstream rule for '{0}'")]
+    #[api_error(id = "dns_check.refresh_requires_rule", status = 409)]
+    RefreshRequiresRule(String),
+
+    #[error("DNS cache refresh is not available for redirected domain '{0}'")]
+    #[api_error(id = "dns_check.refresh_redirected", status = 409)]
+    RefreshRedirected(String),
+
+    #[error("DNS cache refresh failed for '{0}'")]
+    #[api_error(id = "dns_check.refresh_failed", status = 502)]
+    RefreshFailed(String),
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use landscape_common::{
     config::DnsRuntimeConfig,
+    dns::check::DnsCheckError,
     dns::{CacheRuntimeConfig, DohRuntimeConfig, FlowDnsDependencies},
     event::{dns::DnsEvent, DnsMetricMessage},
     service::{
@@ -179,6 +180,20 @@ impl LandscapeDnsService {
 
     pub async fn check_domain(&self, req: CheckDnsReq) -> CheckChainDnsResult {
         self.dns_service.check_domain(req).await
+    }
+
+    pub async fn invalidate_domain_cache(
+        &self,
+        req: CheckDnsReq,
+    ) -> Result<CheckChainDnsResult, DnsCheckError> {
+        self.dns_service.invalidate_domain_cache(req).await
+    }
+
+    pub async fn refresh_domain_cache(
+        &self,
+        req: CheckDnsReq,
+    ) -> Result<CheckChainDnsResult, DnsCheckError> {
+        self.dns_service.refresh_domain_cache(req).await
     }
 
     pub async fn apply_runtime_config(&self, dns_config: DnsRuntimeConfig) {

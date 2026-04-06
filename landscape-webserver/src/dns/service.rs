@@ -12,7 +12,7 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 pub fn get_dns_service_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .routes(routes!(get_dns_service_status, start_dns_service, stop_dns_service))
-        .routes(routes!(check_domain))
+        .routes(routes!(check_domain, invalidate_domain_cache, refresh_domain_cache))
 }
 
 #[utoipa::path(
@@ -71,4 +71,46 @@ async fn check_domain(
     Query(req): Query<CheckDnsReq>,
 ) -> LandscapeApiResult<CheckChainDnsResult> {
     LandscapeApiResp::success(state.dns_service.check_domain(req).await)
+}
+
+#[utoipa::path(
+    delete,
+    path = "/service/cache",
+    tag = "DNS Service",
+    operation_id = "invalidate_domain_cache",
+    summary = "Delete DNS runtime cache entry",
+    description = "Deletes the DNS runtime cache entry for the selected flow, domain, and record type, then returns the latest inspection result.",
+    params(CheckDnsReq),
+    responses((
+        status = 200,
+        description = "DNS inspection result after cache deletion",
+        body = CommonApiResp<CheckChainDnsResult>
+    ))
+)]
+async fn invalidate_domain_cache(
+    State(state): State<LandscapeApp>,
+    Query(req): Query<CheckDnsReq>,
+) -> LandscapeApiResult<CheckChainDnsResult> {
+    LandscapeApiResp::success(state.dns_service.invalidate_domain_cache(req).await?)
+}
+
+#[utoipa::path(
+    post,
+    path = "/service/cache/refresh",
+    tag = "DNS Service",
+    operation_id = "refresh_domain_cache",
+    summary = "Refresh DNS runtime cache entry from upstream",
+    description = "Queries upstream for the selected flow, domain, and record type, updates the DNS runtime cache, then returns the refreshed inspection result.",
+    params(CheckDnsReq),
+    responses((
+        status = 200,
+        description = "DNS inspection result after cache refresh",
+        body = CommonApiResp<CheckChainDnsResult>
+    ))
+)]
+async fn refresh_domain_cache(
+    State(state): State<LandscapeApp>,
+    Query(req): Query<CheckDnsReq>,
+) -> LandscapeApiResult<CheckChainDnsResult> {
+    LandscapeApiResp::success(state.dns_service.refresh_domain_cache(req).await?)
 }

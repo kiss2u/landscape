@@ -114,6 +114,18 @@ export default {
     test_flow_query: "Test flow: {flow_id} domain query (results not cached)",
     query_instruction:
       "Enter a domain, then click the button on the right or press Enter",
+    diagnostic_hint:
+      "Regular query is diagnostic only and does not write runtime cache",
+    delete_cache: "Delete Cache",
+    refresh_cache: "Refresh Cache",
+    confirm_delete_cache:
+      "Delete the current cache entry for this domain and record type?",
+    confirm_refresh_cache:
+      "Refresh this domain and record type from upstream and overwrite runtime cache?",
+    delete_cache_success: "DNS cache entry deleted",
+    refresh_cache_success: "DNS cache refreshed from upstream",
+    query_filtered_hint:
+      "This record type is filtered by rule, so runtime will not serve or store cache for it",
     upstream_result: "DNS Upstream Query Results",
     cache_result: "DNS Internal Cache Results",
     redirect_result: "Domain Redirect Results",

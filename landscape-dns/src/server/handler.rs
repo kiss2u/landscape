@@ -32,6 +32,7 @@ use crate::{
     CacheDNSItem, CheckChainDnsResult, DNSCache,
 };
 use landscape_common::{
+    dns::check::DnsCheckError,
     dns::rule::FilterResult,
     dns::{FlowDnsDesiredState, RuntimeDnsRule, RuntimeRedirectRule},
     event::DnsMetricMessage,
@@ -311,6 +312,124 @@ impl DnsRequestHandler {
         }
 
         result
+    }
+
+    pub async fn invalidate_cache_entry(&self, domain: &str, query_type: RecordType) {
+        self.clear_cache_entry(domain, query_type).await;
+        self.refresh_runtime_maps_from_cache();
+    }
+
+    pub async fn refresh_cache_entry(
+        &self,
+        domain: &str,
+        query_type: RecordType,
+        apply_filter: bool,
+    ) -> Result<CheckChainDnsResult, DnsCheckError> {
+        if self.lookup_redirects(domain, query_type).is_some() {
+            return Err(DnsCheckError::RefreshRedirected(domain.to_string()));
+        }
+
+        let resolves = self.resolves.load();
+        for (_index, resolver) in resolves.iter() {
+            if !resolver.is_match(domain) {
+                continue;
+            }
+
+            let filter = resolver.filter_mode();
+            let query_filtered = is_type_filtered(query_type, &filter);
+            let mut result = CheckChainDnsResult {
+                rule_id: Some(resolver.get_config_id()),
+                rule_filter: Some(filter.clone()),
+                query_filtered,
+                ..Default::default()
+            };
+
+            match with_lookup_timeout(resolver.lookup(domain, query_type), LOOKUP_TIMEOUT).await {
+                Ok(rdata_vec) => {
+                    let records = if apply_filter {
+                        filter_result(rdata_vec.clone(), &filter)
+                    } else {
+                        rdata_vec.clone()
+                    };
+                    result.records = Some(crate::to_common_records(records));
+
+                    if query_filtered {
+                        self.clear_cache_entry(domain, query_type).await;
+                    } else {
+                        self.insert(
+                            domain,
+                            query_type,
+                            rdata_vec,
+                            ResponseCode::NoError,
+                            resolver.mark(),
+                            filter.clone(),
+                            Some(resolver.get_config_id()),
+                            Some(resolver.order()),
+                        )
+                        .await;
+                    }
+                }
+                Err(err) => {
+                    let code = err.to_response_code();
+                    result.records = Some(vec![]);
+
+                    if query_filtered {
+                        self.clear_cache_entry(domain, query_type).await;
+                    } else if code == ResponseCode::NXDomain || code == ResponseCode::NoError {
+                        self.insert(
+                            domain,
+                            query_type,
+                            vec![],
+                            code,
+                            resolver.mark(),
+                            filter.clone(),
+                            Some(resolver.get_config_id()),
+                            Some(resolver.order()),
+                        )
+                        .await;
+                    } else {
+                        return Err(DnsCheckError::RefreshFailed(domain.to_string()));
+                    }
+                }
+            }
+
+            self.refresh_runtime_maps_from_cache();
+
+            if let Some((records, cache_filter, _)) = self.lookup_cache(domain, query_type).await {
+                let cache_query_filtered = is_type_filtered(query_type, &cache_filter);
+                result.query_filtered |= cache_query_filtered;
+                if result.rule_filter.is_none() {
+                    result.rule_filter = Some(cache_filter.clone());
+                }
+                result.cache_records = Some(if cache_query_filtered && apply_filter {
+                    vec![]
+                } else if apply_filter {
+                    crate::to_common_records(filter_result(records, &cache_filter))
+                } else {
+                    crate::to_common_records(records)
+                });
+            }
+
+            return Ok(result);
+        }
+
+        Err(DnsCheckError::RefreshRequiresRule(domain.to_string()))
+    }
+
+    async fn clear_cache_entry(&self, domain: &str, query_type: RecordType) {
+        let cache = self.cache.load();
+        cache.invalidate(&(domain.to_string(), query_type)).await;
+    }
+
+    fn refresh_runtime_maps_from_cache(&self) {
+        let cache = self.cache.load();
+        let mut update_dns_mark_list = HashSet::new();
+        for (_key, value) in cache.iter() {
+            update_dns_mark_list.extend(value.get_update_rules());
+        }
+
+        self.refresh_flow_dns_map(update_dns_mark_list);
+        Self::recreate_route_cache();
     }
 
     // 检查缓存并根据 TTL 判断是否过期

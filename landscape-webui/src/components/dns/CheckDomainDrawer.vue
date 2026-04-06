@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { SearchLocate } from "@vicons/carbon";
@@ -9,7 +9,11 @@ import type {
   DNSRedirectRule,
   LandscapeDnsRecordType,
 } from "@landscape-router/types/api/schemas";
-import { check_domain } from "@/api/dns_service";
+import {
+  check_domain,
+  invalidate_domain_cache,
+  refresh_domain_cache,
+} from "@/api/dns_service";
 import { DnsRule } from "@/lib/dns";
 import { getDnsRule } from "@landscape-router/types/api/dns-rules/dns-rules";
 import { get_dns_redirect } from "@/api/dns_rule/redirect";
@@ -34,12 +38,19 @@ const req = ref<CheckDomainParams>({
   domain: "",
   record_type: "A",
 });
-const result = ref<CheckChainDnsResult>({
-  redirect_id: undefined,
-  rule_id: undefined,
-  records: undefined,
-  cache_records: undefined,
-});
+function createEmptyResult(): CheckChainDnsResult {
+  return {
+    redirect_id: undefined,
+    dynamic_redirect_source: undefined,
+    rule_id: undefined,
+    rule_filter: undefined,
+    query_filtered: false,
+    records: undefined,
+    cache_records: undefined,
+  };
+}
+
+const result = ref<CheckChainDnsResult>(createEmptyResult());
 
 async function init_req(isEnter = false) {
   req.value = {
@@ -47,14 +58,11 @@ async function init_req(isEnter = false) {
     domain: props.initialDomain || "",
     record_type: props.initialType || "A",
   };
-  result.value = {
-    redirect_id: undefined,
-    rule_id: undefined,
-    records: undefined,
-    cache_records: undefined,
-  };
+  result.value = createEmptyResult();
+  config_rule.value = undefined;
+  redirect_rule.value = undefined;
   if (isEnter && req.value.domain) {
-    query();
+    await query();
   }
 }
 const options = [
@@ -88,39 +96,101 @@ function extractDomain(input: string): string {
 }
 
 const loading = ref(false);
+const deleteCacheLoading = ref(false);
+const refreshCacheLoading = ref(false);
 const config_rule = ref<DnsRule>();
 const redirect_rule = ref<DNSRedirectRule>();
-async function query() {
+const busy = computed(
+  () => loading.value || deleteCacheLoading.value || refreshCacheLoading.value,
+);
+const canDeleteCache = computed(() => req.value.domain.trim() !== "");
+const canRefreshCache = computed(
+  () =>
+    req.value.domain.trim() !== "" &&
+    !!result.value.rule_id &&
+    !redirect_rule.value,
+);
+
+function getNormalizedReq(): CheckDomainParams | undefined {
   const domain = extractDomain(req.value.domain);
-  if (domain !== "") {
-    loading.value = true;
-    try {
-      config_rule.value = undefined;
-      redirect_rule.value = undefined;
-      result.value = await check_domain({
-        ...req.value,
-        domain,
-        apply_filter: false,
-      });
-      if (result.value.rule_id) {
-        config_rule.value = new DnsRule(await getDnsRule(result.value.rule_id));
-      }
-      if (result.value.redirect_id) {
-        redirect_rule.value = await get_dns_redirect(result.value.redirect_id);
-      }
-    } finally {
-      loading.value = false;
-    }
-  } else {
+  if (domain === "") {
     message.info(t("dns_editor.check_domain.enter_domain"));
+    return;
+  }
+
+  req.value.domain = domain;
+  return {
+    ...req.value,
+    domain,
+    apply_filter: false,
+  };
+}
+
+async function syncRuleDetails(nextResult: CheckChainDnsResult) {
+  config_rule.value = undefined;
+  redirect_rule.value = undefined;
+
+  if (nextResult.rule_id) {
+    config_rule.value = new DnsRule(await getDnsRule(nextResult.rule_id));
+  }
+  if (nextResult.redirect_id) {
+    redirect_rule.value = await get_dns_redirect(nextResult.redirect_id);
   }
 }
-const showInner = ref(false);
+
+async function applyResult(nextResult: CheckChainDnsResult) {
+  result.value = nextResult;
+  await syncRuleDetails(nextResult);
+}
+
+async function query() {
+  const nextReq = getNormalizedReq();
+  if (!nextReq) {
+    return;
+  }
+
+  loading.value = true;
+  try {
+    await applyResult(await check_domain(nextReq));
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function deleteCache() {
+  const nextReq = getNormalizedReq();
+  if (!nextReq) {
+    return;
+  }
+
+  deleteCacheLoading.value = true;
+  try {
+    await applyResult(await invalidate_domain_cache(nextReq));
+    message.success(t("dns_editor.check_domain.delete_cache_success"));
+  } finally {
+    deleteCacheLoading.value = false;
+  }
+}
+
+async function refreshCache() {
+  const nextReq = getNormalizedReq();
+  if (!nextReq) {
+    return;
+  }
+
+  refreshCacheLoading.value = true;
+  try {
+    await applyResult(await refresh_domain_cache(nextReq));
+    message.success(t("dns_editor.check_domain.refresh_cache_success"));
+  } finally {
+    refreshCacheLoading.value = false;
+  }
+}
 
 async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
   req.value.domain = domain;
   req.value.record_type = record_type;
-  query();
+  await query();
 }
 </script>
 
@@ -141,7 +211,7 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
         <n-flex :wrap="false" justify="space-between">
           <n-button
             size="small"
-            :loading="loading"
+            :loading="busy"
             type="info"
             ghost
             @click="quick_btn('A', 'www.baidu.com')"
@@ -151,7 +221,7 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
           <n-button
             size="small"
             ghost
-            :loading="loading"
+            :loading="busy"
             type="success"
             @click="quick_btn('AAAA', 'www.baidu.com')"
           >
@@ -159,7 +229,7 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
           </n-button>
           <n-button
             size="small"
-            :loading="loading"
+            :loading="busy"
             type="info"
             ghost
             @click="quick_btn('HTTPS', 'crypto.cloudflare.com')"
@@ -168,7 +238,7 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
           </n-button>
           <n-button
             size="small"
-            :loading="loading"
+            :loading="busy"
             type="info"
             ghost
             @click="quick_btn('A', 'test.ustc.edu.cn')"
@@ -178,7 +248,7 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
           <n-button
             size="small"
             ghost
-            :loading="loading"
+            :loading="busy"
             type="success"
             @click="quick_btn('AAAA', 'test6.ustc.edu.cn')"
           >
@@ -206,6 +276,51 @@ async function quick_btn(record_type: LandscapeDnsRecordType, domain: string) {
               </template>
             </n-button>
           </n-input-group>
+          <n-flex
+            justify="space-between"
+            align="center"
+            style="margin-top: 10px"
+          >
+            <n-text depth="3">
+              {{ t("dns_editor.check_domain.diagnostic_hint") }}
+            </n-text>
+            <n-flex>
+              <n-popconfirm
+                :positive-button-props="{ loading: deleteCacheLoading }"
+                @positive-click="deleteCache"
+              >
+                <template #trigger>
+                  <n-button size="small" :disabled="!canDeleteCache">
+                    {{ t("dns_editor.check_domain.delete_cache") }}
+                  </n-button>
+                </template>
+                {{ t("dns_editor.check_domain.confirm_delete_cache") }}
+              </n-popconfirm>
+              <n-popconfirm
+                :positive-button-props="{ loading: refreshCacheLoading }"
+                @positive-click="refreshCache"
+              >
+                <template #trigger>
+                  <n-button
+                    size="small"
+                    type="warning"
+                    :disabled="!canRefreshCache"
+                  >
+                    {{ t("dns_editor.check_domain.refresh_cache") }}
+                  </n-button>
+                </template>
+                {{ t("dns_editor.check_domain.confirm_refresh_cache") }}
+              </n-popconfirm>
+            </n-flex>
+          </n-flex>
+          <n-alert
+            v-if="result.query_filtered"
+            type="warning"
+            :show-icon="false"
+            style="margin-top: 10px"
+          >
+            {{ t("dns_editor.check_domain.query_filtered_hint") }}
+          </n-alert>
         </n-spin>
 
         <n-scrollbar>

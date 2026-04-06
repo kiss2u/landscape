@@ -5,6 +5,7 @@ use axum::Json;
 use landscape_common::api_response::LandscapeApiResp as CommonLandscapeApiResp;
 use landscape_common::cert::CertError;
 use landscape_common::dhcp::DhcpError;
+use landscape_common::dns::check::DnsCheckError;
 use landscape_common::dns::redirect::DnsRedirectError;
 use landscape_common::dns::rule::DnsRuleError;
 use landscape_common::dns::upstream::DnsUpstreamError;
@@ -30,6 +31,8 @@ pub enum LandscapeApiError {
     Cert(#[from] CertError),
     #[error(transparent)]
     DnsRule(#[from] DnsRuleError),
+    #[error(transparent)]
+    DnsCheck(#[from] DnsCheckError),
     #[error(transparent)]
     DnsUpstream(#[from] DnsUpstreamError),
     #[error(transparent)]
@@ -77,6 +80,7 @@ impl LandscapeApiError {
         match self {
             Self::Cert(e) => e.error_id(),
             Self::DnsRule(e) => e.error_id(),
+            Self::DnsCheck(e) => e.error_id(),
             Self::DnsUpstream(e) => e.error_id(),
             Self::DnsRedirect(e) => e.error_id(),
             Self::FlowRule(e) => e.error_id(),
@@ -106,6 +110,7 @@ impl LandscapeApiError {
         match self {
             Self::Cert(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::DnsRule(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
+            Self::DnsCheck(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::DnsUpstream(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::DnsRedirect(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::FlowRule(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
@@ -135,6 +140,7 @@ impl LandscapeApiError {
         match self {
             Self::Cert(e) => e.error_args(),
             Self::DnsRule(e) => e.error_args(),
+            Self::DnsCheck(e) => e.error_args(),
             Self::DnsUpstream(e) => e.error_args(),
             Self::DnsRedirect(e) => e.error_args(),
             Self::FlowRule(e) => e.error_args(),
