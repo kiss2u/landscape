@@ -8,6 +8,7 @@ use crate::database::repository::LandscapeDBStore;
 use crate::dhcp::v6_server::config::DHCPv6ServerConfig;
 use crate::iface::config::{ServiceKind, ZoneAwareConfig, ZoneRequirement};
 use crate::ipv6::ra::RouterFlags;
+use crate::ipv6_pd::LDIAPrefix;
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -96,6 +97,14 @@ pub enum PrefixGroupParentKey {
     Pd(String, u8),
 }
 
+type PrefixInfoMap = HashMap<String, Option<LDIAPrefix>>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ExpandedParentKey {
+    Static(Ipv6Addr, u8),
+    Pd { depend_iface: String, actual_prefix: Option<Ipv6Addr>, prefix_len: u8 },
+}
+
 impl PrefixParentSource {
     pub fn parent_key(&self) -> PrefixGroupParentKey {
         match self {
@@ -112,6 +121,43 @@ impl PrefixParentSource {
         match self {
             PrefixParentSource::Static { parent_prefix_len, .. } => *parent_prefix_len,
             PrefixParentSource::Pd { planned_parent_prefix_len, .. } => *planned_parent_prefix_len,
+        }
+    }
+
+    pub fn resolved_parent_prefix_len(&self, prefix_infos: Option<&PrefixInfoMap>) -> u8 {
+        match self {
+            PrefixParentSource::Static { parent_prefix_len, .. } => *parent_prefix_len,
+            PrefixParentSource::Pd { depend_iface, planned_parent_prefix_len } => prefix_infos
+                .and_then(|infos| infos.get(depend_iface))
+                .and_then(|prefix| prefix.as_ref())
+                .map(|prefix| prefix.prefix_len)
+                .unwrap_or(*planned_parent_prefix_len),
+        }
+    }
+
+    pub fn expanded_parent_key(&self, prefix_infos: Option<&PrefixInfoMap>) -> ExpandedParentKey {
+        match self {
+            PrefixParentSource::Static { base_prefix, parent_prefix_len } => {
+                ExpandedParentKey::Static(*base_prefix, *parent_prefix_len)
+            }
+            PrefixParentSource::Pd { depend_iface, planned_parent_prefix_len } => {
+                if let Some(prefix) = prefix_infos
+                    .and_then(|infos| infos.get(depend_iface))
+                    .and_then(|prefix| prefix.as_ref())
+                {
+                    ExpandedParentKey::Pd {
+                        depend_iface: depend_iface.clone(),
+                        actual_prefix: Some(prefix.prefix_ip),
+                        prefix_len: prefix.prefix_len,
+                    }
+                } else {
+                    ExpandedParentKey::Pd {
+                        depend_iface: depend_iface.clone(),
+                        actual_prefix: None,
+                        prefix_len: *planned_parent_prefix_len,
+                    }
+                }
+            }
         }
     }
 }
@@ -486,7 +532,7 @@ fn range_blocks_overlap(start_a: u64, end_a: u64, start_b: u64, end_b: u64) -> b
 
 #[derive(Debug, Clone)]
 pub struct ExpandedPrefixEntry {
-    pub parent: PrefixGroupParentKey,
+    pub parent: ExpandedParentKey,
     pub parent_prefix_len: u8,
     pub service_kind: PrefixGroupServiceKind,
     pub start_index: u32,
@@ -495,6 +541,10 @@ pub struct ExpandedPrefixEntry {
 }
 
 impl ExpandedPrefixEntry {
+    pub fn is_dynamic(&self) -> bool {
+        matches!(self.parent, ExpandedParentKey::Pd { .. })
+    }
+
     pub fn effective_index_range(&self, is_dynamic: bool) -> (u64, u64) {
         let start = self.start_index as u64;
         let end = self.end_index as u64;
@@ -509,6 +559,13 @@ impl ExpandedPrefixEntry {
 
 impl LanPrefixGroupConfig {
     pub fn validate(&self) -> Result<(), ServiceConfigError> {
+        self.validate_with_prefix_infos(None)
+    }
+
+    pub fn validate_with_prefix_infos(
+        &self,
+        prefix_infos: Option<&PrefixInfoMap>,
+    ) -> Result<(), ServiceConfigError> {
         if self.group_id.trim().is_empty() {
             return Err(ServiceConfigError::InvalidConfig {
                 reason: "Prefix group id must not be empty".to_string(),
@@ -554,7 +611,7 @@ impl LanPrefixGroupConfig {
             }
         }
 
-        let parent_len = self.parent.parent_prefix_len();
+        let parent_len = self.parent.resolved_parent_prefix_len(prefix_infos);
         if let Some(ra) = &self.ra {
             if 64 <= parent_len {
                 return Err(ServiceConfigError::InvalidConfig {
@@ -564,7 +621,7 @@ impl LanPrefixGroupConfig {
                     ),
                 });
             }
-            if !self.group_has_capacity(ra.pool_index, ra.pool_index, 64) {
+            if !self.group_has_capacity(ra.pool_index, ra.pool_index, 64, parent_len) {
                 return Err(ServiceConfigError::InvalidConfig {
                     reason: format!("RA pool_index ({}) exceeds available capacity", ra.pool_index),
                 });
@@ -579,7 +636,7 @@ impl LanPrefixGroupConfig {
                     ),
                 });
             }
-            if !self.group_has_capacity(na.pool_index, na.pool_index, 64) {
+            if !self.group_has_capacity(na.pool_index, na.pool_index, 64, parent_len) {
                 return Err(ServiceConfigError::InvalidConfig {
                     reason: format!(
                         "IA_NA pool_index ({}) exceeds available capacity",
@@ -597,7 +654,7 @@ impl LanPrefixGroupConfig {
                     ),
                 });
             }
-            if !self.group_has_capacity(pd.start_index, pd.end_index, pd.pool_len) {
+            if !self.group_has_capacity(pd.start_index, pd.end_index, pd.pool_len, parent_len) {
                 return Err(ServiceConfigError::InvalidConfig {
                     reason: format!(
                         "IA_PD range {}-{} exceeds available capacity for pool_len /{}",
@@ -610,8 +667,13 @@ impl LanPrefixGroupConfig {
         Ok(())
     }
 
-    fn group_has_capacity(&self, start_index: u32, end_index: u32, target_len: u8) -> bool {
-        let parent_len = self.parent.parent_prefix_len();
+    fn group_has_capacity(
+        &self,
+        start_index: u32,
+        end_index: u32,
+        target_len: u8,
+        parent_len: u8,
+    ) -> bool {
         if target_len <= parent_len {
             return false;
         }
@@ -620,9 +682,17 @@ impl LanPrefixGroupConfig {
     }
 
     pub fn active_entries(&self, mode: IPv6ServiceMode) -> Vec<ExpandedPrefixEntry> {
+        self.active_entries_with_prefix_infos(mode, None)
+    }
+
+    pub fn active_entries_with_prefix_infos(
+        &self,
+        mode: IPv6ServiceMode,
+        prefix_infos: Option<&PrefixInfoMap>,
+    ) -> Vec<ExpandedPrefixEntry> {
         let mut result = Vec::new();
-        let parent = self.parent.parent_key();
-        let parent_prefix_len = self.parent.parent_prefix_len();
+        let parent = self.parent.expanded_parent_key(prefix_infos);
+        let parent_prefix_len = self.parent.resolved_parent_prefix_len(prefix_infos);
         let include_ra = matches!(mode, IPv6ServiceMode::Slaac | IPv6ServiceMode::SlaacDhcpv6);
         let include_na = matches!(mode, IPv6ServiceMode::Stateful | IPv6ServiceMode::SlaacDhcpv6);
         let include_pd = matches!(mode, IPv6ServiceMode::Stateful | IPv6ServiceMode::SlaacDhcpv6);
@@ -668,11 +738,19 @@ impl LanPrefixGroupConfig {
 }
 
 pub fn validate_prefix_groups(groups: &[LanPrefixGroupConfig]) -> Result<(), ServiceConfigError> {
+    validate_prefix_groups_with_prefix_infos(groups, None)
+}
+
+pub fn validate_prefix_groups_with_prefix_infos(
+    groups: &[LanPrefixGroupConfig],
+    prefix_infos: Option<&PrefixInfoMap>,
+) -> Result<(), ServiceConfigError> {
     let mut by_parent: HashMap<PrefixGroupParentKey, Vec<&LanPrefixGroupConfig>> = HashMap::new();
     for group in groups {
-        group.validate()?;
+        group.validate_with_prefix_infos(prefix_infos)?;
 
-        let entries = group.active_entries(IPv6ServiceMode::SlaacDhcpv6);
+        let entries =
+            group.active_entries_with_prefix_infos(IPv6ServiceMode::SlaacDhcpv6, prefix_infos);
         for i in 0..entries.len() {
             for j in (i + 1)..entries.len() {
                 validate_expanded_pair(&entries[i], &entries[j], entries[i].parent_prefix_len)?;
@@ -687,8 +765,13 @@ pub fn validate_prefix_groups(groups: &[LanPrefixGroupConfig]) -> Result<(), Ser
             for j in (i + 1)..groups.len() {
                 let a = groups[i];
                 let b = groups[j];
-                for left in a.active_entries(IPv6ServiceMode::SlaacDhcpv6) {
-                    for right in b.active_entries(IPv6ServiceMode::SlaacDhcpv6) {
+                for left in
+                    a.active_entries_with_prefix_infos(IPv6ServiceMode::SlaacDhcpv6, prefix_infos)
+                {
+                    for right in b.active_entries_with_prefix_infos(
+                        IPv6ServiceMode::SlaacDhcpv6,
+                        prefix_infos,
+                    ) {
                         validate_expanded_pair(&left, &right, left.parent_prefix_len)?;
                     }
                 }
@@ -712,7 +795,7 @@ fn validate_expanded_pair(
         return Ok(());
     }
 
-    let dynamic = matches!(a.parent, PrefixGroupParentKey::Pd(_, _));
+    let dynamic = a.is_dynamic();
     let (start_a, end_a) = a.effective_index_range(dynamic);
     let (start_b, end_b) = b.effective_index_range(dynamic);
 
@@ -933,7 +1016,14 @@ impl LanIPv6Config {
 
 impl LanIPv6ConfigV2 {
     pub fn validate(&self) -> Result<(), ServiceConfigError> {
-        validate_prefix_groups(&self.prefix_groups)?;
+        self.validate_with_prefix_infos(None)
+    }
+
+    pub fn validate_with_prefix_infos(
+        &self,
+        prefix_infos: Option<&PrefixInfoMap>,
+    ) -> Result<(), ServiceConfigError> {
+        validate_prefix_groups_with_prefix_infos(&self.prefix_groups, prefix_infos)?;
 
         match self.mode {
             IPv6ServiceMode::Slaac => {
@@ -1039,7 +1129,17 @@ impl LanIPv6ConfigV2 {
     }
 
     pub fn active_entries(&self) -> Vec<ExpandedPrefixEntry> {
-        self.prefix_groups.iter().flat_map(|group| group.active_entries(self.mode)).collect()
+        self.active_entries_with_prefix_infos(None)
+    }
+
+    pub fn active_entries_with_prefix_infos(
+        &self,
+        prefix_infos: Option<&PrefixInfoMap>,
+    ) -> Vec<ExpandedPrefixEntry> {
+        self.prefix_groups
+            .iter()
+            .flat_map(|group| group.active_entries_with_prefix_infos(self.mode, prefix_infos))
+            .collect()
     }
 }
 
@@ -1047,7 +1147,15 @@ pub fn validate_cross_interface_v2(
     new_config: &LanIPv6ServiceConfigV2,
     other_configs: &[LanIPv6ServiceConfigV2],
 ) -> Result<(), ServiceConfigError> {
-    let new_entries = new_config.config.active_entries();
+    validate_cross_interface_v2_with_prefix_infos(new_config, other_configs, None)
+}
+
+pub fn validate_cross_interface_v2_with_prefix_infos(
+    new_config: &LanIPv6ServiceConfigV2,
+    other_configs: &[LanIPv6ServiceConfigV2],
+    prefix_infos: Option<&PrefixInfoMap>,
+) -> Result<(), ServiceConfigError> {
+    let new_entries = new_config.config.active_entries_with_prefix_infos(prefix_infos);
 
     for other in other_configs {
         if other.iface_name == new_config.iface_name || !other.enable {
@@ -1055,7 +1163,7 @@ pub fn validate_cross_interface_v2(
         }
 
         for left in &new_entries {
-            for right in other.config.active_entries() {
+            for right in other.config.active_entries_with_prefix_infos(prefix_infos) {
                 if left.parent != right.parent {
                     continue;
                 }
@@ -1876,5 +1984,65 @@ mod tests {
         };
 
         assert!(validate_prefix_groups(&[config]).is_ok());
+    }
+
+    #[test]
+    fn v2_pd_parent_capacity_falls_back_to_planned_prefix_len_without_runtime_prefix() {
+        let config = LanPrefixGroupConfig {
+            group_id: "capacity-ok".to_string(),
+            parent: PrefixParentSource::Pd {
+                depend_iface: "eth0".to_string(),
+                planned_parent_prefix_len: 60,
+            },
+            ra: None,
+            na: Some(NaPrefixConfig { pool_index: 15 }),
+            pd: None,
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn v2_pd_parent_capacity_rejects_indices_beyond_planned_prefix_len_without_runtime_prefix() {
+        let config = LanPrefixGroupConfig {
+            group_id: "capacity-bad".to_string(),
+            parent: PrefixParentSource::Pd {
+                depend_iface: "eth0".to_string(),
+                planned_parent_prefix_len: 60,
+            },
+            ra: None,
+            na: Some(NaPrefixConfig { pool_index: 16 }),
+            pd: None,
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn v2_pd_parent_capacity_prefers_runtime_prefix_len_when_available() {
+        let config = LanPrefixGroupConfig {
+            group_id: "capacity-runtime".to_string(),
+            parent: PrefixParentSource::Pd {
+                depend_iface: "eth0".to_string(),
+                planned_parent_prefix_len: 60,
+            },
+            ra: None,
+            na: Some(NaPrefixConfig { pool_index: 38 }),
+            pd: None,
+        };
+
+        let mut prefix_infos = HashMap::new();
+        prefix_infos.insert(
+            "eth0".to_string(),
+            Some(LDIAPrefix {
+                preferred_lifetime: 300,
+                valid_lifetime: 600,
+                prefix_len: 56,
+                prefix_ip: "2001:db8::".parse().unwrap(),
+                last_update_time: 0.0,
+            }),
+        );
+
+        assert!(config.validate_with_prefix_infos(Some(&prefix_infos)).is_ok());
     }
 }

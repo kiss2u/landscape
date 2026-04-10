@@ -690,7 +690,10 @@ function buildGroupOccupancyRecords(
     .filter((config) => config.enable)
     .flatMap((config) =>
       (config.config.prefix_groups ?? [])
-        .flatMap((group) => buildEntriesForGroup(group, config.config.mode))
+        // Match the current-interface canvas behavior: keep configured results visible
+        // for other LANs as well, so users can see occupied positions even when a mode
+        // would not currently activate that kind.
+        .flatMap((group) => buildEntriesForGroup(group, undefined))
         .filter(
           (entry) =>
             occupancyParentKeyForParent(entry.parent, options.prefixInfos) ===
@@ -800,23 +803,20 @@ function buildGroupPlannerViewBase(
 
   const actualPrefix =
     options.prefixInfos.get(selectedEntry.parent.dependIface) ?? null;
-  const actualParentPrefixLen =
-    actualPrefix?.prefix_len ?? selectedEntry.parent.plannedParentPrefixLen;
+  const plannedParentPrefixLen = selectedEntry.parent.plannedParentPrefixLen;
+  const effectiveParentPrefixLen = actualPrefix?.prefix_len ?? plannedParentPrefixLen;
   const occupancyParentKey = occupancyParentKeyForParent(
     selectedEntry.parent,
     options.prefixInfos,
   );
 
-  if (
-    actualPrefix &&
-    actualPrefix.prefix_len > selectedEntry.parent.plannedParentPrefixLen
-  ) {
+  if (actualPrefix && actualPrefix.prefix_len > plannedParentPrefixLen) {
     return {
       entry: selectedEntry,
       hasSelection: selectedEntry.hasSelection,
       selectedKind: selectedEntry.serviceKind,
       parentKey: occupancyParentKey,
-      parentPrefixLen: actualParentPrefixLen,
+      parentPrefixLen: effectiveParentPrefixLen,
       targetPrefixLen,
       selectedPoolIndex: selectedEntry.hasSelection
         ? selectedEntry.startIndex
@@ -842,7 +842,7 @@ function buildGroupPlannerViewBase(
     hasSelection: selectedEntry.hasSelection,
     selectedKind: selectedEntry.serviceKind,
     parentKey: occupancyParentKey,
-    parentPrefixLen: actualParentPrefixLen,
+    parentPrefixLen: effectiveParentPrefixLen,
     targetPrefixLen,
     selectedPoolIndex: selectedEntry.hasSelection
       ? selectedEntry.startIndex

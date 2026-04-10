@@ -110,6 +110,33 @@ async function on_modal_enter() {
 function on_mode_change(mode: IPv6ServiceMode) {
   if (!service_config.value) return;
   service_config.value.config.mode = mode;
+
+  const ensure_dhcpv6 = () => {
+    if (!service_config.value) return;
+    if (!service_config.value.config.dhcpv6) {
+      service_config.value.config.dhcpv6 = {
+        enable: true,
+      };
+    } else {
+      service_config.value.config.dhcpv6.enable = true;
+    }
+    if (!service_config.value.config.dhcpv6.ia_na) {
+      service_config.value.config.dhcpv6.ia_na = {
+        max_prefix_len: 64,
+        pool_start: 256,
+        preferred_lifetime: 300,
+        valid_lifetime: 600,
+      };
+    }
+    if (!service_config.value.config.dhcpv6.ia_pd) {
+      service_config.value.config.dhcpv6.ia_pd = {
+        delegate_prefix_len: 64,
+        preferred_lifetime: 300,
+        valid_lifetime: 600,
+      };
+    }
+  };
+
   // Auto-set flags based on mode
   if (mode === "slaac") {
     service_config.value.config.ra_flag.managed_address_config = false;
@@ -121,25 +148,11 @@ function on_mode_change(mode: IPv6ServiceMode) {
   } else if (mode === "stateful") {
     service_config.value.config.ra_flag.managed_address_config = true;
     service_config.value.config.ra_flag.other_config = true;
-    // Enable DHCPv6
-    if (!service_config.value.config.dhcpv6) {
-      service_config.value.config.dhcpv6 = {
-        enable: true,
-      };
-    } else {
-      service_config.value.config.dhcpv6.enable = true;
-    }
+    ensure_dhcpv6();
   } else if (mode === "slaac_dhcpv6") {
     service_config.value.config.ra_flag.managed_address_config = true;
     service_config.value.config.ra_flag.other_config = true;
-    // Enable DHCPv6
-    if (!service_config.value.config.dhcpv6) {
-      service_config.value.config.dhcpv6 = {
-        enable: true,
-      };
-    } else {
-      service_config.value.config.dhcpv6.enable = true;
-    }
+    ensure_dhcpv6();
   }
 }
 

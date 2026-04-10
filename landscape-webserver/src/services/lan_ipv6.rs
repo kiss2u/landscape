@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
-use landscape_common::ipv6::lan::{validate_cross_interface_v2, LanIPv6ServiceConfigV2};
+use landscape_common::ipv6::lan::{
+    validate_cross_interface_v2_with_prefix_infos, LanIPv6ServiceConfigV2,
+};
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::{ServiceStatus, WatchService};
@@ -120,12 +122,13 @@ async fn handle_lan_ipv6(
     JsonBody(config): JsonBody<LanIPv6ServiceConfigV2>,
 ) -> LandscapeApiResult<()> {
     state.validate_zone(&config).await?;
-    config.config.validate()?;
+    let prefix_infos = state.ipv6_pd_service.get_ipv6_prefix_infos().await;
+    config.config.validate_with_prefix_infos(Some(&prefix_infos))?;
 
     // Cross-interface conflict detection
     let other_configs: Vec<LanIPv6ServiceConfigV2> =
         state.lan_ipv6_service.get_repository().list().await.unwrap_or_default();
-    validate_cross_interface_v2(&config, &other_configs)?;
+    validate_cross_interface_v2_with_prefix_infos(&config, &other_configs, Some(&prefix_infos))?;
 
     state.lan_ipv6_service.handle_service_config(config).await?;
     LandscapeApiResp::success(())

@@ -82,13 +82,6 @@ impl DHCPv6ServerConfig {
             return Ok(());
         }
 
-        // At least one of ia_na or ia_pd must be set if enabled
-        if self.ia_na.is_none() && self.ia_pd.is_none() {
-            return Err(ServiceConfigError::InvalidConfig {
-                reason: "DHCPv6 enabled but neither IA_NA nor IA_PD is configured".to_string(),
-            });
-        }
-
         if let Some(ia_na) = &self.ia_na {
             if ia_na.max_prefix_len == 0 || ia_na.max_prefix_len > 127 {
                 return Err(ServiceConfigError::InvalidConfig {
@@ -147,5 +140,17 @@ impl DHCPv6ServerConfig {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_allows_temporarily_disabling_ia_na_and_ia_pd() {
+        let config = DHCPv6ServerConfig { enable: true, ia_na: None, ia_pd: None };
+
+        assert!(config.validate().is_ok());
     }
 }
