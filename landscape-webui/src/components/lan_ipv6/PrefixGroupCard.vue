@@ -75,6 +75,69 @@ function kindConfigured(kind: ServiceKind) {
   return !!props.group.pd;
 }
 
+function kindEffectiveInMode(kind: ServiceKind) {
+  switch (props.currentMode) {
+    case "slaac":
+      return kind === "ra";
+    case "stateful":
+      return kind === "na" || kind === "pd";
+    case "slaac_dhcpv6":
+      if (kind === "ra") {
+        return sourceType.value === "static";
+      }
+      return kind === "na" || kind === "pd";
+    case undefined:
+      return true;
+    default:
+      return true;
+  }
+}
+
+function kindInactive(kind: ServiceKind) {
+  return kindConfigured(kind) && !kindEffectiveInMode(kind);
+}
+
+function kindStateLabel(kind: ServiceKind) {
+  if (kindInactive(kind)) {
+    return t("lan_ipv6.prefix_state_compact_inactive");
+  }
+  if (kindConfigured(kind)) {
+    return t("lan_ipv6.prefix_state_compact_configured");
+  }
+  return t("lan_ipv6.prefix_state_compact_empty");
+}
+
+function kindStateClass(kind: ServiceKind) {
+  if (kindInactive(kind)) {
+    return "inactive";
+  }
+  if (kindConfigured(kind)) {
+    return "configured";
+  }
+  return "empty";
+}
+
+function kindInactiveHint(kind: ServiceKind) {
+  if (!kindInactive(kind)) {
+    return undefined;
+  }
+
+  switch (props.currentMode) {
+    case "slaac":
+      return t("lan_ipv6.prefix_state_inactive_hint_slaac");
+    case "stateful":
+      return kind === "ra"
+        ? t("lan_ipv6.prefix_state_inactive_hint_stateful_ra")
+        : t("lan_ipv6.prefix_state_inactive");
+    case "slaac_dhcpv6":
+      return kind === "ra" && sourceType.value === "pd"
+        ? t("lan_ipv6.prefix_state_inactive_hint_slaac_dhcpv6_ra_dynamic")
+        : t("lan_ipv6.prefix_state_inactive");
+    default:
+      return t("lan_ipv6.prefix_state_inactive");
+  }
+}
+
 function kindDetail(kind: ServiceKind) {
   if (kind === "ra" && props.group.ra) {
     return `PL ${props.group.ra.preferred_lifetime}s · VL ${props.group.ra.valid_lifetime}s`;
@@ -115,18 +178,19 @@ function openEditor(kind: ServiceKind) {
         v-for="kind in kinds"
         :key="`${group.group_id}-${kind}`"
         class="summary-row"
-        :class="{ clickable: canOpenKind(kind), configured: kindConfigured(kind), empty: !kindConfigured(kind) }"
+        :class="{
+          clickable: canOpenKind(kind),
+          configured: kindConfigured(kind) && !kindInactive(kind),
+          inactive: kindInactive(kind),
+          empty: !kindConfigured(kind),
+        }"
         @click="canOpenKind(kind) && openEditor(kind)"
       >
         <div class="summary-main">
           <div class="summary-head">
             <div class="summary-kind">{{ brushLabel(kind) }}</div>
-            <span class="summary-state" :class="kindConfigured(kind) ? 'configured' : 'empty'">
-              {{
-                kindConfigured(kind)
-                  ? t('lan_ipv6.prefix_state_compact_configured')
-                  : t('lan_ipv6.prefix_state_compact_empty')
-              }}
+            <span class="summary-state" :class="kindStateClass(kind)">
+              {{ kindStateLabel(kind) }}
             </span>
           </div>
           <div v-if="kindConfigured(kind) && kindSummary(kind)" class="summary-text">
@@ -135,6 +199,9 @@ function openEditor(kind: ServiceKind) {
             }}
           </div>
           <div v-if="kindDetail(kind)" class="summary-detail">{{ kindDetail(kind) }}</div>
+          <div v-if="kindInactiveHint(kind)" class="summary-detail inactive-hint">
+            {{ kindInactiveHint(kind) }}
+          </div>
         </div>
       </div>
 
@@ -257,6 +324,10 @@ function openEditor(kind: ServiceKind) {
   opacity: 0.88;
 }
 
+.summary-row.inactive {
+  background: color-mix(in srgb, var(--n-color) 84%, var(--n-warning-color-suppl) 16%);
+}
+
 .summary-row.clickable {
   cursor: pointer;
 }
@@ -300,6 +371,11 @@ function openEditor(kind: ServiceKind) {
   color: var(--n-text-color-3);
 }
 
+.summary-state.inactive {
+  background: color-mix(in srgb, var(--n-warning-color) 14%, transparent);
+  color: var(--n-warning-color);
+}
+
 .summary-text {
   font-size: 13px;
   margin-top: 2px;
@@ -309,6 +385,10 @@ function openEditor(kind: ServiceKind) {
   font-size: 12px;
   color: var(--n-text-color-3);
   margin-top: 2px;
+}
+
+.summary-detail.inactive-hint {
+  color: var(--n-warning-color);
 }
 
 .summary-actions {

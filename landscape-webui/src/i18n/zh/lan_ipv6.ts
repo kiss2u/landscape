@@ -86,6 +86,7 @@ export default {
   prefix_continuous_range: "已选择 {count} 个连续区间单元，粒度 {prefix}。",
   prefix_pd_range: "分配单元 {prefix}, 范围 {start}-{end}",
   prefix_state_compact_configured: "已配置",
+  prefix_state_compact_inactive: "未生效",
   prefix_state_compact_empty: "未配置",
   prefix_group_edit: "编辑这一组",
   prefix_group_delete_confirm: "确定删除这一组前缀吗？",
@@ -100,6 +101,11 @@ export default {
   pd_must_be_continuous: "PD 结果必须保持连续，不能形成断开的区块。",
   prefix_state_active: "当前模式生效",
   prefix_state_inactive: "当前模式不生效",
+  prefix_state_inactive_hint_slaac: "SLAAC 模式下仅使用 RA 前缀结果。",
+  prefix_state_inactive_hint_stateful_ra:
+    "Stateful 模式会发送 RA 标志，但不会使用 RA 前缀结果。",
+  prefix_state_inactive_hint_slaac_dhcpv6_ra_dynamic:
+    "SLAAC + DHCPv6 模式下，RA 仅允许使用静态前缀。",
   prefix_parent: "父前缀:",
   prefix_block: "结果块:",
 
