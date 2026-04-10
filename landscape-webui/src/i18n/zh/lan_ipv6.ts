@@ -79,7 +79,8 @@ export default {
   prefix_group_pd: "上游 PD 前缀结果",
   prefix_group_pd_desc:
     "这里展示基于上游 PD 切分得到的前缀结果，包括 RA / IA_NA / IA_PD。",
-  prefix_group_pd_parent_hint: "该上游接口下的所有前缀结果会在同一张画布中规划。",
+  prefix_group_pd_parent_hint:
+    "该上游接口下的所有前缀结果会在同一张画布中规划。",
   prefix_group_count: "共 {count} 条结果",
   prefix_group_empty_kind: "当前父前缀下暂无 {kind} 结果。",
   prefix_single_unit: "已选择一个 {prefix} 单元。",

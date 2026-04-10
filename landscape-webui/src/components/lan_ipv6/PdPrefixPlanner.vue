@@ -13,7 +13,14 @@ import {
 } from "@/lib/ipv6_planner";
 import type { SourceKind } from "@/lib/lan_ipv6_v2_helpers";
 import { useThemeVars } from "naive-ui";
-import { computed, nextTick, onBeforeUnmount, ref, watch, watchEffect } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  watch,
+  watchEffect,
+} from "vue";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n({ useScope: "global" });
@@ -34,18 +41,21 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:assumedPrefixLen", value: number): void;
   (e: "selectPoolIndex", value: number): void;
-  (e: "interactPoolIndex", value: {
-    poolIndex: number;
-    unitStart: number;
-    unitSpan: number;
-    canSave: boolean;
-    saveError?: string;
-    occupants: {
-      scope: "current" | "other";
-      serviceKind: "ra" | "na" | "pd";
-      ifaceName: string;
-    }[];
-  }): void;
+  (
+    e: "interactPoolIndex",
+    value: {
+      poolIndex: number;
+      unitStart: number;
+      unitSpan: number;
+      canSave: boolean;
+      saveError?: string;
+      occupants: {
+        scope: "current" | "other";
+        serviceKind: "ra" | "na" | "pd";
+        ifaceName: string;
+      }[];
+    },
+  ): void;
 }>();
 
 const planner = computed(() =>
@@ -273,7 +283,9 @@ function drawUnits() {
   planner.value.units.forEach((unit) => {
     const x = (unit.index % columns.value) * cellSize.value;
     const y = Math.floor(unit.index / columns.value) * cellSize.value;
-    ctx.fillStyle = unit.selected ? selectedFillColor(unit) : colorForUnit(unit);
+    ctx.fillStyle = unit.selected
+      ? selectedFillColor(unit)
+      : colorForUnit(unit);
     ctx.fillRect(x, y, cellSize.value, cellSize.value);
     ctx.strokeStyle = palette.border;
     ctx.strokeRect(x + 0.5, y + 0.5, cellSize.value - 1, cellSize.value - 1);
@@ -283,8 +295,13 @@ function drawUnits() {
       ctx.beginPath();
       ctx.rect(x + 1, y + 1, cellSize.value - 2, cellSize.value - 2);
       ctx.clip();
-      ctx.strokeStyle = unit.kind === "blocked" ? palette.mutedText : palette.error;
-      for (let offset = -cellSize.value; offset < cellSize.value * 2; offset += 6) {
+      ctx.strokeStyle =
+        unit.kind === "blocked" ? palette.mutedText : palette.error;
+      for (
+        let offset = -cellSize.value;
+        offset < cellSize.value * 2;
+        offset += 6
+      ) {
         ctx.beginPath();
         ctx.moveTo(x + offset, y);
         ctx.lineTo(x + offset + cellSize.value, y + cellSize.value);
@@ -345,7 +362,12 @@ function unitIndexFromEvent(event: MouseEvent) {
   const column = Math.floor(x / cellSize.value);
   const row = Math.floor(y / cellSize.value);
   const index = row * columns.value + column;
-  if (column < 0 || row < 0 || index < 0 || index >= planner.value.units.length) {
+  if (
+    column < 0 ||
+    row < 0 ||
+    index < 0 ||
+    index >= planner.value.units.length
+  ) {
     return undefined;
   }
   return index;
@@ -450,7 +472,11 @@ onBeforeUnmount(() => {
 <template>
   <n-card size="small" :bordered="false" class="planner-card">
     <n-flex vertical :size="10">
-      <n-flex v-if="props.editGroup?.parent.t === 'pd'" align="center" :size="8">
+      <n-flex
+        v-if="props.editGroup?.parent.t === 'pd'"
+        align="center"
+        :size="8"
+      >
         <n-text depth="3" style="font-size: 12px">
           {{ t("lan_ipv6.planner_preview_prefix_len") }}
         </n-text>
@@ -461,8 +487,14 @@ onBeforeUnmount(() => {
           :max="128"
           @update:value="updateAssumedPrefixLen"
         />
-        <n-text v-if="planner.actualPrefixLen !== undefined" depth="3" style="font-size: 12px">
-          {{ t("lan_ipv6.planner_actual_prefix") }} /{{ planner.actualPrefixLen }}
+        <n-text
+          v-if="planner.actualPrefixLen !== undefined"
+          depth="3"
+          style="font-size: 12px"
+        >
+          {{ t("lan_ipv6.planner_actual_prefix") }} /{{
+            planner.actualPrefixLen
+          }}
         </n-text>
       </n-flex>
 
@@ -476,7 +508,7 @@ onBeforeUnmount(() => {
         />
       </div>
       <n-alert v-else type="warning" :bordered="false">
-        {{ reasonText || t('lan_ipv6.planner_summary_only') }}
+        {{ reasonText || t("lan_ipv6.planner_summary_only") }}
       </n-alert>
 
       <n-alert v-if="displayError" type="error" :bordered="false">
@@ -484,8 +516,14 @@ onBeforeUnmount(() => {
       </n-alert>
 
       <div class="planner-legend">
-        <span v-for="item in legendItems" :key="item.label" class="planner-legend-item">
-          <i class="swatch" :style="{ background: item.color }" />{{ item.label }}
+        <span
+          v-for="item in legendItems"
+          :key="item.label"
+          class="planner-legend-item"
+        >
+          <i class="swatch" :style="{ background: item.color }" />{{
+            item.label
+          }}
         </span>
       </div>
     </n-flex>

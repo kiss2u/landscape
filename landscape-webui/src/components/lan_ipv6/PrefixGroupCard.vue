@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { IPv6ServiceMode, LanPrefixGroupConfig } from "@landscape-router/types/api/schemas";
+import type {
+  IPv6ServiceMode,
+  LanPrefixGroupConfig,
+} from "@landscape-router/types/api/schemas";
 import { computed, ref } from "vue";
 import { Edit, TrashCan } from "@vicons/carbon";
 import { useI18n } from "vue-i18n";
@@ -23,7 +26,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "commitGroup", groupKey: string, group: LanPrefixGroupConfig | undefined): void;
+  (
+    e: "commitGroup",
+    groupKey: string,
+    group: LanPrefixGroupConfig | undefined,
+  ): void;
 }>();
 
 const showEdit = ref(false);
@@ -160,7 +167,6 @@ function openEditor(kind: ServiceKind) {
   initialKind.value = kind;
   showEdit.value = true;
 }
-
 </script>
 
 <template>
@@ -193,13 +199,19 @@ function openEditor(kind: ServiceKind) {
               {{ kindStateLabel(kind) }}
             </span>
           </div>
-          <div v-if="kindConfigured(kind) && kindSummary(kind)" class="summary-text">
-            {{
-              kindSummary(kind)
-            }}
+          <div
+            v-if="kindConfigured(kind) && kindSummary(kind)"
+            class="summary-text"
+          >
+            {{ kindSummary(kind) }}
           </div>
-          <div v-if="kindDetail(kind)" class="summary-detail">{{ kindDetail(kind) }}</div>
-          <div v-if="kindInactiveHint(kind)" class="summary-detail inactive-hint">
+          <div v-if="kindDetail(kind)" class="summary-detail">
+            {{ kindDetail(kind) }}
+          </div>
+          <div
+            v-if="kindInactiveHint(kind)"
+            class="summary-detail inactive-hint"
+          >
             {{ kindInactiveHint(kind) }}
           </div>
         </div>
@@ -237,7 +249,7 @@ function openEditor(kind: ServiceKind) {
                 </template>
               </n-button>
             </template>
-            {{ t('lan_ipv6.prefix_group_delete_confirm') }}
+            {{ t("lan_ipv6.prefix_group_delete_confirm") }}
           </n-popconfirm>
         </n-flex>
       </div>
@@ -265,7 +277,11 @@ function openEditor(kind: ServiceKind) {
   box-sizing: border-box;
   padding: 0;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--n-color) 82%, var(--n-primary-color-suppl) 18%);
+  background: color-mix(
+    in srgb,
+    var(--n-color) 82%,
+    var(--n-primary-color-suppl) 18%
+  );
 }
 
 .group-summary {
@@ -312,7 +328,11 @@ function openEditor(kind: ServiceKind) {
   padding: 10px 12px;
   border: 1px solid var(--n-border-color);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--n-color) 90%, var(--n-color-embedded) 10%);
+  background: color-mix(
+    in srgb,
+    var(--n-color) 90%,
+    var(--n-color-embedded) 10%
+  );
   min-width: 0;
 }
 
@@ -325,7 +345,11 @@ function openEditor(kind: ServiceKind) {
 }
 
 .summary-row.inactive {
-  background: color-mix(in srgb, var(--n-color) 84%, var(--n-warning-color-suppl) 16%);
+  background: color-mix(
+    in srgb,
+    var(--n-color) 84%,
+    var(--n-warning-color-suppl) 16%
+  );
 }
 
 .summary-row.clickable {

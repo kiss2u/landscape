@@ -57,7 +57,10 @@ pub struct PrefixSetupResult {
     pub cleanup_ips: Vec<(Ipv6Addr, u8, String)>,
 }
 
-fn can_delegate_group(kind: PrefixGroupServiceKind, filter_kinds: &[PrefixGroupServiceKind]) -> bool {
+fn can_delegate_group(
+    kind: PrefixGroupServiceKind,
+    filter_kinds: &[PrefixGroupServiceKind],
+) -> bool {
     filter_kinds.contains(&kind)
 }
 
@@ -250,9 +253,9 @@ async fn add_dynamic_pd_range(
                     prefix: sub_block,
                     prefix_len: pool_len,
                 })));
-                expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(
-                    ia_prefix.valid_lifetime as u64,
-                )));
+                expire_time
+                    .as_mut()
+                    .set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
             }
         }
 
@@ -326,7 +329,9 @@ pub async fn setup_prefix_groups(
     for group in groups {
         match &group.parent {
             PrefixParentSource::Static { base_prefix, parent_prefix_len } => {
-                if let Some(RaPrefixConfig { pool_index, preferred_lifetime, valid_lifetime }) = &group.ra {
+                if let Some(RaPrefixConfig { pool_index, preferred_lifetime, valid_lifetime }) =
+                    &group.ra
+                {
                     if can_delegate_group(PrefixGroupServiceKind::Ra, filter_kinds) {
                         add_static_runtime_info(
                             &mut runtime,
@@ -339,7 +344,8 @@ pub async fn setup_prefix_groups(
                             *pool_index,
                             *preferred_lifetime,
                             *valid_lifetime,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
                 if let Some(NaPrefixConfig { pool_index }) = &group.na {
@@ -355,17 +361,21 @@ pub async fn setup_prefix_groups(
                             *pool_index,
                             0,
                             0,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
                 if let Some(pd) = &group.pd {
                     if can_delegate_group(PrefixGroupServiceKind::IaPd, filter_kinds) {
-                        add_static_pd_range(&mut runtime, *base_prefix, *parent_prefix_len, pd).await;
+                        add_static_pd_range(&mut runtime, *base_prefix, *parent_prefix_len, pd)
+                            .await;
                     }
                 }
             }
             PrefixParentSource::Pd { depend_iface, planned_parent_prefix_len } => {
-                if let Some(RaPrefixConfig { pool_index, preferred_lifetime, valid_lifetime }) = &group.ra {
+                if let Some(RaPrefixConfig { pool_index, preferred_lifetime, valid_lifetime }) =
+                    &group.ra
+                {
                     if can_delegate_group(PrefixGroupServiceKind::Ra, filter_kinds) {
                         add_dynamic_runtime_info(
                             &mut runtime,
@@ -381,7 +391,8 @@ pub async fn setup_prefix_groups(
                             *pool_index,
                             *preferred_lifetime,
                             *valid_lifetime,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
                 if let Some(NaPrefixConfig { pool_index }) = &group.na {
@@ -400,7 +411,8 @@ pub async fn setup_prefix_groups(
                             *pool_index,
                             0,
                             0,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
                 if let Some(pd) = &group.pd {
@@ -412,7 +424,8 @@ pub async fn setup_prefix_groups(
                             depend_iface,
                             *planned_parent_prefix_len,
                             pd,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
             }

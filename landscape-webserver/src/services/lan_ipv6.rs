@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
-use landscape_common::ipv6::lan::{LanIPv6ServiceConfigV2, validate_cross_interface_v2};
+use landscape_common::ipv6::lan::{validate_cross_interface_v2, LanIPv6ServiceConfigV2};
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::{ServiceStatus, WatchService};
@@ -82,7 +82,9 @@ async fn get_all_status(
 async fn get_all_lan_ipv6_configs(
     State(state): State<LandscapeApp>,
 ) -> LandscapeApiResult<Vec<LanIPv6ServiceConfigV2>> {
-    LandscapeApiResp::success(state.lan_ipv6_service.get_repository().list().await.unwrap_or_default())
+    LandscapeApiResp::success(
+        state.lan_ipv6_service.get_repository().list().await.unwrap_or_default(),
+    )
 }
 
 #[utoipa::path(

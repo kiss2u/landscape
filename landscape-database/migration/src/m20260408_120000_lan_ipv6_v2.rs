@@ -71,11 +71,8 @@ impl MigrationTrait for Migration {
 }
 
 fn migrate_to_v2(mut config: serde_json::Value) -> serde_json::Value {
-    let sources = config
-        .get("sources")
-        .and_then(|value| value.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let sources =
+        config.get("sources").and_then(|value| value.as_array()).cloned().unwrap_or_default();
     let mut prefix_groups: Vec<serde_json::Value> = Vec::new();
 
     for source in sources {
@@ -93,9 +90,7 @@ fn migrate_to_v2(mut config: serde_json::Value) -> serde_json::Value {
         }
     }
 
-    config
-        .as_object_mut()
-        .map(|object| object.remove("sources"));
+    config.as_object_mut().map(|object| object.remove("sources"));
     config["prefix_groups"] = serde_json::Value::Array(prefix_groups);
     config
 }
@@ -110,10 +105,7 @@ fn merge_source_into_groups(
             return;
         };
         let parent_prefix_len = if source.get("t").and_then(|v| v.as_str()) == Some("pd_static") {
-            source
-                .get("base_prefix_len")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(60)
+            source.get("base_prefix_len").and_then(|v| v.as_u64()).unwrap_or(60)
         } else {
             60
         };
@@ -129,10 +121,8 @@ fn merge_source_into_groups(
         let Some(depend_iface) = source.get("depend_iface").and_then(|v| v.as_str()) else {
             return;
         };
-        let planned_parent_prefix_len = source
-            .get("max_source_prefix_len")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(60);
+        let planned_parent_prefix_len =
+            source.get("max_source_prefix_len").and_then(|v| v.as_u64()).unwrap_or(60);
         (
             format!("pd:{}:{}", depend_iface, planned_parent_prefix_len),
             serde_json::json!({
@@ -251,7 +241,9 @@ fn pd_can_merge(group: &serde_json::Value, pool_len: u64, pool_index: u64) -> bo
     let next_start = start_index.min(pool_index);
     let next_end = end_index.max(pool_index);
     next_end - next_start + 1
-        == end_index - start_index + 1 + if pool_index < start_index || pool_index > end_index { 1 } else { 0 }
+        == end_index - start_index
+            + 1
+            + if pool_index < start_index || pool_index > end_index { 1 } else { 0 }
 }
 
 fn find_group_for_pd(

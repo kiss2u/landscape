@@ -133,13 +133,7 @@ impl ServiceStarterTrait for LanIPv6Service {
                     };
                     tokio::spawn(async move {
                         let mode = config.config.mode;
-                        let LanIPv6ConfigV2 {
-                            ad_interval,
-                            ra_flag,
-                            prefix_groups,
-                            dhcpv6,
-                            ..
-                        } =
+                        let LanIPv6ConfigV2 { ad_interval, ra_flag, prefix_groups, dhcpv6, .. } =
                             config.config;
                         let iface_name = config.iface_name;
 

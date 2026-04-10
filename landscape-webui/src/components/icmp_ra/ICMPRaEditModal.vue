@@ -8,7 +8,11 @@ import {
   get_lan_ipv6_config,
   update_lan_ipv6_config,
 } from "@/api/service_lan_ipv6";
-import { type SourceKind, type SourceType, sourceTypeFromParent } from "@/lib/lan_ipv6_v2_helpers";
+import {
+  type SourceKind,
+  type SourceType,
+  sourceTypeFromParent,
+} from "@/lib/lan_ipv6_v2_helpers";
 import type {
   LanIPv6ServiceConfigV2,
   LanPrefixGroupConfig,
@@ -57,9 +61,13 @@ function default_config(): LanIPv6ServiceConfigV2 {
   };
 }
 
-const all_groups = computed(() => service_config.value?.config.prefix_groups ?? []);
+const all_groups = computed(
+  () => service_config.value?.config.prefix_groups ?? [],
+);
 
-function allowed_service_kinds_for_type(type: SourceType): ("ra" | "na" | "pd")[] {
+function allowed_service_kinds_for_type(
+  type: SourceType,
+): ("ra" | "na" | "pd")[] {
   const mode = service_config.value?.config.mode ?? "slaac";
   if (mode === "slaac") {
     return ["ra"];
@@ -179,7 +187,9 @@ function replace_group_sources(
     return;
   }
   const currentGroups = [...service_config.value.config.prefix_groups];
-  const index = currentGroups.findIndex((currentGroup) => currentGroup.group_id === group_key);
+  const index = currentGroups.findIndex(
+    (currentGroup) => currentGroup.group_id === group_key,
+  );
   if (index === -1) {
     return;
   }
@@ -289,7 +299,11 @@ function replace_group_sources(
               <n-button size="tiny" @click="show_static_source_add = true">
                 {{ t("lan_ipv6.add_static_prefix") }}
               </n-button>
-              <n-button size="tiny" type="primary" @click="show_pd_source_add = true">
+              <n-button
+                size="tiny"
+                type="primary"
+                @click="show_pd_source_add = true"
+              >
                 {{ t("lan_ipv6.add_pd_prefix") }}
               </n-button>
             </n-flex>
@@ -322,7 +336,11 @@ function replace_group_sources(
               v-for="group in all_groups"
               :key="group.group_id"
               :group="group"
-              :allowed-service-kinds="allowed_service_kinds_for_type(sourceTypeFromParent(group.parent))"
+              :allowed-service-kinds="
+                allowed_service_kinds_for_type(
+                  sourceTypeFromParent(group.parent),
+                )
+              "
               :iface-name="service_config.iface_name"
               :current-groups="all_groups"
               :current-mode="service_config.config.mode"
@@ -330,10 +348,7 @@ function replace_group_sources(
             />
           </n-flex>
 
-          <n-empty
-            v-else
-            :description="t('lan_ipv6.no_prefix')"
-          />
+          <n-empty v-else :description="t('lan_ipv6.no_prefix')" />
         </n-card>
 
         <!-- Bottom config area -->
@@ -426,7 +441,6 @@ function replace_group_sources(
                   />
                 </n-radio-group>
               </n-form-item-gi>
-
             </n-grid>
           </n-card>
 

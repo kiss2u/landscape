@@ -86,7 +86,8 @@ export default {
   prefix_group_pd_parent_hint:
     "All prefix results under this upstream interface are planned on the same canvas.",
   prefix_group_count: "{count} results",
-  prefix_group_empty_kind: "No {kind} result exists under this parent prefix yet.",
+  prefix_group_empty_kind:
+    "No {kind} result exists under this parent prefix yet.",
   prefix_single_unit: "One {prefix} unit selected.",
   prefix_continuous_range:
     "{count} continuous units selected at granularity {prefix}.",
@@ -193,7 +194,8 @@ export default {
   planner_status_idle: "Waiting for selection",
   planner_status_available: "Ready to save",
   planner_status_shared: "Shared with RA/NA, ready to save",
-  planner_summary_only: "The current settings only support summary mode, so the interactive canvas is hidden.",
+  planner_summary_only:
+    "The current settings only support summary mode, so the interactive canvas is hidden.",
   planner_save_error_no_parent_iface: "Select an upstream PD interface first.",
   planner_save_error_no_static_prefix: "Enter the static parent prefix first.",
   planner_save_error_wan_reserved:

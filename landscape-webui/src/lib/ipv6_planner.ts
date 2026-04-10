@@ -154,13 +154,21 @@ function unitSpanForPrefix(prefixLen: number): number | undefined {
   return Number(1n << BigInt(64 - prefixLen));
 }
 
-function rangesOverlap(startA: number, spanA: number, startB: number, spanB: number) {
+function rangesOverlap(
+  startA: number,
+  spanA: number,
+  startB: number,
+  spanB: number,
+) {
   const endA = startA + spanA;
   const endB = startB + spanB;
   return startA < endB && startB < endA;
 }
 
-function conflictBetweenSelection(selectedKind: ServiceKind, occupantKind: ServiceKind) {
+function conflictBetweenSelection(
+  selectedKind: ServiceKind,
+  occupantKind: ServiceKind,
+) {
   return !(
     (selectedKind === "ra" && occupantKind === "na") ||
     (selectedKind === "na" && occupantKind === "ra")
@@ -180,7 +188,10 @@ function ipv6ToBigInt(ip: string): bigint {
   if (groups.length !== 8) {
     throw new Error(`Invalid IPv6 address: ${ip}`);
   }
-  return groups.reduce((acc, group) => (acc << 16n) + BigInt(parseInt(group || "0", 16)), 0n);
+  return groups.reduce(
+    (acc, group) => (acc << 16n) + BigInt(parseInt(group || "0", 16)),
+    0n,
+  );
 }
 
 function bigIntToIpv6(value: bigint): string {
@@ -273,13 +284,21 @@ function selectionStatus(
   selectedUnitStart: number,
   selectedUnitSpan: number,
   reservedUnitCount: number,
-): Pick<PlannerView, "selectedStatus" | "selectedOccupants" | "canSave" | "saveError"> {
+): Pick<
+  PlannerView,
+  "selectedStatus" | "selectedOccupants" | "canSave" | "saveError"
+> {
   const selectedOccupants = records
     .filter(
       (record) =>
         record.unitStart !== undefined &&
         record.unitSpan !== undefined &&
-        rangesOverlap(selectedUnitStart, selectedUnitSpan, record.unitStart, record.unitSpan),
+        rangesOverlap(
+          selectedUnitStart,
+          selectedUnitSpan,
+          record.unitStart,
+          record.unitSpan,
+        ),
     )
     .map((record) => ({
       ifaceName: record.ifaceName,
@@ -287,11 +306,15 @@ function selectionStatus(
       serviceKind: record.serviceKind,
       effectiveIndex: record.effectiveIndex,
       poolLen: record.poolLen,
-      conflictsWithSelection: conflictBetweenSelection(selectedKind, record.serviceKind),
+      conflictsWithSelection: conflictBetweenSelection(
+        selectedKind,
+        record.serviceKind,
+      ),
     }));
 
   const hitsReservedArea =
-    reservedUnitCount > 0 && rangesOverlap(selectedUnitStart, selectedUnitSpan, 0, reservedUnitCount);
+    reservedUnitCount > 0 &&
+    rangesOverlap(selectedUnitStart, selectedUnitSpan, 0, reservedUnitCount);
   if (hitsReservedArea) {
     return {
       selectedStatus: "wan_reserved",
@@ -301,7 +324,9 @@ function selectionStatus(
     };
   }
 
-  const hasConflict = selectedOccupants.some((item) => item.conflictsWithSelection);
+  const hasConflict = selectedOccupants.some(
+    (item) => item.conflictsWithSelection,
+  );
   if (hasConflict) {
     return {
       selectedStatus: "conflict",
@@ -329,7 +354,12 @@ function selectionStatus(
 function recordsConflict(records: OccupancyRecord[]): boolean {
   for (let left = 0; left < records.length; left++) {
     for (let right = left + 1; right < records.length; right++) {
-      if (conflictBetweenSelection(records[left].serviceKind, records[right].serviceKind)) {
+      if (
+        conflictBetweenSelection(
+          records[left].serviceKind,
+          records[right].serviceKind,
+        )
+      ) {
         return true;
       }
     }
@@ -370,7 +400,10 @@ function unitKind(
   return "available";
 }
 
-function idleView(stateReason: PlannerView["stateReason"], saveError?: string): PlannerView {
+function idleView(
+  stateReason: PlannerView["stateReason"],
+  saveError?: string,
+): PlannerView {
   return {
     state: "idle",
     stateReason,
@@ -401,7 +434,9 @@ export function poolIndexFromPlannerUnitStart(
   return Math.max(0, effectiveIndex - reservedSlots);
 }
 
-function plannerParentFromGroup(group: LanPrefixGroupConfig): GroupPlannerParent {
+function plannerParentFromGroup(
+  group: LanPrefixGroupConfig,
+): GroupPlannerParent {
   if (group.parent.t === "static") {
     return {
       t: "static",
@@ -435,7 +470,10 @@ function occupancyParentKeyForParent(
   return parent.key;
 }
 
-function entryActiveInMode(mode: IPv6ServiceMode | undefined, serviceKind: ServiceKind): boolean {
+function entryActiveInMode(
+  mode: IPv6ServiceMode | undefined,
+  serviceKind: ServiceKind,
+): boolean {
   switch (mode) {
     case "slaac":
       return serviceKind === "ra";
@@ -540,12 +578,18 @@ function defaultEntryForKind(
   };
 }
 
-function selectedEntryForOptions(options: BuildGroupPlannerOptions): GroupPlannerEntry | undefined {
+function selectedEntryForOptions(
+  options: BuildGroupPlannerOptions,
+): GroupPlannerEntry | undefined {
   const entry = defaultEntryForKind(options.editGroup, options.selectedKind);
   if (!entry) {
     return undefined;
   }
-  if (options.selectedKind === "pd" && !options.editGroup?.pd && options.draftPdPoolLen) {
+  if (
+    options.selectedKind === "pd" &&
+    !options.editGroup?.pd &&
+    options.draftPdPoolLen
+  ) {
     return {
       ...entry,
       poolLen: options.draftPdPoolLen,
@@ -554,7 +598,10 @@ function selectedEntryForOptions(options: BuildGroupPlannerOptions): GroupPlanne
   return entry;
 }
 
-function withPoolIndex(entry: GroupPlannerEntry, poolIndex: number): GroupPlannerEntry {
+function withPoolIndex(
+  entry: GroupPlannerEntry,
+  poolIndex: number,
+): GroupPlannerEntry {
   return {
     ...entry,
     hasSelection: true,
@@ -564,7 +611,9 @@ function withPoolIndex(entry: GroupPlannerEntry, poolIndex: number): GroupPlanne
 }
 
 function entryReservedBlockOffset(entry: GroupPlannerEntry): number {
-  return entry.parent.t === "pd" ? reservedBlockOffsetForPrefix(entry.poolLen) : 0;
+  return entry.parent.t === "pd"
+    ? reservedBlockOffsetForPrefix(entry.poolLen)
+    : 0;
 }
 
 function entryReservedUnitCount(entry: GroupPlannerEntry): number {
@@ -621,13 +670,20 @@ function buildGroupOccupancyRecords(
     // even if the current service mode would not activate them right now.
     buildEntriesForGroup(group, undefined)
       .filter(
-        (entry) => occupancyParentKeyForParent(entry.parent, options.prefixInfos) === parentKey,
+        (entry) =>
+          occupancyParentKeyForParent(entry.parent, options.prefixInfos) ===
+          parentKey,
       )
       .filter(
         (entry) =>
-          !(group === options.editGroup && entry.serviceKind === options.selectedKind),
+          !(
+            group === options.editGroup &&
+            entry.serviceKind === options.selectedKind
+          ),
       )
-      .map((entry) => buildGroupOccupancyRecord(options.currentIfaceName, "current", entry)),
+      .map((entry) =>
+        buildGroupOccupancyRecord(options.currentIfaceName, "current", entry),
+      ),
   );
 
   const otherRecords = options.otherConfigsV2
@@ -636,9 +692,13 @@ function buildGroupOccupancyRecords(
       (config.config.prefix_groups ?? [])
         .flatMap((group) => buildEntriesForGroup(group, config.config.mode))
         .filter(
-          (entry) => occupancyParentKeyForParent(entry.parent, options.prefixInfos) === parentKey,
+          (entry) =>
+            occupancyParentKeyForParent(entry.parent, options.prefixInfos) ===
+            parentKey,
         )
-        .map((entry) => buildGroupOccupancyRecord(config.iface_name, "other", entry)),
+        .map((entry) =>
+          buildGroupOccupancyRecord(config.iface_name, "other", entry),
+        ),
     );
 
   return [...currentRecords, ...otherRecords];
@@ -667,7 +727,9 @@ function buildGroupPlannerViewBase(
       parentKey: selectedEntry.parent.key,
       parentPrefixLen,
       targetPrefixLen,
-      selectedPoolIndex: selectedEntry.hasSelection ? selectedEntry.startIndex : undefined,
+      selectedPoolIndex: selectedEntry.hasSelection
+        ? selectedEntry.startIndex
+        : undefined,
       selectedEffectiveIndex: selectedEntry.hasSelection
         ? entryEffectiveIndexRange(selectedEntry).startIndex
         : undefined,
@@ -681,9 +743,12 @@ function buildGroupPlannerViewBase(
   }
 
   const effectiveRange = entryEffectiveIndexRange(selectedEntry);
-  const selectedUnitStart = selectedEntry.hasSelection ? effectiveRange.startIndex * selectedUnitBlock : 0;
+  const selectedUnitStart = selectedEntry.hasSelection
+    ? effectiveRange.startIndex * selectedUnitBlock
+    : 0;
   const selectedUnitSpan = selectedEntry.hasSelection
-    ? (effectiveRange.endIndex - effectiveRange.startIndex + 1) * selectedUnitBlock
+    ? (effectiveRange.endIndex - effectiveRange.startIndex + 1) *
+      selectedUnitBlock
     : 0;
 
   if (selectedEntry.parent.t === "static") {
@@ -694,8 +759,12 @@ function buildGroupPlannerViewBase(
       parentKey: selectedEntry.parent.key,
       parentPrefixLen: selectedEntry.parent.parentPrefixLen,
       targetPrefixLen,
-      selectedPoolIndex: selectedEntry.hasSelection ? selectedEntry.startIndex : undefined,
-      selectedEffectiveIndex: selectedEntry.hasSelection ? effectiveRange.startIndex : undefined,
+      selectedPoolIndex: selectedEntry.hasSelection
+        ? selectedEntry.startIndex
+        : undefined,
+      selectedEffectiveIndex: selectedEntry.hasSelection
+        ? effectiveRange.startIndex
+        : undefined,
       selectedUnitStart,
       selectedUnitSpan,
       reservedUnitCount: 0,
@@ -714,8 +783,12 @@ function buildGroupPlannerViewBase(
       parentKey: "",
       parentPrefixLen: 0,
       targetPrefixLen,
-      selectedPoolIndex: selectedEntry.hasSelection ? selectedEntry.startIndex : undefined,
-      selectedEffectiveIndex: selectedEntry.hasSelection ? effectiveRange.startIndex : undefined,
+      selectedPoolIndex: selectedEntry.hasSelection
+        ? selectedEntry.startIndex
+        : undefined,
+      selectedEffectiveIndex: selectedEntry.hasSelection
+        ? effectiveRange.startIndex
+        : undefined,
       selectedUnitStart: 0,
       selectedUnitSpan,
       reservedUnitCount: 0,
@@ -725,11 +798,19 @@ function buildGroupPlannerViewBase(
     };
   }
 
-  const actualPrefix = options.prefixInfos.get(selectedEntry.parent.dependIface) ?? null;
-  const actualParentPrefixLen = actualPrefix?.prefix_len ?? selectedEntry.parent.plannedParentPrefixLen;
-  const occupancyParentKey = occupancyParentKeyForParent(selectedEntry.parent, options.prefixInfos);
+  const actualPrefix =
+    options.prefixInfos.get(selectedEntry.parent.dependIface) ?? null;
+  const actualParentPrefixLen =
+    actualPrefix?.prefix_len ?? selectedEntry.parent.plannedParentPrefixLen;
+  const occupancyParentKey = occupancyParentKeyForParent(
+    selectedEntry.parent,
+    options.prefixInfos,
+  );
 
-  if (actualPrefix && actualPrefix.prefix_len > selectedEntry.parent.plannedParentPrefixLen) {
+  if (
+    actualPrefix &&
+    actualPrefix.prefix_len > selectedEntry.parent.plannedParentPrefixLen
+  ) {
     return {
       entry: selectedEntry,
       hasSelection: selectedEntry.hasSelection,
@@ -737,8 +818,12 @@ function buildGroupPlannerViewBase(
       parentKey: occupancyParentKey,
       parentPrefixLen: actualParentPrefixLen,
       targetPrefixLen,
-      selectedPoolIndex: selectedEntry.hasSelection ? selectedEntry.startIndex : undefined,
-      selectedEffectiveIndex: selectedEntry.hasSelection ? effectiveRange.startIndex : undefined,
+      selectedPoolIndex: selectedEntry.hasSelection
+        ? selectedEntry.startIndex
+        : undefined,
+      selectedEffectiveIndex: selectedEntry.hasSelection
+        ? effectiveRange.startIndex
+        : undefined,
       selectedUnitStart,
       selectedUnitSpan,
       reservedUnitCount: entryReservedUnitCount(selectedEntry),
@@ -759,12 +844,18 @@ function buildGroupPlannerViewBase(
     parentKey: occupancyParentKey,
     parentPrefixLen: actualParentPrefixLen,
     targetPrefixLen,
-    selectedPoolIndex: selectedEntry.hasSelection ? selectedEntry.startIndex : undefined,
-    selectedEffectiveIndex: selectedEntry.hasSelection ? effectiveRange.startIndex : undefined,
+    selectedPoolIndex: selectedEntry.hasSelection
+      ? selectedEntry.startIndex
+      : undefined,
+    selectedEffectiveIndex: selectedEntry.hasSelection
+      ? effectiveRange.startIndex
+      : undefined,
     selectedUnitStart,
     selectedUnitSpan,
     reservedUnitCount: entryReservedUnitCount(selectedEntry),
-    actualPrefix: actualPrefix ? `${actualPrefix.prefix_ip}/${actualPrefix.prefix_len}` : undefined,
+    actualPrefix: actualPrefix
+      ? `${actualPrefix.prefix_ip}/${actualPrefix.prefix_len}`
+      : undefined,
     actualPrefixLen: actualPrefix?.prefix_len,
     parentBasePrefix: actualPrefix?.prefix_ip,
     state: actualPrefix ? "active" : "preview",
@@ -786,7 +877,9 @@ function buildGroupPlannerView(
   }
 
   const selectedPrefix =
-    base.hasSelection && base.parentBasePrefix && base.targetPrefixLen >= base.parentPrefixLen
+    base.hasSelection &&
+    base.parentBasePrefix &&
+    base.targetPrefixLen >= base.parentPrefixLen
       ? prefixAtIndex(
           base.parentBasePrefix,
           base.parentPrefixLen,
@@ -887,7 +980,8 @@ function buildGroupPlannerView(
       selectedStatus: selection.selectedStatus,
       canSave: selection.canSave,
       saveError:
-        selection.saveError ?? "lan_ipv6.planner_save_error_target_more_specific_than_64",
+        selection.saveError ??
+        "lan_ipv6.planner_save_error_target_more_specific_than_64",
     };
   }
 
@@ -925,16 +1019,31 @@ function buildGroupPlannerView(
   const candidateUnitSpan = unitSpanForPrefix(base.targetPrefixLen) ?? 1;
   const blockedBlockStarts = new Set<number>();
 
-  for (let blockStart = 0; blockStart < totalUnits; blockStart += candidateUnitSpan) {
+  for (
+    let blockStart = 0;
+    blockStart < totalUnits;
+    blockStart += candidateUnitSpan
+  ) {
     const blockEnd = Math.min(totalUnits, blockStart + candidateUnitSpan);
     const blockRecords = allRecords.filter(
       (record) =>
         record.unitStart !== undefined &&
         record.unitSpan !== undefined &&
-        rangesOverlap(blockStart, blockEnd - blockStart, record.unitStart, record.unitSpan),
+        rangesOverlap(
+          blockStart,
+          blockEnd - blockStart,
+          record.unitStart,
+          record.unitSpan,
+        ),
     );
     const blockHitsReserved =
-      base.reservedUnitCount > 0 && rangesOverlap(blockStart, blockEnd - blockStart, 0, base.reservedUnitCount);
+      base.reservedUnitCount > 0 &&
+      rangesOverlap(
+        blockStart,
+        blockEnd - blockStart,
+        0,
+        base.reservedUnitCount,
+      );
     const conflictingRecords = blockRecords.filter((record) =>
       conflictBetweenSelection(base.selectedKind, record.serviceKind),
     );
@@ -952,13 +1061,23 @@ function buildGroupPlannerView(
         index >= record.unitStart &&
         index < record.unitStart + record.unitSpan,
     );
-    const occupiedByRa = recordsForUnit.some((record) => record.serviceKind === "ra");
-    const occupiedByNa = recordsForUnit.some((record) => record.serviceKind === "na");
-    const occupiedByPd = recordsForUnit.some((record) => record.serviceKind === "pd");
-    const occupiedByOtherLan = recordsForUnit.some((record) => record.scope === "other");
+    const occupiedByRa = recordsForUnit.some(
+      (record) => record.serviceKind === "ra",
+    );
+    const occupiedByNa = recordsForUnit.some(
+      (record) => record.serviceKind === "na",
+    );
+    const occupiedByPd = recordsForUnit.some(
+      (record) => record.serviceKind === "pd",
+    );
+    const occupiedByOtherLan = recordsForUnit.some(
+      (record) => record.scope === "other",
+    );
     const isWanReserved = index < wanUnitCount;
-    const blockStart = Math.floor(index / candidateUnitSpan) * candidateUnitSpan;
-    const hasOccupancy = occupiedByRa || occupiedByNa || occupiedByPd || occupiedByOtherLan;
+    const blockStart =
+      Math.floor(index / candidateUnitSpan) * candidateUnitSpan;
+    const hasOccupancy =
+      occupiedByRa || occupiedByNa || occupiedByPd || occupiedByOtherLan;
     const isAlignmentBlocked =
       !isWanReserved && !hasOccupancy && blockedBlockStarts.has(blockStart);
     const selected =
@@ -1015,7 +1134,9 @@ function buildGroupPlannerView(
   };
 }
 
-export function buildPrefixPlannerViewFromGroups(options: BuildGroupPlannerOptions): PlannerView {
+export function buildPrefixPlannerViewFromGroups(
+  options: BuildGroupPlannerOptions,
+): PlannerView {
   return buildGroupPlannerView(options, selectedEntryForOptions(options));
 }
 
@@ -1042,7 +1163,10 @@ export function inspectPlannerCandidateFromGroups(
     };
   }
 
-  const nextView = buildGroupPlannerView(options, withPoolIndex(selectedEntry, poolIndex));
+  const nextView = buildGroupPlannerView(
+    options,
+    withPoolIndex(selectedEntry, poolIndex),
+  );
   return {
     selectedPoolIndex: nextView.selectedPoolIndex,
     selectedEffectiveIndex: nextView.selectedEffectiveIndex,
@@ -1067,7 +1191,10 @@ export function inspectPlannerUnitRangeCandidateFromGroups(
   | "selectedUnitStart"
   | "selectedUnitSpan"
 > {
-  const base = buildGroupPlannerViewBase(options, selectedEntryForOptions(options));
+  const base = buildGroupPlannerViewBase(
+    options,
+    selectedEntryForOptions(options),
+  );
   if (!base) {
     return {
       selectedOccupants: [],
