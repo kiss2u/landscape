@@ -40,6 +40,22 @@ interface PlannerInteractionPayload {
   }[];
 }
 
+function randomUint32() {
+  if (typeof globalThis.crypto !== "undefined") {
+    const buffer = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(buffer);
+    return buffer[0];
+  }
+  return Math.floor(Math.random() * 0x1_0000_0000);
+}
+
+function generateDefaultStaticBasePrefix() {
+  const mixed =
+    ((BigInt(Date.now()) << 16n) ^ BigInt(randomUint32())) & 0xffffffffffffn;
+  const hex = mixed.toString(16).padStart(12, "0");
+  return `fd${hex.slice(0, 2)}:${hex.slice(2, 6)}:${hex.slice(6, 10)}:${hex.slice(10, 12)}00::`;
+}
+
 const show = defineModel<boolean>("show", { required: true });
 
 const props = defineProps<{
@@ -59,8 +75,8 @@ const emit = defineEmits<{
 
 const switchKinds: ServiceKind[] = ["ra", "na", "pd"];
 const selectedKind = ref<ServiceKind>("ra");
-const staticBasePrefix = ref("fd11:2222:3333:4400::");
-const staticPrefixLen = ref(60);
+const staticBasePrefix = ref(generateDefaultStaticBasePrefix());
+const staticPrefixLen = ref(56);
 const dependIface = ref("");
 const assumedPrefixLen = ref(60);
 const pdPoolLenDraft = ref(64);
@@ -114,7 +130,9 @@ const minPdPoolLen = computed(() => {
   return Math.min(effectivePdParentPrefixLen.value + 1, 128);
 });
 
-const currentPdPoolLen = computed(() => draftGroup.value?.pd?.pool_len ?? pdPoolLenDraft.value);
+const currentPdPoolLen = computed(
+  () => draftGroup.value?.pd?.pool_len ?? pdPoolLenDraft.value,
+);
 
 const displayParentLabel = computed(() => {
   const group = draftGroup.value;
@@ -128,7 +146,8 @@ const displayParentLabel = computed(() => {
 });
 
 const draftGroupHasResults = computed(
-  () => !!(draftGroup.value?.ra || draftGroup.value?.na || draftGroup.value?.pd),
+  () =>
+    !!(draftGroup.value?.ra || draftGroup.value?.na || draftGroup.value?.pd),
 );
 
 const commitSaveState = computed(() => {
@@ -296,7 +315,10 @@ function clearKind(kind: ServiceKind) {
   group.pd = null;
 }
 
-function poolIndexFromSelectionUnitStart(unitStart: number, targetPrefixLen: number) {
+function poolIndexFromSelectionUnitStart(
+  unitStart: number,
+  targetPrefixLen: number,
+) {
   return poolIndexFromPlannerUnitStart(
     targetPrefixLen,
     reservedBlockOffsetForPrefix(targetPrefixLen),
@@ -304,7 +326,11 @@ function poolIndexFromSelectionUnitStart(unitStart: number, targetPrefixLen: num
   );
 }
 
-function rangeForSelection(startIndex: number, endIndex: number, poolLen: number) {
+function rangeForSelection(
+  startIndex: number,
+  endIndex: number,
+  poolLen: number,
+) {
   const unitSpan = unitSpanForPrefix(poolLen);
   if (!unitSpan) {
     return undefined;
@@ -330,13 +356,21 @@ function currentPdExtent() {
   return rangeForSelection(pd.start_index, pd.end_index, pd.pool_len);
 }
 
-function intervalFromUnitRange(unitStart: number, unitEnd: number, poolLen: number) {
+function intervalFromUnitRange(
+  unitStart: number,
+  unitEnd: number,
+  poolLen: number,
+) {
   const unitSpan = unitSpanForPrefix(poolLen);
   if (!unitSpan) {
     return undefined;
   }
   const totalSpan = unitEnd - unitStart;
-  if (totalSpan <= 0 || unitStart % unitSpan !== 0 || totalSpan % unitSpan !== 0) {
+  if (
+    totalSpan <= 0 ||
+    unitStart % unitSpan !== 0 ||
+    totalSpan % unitSpan !== 0
+  ) {
     return undefined;
   }
   const startIndex = poolIndexFromSelectionUnitStart(unitStart, poolLen);
@@ -347,23 +381,34 @@ function intervalFromUnitRange(unitStart: number, unitEnd: number, poolLen: numb
   return { startIndex, endIndex };
 }
 
-function intervalFromCoveredUnits(coveredUnitStart: number, coveredUnitEnd: number, poolLen: number) {
+function intervalFromCoveredUnits(
+  coveredUnitStart: number,
+  coveredUnitEnd: number,
+  poolLen: number,
+) {
   const unitSpan = unitSpanForPrefix(poolLen);
   if (!unitSpan) {
     return undefined;
   }
   const baseStart = reservedBlockOffsetForPrefix(poolLen) * unitSpan;
   const alignedStart =
-    baseStart + Math.max(0, Math.floor((coveredUnitStart - baseStart) / unitSpan)) * unitSpan;
+    baseStart +
+    Math.max(0, Math.floor((coveredUnitStart - baseStart) / unitSpan)) *
+      unitSpan;
   const alignedEnd =
-    baseStart + Math.max(1, Math.ceil((coveredUnitEnd - baseStart) / unitSpan)) * unitSpan;
+    baseStart +
+    Math.max(1, Math.ceil((coveredUnitEnd - baseStart) / unitSpan)) * unitSpan;
   if (alignedEnd <= alignedStart) {
     return undefined;
   }
   return intervalFromUnitRange(alignedStart, alignedEnd, poolLen);
 }
 
-function validatePdInterval(startIndex: number, endIndex: number, poolLen: number) {
+function validatePdInterval(
+  startIndex: number,
+  endIndex: number,
+  poolLen: number,
+) {
   const nextRange = rangeForSelection(startIndex, endIndex, poolLen);
   if (!nextRange) {
     return {
@@ -448,7 +493,11 @@ function onPlannerInteract(payload: PlannerInteractionPayload) {
   }
 
   const poolLen = currentPdPoolLen.value;
-  const clickedRange = rangeForSelection(payload.poolIndex, payload.poolIndex, poolLen);
+  const clickedRange = rangeForSelection(
+    payload.poolIndex,
+    payload.poolIndex,
+    poolLen,
+  );
   if (!clickedRange) {
     return;
   }
@@ -470,17 +519,28 @@ function onPlannerInteract(payload: PlannerInteractionPayload) {
     return;
   }
 
-  if (payload.poolIndex >= currentPd.start_index && payload.poolIndex <= currentPd.end_index) {
+  if (
+    payload.poolIndex >= currentPd.start_index &&
+    payload.poolIndex <= currentPd.end_index
+  ) {
     if (currentPd.start_index === currentPd.end_index) {
       clearKind("pd");
       return;
     }
     if (payload.poolIndex === currentPd.start_index) {
-      setPdInterval(currentPd.start_index + 1, currentPd.end_index, currentPd.pool_len);
+      setPdInterval(
+        currentPd.start_index + 1,
+        currentPd.end_index,
+        currentPd.pool_len,
+      );
       return;
     }
     if (payload.poolIndex === currentPd.end_index) {
-      setPdInterval(currentPd.start_index, currentPd.end_index - 1, currentPd.pool_len);
+      setPdInterval(
+        currentPd.start_index,
+        currentPd.end_index - 1,
+        currentPd.pool_len,
+      );
     }
     return;
   }
@@ -588,11 +648,14 @@ async function loadPlannerContext() {
   const allConfigs = await get_all_lan_ipv6_configs();
   const netDevs = await ifaces();
   const lanIfaceNames = new Set(
-    netDevs.filter((dev) => dev.zone_type === ZoneType.Lan).map((dev) => dev.name),
+    netDevs
+      .filter((dev) => dev.zone_type === ZoneType.Lan)
+      .map((dev) => dev.name),
   );
   otherLanConfigsV2.value = allConfigs.filter(
     (config) =>
-      config.iface_name !== props.currentIfaceName && lanIfaceNames.has(config.iface_name),
+      config.iface_name !== props.currentIfaceName &&
+      lanIfaceNames.has(config.iface_name),
   );
 }
 
@@ -626,8 +689,8 @@ function initDraftGroup() {
   }
 
   if (props.sourceType === "static") {
-    staticBasePrefix.value = "fd11:2222:3333:4400::";
-    staticPrefixLen.value = 60;
+    staticBasePrefix.value = generateDefaultStaticBasePrefix();
+    staticPrefixLen.value = 56;
   } else {
     dependIface.value = "";
     assumedPrefixLen.value = 60;
@@ -640,20 +703,29 @@ async function enter() {
   await Promise.all([searchIpv6Pd(), loadPlannerContext()]);
   initDraftGroup();
   syncParentIntoDraftGroup();
-  const firstKind = props.initialKind ?? firstConfiguredKind() ?? availableServiceKinds.value[0] ?? "ra";
+  const firstKind =
+    props.initialKind ??
+    firstConfiguredKind() ??
+    availableServiceKinds.value[0] ??
+    "ra";
   selectKind(firstKind);
 }
 
 async function commit() {
   if (draftGroupHasResults.value && !commitSaveState.value.canSave) {
     window.$message.error(
-      t(commitSaveState.value.saveError ?? "lan_ipv6.planner_save_error_conflict"),
+      t(
+        commitSaveState.value.saveError ??
+          "lan_ipv6.planner_save_error_conflict",
+      ),
     );
     return;
   }
 
   const groupToCommit =
-    draftGroupHasResults.value && draftGroup.value ? cloneValue(draftGroup.value) : undefined;
+    draftGroupHasResults.value && draftGroup.value
+      ? cloneValue(draftGroup.value)
+      : undefined;
 
   if (groupToCommit?.parent.t === "pd" && !groupToCommit.parent.depend_iface) {
     window.$message.error(t("lan_ipv6.planner_save_error_no_parent_iface"));
@@ -689,7 +761,9 @@ function deleteCurrentGroup() {
     style="width: 1180px"
     v-model:show="show"
     preset="card"
-    :title="t('lan_ipv6.prefix_group_editor_title', { parent: displayParentLabel })"
+    :title="
+      t('lan_ipv6.prefix_group_editor_title', { parent: displayParentLabel })
+    "
     size="small"
     :bordered="false"
     @after-enter="enter"
@@ -704,7 +778,10 @@ function deleteCurrentGroup() {
             </div>
           </n-flex>
 
-          <n-form-item v-if="sourceType === 'static'" :label="t('lan_ipv6.source_base_prefix')">
+          <n-form-item
+            v-if="sourceType === 'static'"
+            :label="t('lan_ipv6.source_base_prefix')"
+          >
             <n-flex style="flex: 1" :gap="8">
               <n-input
                 style="flex: 1"
@@ -737,7 +814,7 @@ function deleteCurrentGroup() {
             <n-gi>
               <n-flex vertical :size="6">
                 <n-text depth="3" style="font-size: 12px">
-                  {{ t('lan_ipv6.prefix_group_editor_kind') }}
+                  {{ t("lan_ipv6.prefix_group_editor_kind") }}
                 </n-text>
                 <n-grid cols="1" :x-gap="8" :y-gap="8">
                   <n-gi v-for="kind in switchKinds" :key="kind">
@@ -753,11 +830,19 @@ function deleteCurrentGroup() {
                         {{ t(`lan_ipv6.planner_brush_${kind}`) }}
                       </div>
                       <div class="kind-switch-count">
-                        {{ t('lan_ipv6.prefix_group_count', { count: kindCount(kind) }) }}
+                        {{
+                          t("lan_ipv6.prefix_group_count", {
+                            count: kindCount(kind),
+                          })
+                        }}
                       </div>
-                      <div v-if="kind === 'pd'" class="kind-switch-extra" @click.stop>
+                      <div
+                        v-if="kind === 'pd'"
+                        class="kind-switch-extra"
+                        @click.stop
+                      >
                         <n-text depth="3" style="font-size: 12px">
-                          {{ t('lan_ipv6.source_pool_len') }}
+                          {{ t("lan_ipv6.source_pool_len") }}
                         </n-text>
                         <n-input-number
                           :value="currentPdPoolLen"
@@ -792,7 +877,11 @@ function deleteCurrentGroup() {
           </n-grid>
 
           <n-alert
-            v-if="draftGroupHasResults && !commitSaveState.canSave && commitSaveState.saveError"
+            v-if="
+              draftGroupHasResults &&
+              !commitSaveState.canSave &&
+              commitSaveState.saveError
+            "
             type="error"
             :bordered="false"
           >
@@ -808,13 +897,13 @@ function deleteCurrentGroup() {
           <n-popconfirm v-if="group" @positive-click="deleteCurrentGroup">
             <template #trigger>
               <n-button type="error" secondary>
-                {{ t('lan_ipv6.delete') }}
+                {{ t("lan_ipv6.delete") }}
               </n-button>
             </template>
-            {{ t('lan_ipv6.prefix_group_delete_confirm') }}
+            {{ t("lan_ipv6.prefix_group_delete_confirm") }}
           </n-popconfirm>
 
-          <n-button @click="show = false">{{ t('lan_ipv6.cancel') }}</n-button>
+          <n-button @click="show = false">{{ t("lan_ipv6.cancel") }}</n-button>
         </n-flex>
 
         <n-button
@@ -822,7 +911,7 @@ function deleteCurrentGroup() {
           :disabled="draftGroupHasResults && !commitSaveState.canSave"
           @click="commit"
         >
-          {{ t('lan_ipv6.confirm') }}
+          {{ t("lan_ipv6.confirm") }}
         </n-button>
       </n-flex>
     </template>
@@ -835,9 +924,15 @@ function deleteCurrentGroup() {
   border-radius: 10px;
   padding: 12px;
   cursor: pointer;
-  background: color-mix(in srgb, var(--n-color) 68%, var(--n-color-embedded) 32%);
+  background: color-mix(
+    in srgb,
+    var(--n-color) 68%,
+    var(--n-color-embedded) 32%
+  );
   color: var(--n-text-color);
-  transition: border-color 0.15s ease, background-color 0.15s ease,
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
     transform 0.15s ease;
 }
 
@@ -847,17 +942,29 @@ function deleteCurrentGroup() {
 
 .kind-switch.active {
   border-color: var(--n-primary-color);
-  background: color-mix(in srgb, var(--n-primary-color) 28%, var(--n-color) 72%);
+  background: color-mix(
+    in srgb,
+    var(--n-primary-color) 28%,
+    var(--n-color) 72%
+  );
 }
 
 .kind-switch.disabled {
   cursor: not-allowed;
   opacity: 0.5;
-  background: color-mix(in srgb, var(--n-color) 55%, var(--n-color-embedded) 45%);
+  background: color-mix(
+    in srgb,
+    var(--n-color) 55%,
+    var(--n-color-embedded) 45%
+  );
 }
 
 .kind-switch.disabled:hover {
-  background: color-mix(in srgb, var(--n-color) 55%, var(--n-color-embedded) 45%);
+  background: color-mix(
+    in srgb,
+    var(--n-color) 55%,
+    var(--n-color-embedded) 45%
+  );
 }
 
 .kind-switch-title {
