@@ -168,13 +168,17 @@ function plannerPalette() {
 const legendItems = computed(() => {
   const palette = plannerPalette();
   return [
-    { label: "RA", color: palette.info },
-    { label: "IA_NA", color: palette.success },
-    { label: "PD", color: palette.primary },
-    { label: t("lan_ipv6.planner_legend_other_lan"), color: palette.embedded },
-    { label: t("lan_ipv6.planner_legend_wan"), color: palette.warning },
-    { label: t("lan_ipv6.planner_legend_blocked"), color: palette.blocked },
-    { label: t("lan_ipv6.planner_conflict"), color: palette.error },
+    { label: "RA", color: palette.info, kind: "solid" },
+    { label: "IA_NA", color: palette.success, kind: "solid" },
+    { label: "PD", color: palette.primary, kind: "solid" },
+    {
+      label: t("lan_ipv6.planner_legend_other_lan"),
+      color: palette.embedded,
+      kind: "solid",
+    },
+    { label: t("lan_ipv6.planner_legend_wan"), color: palette.warning, kind: "solid" },
+    { label: t("lan_ipv6.planner_legend_blocked"), color: palette.blocked, kind: "striped" },
+    { label: t("lan_ipv6.planner_conflict"), color: palette.error, kind: "solid" },
   ];
 });
 
@@ -521,7 +525,11 @@ onBeforeUnmount(() => {
           :key="item.label"
           class="planner-legend-item"
         >
-          <i class="swatch" :style="{ background: item.color }" />{{
+          <i
+            class="swatch"
+            :class="{ 'swatch-striped': item.kind === 'striped' }"
+            :style="{ '--swatch-color': item.color, backgroundColor: item.color }"
+          />{{
             item.label
           }}
         </span>
@@ -567,5 +575,13 @@ onBeforeUnmount(() => {
   border-radius: 3px;
   border: 1px solid var(--n-border-color);
   display: inline-block;
+}
+
+.swatch-striped {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--swatch-color) 62%, var(--n-text-color)) 0 2px,
+    color-mix(in srgb, var(--swatch-color) 18%, transparent) 2px 4px
+  );
 }
 </style>
