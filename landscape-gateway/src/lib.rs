@@ -204,7 +204,7 @@ fn run_pingora_server(
 
     let proxy = LandscapeReverseProxy::new(rules.clone());
     let mut http_service = pingora::proxy::http_proxy_service(&server.configuration, proxy);
-    http_service.add_tcp(&format!("0.0.0.0:{http_port}"));
+    http_service.add_tcp(&format!("[::]:{http_port}"));
     server.add_service(http_service);
 
     let https_handle = tls_config.map(|tls_config| {
@@ -428,7 +428,7 @@ async fn run_https_server_inner(
 }
 
 fn gateway_https_bind_addr(https_port: u16) -> String {
-    format!("0.0.0.0:{https_port}")
+    format!("[::]:{https_port}")
 }
 
 fn gateway_https_bind_failure_diagnosis(kind: ErrorKind) -> &'static str {
