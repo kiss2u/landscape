@@ -31,6 +31,91 @@ pub enum SourceServiceKind {
     IaPd,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum PrefixGroupServiceKind {
+    Ra,
+    Na,
+    IaPd,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(tag = "t", rename_all = "snake_case")]
+pub enum PrefixParentSource {
+    Static {
+        #[cfg_attr(feature = "openapi", schema(value_type = String))]
+        base_prefix: Ipv6Addr,
+        parent_prefix_len: u8,
+    },
+    Pd {
+        depend_iface: String,
+        planned_parent_prefix_len: u8,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RaPrefixConfig {
+    pub pool_index: u32,
+    pub preferred_lifetime: u32,
+    pub valid_lifetime: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct NaPrefixConfig {
+    pub pool_index: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PdPrefixRangeConfig {
+    pub pool_len: u8,
+    pub start_index: u32,
+    pub end_index: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct LanPrefixGroupConfig {
+    pub group_id: String,
+    pub parent: PrefixParentSource,
+    #[serde(default)]
+    pub ra: Option<RaPrefixConfig>,
+    #[serde(default)]
+    pub na: Option<NaPrefixConfig>,
+    #[serde(default)]
+    pub pd: Option<PdPrefixRangeConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PrefixGroupParentKey {
+    Static(Ipv6Addr, u8),
+    Pd(String, u8),
+}
+
+impl PrefixParentSource {
+    pub fn parent_key(&self) -> PrefixGroupParentKey {
+        match self {
+            PrefixParentSource::Static { base_prefix, parent_prefix_len } => {
+                PrefixGroupParentKey::Static(*base_prefix, *parent_prefix_len)
+            }
+            PrefixParentSource::Pd { depend_iface, planned_parent_prefix_len } => {
+                PrefixGroupParentKey::Pd(depend_iface.clone(), *planned_parent_prefix_len)
+            }
+        }
+    }
+
+    pub fn parent_prefix_len(&self) -> u8 {
+        match self {
+            PrefixParentSource::Static { parent_prefix_len, .. } => *parent_prefix_len,
+            PrefixParentSource::Pd { planned_parent_prefix_len, .. } => *planned_parent_prefix_len,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ParentPrefixKey {
     Static(Ipv6Addr),
@@ -210,6 +295,161 @@ pub struct LanIPv6Config {
     pub dhcpv6: Option<DHCPv6ServerConfig>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct LanIPv6ConfigV2 {
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub mode: IPv6ServiceMode,
+    pub ad_interval: u32,
+    #[serde(default = "ra_flag_default")]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub ra_flag: RouterFlags,
+    #[serde(default)]
+    pub prefix_groups: Vec<LanPrefixGroupConfig>,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = false))]
+    pub dhcpv6: Option<DHCPv6ServerConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct LanIPv6ServiceConfigV2 {
+    pub iface_name: String,
+    pub enable: bool,
+    pub config: LanIPv6ConfigV2,
+
+    #[serde(default = "get_f64_timestamp")]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub update_at: f64,
+}
+
+impl LandscapeDBStore<String> for LanIPv6ServiceConfigV2 {
+    fn get_id(&self) -> String {
+        self.iface_name.clone()
+    }
+    fn get_update_at(&self) -> f64 {
+        self.update_at
+    }
+    fn set_update_at(&mut self, ts: f64) {
+        self.update_at = ts;
+    }
+}
+
+fn legacy_source_parent(source: &LanIPv6SourceConfig) -> PrefixParentSource {
+    match source {
+        LanIPv6SourceConfig::RaStatic { base_prefix, .. }
+        | LanIPv6SourceConfig::NaStatic { base_prefix, .. } => {
+            PrefixParentSource::Static { base_prefix: *base_prefix, parent_prefix_len: 60 }
+        }
+        LanIPv6SourceConfig::PdStatic { base_prefix, base_prefix_len, .. } => {
+            PrefixParentSource::Static {
+                base_prefix: *base_prefix,
+                parent_prefix_len: *base_prefix_len,
+            }
+        }
+        LanIPv6SourceConfig::RaPd { depend_iface, .. }
+        | LanIPv6SourceConfig::NaPd { depend_iface, .. } => PrefixParentSource::Pd {
+            depend_iface: depend_iface.clone(),
+            planned_parent_prefix_len: 60,
+        },
+        LanIPv6SourceConfig::PdPd { depend_iface, max_source_prefix_len, .. } => {
+            PrefixParentSource::Pd {
+                depend_iface: depend_iface.clone(),
+                planned_parent_prefix_len: *max_source_prefix_len,
+            }
+        }
+    }
+}
+
+fn legacy_source_group_id(index: usize, source: &LanIPv6SourceConfig) -> String {
+    let kind = match source.service_kind() {
+        SourceServiceKind::Ra => "ra",
+        SourceServiceKind::Na => "na",
+        SourceServiceKind::IaPd => "pd",
+    };
+
+    let base = match legacy_source_parent(source) {
+        PrefixParentSource::Static { base_prefix, parent_prefix_len } => {
+            format!("legacy:static:{}:{}/{}", kind, base_prefix, parent_prefix_len)
+        }
+        PrefixParentSource::Pd { depend_iface, planned_parent_prefix_len } => {
+            format!("legacy:pd:{}:{}/{}", kind, depend_iface, planned_parent_prefix_len)
+        }
+    };
+
+    format!("{}:{}", base.replace("//", "/"), index)
+}
+
+fn legacy_source_to_group(index: usize, source: &LanIPv6SourceConfig) -> LanPrefixGroupConfig {
+    let (ra, na, pd) = match source {
+        LanIPv6SourceConfig::RaStatic {
+            pool_index, preferred_lifetime, valid_lifetime, ..
+        }
+        | LanIPv6SourceConfig::RaPd { pool_index, preferred_lifetime, valid_lifetime, .. } => (
+            Some(RaPrefixConfig {
+                pool_index: *pool_index,
+                preferred_lifetime: *preferred_lifetime,
+                valid_lifetime: *valid_lifetime,
+            }),
+            None,
+            None,
+        ),
+        LanIPv6SourceConfig::NaStatic { pool_index, .. }
+        | LanIPv6SourceConfig::NaPd { pool_index, .. } => {
+            (None, Some(NaPrefixConfig { pool_index: *pool_index }), None)
+        }
+        LanIPv6SourceConfig::PdStatic { pool_index, pool_len, .. }
+        | LanIPv6SourceConfig::PdPd { pool_index, pool_len, .. } => (
+            None,
+            None,
+            Some(PdPrefixRangeConfig {
+                pool_len: *pool_len,
+                start_index: *pool_index,
+                end_index: *pool_index,
+            }),
+        ),
+    };
+
+    LanPrefixGroupConfig {
+        group_id: legacy_source_group_id(index, source),
+        parent: legacy_source_parent(source),
+        ra,
+        na,
+        pd,
+    }
+}
+
+impl From<LanIPv6Config> for LanIPv6ConfigV2 {
+    fn from(value: LanIPv6Config) -> Self {
+        let prefix_groups = value
+            .sources
+            .iter()
+            .enumerate()
+            .map(|(index, source)| legacy_source_to_group(index, source))
+            .collect();
+
+        Self {
+            mode: value.mode,
+            ad_interval: value.ad_interval,
+            ra_flag: value.ra_flag,
+            prefix_groups,
+            dhcpv6: value.dhcpv6,
+        }
+    }
+}
+
+impl From<LanIPv6ServiceConfig> for LanIPv6ServiceConfigV2 {
+    fn from(value: LanIPv6ServiceConfig) -> Self {
+        Self {
+            iface_name: value.iface_name,
+            enable: value.enable,
+            config: value.config.into(),
+            update_at: value.update_at,
+        }
+    }
+}
+
 fn ra_flag_default() -> RouterFlags {
     0xc0.into()
 }
@@ -231,11 +471,293 @@ fn blocks_overlap(_parent_prefix_len: u8, idx_a: u64, len_a: u8, idx_b: u64, len
 }
 
 fn reserved_wan_slots(pool_len: u8) -> u64 {
+    // Dynamic sources skip the first child block for WAN use.
+    // When the target is more specific than /64, reserve the first /64 worth of slots.
     if pool_len <= 64 {
         1
     } else {
         1u64.checked_shl((pool_len - 64) as u32).unwrap_or(u64::MAX)
     }
+}
+
+fn range_blocks_overlap(start_a: u64, end_a: u64, start_b: u64, end_b: u64) -> bool {
+    start_a <= end_b && start_b <= end_a
+}
+
+#[derive(Debug, Clone)]
+pub struct ExpandedPrefixEntry {
+    pub parent: PrefixGroupParentKey,
+    pub parent_prefix_len: u8,
+    pub service_kind: PrefixGroupServiceKind,
+    pub start_index: u32,
+    pub end_index: u32,
+    pub pool_len: u8,
+}
+
+impl ExpandedPrefixEntry {
+    pub fn effective_index_range(&self, is_dynamic: bool) -> (u64, u64) {
+        let start = self.start_index as u64;
+        let end = self.end_index as u64;
+        if is_dynamic {
+            let offset = reserved_wan_slots(self.pool_len);
+            (start.saturating_add(offset), end.saturating_add(offset))
+        } else {
+            (start, end)
+        }
+    }
+}
+
+impl LanPrefixGroupConfig {
+    pub fn validate(&self) -> Result<(), ServiceConfigError> {
+        if self.group_id.trim().is_empty() {
+            return Err(ServiceConfigError::InvalidConfig {
+                reason: "Prefix group id must not be empty".to_string(),
+            });
+        }
+
+        match &self.parent {
+            PrefixParentSource::Static { parent_prefix_len, .. } => {
+                if *parent_prefix_len == 0 || *parent_prefix_len > 127 {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: format!(
+                            "Static parent_prefix_len ({}) must be between 1 and 127",
+                            parent_prefix_len
+                        ),
+                    });
+                }
+            }
+            PrefixParentSource::Pd { planned_parent_prefix_len, .. } => {
+                if *planned_parent_prefix_len == 0 || *planned_parent_prefix_len > 127 {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: format!(
+                            "PD planned_parent_prefix_len ({}) must be between 1 and 127",
+                            planned_parent_prefix_len
+                        ),
+                    });
+                }
+            }
+        }
+
+        if let Some(pd) = &self.pd {
+            if pd.pool_len == 0 || pd.pool_len > 128 {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!("PD pool_len ({}) must be between 1 and 128", pd.pool_len),
+                });
+            }
+            if pd.end_index < pd.start_index {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "PD range end_index ({}) must be >= start_index ({})",
+                        pd.end_index, pd.start_index
+                    ),
+                });
+            }
+        }
+
+        let parent_len = self.parent.parent_prefix_len();
+        if let Some(ra) = &self.ra {
+            if 64 <= parent_len {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "RA requires parent_prefix_len ({}) to be less than 64",
+                        parent_len
+                    ),
+                });
+            }
+            if !self.group_has_capacity(ra.pool_index, ra.pool_index, 64) {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!("RA pool_index ({}) exceeds available capacity", ra.pool_index),
+                });
+            }
+        }
+        if let Some(na) = &self.na {
+            if 64 <= parent_len {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "IA_NA requires parent_prefix_len ({}) to be less than 64",
+                        parent_len
+                    ),
+                });
+            }
+            if !self.group_has_capacity(na.pool_index, na.pool_index, 64) {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "IA_NA pool_index ({}) exceeds available capacity",
+                        na.pool_index
+                    ),
+                });
+            }
+        }
+        if let Some(pd) = &self.pd {
+            if pd.pool_len <= parent_len {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "IA_PD pool_len ({}) must be greater than parent_prefix_len ({})",
+                        pd.pool_len, parent_len
+                    ),
+                });
+            }
+            if !self.group_has_capacity(pd.start_index, pd.end_index, pd.pool_len) {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "IA_PD range {}-{} exceeds available capacity for pool_len /{}",
+                        pd.start_index, pd.end_index, pd.pool_len
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn group_has_capacity(&self, start_index: u32, end_index: u32, target_len: u8) -> bool {
+        let parent_len = self.parent.parent_prefix_len();
+        if target_len <= parent_len {
+            return false;
+        }
+        let max_blocks = 1u64.checked_shl((target_len - parent_len) as u32).unwrap_or(u64::MAX);
+        (end_index as u64) < max_blocks && start_index <= end_index
+    }
+
+    pub fn active_entries(&self, mode: IPv6ServiceMode) -> Vec<ExpandedPrefixEntry> {
+        let mut result = Vec::new();
+        let parent = self.parent.parent_key();
+        let parent_prefix_len = self.parent.parent_prefix_len();
+        let include_ra = matches!(mode, IPv6ServiceMode::Slaac | IPv6ServiceMode::SlaacDhcpv6);
+        let include_na = matches!(mode, IPv6ServiceMode::Stateful | IPv6ServiceMode::SlaacDhcpv6);
+        let include_pd = matches!(mode, IPv6ServiceMode::Stateful | IPv6ServiceMode::SlaacDhcpv6);
+
+        if include_ra {
+            if let Some(ra) = &self.ra {
+                result.push(ExpandedPrefixEntry {
+                    parent: parent.clone(),
+                    parent_prefix_len,
+                    service_kind: PrefixGroupServiceKind::Ra,
+                    start_index: ra.pool_index,
+                    end_index: ra.pool_index,
+                    pool_len: 64,
+                });
+            }
+        }
+        if include_na {
+            if let Some(na) = &self.na {
+                result.push(ExpandedPrefixEntry {
+                    parent: parent.clone(),
+                    parent_prefix_len,
+                    service_kind: PrefixGroupServiceKind::Na,
+                    start_index: na.pool_index,
+                    end_index: na.pool_index,
+                    pool_len: 64,
+                });
+            }
+        }
+        if include_pd {
+            if let Some(pd) = &self.pd {
+                result.push(ExpandedPrefixEntry {
+                    parent,
+                    parent_prefix_len,
+                    service_kind: PrefixGroupServiceKind::IaPd,
+                    start_index: pd.start_index,
+                    end_index: pd.end_index,
+                    pool_len: pd.pool_len,
+                });
+            }
+        }
+        result
+    }
+}
+
+pub fn validate_prefix_groups(groups: &[LanPrefixGroupConfig]) -> Result<(), ServiceConfigError> {
+    let mut by_parent: HashMap<PrefixGroupParentKey, Vec<&LanPrefixGroupConfig>> = HashMap::new();
+    for group in groups {
+        group.validate()?;
+
+        let entries = group.active_entries(IPv6ServiceMode::SlaacDhcpv6);
+        for i in 0..entries.len() {
+            for j in (i + 1)..entries.len() {
+                validate_expanded_pair(&entries[i], &entries[j], entries[i].parent_prefix_len)?;
+            }
+        }
+
+        by_parent.entry(group.parent.parent_key()).or_default().push(group);
+    }
+
+    for groups in by_parent.values() {
+        for i in 0..groups.len() {
+            for j in (i + 1)..groups.len() {
+                let a = groups[i];
+                let b = groups[j];
+                for left in a.active_entries(IPv6ServiceMode::SlaacDhcpv6) {
+                    for right in b.active_entries(IPv6ServiceMode::SlaacDhcpv6) {
+                        validate_expanded_pair(&left, &right, left.parent_prefix_len)?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_expanded_pair(
+    a: &ExpandedPrefixEntry,
+    b: &ExpandedPrefixEntry,
+    parent_len: u8,
+) -> Result<(), ServiceConfigError> {
+    if matches!(
+        (a.service_kind, b.service_kind),
+        (PrefixGroupServiceKind::Ra, PrefixGroupServiceKind::Na)
+            | (PrefixGroupServiceKind::Na, PrefixGroupServiceKind::Ra)
+    ) {
+        return Ok(());
+    }
+
+    let dynamic = matches!(a.parent, PrefixGroupParentKey::Pd(_, _));
+    let (start_a, end_a) = a.effective_index_range(dynamic);
+    let (start_b, end_b) = b.effective_index_range(dynamic);
+
+    if a.service_kind == PrefixGroupServiceKind::IaPd
+        && b.service_kind == PrefixGroupServiceKind::IaPd
+    {
+        if range_blocks_overlap(start_a, end_a, start_b, end_b) {
+            return Err(ServiceConfigError::InvalidConfig {
+                reason: "IA_PD ranges conflict under the same parent prefix".to_string(),
+            });
+        }
+        return Ok(());
+    }
+
+    if a.service_kind == PrefixGroupServiceKind::IaPd {
+        for idx in start_a..=end_a {
+            if blocks_overlap(parent_len, idx, a.pool_len, start_b, b.pool_len) {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: "Prefix group results conflict under the same parent prefix"
+                        .to_string(),
+                });
+            }
+        }
+        return Ok(());
+    }
+
+    if b.service_kind == PrefixGroupServiceKind::IaPd {
+        for idx in start_b..=end_b {
+            if blocks_overlap(parent_len, start_a, a.pool_len, idx, b.pool_len) {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: "Prefix group results conflict under the same parent prefix"
+                        .to_string(),
+                });
+            }
+        }
+        return Ok(());
+    }
+
+    if blocks_overlap(parent_len, start_a, a.pool_len, start_b, b.pool_len) {
+        return Err(ServiceConfigError::InvalidConfig {
+            reason: "Prefix group results conflict under the same parent prefix".to_string(),
+        });
+    }
+
+    Ok(())
 }
 
 fn effective_pool_index(src: &LanIPv6SourceConfig) -> u64 {
@@ -407,6 +929,142 @@ impl LanIPv6Config {
             dhcpv6: None,
         }
     }
+}
+
+impl LanIPv6ConfigV2 {
+    pub fn validate(&self) -> Result<(), ServiceConfigError> {
+        validate_prefix_groups(&self.prefix_groups)?;
+
+        match self.mode {
+            IPv6ServiceMode::Slaac => {
+                if !self.prefix_groups.iter().any(|group| group.ra.is_some()) {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "Slaac mode requires at least one RA prefix group".to_string(),
+                    });
+                }
+                if self.ra_flag.managed_address_config {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "Slaac mode requires M flag to be 0".to_string(),
+                    });
+                }
+                if let Some(dhcpv6) = &self.dhcpv6 {
+                    if dhcpv6.enable {
+                        return Err(ServiceConfigError::InvalidConfig {
+                            reason: "Slaac mode does not allow DHCPv6 to be enabled".to_string(),
+                        });
+                    }
+                }
+            }
+            IPv6ServiceMode::Stateful => {
+                if !self.prefix_groups.iter().any(|group| group.na.is_some()) {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "Stateful mode requires at least one IA_NA prefix group"
+                            .to_string(),
+                    });
+                }
+                if !self.ra_flag.managed_address_config || !self.ra_flag.other_config {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "Stateful mode requires M=1 and O=1".to_string(),
+                    });
+                }
+                let dhcpv6 = self.dhcpv6.as_ref().ok_or(ServiceConfigError::InvalidConfig {
+                    reason: "Stateful mode requires DHCPv6 configuration".to_string(),
+                })?;
+                if !dhcpv6.enable {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "Stateful mode requires DHCPv6 to be enabled".to_string(),
+                    });
+                }
+                dhcpv6.validate()?;
+            }
+            IPv6ServiceMode::SlaacDhcpv6 => {
+                let ra_groups: Vec<_> =
+                    self.prefix_groups.iter().filter(|group| group.ra.is_some()).collect();
+                if ra_groups.is_empty() {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "SlaacDhcpv6 mode requires at least one RA prefix group"
+                            .to_string(),
+                    });
+                }
+                for group in &ra_groups {
+                    match &group.parent {
+                        PrefixParentSource::Static { base_prefix, .. } => {
+                            if !is_ula(*base_prefix) {
+                                return Err(ServiceConfigError::InvalidConfig {
+                                    reason: format!(
+                                        "SlaacDhcpv6 mode requires RA prefix groups to be ULA (fc00::/7), got: {}",
+                                        base_prefix
+                                    ),
+                                });
+                            }
+                        }
+                        PrefixParentSource::Pd { .. } => {
+                            return Err(ServiceConfigError::InvalidConfig {
+                                reason: "SlaacDhcpv6 mode only allows Static RA prefix groups"
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
+                if !self.ra_flag.managed_address_config || !self.ra_flag.other_config {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "SlaacDhcpv6 mode requires M=1 and O=1".to_string(),
+                    });
+                }
+                let dhcpv6_source_count = self
+                    .prefix_groups
+                    .iter()
+                    .filter(|group| group.na.is_some() || group.pd.is_some())
+                    .count();
+                if dhcpv6_source_count == 0 {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason:
+                            "SlaacDhcpv6 mode requires at least one DHCPv6 prefix group (NA or PD)"
+                                .to_string(),
+                    });
+                }
+                let dhcpv6 = self.dhcpv6.as_ref().ok_or(ServiceConfigError::InvalidConfig {
+                    reason: "SlaacDhcpv6 mode requires DHCPv6 configuration".to_string(),
+                })?;
+                if !dhcpv6.enable {
+                    return Err(ServiceConfigError::InvalidConfig {
+                        reason: "SlaacDhcpv6 mode requires DHCPv6 to be enabled".to_string(),
+                    });
+                }
+                dhcpv6.validate()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn active_entries(&self) -> Vec<ExpandedPrefixEntry> {
+        self.prefix_groups.iter().flat_map(|group| group.active_entries(self.mode)).collect()
+    }
+}
+
+pub fn validate_cross_interface_v2(
+    new_config: &LanIPv6ServiceConfigV2,
+    other_configs: &[LanIPv6ServiceConfigV2],
+) -> Result<(), ServiceConfigError> {
+    let new_entries = new_config.config.active_entries();
+
+    for other in other_configs {
+        if other.iface_name == new_config.iface_name || !other.enable {
+            continue;
+        }
+
+        for left in &new_entries {
+            for right in other.config.active_entries() {
+                if left.parent != right.parent {
+                    continue;
+                }
+                validate_expanded_pair(left, &right, left.parent_prefix_len)?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_source_entry(src: &LanIPv6SourceConfig) -> Result<(), ServiceConfigError> {
@@ -594,7 +1252,25 @@ impl LandscapeStore for LanIPv6ServiceConfig {
     }
 }
 
+impl LandscapeStore for LanIPv6ServiceConfigV2 {
+    fn get_store_key(&self) -> String {
+        self.iface_name.clone()
+    }
+}
+
 impl ZoneAwareConfig for LanIPv6ServiceConfig {
+    fn iface_name(&self) -> &str {
+        &self.iface_name
+    }
+    fn zone_requirement() -> ZoneRequirement {
+        ZoneRequirement::LanOnly
+    }
+    fn service_kind() -> ServiceKind {
+        ServiceKind::LanIpv6
+    }
+}
+
+impl ZoneAwareConfig for LanIPv6ServiceConfigV2 {
     fn iface_name(&self) -> &str {
         &self.iface_name
     }
@@ -737,7 +1413,7 @@ mod tests {
         let sources = vec![
             LanIPv6SourceConfig::RaPd {
                 depend_iface: "eth0".to_string(),
-                pool_index: 2,
+                pool_index: 3,
                 preferred_lifetime: 300,
                 valid_lifetime: 600,
             },
@@ -782,7 +1458,7 @@ mod tests {
             LanIPv6SourceConfig::PdPd {
                 depend_iface: "eth0".to_string(),
                 max_source_prefix_len: 56,
-                pool_index: 0,
+                pool_index: 1,
                 pool_len: 63,
             },
         ];
@@ -801,7 +1477,7 @@ mod tests {
             LanIPv6SourceConfig::PdPd {
                 depend_iface: "eth0".to_string(),
                 max_source_prefix_len: 56,
-                pool_index: 4,
+                pool_index: 7,
                 pool_len: 64,
             },
         ];
@@ -1028,5 +1704,177 @@ mod tests {
     #[test]
     fn test_blocks_no_overlap_different_sizes() {
         assert!(!blocks_overlap(48, 0, 62, 4, 64));
+    }
+
+    #[test]
+    fn legacy_service_config_converts_to_v2() {
+        let legacy = make_service_config(
+            "lan1",
+            vec![
+                LanIPv6SourceConfig::RaPd {
+                    depend_iface: "eth0".to_string(),
+                    pool_index: 1,
+                    preferred_lifetime: 300,
+                    valid_lifetime: 600,
+                },
+                LanIPv6SourceConfig::PdStatic {
+                    base_prefix: "fd00::".parse().unwrap(),
+                    base_prefix_len: 56,
+                    pool_index: 2,
+                    pool_len: 60,
+                },
+            ],
+        );
+
+        let converted: LanIPv6ServiceConfigV2 = legacy.into();
+        assert_eq!(converted.config.prefix_groups.len(), 2);
+        assert!(matches!(
+            converted.config.prefix_groups[0].parent,
+            PrefixParentSource::Pd { planned_parent_prefix_len: 60, .. }
+        ));
+        assert!(matches!(
+            converted.config.prefix_groups[1].parent,
+            PrefixParentSource::Static { parent_prefix_len: 56, .. }
+        ));
+    }
+
+    #[test]
+    fn v2_stateful_requires_enabled_dhcpv6() {
+        let config = LanIPv6ConfigV2 {
+            mode: IPv6ServiceMode::Stateful,
+            ad_interval: 300,
+            ra_flag: ra_flag_default(),
+            prefix_groups: vec![LanPrefixGroupConfig {
+                group_id: "stateful-na".to_string(),
+                parent: PrefixParentSource::Static {
+                    base_prefix: "fd00::".parse().unwrap(),
+                    parent_prefix_len: 60,
+                },
+                ra: None,
+                na: Some(NaPrefixConfig { pool_index: 0 }),
+                pd: None,
+            }],
+            dhcpv6: None,
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn v2_slaac_does_not_allow_enabled_dhcpv6() {
+        let config = LanIPv6ConfigV2 {
+            mode: IPv6ServiceMode::Slaac,
+            ad_interval: 300,
+            ra_flag: RouterFlags {
+                managed_address_config: false,
+                other_config: false,
+                ..ra_flag_default()
+            },
+            prefix_groups: vec![LanPrefixGroupConfig {
+                group_id: "slaac-ra".to_string(),
+                parent: PrefixParentSource::Static {
+                    base_prefix: "fd00::".parse().unwrap(),
+                    parent_prefix_len: 60,
+                },
+                ra: Some(RaPrefixConfig {
+                    pool_index: 0,
+                    preferred_lifetime: 300,
+                    valid_lifetime: 600,
+                }),
+                na: None,
+                pd: None,
+            }],
+            dhcpv6: Some(DHCPv6ServerConfig { enable: true, ..DHCPv6ServerConfig::default() }),
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn v2_slaac_dhcpv6_rejects_pd_ra_groups() {
+        let config = LanIPv6ConfigV2 {
+            mode: IPv6ServiceMode::SlaacDhcpv6,
+            ad_interval: 300,
+            ra_flag: ra_flag_default(),
+            prefix_groups: vec![
+                LanPrefixGroupConfig {
+                    group_id: "ra-pd".to_string(),
+                    parent: PrefixParentSource::Pd {
+                        depend_iface: "eth0".to_string(),
+                        planned_parent_prefix_len: 60,
+                    },
+                    ra: Some(RaPrefixConfig {
+                        pool_index: 0,
+                        preferred_lifetime: 300,
+                        valid_lifetime: 600,
+                    }),
+                    na: None,
+                    pd: None,
+                },
+                LanPrefixGroupConfig {
+                    group_id: "na-static".to_string(),
+                    parent: PrefixParentSource::Static {
+                        base_prefix: "fd00::".parse().unwrap(),
+                        parent_prefix_len: 60,
+                    },
+                    ra: None,
+                    na: Some(NaPrefixConfig { pool_index: 1 }),
+                    pd: None,
+                },
+            ],
+            dhcpv6: Some(DHCPv6ServerConfig {
+                enable: true,
+                ia_na: Some(crate::dhcp::v6_server::config::DHCPv6IANAConfig {
+                    max_prefix_len: 64,
+                    pool_start: 0x100,
+                    pool_end: Some(0x200),
+                    preferred_lifetime: 300,
+                    valid_lifetime: 600,
+                }),
+                ia_pd: None,
+            }),
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn v2_same_group_rejects_ra_pd_overlap() {
+        let config = LanPrefixGroupConfig {
+            group_id: "same-parent".to_string(),
+            parent: PrefixParentSource::Pd {
+                depend_iface: "eth0".to_string(),
+                planned_parent_prefix_len: 60,
+            },
+            ra: Some(RaPrefixConfig {
+                pool_index: 0,
+                preferred_lifetime: 300,
+                valid_lifetime: 600,
+            }),
+            na: None,
+            pd: Some(PdPrefixRangeConfig { pool_len: 64, start_index: 0, end_index: 0 }),
+        };
+
+        assert!(validate_prefix_groups(&[config]).is_err());
+    }
+
+    #[test]
+    fn v2_same_group_allows_ra_na_share() {
+        let config = LanPrefixGroupConfig {
+            group_id: "same-parent".to_string(),
+            parent: PrefixParentSource::Pd {
+                depend_iface: "eth0".to_string(),
+                planned_parent_prefix_len: 60,
+            },
+            ra: Some(RaPrefixConfig {
+                pool_index: 0,
+                preferred_lifetime: 300,
+                valid_lifetime: 600,
+            }),
+            na: Some(NaPrefixConfig { pool_index: 0 }),
+            pd: None,
+        };
+
+        assert!(validate_prefix_groups(&[config]).is_ok());
     }
 }

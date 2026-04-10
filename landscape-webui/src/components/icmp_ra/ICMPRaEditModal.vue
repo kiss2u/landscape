@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { FormInst, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { ZoneType } from "@/lib/service_ipconfig";
@@ -8,14 +8,19 @@ import {
   get_lan_ipv6_config,
   update_lan_ipv6_config,
 } from "@/api/service_lan_ipv6";
+import {
+  type SourceKind,
+  type SourceType,
+  sourceTypeFromParent,
+} from "@/lib/lan_ipv6_v2_helpers";
 import type {
-  LanIPv6ServiceConfig,
-  LanIPv6SourceConfig,
+  LanIPv6ServiceConfigV2,
+  LanPrefixGroupConfig,
   IPv6ServiceMode,
 } from "@landscape-router/types/api/schemas";
 import DHCPv6ServerCard from "@/components/dhcp_v6/DHCPv6ServerCard.vue";
-import SourceBindingCard from "@/components/lan_ipv6/SourceBindingCard.vue";
-import SourceBindingModal from "@/components/lan_ipv6/SourceBindingModal.vue";
+import PrefixGroupCard from "@/components/lan_ipv6/PrefixGroupCard.vue";
+import PrefixGroupEditorModal from "@/components/lan_ipv6/PrefixGroupEditorModal.vue";
 
 const { t } = useI18n({ useScope: "global" });
 let ipv6PDStore = useIPv6PDStore();
@@ -31,9 +36,9 @@ const iface_info = defineProps<{
   zone: ZoneType;
 }>();
 
-const service_config = ref<LanIPv6ServiceConfig>();
+const service_config = ref<LanIPv6ServiceConfigV2>();
 
-function default_config(): LanIPv6ServiceConfig {
+function default_config(): LanIPv6ServiceConfigV2 {
   return {
     iface_name: iface_info.iface_name,
     enable: true,
@@ -48,7 +53,7 @@ function default_config(): LanIPv6ServiceConfig {
         nd_proxy: false,
         reserved: 0,
       },
-      sources: [],
+      prefix_groups: [],
       dhcpv6: {
         enable: false,
       },
@@ -56,41 +61,28 @@ function default_config(): LanIPv6ServiceConfig {
   };
 }
 
-// Filter sources by service kind
-function sources_by_kind(kind: "ra" | "na" | "pd"): LanIPv6SourceConfig[] {
-  if (!service_config.value) return [];
-  const sources = service_config.value.config.sources ?? [];
-  switch (kind) {
-    case "ra":
-      return sources.filter((s) => s.t === "ra_static" || s.t === "ra_pd");
-    case "na":
-      return sources.filter((s) => s.t === "na_static" || s.t === "na_pd");
-    case "pd":
-      return sources.filter((s) => s.t === "pd_static" || s.t === "pd_pd");
+const all_groups = computed(() => service_config.value?.config.prefix_groups ?? []);
+
+function allowed_service_kinds_for_type(type: SourceType): ("ra" | "na" | "pd")[] {
+  const mode = service_config.value?.config.mode ?? "slaac";
+  if (mode === "slaac") {
+    return ["ra"];
   }
+  if (mode === "stateful") {
+    return ["na", "pd"];
+  }
+  if (type === "static") {
+    return ["ra", "na", "pd"];
+  }
+  return ["na", "pd"];
 }
 
-// Find index in the flat sources array for a filtered item
-function find_source_index(
-  filtered_index: number,
-  kind: "ra" | "na" | "pd",
-): number {
-  if (!service_config.value) return -1;
-  const sources = service_config.value.config.sources ?? [];
-  let count = 0;
-  for (let i = 0; i < sources.length; i++) {
-    const s = sources[i];
-    const matches =
-      (kind === "ra" && (s.t === "ra_static" || s.t === "ra_pd")) ||
-      (kind === "na" && (s.t === "na_static" || s.t === "na_pd")) ||
-      (kind === "pd" && (s.t === "pd_static" || s.t === "pd_pd"));
-    if (matches) {
-      if (count === filtered_index) return i;
-      count++;
-    }
-  }
-  return -1;
-}
+const mixed_groups = computed(() =>
+  all_groups.value.map((group) => ({
+    key: group.group_id,
+    type: sourceTypeFromParent(group.parent),
+  })),
+);
 
 async function on_modal_enter() {
   try {
@@ -100,9 +92,8 @@ async function on_modal_enter() {
     } else {
       service_config.value = default_config();
     }
-    // Ensure sources is initialized
-    if (!service_config.value.config.sources) {
-      service_config.value.config.sources = [];
+    if (!service_config.value.config.prefix_groups) {
+      service_config.value.config.prefix_groups = [];
     }
     // Always ensure dhcpv6 config is initialized
     if (!service_config.value.config.dhcpv6) {
@@ -158,42 +149,50 @@ function on_mode_change(mode: IPv6ServiceMode) {
 async function save_config() {
   try {
     await formRef.value?.validate();
+  } catch (_err) {
+    message.warning(t("lan_ipv6.form_validation_failed"));
+    return;
+  }
+
+  try {
     if (service_config.value) {
       await update_lan_ipv6_config(service_config.value);
       await ipv6PDStore.UPDATE_INFO();
       show_model.value = false;
     }
-  } catch (err) {
-    message.warning(t("lan_ipv6.form_validation_failed"));
+  } catch (err: any) {
+    message.error(err?.message || t("lan_ipv6.form_validation_failed"));
   }
 }
 
 const formRules = {};
 
-// Source edit modals
-const show_ra_source_edit = ref(false);
-const show_na_source_edit = ref(false);
-const show_pd_source_edit = ref(false);
+const show_static_source_add = ref(false);
+const show_pd_source_add = ref(false);
 
-function add_source(source: LanIPv6SourceConfig) {
+function add_group_sources(group: LanPrefixGroupConfig | undefined) {
   if (service_config.value) {
-    if (!service_config.value.config.sources) {
-      service_config.value.config.sources = [];
+    if (!service_config.value.config.prefix_groups) {
+      service_config.value.config.prefix_groups = [];
     }
-    service_config.value.config.sources.unshift(source);
+    if (!group) {
+      return;
+    }
+    service_config.value.config.prefix_groups.unshift(group);
   }
 }
 
-function replace_source(source: LanIPv6SourceConfig, flat_index: number) {
-  if (service_config.value?.config.sources) {
-    service_config.value.config.sources[flat_index] = source;
+function replace_group_sources(
+  group_key: string,
+  group: LanPrefixGroupConfig | undefined,
+) {
+  if (!service_config.value?.config.prefix_groups) {
+    return;
   }
-}
-
-function delete_source(flat_index: number) {
-  if (service_config.value?.config.sources) {
-    service_config.value.config.sources.splice(flat_index, 1);
-  }
+  const remaining = service_config.value.config.prefix_groups.filter(
+    (group) => group.group_id !== group_key,
+  );
+  service_config.value.config.prefix_groups = group ? [group, ...remaining] : remaining;
 }
 </script>
 
@@ -283,281 +282,63 @@ function delete_source(flat_index: number) {
           </n-alert>
         </n-card>
 
-        <!-- Mode 1 (Slaac): RA prefix source full-width -->
         <n-card
-          v-if="service_config.config.mode === 'slaac'"
           style="width: 100%; margin-bottom: 12px"
           size="small"
-          :title="t('lan_ipv6.ra_prefix_source')"
+          :title="t('lan_ipv6.prefix_overview')"
           :bordered="false"
         >
           <template #header-extra>
-            <button
-              style="
-                width: 0;
-                height: 0;
-                overflow: hidden;
-                opacity: 0;
-                position: absolute;
-              "
-            ></button>
-            <n-button
-              :focusable="false"
-              size="tiny"
-              @click="show_ra_source_edit = true"
-            >
-              {{ t("lan_ipv6.add") }}
-            </n-button>
-            <SourceBindingModal
-              @commit="add_source"
-              v-model:show="show_ra_source_edit"
-              :allowed-service-kinds="['ra']"
+            <n-flex :size="8">
+              <n-button size="tiny" @click="show_static_source_add = true">
+                {{ t("lan_ipv6.add_static_prefix") }}
+              </n-button>
+              <n-button size="tiny" type="primary" @click="show_pd_source_add = true">
+                {{ t("lan_ipv6.add_pd_prefix") }}
+              </n-button>
+            </n-flex>
+            <PrefixGroupEditorModal
+              @commit="add_group_sources"
+              v-model:show="show_static_source_add"
+              :allowed-service-kinds="allowed_service_kinds_for_type('static')"
+              source-type="static"
+              :parent-label="t('lan_ipv6.add_static_prefix')"
+              :group="undefined"
+              :current-iface-name="service_config.iface_name"
+              :current-groups="all_groups"
+              :current-mode="service_config.config.mode"
+            />
+            <PrefixGroupEditorModal
+              @commit="add_group_sources"
+              v-model:show="show_pd_source_add"
+              :allowed-service-kinds="allowed_service_kinds_for_type('pd')"
+              source-type="pd"
+              :parent-label="t('lan_ipv6.add_pd_prefix')"
+              :group="undefined"
+              :current-iface-name="service_config.iface_name"
+              :current-groups="all_groups"
+              :current-mode="service_config.config.mode"
             />
           </template>
 
-          <n-text
-            depth="3"
-            style="font-size: 12px; display: block; margin-bottom: 8px"
-          >
-            {{ t("lan_ipv6.ra_prefix_source_desc") }}
-          </n-text>
-
-          <n-scrollbar style="max-height: 300px">
-            <n-flex v-if="sources_by_kind('ra').length > 0">
-              <SourceBindingCard
-                v-for="(each, index) in sources_by_kind('ra')"
-                :key="index"
-                :source="each"
-                :allowed-service-kinds="['ra']"
-                @commit="
-                  (e: any) => replace_source(e, find_source_index(index, 'ra'))
-                "
-                @delete="delete_source(find_source_index(index, 'ra'))"
-              />
-            </n-flex>
-            <n-empty v-else :description="t('lan_ipv6.no_prefix')" />
-          </n-scrollbar>
-        </n-card>
-
-        <!-- Mode 2 (Stateful): DHCPv6 prefix sources (NA + PD) full-width -->
-        <n-card
-          v-if="service_config.config.mode === 'stateful'"
-          style="width: 100%; margin-bottom: 12px"
-          size="small"
-          :title="t('lan_ipv6.dhcpv6_prefix_source')"
-          :bordered="false"
-        >
-          <template #header-extra>
-            <button
-              style="
-                width: 0;
-                height: 0;
-                overflow: hidden;
-                opacity: 0;
-                position: absolute;
-              "
-            ></button>
-            <n-button
-              :focusable="false"
-              size="tiny"
-              @click="show_na_source_edit = true"
-            >
-              {{ t("lan_ipv6.add") }}
-            </n-button>
-            <SourceBindingModal
-              @commit="add_source"
-              v-model:show="show_na_source_edit"
-              :allowed-service-kinds="['na', 'pd']"
+          <n-flex v-if="mixed_groups.length > 0" vertical>
+            <PrefixGroupCard
+              v-for="group in mixed_groups"
+              :key="group.key"
+              :group="all_groups.find((item) => item.group_id === group.key)!"
+              :allowed-service-kinds="allowed_service_kinds_for_type(group.type)"
+              :iface-name="service_config.iface_name"
+              :current-groups="all_groups"
+              :current-mode="service_config.config.mode"
+              @commit-group="replace_group_sources"
             />
-          </template>
+          </n-flex>
 
-          <n-text
-            depth="3"
-            style="font-size: 12px; display: block; margin-bottom: 8px"
-          >
-            {{ t("lan_ipv6.dhcpv6_prefix_source_desc") }}
-          </n-text>
-
-          <n-scrollbar style="max-height: 300px">
-            <n-flex
-              v-if="
-                [...sources_by_kind('na'), ...sources_by_kind('pd')].length > 0
-              "
-            >
-              <template
-                v-for="(each, index) in sources_by_kind('na')"
-                :key="'na-' + index"
-              >
-                <SourceBindingCard
-                  :source="each"
-                  :allowed-service-kinds="['na', 'pd']"
-                  @commit="
-                    (e: any) =>
-                      replace_source(e, find_source_index(index, 'na'))
-                  "
-                  @delete="delete_source(find_source_index(index, 'na'))"
-                />
-              </template>
-              <template
-                v-for="(each, index) in sources_by_kind('pd')"
-                :key="'pd-' + index"
-              >
-                <SourceBindingCard
-                  :source="each"
-                  :allowed-service-kinds="['na', 'pd']"
-                  @commit="
-                    (e: any) =>
-                      replace_source(e, find_source_index(index, 'pd'))
-                  "
-                  @delete="delete_source(find_source_index(index, 'pd'))"
-                />
-              </template>
-            </n-flex>
-            <n-empty v-else :description="t('lan_ipv6.no_dhcpv6_prefix')" />
-          </n-scrollbar>
+          <n-empty
+            v-else
+            :description="t('lan_ipv6.no_prefix')"
+          />
         </n-card>
-
-        <!-- Mode 3 (SlaacDhcpv6): RA + DHCPv6 prefix sources side by side -->
-        <n-flex
-          v-if="service_config.config.mode === 'slaac_dhcpv6'"
-          :gap="12"
-          align="stretch"
-          style="margin-bottom: 12px"
-        >
-          <!-- Left: RA prefix source (ULA static) -->
-          <n-card
-            style="flex: 1; min-width: 0"
-            size="small"
-            :title="t('lan_ipv6.ra_prefix_source_ula')"
-            :bordered="false"
-          >
-            <template #header-extra>
-              <button
-                style="
-                  width: 0;
-                  height: 0;
-                  overflow: hidden;
-                  opacity: 0;
-                  position: absolute;
-                "
-              ></button>
-              <n-button
-                :focusable="false"
-                size="tiny"
-                @click="show_ra_source_edit = true"
-              >
-                {{ t("lan_ipv6.add") }}
-              </n-button>
-              <SourceBindingModal
-                @commit="add_source"
-                v-model:show="show_ra_source_edit"
-                :allowed-service-kinds="['ra']"
-              />
-            </template>
-
-            <n-text
-              depth="3"
-              style="font-size: 12px; display: block; margin-bottom: 8px"
-            >
-              {{ t("lan_ipv6.ra_prefix_source_ula_desc") }}
-            </n-text>
-
-            <n-scrollbar style="max-height: 300px">
-              <n-flex v-if="sources_by_kind('ra').length > 0">
-                <SourceBindingCard
-                  v-for="(each, index) in sources_by_kind('ra')"
-                  :key="index"
-                  :source="each"
-                  :allowed-service-kinds="['ra']"
-                  @commit="
-                    (e: any) =>
-                      replace_source(e, find_source_index(index, 'ra'))
-                  "
-                  @delete="delete_source(find_source_index(index, 'ra'))"
-                />
-              </n-flex>
-              <n-empty v-else :description="t('lan_ipv6.no_ra_prefix')" />
-            </n-scrollbar>
-          </n-card>
-
-          <!-- Right: DHCPv6 prefix source -->
-          <n-card
-            style="flex: 1; min-width: 0"
-            size="small"
-            :title="t('lan_ipv6.dhcpv6_prefix_source')"
-            :bordered="false"
-          >
-            <template #header-extra>
-              <button
-                style="
-                  width: 0;
-                  height: 0;
-                  overflow: hidden;
-                  opacity: 0;
-                  position: absolute;
-                "
-              ></button>
-              <n-button
-                :focusable="false"
-                size="tiny"
-                @click="show_na_source_edit = true"
-              >
-                {{ t("lan_ipv6.add") }}
-              </n-button>
-              <SourceBindingModal
-                @commit="add_source"
-                v-model:show="show_na_source_edit"
-                :allowed-service-kinds="['na', 'pd']"
-              />
-            </template>
-
-            <n-text
-              depth="3"
-              style="font-size: 12px; display: block; margin-bottom: 8px"
-            >
-              {{ t("lan_ipv6.dhcpv6_prefix_source_combo_desc") }}
-            </n-text>
-
-            <n-scrollbar style="max-height: 300px">
-              <n-flex
-                v-if="
-                  [...sources_by_kind('na'), ...sources_by_kind('pd')].length >
-                  0
-                "
-              >
-                <template
-                  v-for="(each, index) in sources_by_kind('na')"
-                  :key="'na-' + index"
-                >
-                  <SourceBindingCard
-                    :source="each"
-                    :allowed-service-kinds="['na', 'pd']"
-                    @commit="
-                      (e: any) =>
-                        replace_source(e, find_source_index(index, 'na'))
-                    "
-                    @delete="delete_source(find_source_index(index, 'na'))"
-                  />
-                </template>
-                <template
-                  v-for="(each, index) in sources_by_kind('pd')"
-                  :key="'pd-' + index"
-                >
-                  <SourceBindingCard
-                    :source="each"
-                    :allowed-service-kinds="['na', 'pd']"
-                    @commit="
-                      (e: any) =>
-                        replace_source(e, find_source_index(index, 'pd'))
-                    "
-                    @delete="delete_source(find_source_index(index, 'pd'))"
-                  />
-                </template>
-              </n-flex>
-              <n-empty v-else :description="t('lan_ipv6.no_dhcpv6_prefix')" />
-            </n-scrollbar>
-          </n-card>
-        </n-flex>
 
         <!-- Bottom config area -->
         <n-flex :gap="12" align="stretch">
@@ -649,6 +430,7 @@ function delete_source(flat_index: number) {
                   />
                 </n-radio-group>
               </n-form-item-gi>
+
             </n-grid>
           </n-card>
 

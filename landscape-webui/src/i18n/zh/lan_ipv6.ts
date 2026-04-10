@@ -36,7 +36,7 @@ export default {
   no_dhcpv6_prefix: "暂无 DHCPv6 前缀配置",
   no_ra_prefix: "暂无 RA 前缀配置",
 
-  ra_config: "RA 配置",
+  ra_config: "路由通告",
   ad_interval: "路由通告间隔",
   ad_interval_desc: "路由器定期发送通告的时间间隔（秒），默认 300 秒。",
 
@@ -67,6 +67,40 @@ export default {
   service_kind_pd: "DHCPv6 PD",
   source_type_static: "静态前缀",
   source_type_pd: "IPv6 PD",
+  add_static_prefix: "新增静态前缀",
+  add_pd_prefix: "新增上游 PD 前缀",
+  delete: "删除",
+  prefix_overview: "前缀结果总览",
+  prefix_overview_desc:
+    "当前共配置 {total} 条前缀结果，其中 {active} 条会在当前服务模式下生效。",
+  prefix_group_static: "静态前缀结果",
+  prefix_group_static_desc:
+    "这里展示当前接口下所有静态前缀结果，包括 RA / IA_NA / IA_PD。",
+  prefix_group_pd: "上游 PD 前缀结果",
+  prefix_group_pd_desc:
+    "这里展示基于上游 PD 切分得到的前缀结果，包括 RA / IA_NA / IA_PD。",
+  prefix_group_pd_parent_hint: "该上游接口下的所有前缀结果会在同一张画布中规划。",
+  prefix_group_count: "共 {count} 条结果",
+  prefix_group_empty_kind: "当前父前缀下暂无 {kind} 结果。",
+  prefix_single_unit: "已选择一个 {prefix} 单元。",
+  prefix_continuous_range: "已选择 {count} 个连续区间单元，粒度 {prefix}。",
+  prefix_pd_range: "分配单元 {prefix}, 范围 {start}-{end}",
+  prefix_state_compact_configured: "已配置",
+  prefix_state_compact_empty: "未配置",
+  prefix_group_edit: "编辑这一组",
+  prefix_group_open_kind: "进入共享画布",
+  prefix_group_editor_title: "编辑父前缀 {parent}",
+  prefix_group_editor_parent: "当前父前缀:",
+  prefix_group_editor_kind: "当前编辑结果类型",
+  prefix_group_editor_results: "当前结果",
+  prefix_group_editor_details: "结果详情",
+  prefix_group_editor_canvas_hint:
+    "当前使用 {kind}，下方是这个父前缀下的统一画布，RA / IA_NA / IA_PD 会一起显示在上面。",
+  pd_must_be_continuous: "PD 结果必须保持连续，不能形成断开的区块。",
+  prefix_state_active: "当前模式生效",
+  prefix_state_inactive: "当前模式不生效",
+  prefix_parent: "父前缀:",
+  prefix_block: "结果块:",
 
   source_base_prefix: "基础前缀地址",
   source_base_prefix_cidr: "父前缀 (CIDR)",
@@ -89,6 +123,71 @@ export default {
   source_preferred_lifetime_desc:
     "主机会优先使用在首选时间内的 IP，相对于超过首选时间但未超过有效时间的 IP。",
   source_valid_lifetime: "有效生存期 (s)",
+
+  planner_title: "前缀切分规划",
+  planner_brush_picker: "当前类型",
+  planner_current_brush: "当前类型:",
+  planner_brush_ra: "RA",
+  planner_brush_na: "IA_NA",
+  planner_brush_pd: "IA_PD",
+  planner_mode_dynamic_hint:
+    "当前来源为上游 PD。选择 {kind} 后，直接在下方总区域上点选要占用的块。",
+  planner_mode_static_hint:
+    "当前来源为静态前缀。先确定基础前缀，再按 {kind} 的方式配置块范围。",
+  planner_state_preview: "预览模式",
+  planner_state_active: "真实前缀已匹配",
+  planner_state_degraded: "当前前缀无法完整匹配规划",
+  planner_parent_iface: "上游接口:",
+  planner_actual_prefix: "真实父前缀:",
+  planner_static_prefix: "静态父前缀:",
+  planner_preview_prefix_len: "假设父前缀长度:",
+  planner_target_prefix: "当前目标块长度:",
+  planner_reason_no_parent_iface: "先选择一个开启 DHCPv6-PD 的上游接口。",
+  planner_reason_no_static_prefix: "先填写静态父前缀，再在下方画布中选择块。",
+  planner_reason_target_shorter_than_parent:
+    "当前目标块 /{target} 比父前缀 /{parent} 更大，无法从该父前缀中切分。",
+  planner_reason_filtered_parent:
+    "当前上游前缀长度 /{actual} 被“最大源前缀长度”过滤掉，这个源不会实际参与委派。",
+  planner_reason_more_specific_than_64:
+    "当前目标块比 /64 更细，画布无法按 /64 基础网格准确展开，请改用下方摘要信息判断。",
+  planner_reason_too_many_units:
+    "当前父前缀下共有 {count} 个 /64 单元，数量过多，已切换为摘要模式。",
+  planner_legend_wan: "WAN 保留",
+  planner_legend_current_subnet: "本 LAN 子网",
+  planner_legend_current_pd: "本 LAN PD 池",
+  planner_legend_other_lan: "其他 LAN 占用",
+  planner_legend_blocked: "因当前块对齐不可分配",
+  planner_too_many_cells:
+    "当前共有超过 {count} 个 /{target} 候选块（父前缀 /{parent}），暂不展开网格。你仍可手动填写高级字段。",
+  planner_empty: "当前条件下暂无可显示的切分结果。",
+  planner_available: "可选",
+  planner_other_lan_label: "其他 LAN（{iface}）",
+  planner_conflict: "冲突",
+  planner_block: "块",
+  planner_block_status: "状态",
+  planner_selected_prefix: "当前块前缀",
+  planner_selected_status: "当前块状态",
+  planner_hover_pool_index: "悬停块序号",
+  planner_selected_block: "当前选择",
+  planner_hover_prefix: "悬停前缀",
+  planner_occupants: "占用详情",
+  planner_advanced_settings: "高级设置",
+  planner_scope_current: "本 LAN（{iface}）",
+  planner_scope_other: "其他 LAN（{iface}）",
+  planner_status_idle: "待选择",
+  planner_status_available: "可保存",
+  planner_status_shared: "与 RA/NA 共享，可保存",
+  planner_summary_only: "当前条件下仅展示摘要，不展开可点击画布。",
+  planner_save_error_no_parent_iface: "请先选择上游 PD 接口。",
+  planner_save_error_no_static_prefix: "请先填写静态父前缀。",
+  planner_save_error_wan_reserved: "当前选择命中了 WAN 保留块，不能保存。",
+  planner_save_error_conflict: "当前选择与已有来源冲突，不能保存。",
+  planner_save_error_filtered_parent:
+    "当前真实上游前缀被最大源前缀长度过滤，不能保存。",
+  planner_save_error_target_shorter_than_parent:
+    "目标块长度比父前缀更大，当前配置无效。",
+  planner_save_error_target_more_specific_than_64:
+    "当前目标块比 /64 更细，暂不支持通过画布选择。",
 
   // DHCPv6 Server Card
   dhcpv6_server: "DHCPv6 服务器",

@@ -56,7 +56,7 @@ impl LandscapeConfigService {
             dns_redirects: self.store.dns_redirect_rule_store().list().await.unwrap(),
             dns_upstream_configs: self.store.dns_upstream_config_store().list().await.unwrap(),
             enrolled_devices: self.store.enrolled_device_store().list().await.unwrap(),
-            lan_ipv6s: self.store.lan_ipv6_service_store().list().await.unwrap(),
+            lan_ipv6s: self.store.lan_ipv6_v2_service_store().list().await.unwrap(),
             cert_accounts: self.store.cert_account_store().list().await.unwrap(),
             certs: self.store.cert_store().list().await.unwrap(),
             gateway_rules: self.store.gateway_http_upstream_store().list().await.unwrap(),

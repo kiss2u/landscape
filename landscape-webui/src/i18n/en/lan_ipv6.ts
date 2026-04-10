@@ -36,7 +36,7 @@ export default {
   no_dhcpv6_prefix: "No DHCPv6 prefixes configured",
   no_ra_prefix: "No RA prefixes configured",
 
-  ra_config: "RA Configuration",
+  ra_config: "Router Advertisement",
   ad_interval: "Advertisement Interval",
   ad_interval_desc:
     "How often the router sends periodic advertisements (in seconds). Default is 300 seconds.",
@@ -71,6 +71,43 @@ export default {
   service_kind_pd: "DHCPv6 PD",
   source_type_static: "Static Prefix",
   source_type_pd: "IPv6 PD",
+  add_static_prefix: "Add Static Prefix",
+  add_pd_prefix: "Add Upstream PD",
+  delete: "Delete",
+  prefix_overview: "Prefix Overview",
+  prefix_overview_desc:
+    "There are currently {total} configured prefix results, and {active} of them are active under the current service mode.",
+  prefix_group_static: "Static Prefix Results",
+  prefix_group_static_desc:
+    "All static prefix results for this interface, including RA / IA_NA / IA_PD.",
+  prefix_group_pd: "Upstream PD Results",
+  prefix_group_pd_desc:
+    "All upstream PD derived prefix results for this interface, including RA / IA_NA / IA_PD.",
+  prefix_group_pd_parent_hint:
+    "All prefix results under this upstream interface are planned on the same canvas.",
+  prefix_group_count: "{count} results",
+  prefix_group_empty_kind: "No {kind} result exists under this parent prefix yet.",
+  prefix_single_unit: "One {prefix} unit selected.",
+  prefix_continuous_range:
+    "{count} continuous units selected at granularity {prefix}.",
+  prefix_pd_range: "Unit {prefix}, Range {start}-{end}",
+  prefix_state_compact_configured: "Configured",
+  prefix_state_compact_empty: "Empty",
+  prefix_group_edit: "Edit Group",
+  prefix_group_open_kind: "Open Shared Canvas",
+  prefix_group_editor_title: "Edit Parent Prefix {parent}",
+  prefix_group_editor_parent: "Current Parent:",
+  prefix_group_editor_kind: "Current Result Type",
+  prefix_group_editor_results: "Current Results",
+  prefix_group_editor_details: "Result Details",
+  prefix_group_editor_canvas_hint:
+    "You are editing with {kind}. The unified canvas below shows RA / IA_NA / IA_PD together under this parent prefix.",
+  pd_must_be_continuous:
+    "PD results must stay continuous and cannot be split into disconnected blocks.",
+  prefix_state_active: "Active In Mode",
+  prefix_state_inactive: "Inactive In Mode",
+  prefix_parent: "Parent:",
+  prefix_block: "Block:",
 
   source_base_prefix: "Base Prefix Address",
   source_base_prefix_cidr: "Parent Prefix (CIDR)",
@@ -93,6 +130,75 @@ export default {
   source_preferred_lifetime_desc:
     "Devices will prefer using this IP during the preferred lifetime, over IPs that have exceeded their preferred lifetime but are still within valid lifetime.",
   source_valid_lifetime: "Valid Lifetime (s)",
+
+  planner_title: "Prefix Planner",
+  planner_brush_picker: "Current Type",
+  planner_current_brush: "Current Type:",
+  planner_brush_ra: "RA",
+  planner_brush_na: "IA_NA",
+  planner_brush_pd: "IA_PD",
+  planner_mode_dynamic_hint:
+    "The current source comes from upstream PD. Choose {kind}, then click blocks in the main area below.",
+  planner_mode_static_hint:
+    "The current source is static. Define the base prefix first, then configure the block range for {kind}.",
+  planner_state_preview: "Preview mode",
+  planner_state_active: "Using live prefix",
+  planner_state_degraded: "Current prefix cannot satisfy this plan",
+  planner_parent_iface: "Parent interface:",
+  planner_actual_prefix: "Live parent prefix:",
+  planner_static_prefix: "Static parent prefix:",
+  planner_preview_prefix_len: "Assumed parent prefix length:",
+  planner_target_prefix: "Current target block:",
+  planner_reason_no_parent_iface:
+    "Select an interface with DHCPv6-PD enabled first.",
+  planner_reason_no_static_prefix:
+    "Enter the static parent prefix first, then choose a block from the canvas below.",
+  planner_reason_target_shorter_than_parent:
+    "The current target block /{target} is larger than the parent prefix /{parent}, so it cannot be carved from this parent.",
+  planner_reason_filtered_parent:
+    "The live upstream prefix length /{actual} is filtered out by Max Source Prefix Length, so this source would not actually delegate.",
+  planner_reason_more_specific_than_64:
+    "The current target block is more specific than /64, so the /64 canvas cannot represent it accurately. Use the summary below instead.",
+  planner_reason_too_many_units:
+    "The current parent prefix contains {count} /64 units, so the planner switched to summary mode.",
+  planner_legend_wan: "WAN reserved",
+  planner_legend_current_subnet: "Current LAN subnet",
+  planner_legend_current_pd: "Current LAN PD pool",
+  planner_legend_other_lan: "Other LAN occupied",
+  planner_legend_blocked: "Blocked by current block alignment",
+  planner_too_many_cells:
+    "There are more than {count} candidate /{target} blocks under parent /{parent}, so the grid is hidden for now. You can still edit the advanced fields manually.",
+  planner_empty: "No blocks can be shown with the current settings.",
+  planner_available: "Available",
+  planner_other_lan_label: "Other LAN ({iface})",
+  planner_conflict: "Conflict",
+  planner_block: "Block",
+  planner_block_status: "Status",
+  planner_selected_prefix: "Selected Prefix",
+  planner_selected_status: "Selected Status",
+  planner_hover_pool_index: "Hovered Pool Index",
+  planner_selected_block: "Selected Block",
+  planner_hover_prefix: "Hovered Prefix",
+  planner_occupants: "Occupants",
+  planner_advanced_settings: "Advanced Settings",
+  planner_scope_current: "This LAN ({iface})",
+  planner_scope_other: "Other LAN ({iface})",
+  planner_status_idle: "Waiting for selection",
+  planner_status_available: "Ready to save",
+  planner_status_shared: "Shared with RA/NA, ready to save",
+  planner_summary_only: "The current settings only support summary mode, so the interactive canvas is hidden.",
+  planner_save_error_no_parent_iface: "Select an upstream PD interface first.",
+  planner_save_error_no_static_prefix: "Enter the static parent prefix first.",
+  planner_save_error_wan_reserved:
+    "The current selection hits the WAN-reserved block and cannot be saved.",
+  planner_save_error_conflict:
+    "The current selection overlaps with an existing source and cannot be saved.",
+  planner_save_error_filtered_parent:
+    "The live upstream prefix is filtered out by Max Source Prefix Length, so this source cannot be saved.",
+  planner_save_error_target_shorter_than_parent:
+    "The target block is larger than the parent prefix, so the current configuration is invalid.",
+  planner_save_error_target_more_specific_than_64:
+    "The current target block is more specific than /64 and cannot be selected from the canvas yet.",
 
   // DHCPv6 Server Card
   dhcpv6_server: "DHCPv6 Server",

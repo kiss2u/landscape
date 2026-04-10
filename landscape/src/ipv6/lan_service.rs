@@ -7,7 +7,8 @@ use landscape_common::client::{CallerLookupMatch, CallerLookupSource};
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::ipv6::lan::{
-    IPv6ServiceMode, LanIPv6Config, LanIPv6ServiceConfig, LanIPv6SourceConfig, SourceServiceKind,
+    IPv6ServiceMode, LanIPv6ConfigV2, LanIPv6ServiceConfigV2, LanPrefixGroupConfig,
+    PrefixGroupServiceKind,
 };
 use landscape_common::ipv6_pd::IAPrefixMap;
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
@@ -20,13 +21,13 @@ use landscape_common::service::manager::ServiceStarterTrait;
 use landscape_common::service::WatchService;
 use landscape_common::store::storev2::LandscapeStore;
 use landscape_database::enrolled_device::repository::EnrolledDeviceRepository;
-use landscape_database::lan_ipv6::repository::LanIPv6ServiceRepository;
+use landscape_database::lan_ipv6_v2::repository::LanIPv6V2ServiceRepository;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
 use crate::iface::get_iface_by_name;
-use crate::ipv6::prefix::{cleanup_prefix_sources, setup_prefix_sources, PrefixSetupResult};
+use crate::ipv6::prefix::{cleanup_prefix_sources, setup_prefix_groups, PrefixSetupResult};
 use crate::route::IpRouteService;
 
 /// LAN IPv6 service: manages RA + DHCPv6 per interface with mode-aware orchestration
@@ -57,9 +58,9 @@ impl LanIPv6Service {
 
 #[async_trait::async_trait]
 impl ServiceStarterTrait for LanIPv6Service {
-    type Config = LanIPv6ServiceConfig;
+    type Config = LanIPv6ServiceConfigV2;
 
-    async fn start(&self, config: LanIPv6ServiceConfig) -> WatchService {
+    async fn start(&self, config: LanIPv6ServiceConfigV2) -> WatchService {
         let service_status = WatchService::new();
         if config.enable {
             let route_service = self.route_service.clone();
@@ -132,14 +133,20 @@ impl ServiceStarterTrait for LanIPv6Service {
                     };
                     tokio::spawn(async move {
                         let mode = config.config.mode;
-                        let LanIPv6Config { ad_interval, ra_flag, sources, dhcpv6, .. } =
+                        let LanIPv6ConfigV2 {
+                            ad_interval,
+                            ra_flag,
+                            prefix_groups,
+                            dhcpv6,
+                            ..
+                        } =
                             config.config;
                         let iface_name = config.iface_name;
 
                         match mode {
                             IPv6ServiceMode::Slaac => {
                                 run_slaac(
-                                    &sources,
+                                    &prefix_groups,
                                     &iface_name,
                                     &lan_info,
                                     &route_service,
@@ -154,7 +161,7 @@ impl ServiceStarterTrait for LanIPv6Service {
                             }
                             IPv6ServiceMode::Stateful => {
                                 run_stateful(
-                                    &sources,
+                                    &prefix_groups,
                                     dhcpv6,
                                     &iface_name,
                                     &lan_info,
@@ -173,7 +180,7 @@ impl ServiceStarterTrait for LanIPv6Service {
                             }
                             IPv6ServiceMode::SlaacDhcpv6 => {
                                 run_slaac_dhcpv6(
-                                    &sources,
+                                    &prefix_groups,
                                     dhcpv6,
                                     &iface_name,
                                     &lan_info,
@@ -206,7 +213,7 @@ use landscape_common::net::MacAddr;
 
 /// Mode 1 (Slaac): RA with prefix info, no DHCPv6
 async fn run_slaac(
-    sources: &[LanIPv6SourceConfig],
+    groups: &[LanPrefixGroupConfig],
     iface_name: &str,
     lan_info: &LanRouteInfo,
     route_service: &IpRouteService,
@@ -223,9 +230,9 @@ async fn run_slaac(
         dhcpv6_token,
         change_notify,
         cleanup_ips,
-    } = setup_prefix_sources(
-        sources,
-        &[SourceServiceKind::Ra],
+    } = setup_prefix_groups(
+        groups,
+        &[PrefixGroupServiceKind::Ra],
         iface_name,
         lan_info,
         route_service,
@@ -258,7 +265,7 @@ async fn run_slaac(
 
 /// Mode 2 (Stateful): RA sends M=1 without prefix info, DHCPv6 assigns addresses
 async fn run_stateful(
-    sources: &[LanIPv6SourceConfig],
+    groups: &[LanPrefixGroupConfig],
     dhcpv6: Option<DHCPv6ServerConfig>,
     iface_name: &str,
     lan_info: &LanRouteInfo,
@@ -288,9 +295,9 @@ async fn run_stateful(
         dhcpv6_token,
         change_notify: dhcpv6_change_notify,
         cleanup_ips: dhcpv6_cleanup_ips,
-    } = setup_prefix_sources(
-        sources,
-        &[SourceServiceKind::Na, SourceServiceKind::IaPd],
+    } = setup_prefix_groups(
+        groups,
+        &[PrefixGroupServiceKind::Na, PrefixGroupServiceKind::IaPd],
         iface_name,
         lan_info,
         route_service,
@@ -358,7 +365,7 @@ async fn run_stateful(
 
 /// Mode 3 (SlaacDhcpv6): RA sends ULA prefixes, DHCPv6 assigns GUA addresses
 async fn run_slaac_dhcpv6(
-    sources: &[LanIPv6SourceConfig],
+    groups: &[LanPrefixGroupConfig],
     dhcpv6: Option<DHCPv6ServerConfig>,
     iface_name: &str,
     lan_info: &LanRouteInfo,
@@ -388,9 +395,9 @@ async fn run_slaac_dhcpv6(
         dhcpv6_token: ra_dhcpv6_token,
         change_notify: ra_change_notify,
         cleanup_ips: ra_cleanup_ips,
-    } = setup_prefix_sources(
-        sources,
-        &[SourceServiceKind::Ra],
+    } = setup_prefix_groups(
+        groups,
+        &[PrefixGroupServiceKind::Ra],
         iface_name,
         lan_info,
         route_service,
@@ -408,9 +415,9 @@ async fn run_slaac_dhcpv6(
         dhcpv6_token,
         change_notify: dhcpv6_change_notify,
         cleanup_ips: dhcpv6_cleanup_ips,
-    } = setup_prefix_sources(
-        sources,
-        &[SourceServiceKind::Na, SourceServiceKind::IaPd],
+    } = setup_prefix_groups(
+        groups,
+        &[PrefixGroupServiceKind::Na, PrefixGroupServiceKind::IaPd],
         iface_name,
         lan_info,
         route_service,
@@ -481,15 +488,15 @@ async fn run_slaac_dhcpv6(
 
 #[derive(Clone)]
 pub struct LanIPv6ManagerService {
-    store: LanIPv6ServiceRepository,
+    store: LanIPv6V2ServiceRepository,
     service: ServiceManager<LanIPv6Service>,
     server_starter: LanIPv6Service,
 }
 
 impl ControllerService for LanIPv6ManagerService {
     type Id = String;
-    type Config = LanIPv6ServiceConfig;
-    type DatabseAction = LanIPv6ServiceRepository;
+    type Config = LanIPv6ServiceConfigV2;
+    type DatabseAction = LanIPv6V2ServiceRepository;
     type H = LanIPv6Service;
 
     fn get_service(&self) -> &ServiceManager<Self::H> {
@@ -508,7 +515,7 @@ impl LanIPv6ManagerService {
         route_service: IpRouteService,
         prefix_map: IAPrefixMap,
     ) -> Self {
-        let store = store_service.lan_ipv6_service_store();
+        let store = store_service.lan_ipv6_v2_service_store();
         let enrolled_device_store = store_service.enrolled_device_store();
         let server_starter = LanIPv6Service::new(route_service, prefix_map, enrolled_device_store);
         let service =
@@ -535,7 +542,7 @@ impl LanIPv6ManagerService {
             }
         });
 
-        let store = store_service.lan_ipv6_service_store();
+        let store = store_service.lan_ipv6_v2_service_store();
         Self { service, store, server_starter }
     }
 

@@ -1,10 +1,11 @@
 import { ServiceStatus } from "@/lib/services";
 import type {
-  LanIPv6ServiceConfig,
+  LanIPv6ServiceConfigV2,
   IPv6NAInfo,
   DHCPv6OfferInfo,
 } from "@landscape-router/types/api/schemas";
 import {
+  getAllLanIpv6Configs,
   getAllLanIpv6Status,
   getLanIpv6Config,
   handleLanIpv6,
@@ -27,12 +28,18 @@ export async function get_all_lan_ipv6_status(): Promise<
 
 export async function get_lan_ipv6_config(
   iface_name: string,
-): Promise<LanIPv6ServiceConfig> {
+): Promise<LanIPv6ServiceConfigV2> {
   return await getLanIpv6Config(iface_name);
 }
 
+export async function get_all_lan_ipv6_configs(): Promise<
+  LanIPv6ServiceConfigV2[]
+> {
+  return await getAllLanIpv6Configs();
+}
+
 export async function update_lan_ipv6_config(
-  config: LanIPv6ServiceConfig,
+  config: LanIPv6ServiceConfigV2,
 ): Promise<void> {
   await handleLanIpv6(config);
 }

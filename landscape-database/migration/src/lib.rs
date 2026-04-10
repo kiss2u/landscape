@@ -39,6 +39,7 @@ mod m20260308_101225_gateway_http_upstream;
 mod m20260314_120000_dns_redirect_answer_mode;
 mod m20260405_160000_dns_provider_profiles;
 mod m20260405_170000_ddns;
+mod m20260408_120000_lan_ipv6_v2;
 mod tables;
 
 pub struct Migrator;
@@ -86,6 +87,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260314_120000_dns_redirect_answer_mode::Migration),
             Box::new(m20260405_160000_dns_provider_profiles::Migration),
             Box::new(m20260405_170000_ddns::Migration),
+            Box::new(m20260408_120000_lan_ipv6_v2::Migration),
         ]
     }
 }

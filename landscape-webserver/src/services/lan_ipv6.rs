@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
-use landscape_common::ipv6::lan::LanIPv6ServiceConfig;
+use landscape_common::ipv6::lan::{LanIPv6ServiceConfigV2, validate_cross_interface_v2};
 use landscape_common::lan_services::ipv6_ra::IPv6NAInfo;
 use landscape_common::service::controller::ControllerService;
 use landscape_common::service::{ServiceStatus, WatchService};
@@ -11,7 +11,6 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use landscape_common::database::LandscapeStore as LandscapeDBStore;
-use landscape_common::ipv6::lan::validate_cross_interface;
 use landscape_common::service::ServiceConfigError;
 
 use crate::api::JsonBody;
@@ -21,6 +20,7 @@ use crate::{api::LandscapeApiResp, error::LandscapeApiResult};
 pub fn get_lan_ipv6_paths() -> OpenApiRouter<LandscapeApp> {
     OpenApiRouter::new()
         .routes(routes!(get_all_status))
+        .routes(routes!(get_all_lan_ipv6_configs))
         .routes(routes!(handle_lan_ipv6))
         .routes(routes!(get_lan_ipv6_config, delete_and_stop_lan_ipv6))
         .routes(routes!(get_assigned_ips_by_iface_name))
@@ -74,18 +74,31 @@ async fn get_all_status(
 
 #[utoipa::path(
     get,
+    path = "/lan_ipv6",
+    tag = "LAN IPv6",
+    operation_id = "get_all_lan_ipv6_configs",
+    responses((status = 200, body = CommonApiResp<Vec<LanIPv6ServiceConfigV2>>))
+)]
+async fn get_all_lan_ipv6_configs(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<LanIPv6ServiceConfigV2>> {
+    LandscapeApiResp::success(state.lan_ipv6_service.get_repository().list().await.unwrap_or_default())
+}
+
+#[utoipa::path(
+    get,
     path = "/lan_ipv6/{iface_name}",
     tag = "LAN IPv6",
     params(("iface_name" = String, Path, description = "Interface name")),
     responses(
-        (status = 200, body = CommonApiResp<LanIPv6ServiceConfig>),
+        (status = 200, body = CommonApiResp<LanIPv6ServiceConfigV2>),
         (status = 404, description = "Not found")
     )
 )]
 async fn get_lan_ipv6_config(
     State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
-) -> LandscapeApiResult<LanIPv6ServiceConfig> {
+) -> LandscapeApiResult<LanIPv6ServiceConfigV2> {
     if let Some(iface_config) = state.lan_ipv6_service.get_config_by_name(iface_name).await {
         LandscapeApiResp::success(iface_config)
     } else {
@@ -97,20 +110,20 @@ async fn get_lan_ipv6_config(
     put,
     path = "/lan_ipv6",
     tag = "LAN IPv6",
-    request_body = LanIPv6ServiceConfig,
+    request_body = LanIPv6ServiceConfigV2,
     responses((status = 200, description = "Success"))
 )]
 async fn handle_lan_ipv6(
     State(state): State<LandscapeApp>,
-    JsonBody(config): JsonBody<LanIPv6ServiceConfig>,
+    JsonBody(config): JsonBody<LanIPv6ServiceConfigV2>,
 ) -> LandscapeApiResult<()> {
     state.validate_zone(&config).await?;
     config.config.validate()?;
 
     // Cross-interface conflict detection
-    let other_configs: Vec<LanIPv6ServiceConfig> =
+    let other_configs: Vec<LanIPv6ServiceConfigV2> =
         state.lan_ipv6_service.get_repository().list().await.unwrap_or_default();
-    validate_cross_interface(&config, &other_configs)?;
+    validate_cross_interface_v2(&config, &other_configs)?;
 
     state.lan_ipv6_service.handle_service_config(config).await?;
     LandscapeApiResp::success(())

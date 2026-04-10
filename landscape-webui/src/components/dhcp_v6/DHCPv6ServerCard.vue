@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import type { LanIPv6ServiceConfig } from "@landscape-router/types/api/schemas";
+import type { LanIPv6ServiceConfigV2 } from "@landscape-router/types/api/schemas";
 
 const { t } = useI18n({ useScope: "global" });
 
-const config = defineModel<LanIPv6ServiceConfig>("service-config", {
+const config = defineModel<LanIPv6ServiceConfigV2>("service-config", {
   required: true,
 });
 

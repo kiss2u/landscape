@@ -25,7 +25,7 @@ use crate::iface::nat::StaticNatMappingConfig;
 use crate::iface::ppp::PPPDServiceConfig;
 use crate::iface::wifi::WifiServiceConfig;
 use crate::ip_mark::WanIpRuleConfig;
-use crate::ipv6::lan::LanIPv6ServiceConfig;
+use crate::ipv6::lan::LanIPv6ServiceConfigV2;
 use crate::ipv6::ra::IPV6RAServiceConfig;
 use crate::route::lan::RouteLanServiceConfig;
 use crate::route::wan::RouteWanServiceConfig;
@@ -55,7 +55,7 @@ pub struct InitConfig {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub icmpras: Vec<IPV6RAServiceConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub lan_ipv6s: Vec<LanIPv6ServiceConfig>,
+    pub lan_ipv6s: Vec<LanIPv6ServiceConfigV2>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub firewalls: Vec<FirewallServiceConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -94,4 +94,51 @@ pub struct InitConfig {
     pub ddns_jobs: Vec<DdnsJob>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dns_provider_profiles: Vec<DnsProviderProfile>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InitConfig;
+
+    #[test]
+    fn deserialize_v2_lan_ipv6s_without_conversion() {
+        let config: InitConfig = toml::from_str(
+            r#"
+                [[lan_ipv6s]]
+                iface_name = "lan0"
+                enable = true
+                update_at = 0.0
+
+                [lan_ipv6s.config]
+                mode = "slaac"
+                ad_interval = 300
+
+                [lan_ipv6s.config.ra_flag]
+                managed_address_config = false
+                other_config = false
+                home_agent = false
+                prf = 0
+                nd_proxy = false
+                reserved = 0
+
+                [[lan_ipv6s.config.prefix_groups]]
+                group_id = "static:fd00::/60"
+
+                [lan_ipv6s.config.prefix_groups.parent]
+                t = "static"
+                base_prefix = "fd00::"
+                parent_prefix_len = 60
+
+                [lan_ipv6s.config.prefix_groups.ra]
+                pool_index = 1
+                preferred_lifetime = 300
+                valid_lifetime = 600
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.lan_ipv6s.len(), 1);
+        assert_eq!(config.lan_ipv6s[0].config.prefix_groups.len(), 1);
+        assert_eq!(config.lan_ipv6s[0].config.prefix_groups[0].group_id, "static:fd00::/60");
+    }
 }
