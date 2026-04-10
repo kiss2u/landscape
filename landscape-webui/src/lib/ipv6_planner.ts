@@ -617,7 +617,9 @@ function buildGroupOccupancyRecords(
   parentKey: string,
 ): OccupancyRecord[] {
   const currentRecords = options.currentGroups.flatMap((group) =>
-    buildEntriesForGroup(group, options.currentMode)
+    // Show all configured results for the current interface on the shared canvas,
+    // even if the current service mode would not activate them right now.
+    buildEntriesForGroup(group, undefined)
       .filter(
         (entry) => occupancyParentKeyForParent(entry.parent, options.prefixInfos) === parentKey,
       )

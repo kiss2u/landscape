@@ -676,6 +676,11 @@ async function commit() {
   emit("commit", groupToCommit);
   show.value = false;
 }
+
+function deleteCurrentGroup() {
+  emit("commit", undefined);
+  show.value = false;
+}
 </script>
 
 <template>
@@ -799,7 +804,19 @@ async function commit() {
 
     <template #footer>
       <n-flex justify="space-between">
-        <n-button @click="show = false">{{ t('lan_ipv6.cancel') }}</n-button>
+        <n-flex :size="8">
+          <n-popconfirm v-if="group" @positive-click="deleteCurrentGroup">
+            <template #trigger>
+              <n-button type="error" secondary>
+                {{ t('lan_ipv6.delete') }}
+              </n-button>
+            </template>
+            {{ t('lan_ipv6.prefix_group_delete_confirm') }}
+          </n-popconfirm>
+
+          <n-button @click="show = false">{{ t('lan_ipv6.cancel') }}</n-button>
+        </n-flex>
+
         <n-button
           type="success"
           :disabled="draftGroupHasResults && !commitSaveState.canSave"

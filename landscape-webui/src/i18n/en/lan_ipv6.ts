@@ -94,6 +94,7 @@ export default {
   prefix_state_compact_configured: "Configured",
   prefix_state_compact_empty: "Empty",
   prefix_group_edit: "Edit Group",
+  prefix_group_delete_confirm: "Delete this prefix group?",
   prefix_group_open_kind: "Open Shared Canvas",
   prefix_group_editor_title: "Edit Parent Prefix {parent}",
   prefix_group_editor_parent: "Current Parent:",

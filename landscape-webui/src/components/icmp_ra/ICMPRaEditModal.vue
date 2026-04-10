@@ -8,11 +8,7 @@ import {
   get_lan_ipv6_config,
   update_lan_ipv6_config,
 } from "@/api/service_lan_ipv6";
-import {
-  type SourceKind,
-  type SourceType,
-  sourceTypeFromParent,
-} from "@/lib/lan_ipv6_v2_helpers";
+import { type SourceKind, type SourceType, sourceTypeFromParent } from "@/lib/lan_ipv6_v2_helpers";
 import type {
   LanIPv6ServiceConfigV2,
   LanPrefixGroupConfig,
@@ -76,13 +72,6 @@ function allowed_service_kinds_for_type(type: SourceType): ("ra" | "na" | "pd")[
   }
   return ["na", "pd"];
 }
-
-const mixed_groups = computed(() =>
-  all_groups.value.map((group) => ({
-    key: group.group_id,
-    type: sourceTypeFromParent(group.parent),
-  })),
-);
 
 async function on_modal_enter() {
   try {
@@ -189,10 +178,17 @@ function replace_group_sources(
   if (!service_config.value?.config.prefix_groups) {
     return;
   }
-  const remaining = service_config.value.config.prefix_groups.filter(
-    (group) => group.group_id !== group_key,
-  );
-  service_config.value.config.prefix_groups = group ? [group, ...remaining] : remaining;
+  const currentGroups = [...service_config.value.config.prefix_groups];
+  const index = currentGroups.findIndex((currentGroup) => currentGroup.group_id === group_key);
+  if (index === -1) {
+    return;
+  }
+  if (!group) {
+    currentGroups.splice(index, 1);
+  } else {
+    currentGroups.splice(index, 1, group);
+  }
+  service_config.value.config.prefix_groups = currentGroups;
 }
 </script>
 
@@ -321,12 +317,12 @@ function replace_group_sources(
             />
           </template>
 
-          <n-flex v-if="mixed_groups.length > 0" vertical>
+          <n-flex v-if="all_groups.length > 0" vertical>
             <PrefixGroupCard
-              v-for="group in mixed_groups"
-              :key="group.key"
-              :group="all_groups.find((item) => item.group_id === group.key)!"
-              :allowed-service-kinds="allowed_service_kinds_for_type(group.type)"
+              v-for="group in all_groups"
+              :key="group.group_id"
+              :group="group"
+              :allowed-service-kinds="allowed_service_kinds_for_type(sourceTypeFromParent(group.parent))"
               :iface-name="service_config.iface_name"
               :current-groups="all_groups"
               :current-mode="service_config.config.mode"

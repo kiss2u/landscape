@@ -88,6 +88,7 @@ export default {
   prefix_state_compact_configured: "已配置",
   prefix_state_compact_empty: "未配置",
   prefix_group_edit: "编辑这一组",
+  prefix_group_delete_confirm: "确定删除这一组前缀吗？",
   prefix_group_open_kind: "进入共享画布",
   prefix_group_editor_title: "编辑父前缀 {parent}",
   prefix_group_editor_parent: "当前父前缀:",

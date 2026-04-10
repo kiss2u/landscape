@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IPv6ServiceMode, LanPrefixGroupConfig } from "@landscape-router/types/api/schemas";
 import { computed, ref } from "vue";
-import { Edit } from "@vicons/carbon";
+import { Edit, TrashCan } from "@vicons/carbon";
 import { useI18n } from "vue-i18n";
 import PrefixGroupEditorModal from "@/components/lan_ipv6/PrefixGroupEditorModal.vue";
 import {
@@ -86,6 +86,10 @@ function onCommit(group: LanPrefixGroupConfig | undefined) {
   emit("commitGroup", props.group.group_id, group);
 }
 
+function deleteGroup() {
+  emit("commitGroup", props.group.group_id, undefined);
+}
+
 function openEditor(kind: ServiceKind) {
   if (!canOpenKind(kind)) {
     return;
@@ -94,13 +98,10 @@ function openEditor(kind: ServiceKind) {
   showEdit.value = true;
 }
 
-const rootClass = computed(() =>
-  sourceType.value === "static" ? "group-card static-card" : "group-card pd-card",
-);
 </script>
 
 <template>
-  <n-card size="small" :bordered="false" :class="rootClass">
+  <n-flex vertical :size="0" class="group-card">
     <div class="group-summary compact">
       <div class="summary-parent">
         <div class="summary-parent-main">
@@ -138,50 +139,70 @@ const rootClass = computed(() =>
       </div>
 
       <div class="summary-actions">
-        <n-button
-          size="small"
-          secondary
-          type="primary"
-          @click="openEditor(editorKinds[0] ?? kinds[0])"
-        >
-          <template #icon>
-            <n-icon><Edit /></n-icon>
-          </template>
-          {{ t('lan_ipv6.prefix_group_edit') }}
-        </n-button>
+        <n-flex :size="8" justify="end">
+          <n-button
+            quaternary
+            circle
+            size="small"
+            type="primary"
+            :title="t('lan_ipv6.prefix_group_edit')"
+            :aria-label="t('lan_ipv6.prefix_group_edit')"
+            @click="openEditor(editorKinds[0] ?? kinds[0])"
+          >
+            <template #icon>
+              <n-icon><Edit /></n-icon>
+            </template>
+          </n-button>
+
+          <n-popconfirm @positive-click="deleteGroup">
+            <template #trigger>
+              <n-button
+                quaternary
+                circle
+                size="small"
+                type="error"
+                :title="t('lan_ipv6.delete')"
+                :aria-label="t('lan_ipv6.delete')"
+                @click.stop
+              >
+                <template #icon>
+                  <n-icon><TrashCan /></n-icon>
+                </template>
+              </n-button>
+            </template>
+            {{ t('lan_ipv6.prefix_group_delete_confirm') }}
+          </n-popconfirm>
+        </n-flex>
       </div>
     </div>
+  </n-flex>
 
-    <PrefixGroupEditorModal
-      v-model:show="showEdit"
-      :source-type="sourceType"
-      :parent-label="parentLabel"
-      :group="group"
-      :allowed-service-kinds="editorKinds"
-      :current-iface-name="ifaceName"
-      :current-groups="currentGroups"
-      :current-mode="currentMode"
-      :initial-kind="initialKind"
-      @commit="onCommit"
-    />
-  </n-card>
+  <PrefixGroupEditorModal
+    v-model:show="showEdit"
+    :source-type="sourceType"
+    :parent-label="parentLabel"
+    :group="group"
+    :allowed-service-kinds="editorKinds"
+    :current-iface-name="ifaceName"
+    :current-groups="currentGroups"
+    :current-mode="currentMode"
+    :initial-kind="initialKind"
+    @commit="onCommit"
+  />
 </template>
 
 <style scoped>
 .group-card {
   margin-bottom: 8px;
-}
-
-.static-card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--n-color) 82%, var(--n-primary-color-suppl) 18%);
 }
 
-.pd-card {
-  background: color-mix(in srgb, var(--n-color) 72%, var(--n-info-color-suppl) 28%);
-}
-
 .group-summary {
-  margin-top: 8px;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
