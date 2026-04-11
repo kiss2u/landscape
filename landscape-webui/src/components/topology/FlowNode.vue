@@ -116,18 +116,10 @@ const role_tags = computed(() => {
 });
 
 const is_wan_node = computed(() => props.node.zone_type === ZoneType.Wan);
-const node_width = computed(() => (is_wan_node.value ? 360 : 280));
+const node_width = computed(() => (is_wan_node.value ? 235 : 235));
 const title_max_width = computed(
   () => `${Math.max(node_width.value - 126, 140)}px`,
 );
-
-const meta_text = computed(() => {
-  if (props.node.controller_id !== undefined && props.node.controller_name) {
-    return `${props.node.dev_kind || props.node.dev_type} <- ${props.node.controller_name}`;
-  }
-
-  return props.node.dev_kind || props.node.dev_type || props.node.name;
-});
 
 function serviceStatusText(status?: ServiceStatus) {
   if (!status) {
@@ -154,6 +146,16 @@ function serviceStatusColor(status?: ServiceStatus) {
   return status.t === ServiceStatusType.Stop
     ? themeVars.value.errorColor
     : themeVars.value.successColor;
+}
+
+function serviceStatusStyle(status?: ServiceStatus) {
+  const color = serviceStatusColor(status);
+
+  return {
+    borderColor: changeColor(color, { alpha: status ? 0.45 : 0.22 }),
+    backgroundColor: changeColor(color, { alpha: status ? 0.12 : 0.06 }),
+    color,
+  };
 }
 
 const service_items = computed(() => {
@@ -285,6 +287,7 @@ const node_style = computed(() => ({
   <div
     class="topology-node"
     :class="{ 'is-selected': selected }"
+    :data-testid="`topology-node-${node.index}`"
     :style="node_style"
   >
     <div class="topology-node__main">
@@ -327,10 +330,6 @@ const node_style = computed(() => ({
               {{ tag }}
             </n-tag>
           </div>
-
-          <div class="topology-node__meta">
-            {{ meta_text }}
-          </div>
         </div>
 
         <Handle
@@ -348,11 +347,11 @@ const node_style = computed(() => ({
           trigger="hover"
         >
           <template #trigger>
-            <span class="topology-node__service-pill">
-              <span
-                class="topology-node__service-dot"
-                :style="{ backgroundColor: serviceStatusColor(item.status) }"
-              />
+            <span
+              class="topology-node__service-pill"
+              :data-testid="`topology-node-${node.index}-service-${item.key}`"
+              :style="serviceStatusStyle(item.status)"
+            >
               <span>{{ item.short_label }}</span>
             </span>
           </template>
@@ -367,6 +366,7 @@ const node_style = computed(() => ({
 .topology-node {
   position: relative;
   width: var(--topology-node-width);
+  box-sizing: border-box;
 }
 
 .topology-node__main {
@@ -374,17 +374,19 @@ const node_style = computed(() => ({
   width: var(--topology-node-width);
   flex-direction: column;
   gap: 8px;
+  box-sizing: border-box;
 }
 
 .topology-node__card-shell {
   position: relative;
   width: var(--topology-node-width);
+  box-sizing: border-box;
 }
 
 .topology-node__card {
   width: var(--topology-node-width);
-  min-height: 98px;
-  padding: 12px 14px;
+  min-height: 78px;
+  padding: 10px 12px;
   border-radius: 16px;
   border: 1px solid var(--topology-node-border);
   background: linear-gradient(
@@ -397,6 +399,7 @@ const node_style = computed(() => ({
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.2s ease;
+  box-sizing: border-box;
 }
 
 .is-selected .topology-node__card {
@@ -432,49 +435,34 @@ const node_style = computed(() => ({
 
 .topology-node__tags {
   display: flex;
-  margin-top: 10px;
+  margin-top: 8px;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.topology-node__meta {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--topology-node-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .topology-node__services {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 4px;
+  width: var(--topology-node-width);
+  box-sizing: border-box;
 }
 
 .topology-node__service-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid var(--topology-node-service-border);
   background: var(--topology-node-service-bg);
   color: var(--topology-node-service-text);
   font-size: 11px;
+  font-weight: 600;
   line-height: 1;
 }
 
 .topology-node__service-pill--muted {
   opacity: 0.78;
-}
-
-.topology-node__service-dot {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 999px;
 }
 
 .topology-node__handle {

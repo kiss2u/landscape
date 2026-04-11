@@ -11,10 +11,11 @@ interface IfaceOption {
 }
 
 const NODE_WIDTH = 360;
-const NODE_HEIGHT = 176;
+const NODE_HEIGHT = 136;
 const LANE_PADDING = 48;
-const GROUP_GAP = 52;
-const STACK_GAP = 24;
+const GROUP_GAP = 18;
+const STACK_GAP = 8;
+const IDEAL_COLUMN_GAP = 320;
 const MIN_GRAPH_WIDTH = 940;
 const MAX_GRAPH_WIDTH = 1480;
 
@@ -147,12 +148,21 @@ export const useIfaceNodeStore = defineStore(
           MIN_GRAPH_WIDTH,
         );
         const graph_width = Math.min(available_width, MAX_GRAPH_WIDTH);
-        const left_x = LANE_PADDING;
-        const right_x = Math.max(
-          graph_width - NODE_WIDTH - LANE_PADDING,
-          left_x + NODE_WIDTH + 340,
+        const graph_offset_x = Math.max(
+          Math.round((available_width - graph_width) / 2),
+          0,
         );
-        const center_x = Math.round((left_x + right_x) / 2);
+        const center_x =
+          graph_offset_x + Math.round((graph_width - NODE_WIDTH) / 2);
+        const column_gap = Math.max(
+          Math.min(
+            Math.floor((graph_width - NODE_WIDTH) / 2) - LANE_PADDING,
+            IDEAL_COLUMN_GAP,
+          ),
+          220,
+        );
+        const left_x = center_x - column_gap;
+        const right_x = center_x + column_gap;
 
         const push_node = (each: NetDev, x: number, y: number) => {
           positioned.add(each.index);
@@ -193,32 +203,57 @@ export const useIfaceNodeStore = defineStore(
           (each) => each.zone_type !== ZoneType.Wan && is_root(each),
         );
 
+        const get_subtree_height = (each: NetDev): number => {
+          const children = child_map.get(each.index) ?? [];
+
+          if (children.length === 0) {
+            return NODE_HEIGHT;
+          }
+
+          const child_block_height = children.reduce((total, child, index) => {
+            return (
+              total + get_subtree_height(child) + (index > 0 ? STACK_GAP : 0)
+            );
+          }, 0);
+
+          return Math.max(NODE_HEIGHT, child_block_height);
+        };
+
+        const place_subtree = (each: NetDev, x: number, start_y: number) => {
+          const children = child_map.get(each.index) ?? [];
+          const subtree_height = get_subtree_height(each);
+          const child_block_height = children.reduce((total, child, index) => {
+            return (
+              total + get_subtree_height(child) + (index > 0 ? STACK_GAP : 0)
+            );
+          }, 0);
+          const root_y =
+            start_y + Math.max((child_block_height - NODE_HEIGHT) / 2, 0);
+
+          push_node(each, x, root_y);
+
+          if (children.length === 0) {
+            return subtree_height;
+          }
+
+          let child_y = start_y;
+          for (const child of children) {
+            const child_height = place_subtree(child, right_x, child_y);
+            child_y += child_height + STACK_GAP;
+          }
+
+          return subtree_height;
+        };
+
         let wan_y = 72;
         for (const each of wan_roots) {
-          push_node(each, left_x, wan_y);
-          wan_y += NODE_HEIGHT + STACK_GAP;
+          const group_height = place_subtree(each, left_x, wan_y);
+          wan_y += group_height + STACK_GAP;
         }
 
         let center_y = 72;
         for (const each of core_roots) {
-          const children = child_map.get(each.index) ?? [];
-          const child_block_height =
-            children.length > 0
-              ? children.length * NODE_HEIGHT +
-                (children.length - 1) * STACK_GAP
-              : 0;
-          const group_height = Math.max(NODE_HEIGHT, child_block_height);
-          const root_y =
-            center_y + Math.max((group_height - NODE_HEIGHT) / 2, 0);
-
-          push_node(each, center_x, root_y);
-
-          let child_y = center_y;
-          for (const child of children) {
-            push_node(child, right_x, child_y);
-            child_y += NODE_HEIGHT + STACK_GAP;
-          }
-
+          const group_height = place_subtree(each, center_x, center_y);
           center_y += group_height + GROUP_GAP;
         }
 

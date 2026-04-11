@@ -30,23 +30,33 @@ function toggle_down_devices() {
     position="absolute"
     style="z-index: 6"
   >
-    <n-float-button @click="show_create_dev = true">
+    <n-float-button
+      data-testid="topology-create-bridge"
+      @click="show_create_dev = true"
+    >
       <n-icon><Add /></n-icon>
     </n-float-button>
     <n-float-button
+      data-testid="topology-fit-view"
       :aria-label="t('misc.topology.fit_view')"
       :title="t('misc.topology.fit_view')"
       @click="emit('fit-view')"
     >
       <n-icon><FitToScreen /></n-icon>
     </n-float-button>
-    <n-float-button @click="toggle_down_devices">
+    <n-float-button
+      data-testid="topology-toggle-down"
+      @click="toggle_down_devices"
+    >
       <n-icon>
         <View v-if="ifaceNodeStore.hide_down_dev" />
         <ViewOff v-else />
       </n-icon>
     </n-float-button>
-    <n-float-button @click="ifaceNodeStore.TOGGLE_VIEW_LOCK">
+    <n-float-button
+      data-testid="topology-toggle-lock"
+      @click="ifaceNodeStore.TOGGLE_VIEW_LOCK"
+    >
       <n-icon>
         <Locked v-if="ifaceNodeStore.view_locked" />
         <Unlocked v-else />

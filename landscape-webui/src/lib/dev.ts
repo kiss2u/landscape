@@ -61,15 +61,11 @@ export class NetDev {
 
   // right Handle
   has_source_hook() {
-    if (this.zone_type == ZoneType.Wan) {
-      return false;
-    } else if (this.dev_kind == "bridge") {
+    if (this.dev_kind == "bridge") {
       return true;
-    } else if (this.zone_type == ZoneType.Lan) {
-      return true;
-    } else if (this.zone_type == ZoneType.Undefined) {
-      return false;
     }
+
+    return false;
   }
 }
 

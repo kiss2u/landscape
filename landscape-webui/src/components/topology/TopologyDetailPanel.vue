@@ -23,6 +23,10 @@ import { stop_and_del_iface_wifi } from "@/api/service_wifi";
 import { DevStateType, NetDev, WifiMode, WLANTypeTag } from "@/lib/dev";
 import { ZoneType } from "@/lib/service_ipconfig";
 import {
+  canManageBridgeAttachment,
+  getBridgeAttachIssue,
+} from "@/lib/topology";
+import {
   ServiceExhibitSwitch,
   ServiceStatus,
   ServiceStatusType,
@@ -145,17 +149,15 @@ const available_bridge_options = computed(() =>
     .filter((bridge) => bridge.ifindex !== props.node.index)
     .map((bridge) => ({ label: bridge.label, value: bridge.ifindex })),
 );
-const can_manage_controller = computed(() => {
-  if (props.node.dev_kind === "bridge") {
-    return false;
-  }
-  if (props.node.zone_type === ZoneType.Wan) {
-    return false;
-  }
-  return true;
-});
+const can_manage_controller = computed(() =>
+  canManageBridgeAttachment(props.node),
+);
+const can_attach_bridge = computed(
+  () =>
+    can_manage_controller.value && props.node.zone_type === ZoneType.Undefined,
+);
 const controller_hint = computed(() => {
-  if (!can_manage_controller.value) {
+  if (!can_attach_bridge.value) {
     return t("misc.topology_panel.connect_unavailable");
   }
   if (has_controller.value) {
@@ -371,6 +373,26 @@ function serviceStatusColor(status?: ServiceStatus) {
     : themeVars.value.successColor;
 }
 
+function bridgeAttachWarning(
+  controller: NetDev | undefined,
+  child: NetDev | undefined,
+) {
+  const issue = getBridgeAttachIssue(controller, child);
+
+  switch (issue) {
+    case "device_not_found":
+      return t("misc.topology.device_not_found");
+    case "bridge_connection_rule":
+      return t("misc.topology.bridge_connection_rule");
+    case "device_has_parent":
+      return t("misc.topology.device_has_parent");
+    case "connect_unavailable":
+      return t("misc.topology_panel.connect_unavailable");
+    case "wifi_client_mode_warning":
+      return t("misc.topology.wifi_client_mode_warning");
+  }
+}
+
 function openServiceEditor(service_key: string) {
   switch (service_key) {
     case "ip_config":
@@ -445,17 +467,19 @@ async function attachController() {
     return;
   }
 
-  if (
-    props.node.wifi_info &&
-    props.node.wifi_info.wifi_type.t !== WLANTypeTag.Ap
-  ) {
-    message.warning(t("misc.topology.wifi_client_mode_warning"));
-    return;
-  }
-
   const bridge = ifaceNodeStore.bridges.find(
     (item) => item.ifindex === selected_bridge_ifindex.value,
   );
+  const bridge_dev = bridge
+    ? ifaceNodeStore.FIND_DEV_BY_IFINDEX(bridge.ifindex)
+    : undefined;
+  const warning = bridgeAttachWarning(bridge_dev, props.node);
+
+  if (warning) {
+    message.warning(warning);
+    return;
+  }
+
   if (!bridge) {
     return;
   }
@@ -493,7 +517,11 @@ async function handleDeleteBridge() {
 </script>
 
 <template>
-  <div class="topology-detail-shell" :style="panelStyle">
+  <div
+    class="topology-detail-shell nopan nowheel"
+    :data-testid="`topology-detail-${node.index}`"
+    :style="panelStyle"
+  >
     <div v-if="service_sections.length" class="topology-detail__rail-shell">
       <div class="topology-detail__rail">
         <n-tooltip
@@ -505,6 +533,7 @@ async function handleDeleteBridge() {
             <button
               type="button"
               class="topology-detail__rail-button"
+              :data-testid="`topology-detail-${node.index}-service-${section.key}`"
               @click="openServiceEditor(section.key)"
             >
               <span class="topology-detail__rail-label">
@@ -550,7 +579,7 @@ async function handleDeleteBridge() {
         </div>
       </div>
 
-      <n-scrollbar class="topology-detail__content">
+      <n-scrollbar class="topology-detail__content nowheel">
         <div class="topology-detail__content-inner">
           <n-flex vertical size="large">
             <n-card size="small" embedded>
@@ -624,6 +653,7 @@ async function handleDeleteBridge() {
                         }}
                       </span>
                       <n-button
+                        data-testid="topology-detach-controller"
                         v-if="has_controller"
                         tertiary
                         size="tiny"
@@ -661,6 +691,7 @@ async function handleDeleteBridge() {
                   </n-text>
                   <n-input-group
                     v-if="
+                      can_attach_bridge &&
                       !has_controller &&
                       available_bridge_options.length > 0 &&
                       (!node.wifi_info ||
@@ -674,6 +705,7 @@ async function handleDeleteBridge() {
                       clearable
                     />
                     <n-button
+                      data-testid="topology-attach-controller"
                       type="primary"
                       ghost
                       :disabled="selected_bridge_ifindex === null"
@@ -696,7 +728,11 @@ async function handleDeleteBridge() {
                   @positive-click="changeDeviceStatus"
                 >
                   <template #trigger>
-                    <n-button tertiary size="small">
+                    <n-button
+                      data-testid="topology-toggle-device"
+                      tertiary
+                      size="small"
+                    >
                       {{
                         node.dev_status.t === DevStateType.Up
                           ? t("misc.topology_node.action_disable")
@@ -715,6 +751,7 @@ async function handleDeleteBridge() {
                 </n-popconfirm>
 
                 <n-button
+                  data-testid="topology-change-zone"
                   v-if="show_switch.zone_type"
                   tertiary
                   size="small"
@@ -724,6 +761,7 @@ async function handleDeleteBridge() {
                 </n-button>
 
                 <n-button
+                  data-testid="topology-edit-cpu-balance"
                   tertiary
                   size="small"
                   @click="show_cpu_balance_btn = true"
@@ -736,7 +774,11 @@ async function handleDeleteBridge() {
                   @positive-click="switchWifiMode"
                 >
                   <template #trigger>
-                    <n-button tertiary size="small">
+                    <n-button
+                      data-testid="topology-switch-wifi-mode"
+                      tertiary
+                      size="small"
+                    >
                       {{ wifi_mode_target_label }}
                     </n-button>
                   </template>
@@ -756,6 +798,7 @@ async function handleDeleteBridge() {
                 >
                   <template #trigger>
                     <n-button
+                      data-testid="topology-delete-bridge"
                       tertiary
                       size="small"
                       type="error"

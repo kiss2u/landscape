@@ -12,6 +12,7 @@ import FlowHeaderExtra from "@/components/topology/FlowHeaderExtra.vue";
 import FlowNode from "@/components/topology/FlowNode.vue";
 import TopologyDetailPanel from "@/components/topology/TopologyDetailPanel.vue";
 import { NetDev, WLANTypeTag } from "@/lib/dev";
+import { getBridgeAttachIssue } from "@/lib/topology";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { useIfaceNodeStore } from "@/stores/iface_node";
 
@@ -24,8 +25,14 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { t } = useI18n();
-const { fitView, getViewport, onNodeClick, onPaneClick, setCenter } =
-  useVueFlow();
+const {
+  fitView,
+  getViewport,
+  onNodeClick,
+  onPaneClick,
+  setCenter,
+  setViewport,
+} = useVueFlow();
 const message = useMessage();
 const ifaceNodeStore = useIfaceNodeStore();
 const themeVars = useThemeVars();
@@ -34,11 +41,11 @@ const { width } = useElementSize(containerRef);
 const selectedIfaceId = ref<number | null>(null);
 const connectionLoading = ref(false);
 
-const DETAIL_PANEL_WIDTH = 468;
 const MOBILE_BREAKPOINT = 960;
 const DESKTOP_MIN_READABLE_ZOOM = 0.78;
 const MINIMAP_WIDTH = 180;
 const MINIMAP_HEIGHT = 112;
+const TOP_ALIGN_PADDING = 56;
 
 const isDrawerMode = computed(
   () => width.value > 0 && width.value < MOBILE_BREAKPOINT,
@@ -49,9 +56,6 @@ const selectedIface = computed(() =>
   ),
 );
 const detailOpen = computed(() => selectedIface.value !== undefined);
-const reservedWidth = computed(() =>
-  detailOpen.value && !isDrawerMode.value ? DETAIL_PANEL_WIDTH + 24 : 0,
-);
 const miniMapMaskColor = computed(() =>
   changeColor(themeVars.value.primaryColor, { alpha: 0.08 }),
 );
@@ -105,6 +109,29 @@ async function fitTopology(mode: "overview" | "readable" = "readable") {
   }
 
   await fitView(fit_params);
+
+  if (isDrawerMode.value || ifaceNodeStore.nodes.length === 0) {
+    return;
+  }
+
+  const viewport = getViewport();
+  const top_y = Math.min(
+    ...ifaceNodeStore.nodes.map(
+      (node) => node.position?.y ?? TOP_ALIGN_PADDING,
+    ),
+  );
+  const aligned_y = TOP_ALIGN_PADDING - top_y * viewport.zoom;
+
+  if (Math.abs(viewport.y - aligned_y) > 1) {
+    await setViewport(
+      {
+        x: viewport.x,
+        y: aligned_y,
+        zoom: viewport.zoom,
+      },
+      { duration: 160 },
+    );
+  }
 }
 
 function scheduleFitTopology(mode: "overview" | "readable" = "readable") {
@@ -167,31 +194,20 @@ function getConnectionWarning(
   controller: NetDev | undefined,
   child: NetDev | undefined,
 ) {
-  if (!controller || !child) {
-    return t("misc.topology.device_not_found");
-  }
+  const issue = getBridgeAttachIssue(controller, child);
 
-  if (controller.index === child.index) {
-    return t("misc.topology.bridge_connection_rule");
+  switch (issue) {
+    case "device_not_found":
+      return t("misc.topology.device_not_found");
+    case "bridge_connection_rule":
+      return t("misc.topology.bridge_connection_rule");
+    case "device_has_parent":
+      return t("misc.topology.device_has_parent");
+    case "connect_unavailable":
+      return t("misc.topology_panel.connect_unavailable");
+    case "wifi_client_mode_warning":
+      return t("misc.topology.wifi_client_mode_warning");
   }
-
-  if (controller.dev_kind !== "bridge" || child.dev_kind === "bridge") {
-    return t("misc.topology.bridge_connection_rule");
-  }
-
-  if (child.controller_id !== undefined) {
-    return t("misc.topology.device_has_parent");
-  }
-
-  if (child.zone_type !== ZoneType.Undefined) {
-    return t("misc.topology_panel.connect_unavailable");
-  }
-
-  if (child.wifi_info && child.wifi_info.wifi_type.t !== WLANTypeTag.Ap) {
-    return t("misc.topology.wifi_client_mode_warning");
-  }
-
-  return undefined;
 }
 
 async function handleConnect(connection: Connection) {
@@ -229,13 +245,13 @@ ifaceNodeStore.SETTING_CALL_BACK(() => {
 });
 
 watch(
-  [width, reservedWidth],
-  ([currentWidth, panelWidth]) => {
+  width,
+  (currentWidth) => {
     if (currentWidth <= 0) {
       return;
     }
 
-    ifaceNodeStore.SET_LAYOUT_CONTEXT(Math.round(currentWidth), panelWidth);
+    ifaceNodeStore.SET_LAYOUT_CONTEXT(Math.round(currentWidth), 0);
   },
   { immediate: true },
 );
@@ -260,7 +276,7 @@ onPaneClick(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="topology-shell">
+  <div ref="containerRef" class="topology-shell" data-testid="topology-page">
     <VueFlow
       class="topology-flow"
       :style="flowStyle"
@@ -307,7 +323,8 @@ onPaneClick(() => {
       <transition name="topology-panel">
         <aside
           v-if="selectedIface && !isDrawerMode"
-          class="topology-side-panel"
+          class="topology-side-panel nopan nowheel"
+          data-testid="topology-side-panel"
         >
           <TopologyDetailPanel :node="selectedIface" @close="closePanel" />
         </aside>
@@ -323,11 +340,13 @@ onPaneClick(() => {
         @update:show="(show: boolean) => !show && closePanel()"
       >
         <n-drawer-content :closable="false" body-content-style="padding: 0;">
-          <TopologyDetailPanel
-            v-if="selectedIface"
-            :node="selectedIface"
-            @close="closePanel"
-          />
+          <div class="topology-drawer-panel nopan nowheel">
+            <TopologyDetailPanel
+              v-if="selectedIface"
+              :node="selectedIface"
+              @close="closePanel"
+            />
+          </div>
         </n-drawer-content>
       </n-drawer>
     </VueFlow>
@@ -407,6 +426,10 @@ onPaneClick(() => {
   bottom: 16px;
   width: 468px;
   overflow: visible;
+}
+
+.topology-drawer-panel {
+  height: 100%;
 }
 
 .topology-panel-enter-active,
