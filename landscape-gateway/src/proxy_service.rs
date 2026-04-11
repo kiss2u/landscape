@@ -20,6 +20,8 @@ const GATEWAY_NO_UPSTREAM_TARGETS: pingora::ErrorType =
     pingora::ErrorType::new_code("GatewayNoUpstreamTargets", 503);
 const GATEWAY_PATH_REWRITE_FAILED: pingora::ErrorType =
     pingora::ErrorType::new_code("GatewayPathRewriteFailed", 500);
+const GATEWAY_TRAILING_SLASH_REDIRECT: pingora::ErrorType =
+    pingora::ErrorType::new_code("GatewayTrailingSlashRedirect", 308);
 
 pub struct LandscapeReverseProxy {
     rules: SharedRules,
@@ -93,6 +95,7 @@ pub struct ProxyCtx {
     request_host: Option<String>,
     request_path: Option<String>,
     rewritten_path: Option<String>,
+    redirect_location: Option<String>,
     selected_target: Option<SelectedTarget>,
     matched_route: Option<MatchedHttpRoute>,
 }
@@ -107,6 +110,7 @@ impl ProxyHttp for LandscapeReverseProxy {
             request_host: None,
             request_path: None,
             rewritten_path: None,
+            redirect_location: None,
             selected_target: None,
             matched_route: None,
         }
@@ -127,6 +131,7 @@ impl ProxyHttp for LandscapeReverseProxy {
         ctx.request_host = host.clone();
         ctx.request_path = Some(path_and_query);
         ctx.rewritten_path = None;
+        ctx.redirect_location = None;
         ctx.selected_target = None;
 
         let matched_route =
@@ -134,6 +139,14 @@ impl ProxyHttp for LandscapeReverseProxy {
 
         ctx.matched_rule_name = Some(matched_route.rule_name.to_string());
         ctx.matched_route = Some(MatchedHttpRoute::from_resolved(&matched_route));
+
+        if let Some(location) = trailing_slash_redirect_location(
+            req.uri.path_and_query().map(|value| value.as_str()).unwrap_or(path),
+            matched_route.matched_prefix,
+        ) {
+            ctx.redirect_location = Some(location);
+            return Err(trailing_slash_redirect_error());
+        }
 
         let (peer, selected_target) = make_peer(
             matched_route.upstream,
@@ -179,6 +192,23 @@ impl ProxyHttp for LandscapeReverseProxy {
         e: &pingora::Error,
         ctx: &mut Self::CTX,
     ) -> FailToProxy {
+        if is_trailing_slash_redirect_error(e) {
+            if session.response_written().is_none() {
+                if let Some(location) = ctx.redirect_location.as_deref() {
+                    if let Err(write_err) = write_redirect_response(session, location).await {
+                        tracing::error!(
+                            location,
+                            original_error = %e,
+                            write_error = %write_err,
+                            "Failed to write trailing slash redirect response"
+                        );
+                    }
+                }
+            }
+
+            return FailToProxy { error_code: 308, can_reuse_downstream: false };
+        }
+
         let classified = classify_proxy_error(e);
         log_proxy_error(ctx, e, &classified);
 
@@ -213,6 +243,18 @@ fn no_upstream_targets_error() -> pingora::BError {
 fn path_rewrite_failed_error() -> pingora::BError {
     pingora::Error::explain(GATEWAY_PATH_REWRITE_FAILED, "Failed to rewrite upstream request path")
         .into_in()
+}
+
+fn trailing_slash_redirect_error() -> pingora::BError {
+    pingora::Error::explain(
+        GATEWAY_TRAILING_SLASH_REDIRECT,
+        "Redirected request path to the trailing slash variant",
+    )
+    .into_in()
+}
+
+fn is_trailing_slash_redirect_error(error: &pingora::Error) -> bool {
+    error.etype() == &GATEWAY_TRAILING_SLASH_REDIRECT
 }
 
 fn match_http_route<'a>(
@@ -446,6 +488,28 @@ fn rewrite_path_and_query(path_and_query: &str, prefix: &str) -> String {
     } else {
         stripped_path
     }
+}
+
+fn trailing_slash_redirect_location(
+    path_and_query: &str,
+    matched_prefix: Option<&str>,
+) -> Option<String> {
+    let prefix = matched_prefix?;
+    let normalized_prefix = normalize_prefix(prefix);
+    if normalized_prefix == "/" || path_and_query.starts_with(&(normalized_prefix.clone() + "/")) {
+        return None;
+    }
+
+    let (path, query) = split_path_and_query(path_and_query);
+    if path != normalized_prefix {
+        return None;
+    }
+
+    let redirected_path = format!("{normalized_prefix}/");
+    Some(match query {
+        Some(query) => format!("{redirected_path}?{query}"),
+        None => redirected_path,
+    })
 }
 
 fn split_path_and_query(path_and_query: &str) -> (&str, Option<&str>) {
@@ -740,6 +804,21 @@ fn build_gateway_error_response_header(
     Ok(response)
 }
 
+fn build_redirect_response_header(location: &str) -> pingora::Result<ResponseHeader> {
+    let mut response = ResponseHeader::build(StatusCode::PERMANENT_REDIRECT.as_u16(), None)
+        .map_err(|e| e.more_context("Failed to build redirect response header").into_in())?;
+    response
+        .set_content_length(0)
+        .map_err(|e| e.more_context("Failed to set redirect Content-Length header").into_in())?;
+    response
+        .insert_header("Location", location)
+        .map_err(|e| e.more_context("Failed to insert redirect Location header").into_in())?;
+    response
+        .insert_header("Cache-Control", "private, no-store")
+        .map_err(|e| e.more_context("Failed to insert redirect Cache-Control header").into_in())?;
+    Ok(response)
+}
+
 async fn write_gateway_error_response(
     session: &mut Session,
     response: &GatewayErrorResponse,
@@ -750,6 +829,15 @@ async fn write_gateway_error_response(
     session.set_keepalive(None);
     session.write_response_header(Box::new(header), false).await?;
     session.write_response_body(Some(body), true).await?;
+
+    Ok(())
+}
+
+async fn write_redirect_response(session: &mut Session, location: &str) -> pingora::Result<()> {
+    let header = build_redirect_response_header(location)?;
+
+    session.set_keepalive(None);
+    session.write_response_header(Box::new(header), true).await?;
 
     Ok(())
 }
@@ -930,6 +1018,23 @@ mod tests {
     }
 
     #[test]
+    fn trailing_slash_redirect_location_adds_slash_and_keeps_query() {
+        assert_eq!(
+            trailing_slash_redirect_location("/ai?mode=demo", Some("/ai")),
+            Some("/ai/?mode=demo".to_string())
+        );
+        assert_eq!(trailing_slash_redirect_location("/ai", Some("/ai/")), Some("/ai/".to_string()));
+    }
+
+    #[test]
+    fn trailing_slash_redirect_location_ignores_root_and_already_suffixed_paths() {
+        assert_eq!(trailing_slash_redirect_location("/", Some("/")), None);
+        assert_eq!(trailing_slash_redirect_location("/ai/", Some("/ai")), None);
+        assert_eq!(trailing_slash_redirect_location("/ai/assets/app.js", Some("/ai")), None);
+        assert_eq!(trailing_slash_redirect_location("/about", None), None);
+    }
+
+    #[test]
     fn apply_client_ip_headers_sets_standard_proxy_headers() {
         let mut request = RequestHeader::build("GET", b"/", None).unwrap();
 
@@ -1074,5 +1179,15 @@ mod tests {
         assert_eq!(response.headers.get("content-type").unwrap(), "text/plain; charset=utf-8");
         assert_eq!(response.headers.get("cache-control").unwrap(), "private, no-store");
         assert_eq!(response.headers.get("content-length").unwrap(), "12");
+    }
+
+    #[test]
+    fn build_redirect_response_header_sets_location_and_empty_body() {
+        let response = build_redirect_response_header("/ai/?mode=demo").unwrap();
+
+        assert_eq!(response.status, StatusCode::PERMANENT_REDIRECT);
+        assert_eq!(response.headers.get("location").unwrap(), "/ai/?mode=demo");
+        assert_eq!(response.headers.get("cache-control").unwrap(), "private, no-store");
+        assert_eq!(response.headers.get("content-length").unwrap(), "0");
     }
 }
