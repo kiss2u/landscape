@@ -157,6 +157,7 @@ export default {
   source: "来源",
   sources: "来源列表",
   source_required: "至少需要一个来源",
+  source_duplicate: "来源列表里有重复项",
   source_kind_wan: "WAN 网卡",
   source_kind_lan_device: "LAN 设备",
   source_iface: "网卡",
@@ -187,5 +188,5 @@ export default {
   wildcard_hint:
     "支持填写泛域名记录，例如 *.example.com。创建时可一次填写多个域名，每行会创建一个独立 DDNS 任务。当前第一阶段仅支持本机 WAN 地址来源。",
   zone_records_hint:
-    "一个 DDNS 任务对应一个顶级域名，例如 example.com。子记录请填写相对名称：root 表示根域名，home 表示 home.example.com，* 表示泛域名。保存时会自动把 root 转成 @。相同子记录不能重复。",
+    "一个 DDNS 任务对应一个顶级域名，例如 example.com。子记录请填写相对名称：root 表示根域名，home 表示 home.example.com，* 表示泛域名。保存时会自动把 root 转成 {'@'}。相同子记录不能重复。",
 };

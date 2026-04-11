@@ -18,10 +18,17 @@ import type {
   IpFamily,
 } from "@landscape-router/types/api/schemas";
 import { computed, h, onMounted, ref } from "vue";
-import { NButton, NPopconfirm, NTag, type DataTableColumns } from "naive-ui";
+import {
+  NButton,
+  NPopconfirm,
+  NTag,
+  useMessage,
+  type DataTableColumns,
+} from "naive-ui";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
+const message = useMessage();
 const items = ref<DdnsJob[]>([]);
 const runtimeMap = ref<Map<string, DdnsJobRuntime>>(new Map());
 const providerProfiles = ref<DnsProviderProfile[]>([]);
@@ -317,6 +324,25 @@ function updateRecordInput(index: number, value: string) {
   recordInputs.value[index] = value;
 }
 
+function createSourceInputItem(): SourceInputItem {
+  return {
+    kind: "wan",
+    target_id: ifaceOptions.value[0]?.value ?? "",
+    family: "ipv6",
+  };
+}
+
+function ddnsSourceKey(item: {
+  t: "local_wan" | "enrolled_device";
+  iface_name?: string;
+  device_id?: string;
+  family: IpFamily;
+}) {
+  return item.t === "local_wan"
+    ? `${item.t}:${item.iface_name}:${item.family}`
+    : `${item.t}:${item.device_id}:${item.family}`;
+}
+
 function updateSourceKind(index: number, value: "wan" | "lan_device") {
   if (value === "lan_device") {
     sourceInputs.value[index] = {
@@ -351,9 +377,9 @@ function updateProviderProfile(value: string) {
 }
 
 async function save() {
-  await formRef.value?.validate();
-  saving.value = true;
   try {
+    await formRef.value?.validate();
+    saving.value = true;
     const recordNames = recordInputs.value
       .map((item) => normalizeRecordInput(item))
       .filter(Boolean);
@@ -381,6 +407,9 @@ async function save() {
     if (sources.length === 0) {
       throw new Error(t("cert.source_required"));
     }
+    if (new Set(sources.map(ddnsSourceKey)).size !== sources.length) {
+      throw new Error(t("cert.source_duplicate"));
+    }
 
     await push_ddns_job({
       ...form.value,
@@ -393,6 +422,8 @@ async function save() {
     });
     showModal.value = false;
     await refresh();
+  } catch (e: any) {
+    message.error(e?.response?.data || e?.message || "Operation failed");
   } finally {
     saving.value = false;
   }
@@ -676,7 +707,11 @@ onMounted(async () => {
           </n-dynamic-input>
         </n-form-item>
         <n-form-item :label="t('cert.sources')">
-          <n-dynamic-input v-model:value="sourceInputs" :min="1">
+          <n-dynamic-input
+            v-model:value="sourceInputs"
+            :min="1"
+            :on-create="createSourceInputItem"
+          >
             <template #default="{ value, index }">
               <n-flex style="width: 100%" :size="8" :wrap="false">
                 <n-select

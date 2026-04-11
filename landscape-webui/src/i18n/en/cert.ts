@@ -158,6 +158,7 @@ export default {
   source: "Source",
   sources: "Sources",
   source_required: "At least one source is required",
+  source_duplicate: "Duplicate sources are not allowed",
   source_kind_wan: "WAN Interface",
   source_kind_lan_device: "LAN Device",
   source_iface: "Interface",
@@ -190,5 +191,5 @@ export default {
   wildcard_hint:
     "Wildcard records such as *.example.com are supported. When creating jobs you can enter multiple domains and each line will create an independent DDNS job. The first DDNS version currently only supports local WAN address sources.",
   zone_records_hint:
-    "One DDNS job manages one zone such as example.com. Enter relative record names: root for the zone root, home for home.example.com, and * for the wildcard record. The UI will convert root to @ when saving. Duplicate record names are not allowed.",
+    "One DDNS job manages one zone such as example.com. Enter relative record names: root for the zone root, home for home.example.com, and * for the wildcard record. The UI will convert root to {'@'} when saving. Duplicate record names are not allowed.",
 };

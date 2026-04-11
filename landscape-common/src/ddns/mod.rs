@@ -213,6 +213,21 @@ impl DdnsJob {
             }
         }
 
+        let mut seen_sources = HashSet::new();
+        for source in &self.sources {
+            let source_key = match source {
+                DdnsSource::LocalWan { iface_name, family } => {
+                    format!("local_wan:{}:{family:?}", iface_name.trim())
+                }
+                DdnsSource::EnrolledDevice { device_id, family } => {
+                    format!("enrolled_device:{device_id}:{family:?}")
+                }
+            };
+            if !seen_sources.insert(source_key) {
+                return Err("duplicate DDNS source is not allowed".to_string());
+            }
+        }
+
         let mut seen = HashSet::new();
         for record in &self.records {
             let normalized = normalize_record_name(&record.name)?;
@@ -360,5 +375,32 @@ mod tests {
 
         assert_eq!(job.zone_name, "example.com");
         assert_eq!(job.records[0].name, "www");
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_sources() {
+        let job = DdnsJob {
+            id: Uuid::nil(),
+            name: "test".to_string(),
+            enable: true,
+            sources: vec![
+                DdnsSource::LocalWan {
+                    iface_name: "wan0".to_string(),
+                    family: IpFamily::Ipv4,
+                },
+                DdnsSource::LocalWan {
+                    iface_name: "wan0".to_string(),
+                    family: IpFamily::Ipv4,
+                },
+            ],
+            zone_name: "example.com".to_string(),
+            provider_profile_id: Uuid::nil(),
+            ttl: Some(120),
+            records: vec![DdnsRecordConfig { name: "www".to_string(), enable: true }],
+            update_at: 0.0,
+        };
+
+        let err = job.validate().unwrap_err();
+        assert!(err.contains("duplicate DDNS source"));
     }
 }
