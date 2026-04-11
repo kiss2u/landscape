@@ -176,9 +176,21 @@ const legendItems = computed(() => {
       color: palette.embedded,
       kind: "solid",
     },
-    { label: t("lan_ipv6.planner_legend_wan"), color: palette.warning, kind: "solid" },
-    { label: t("lan_ipv6.planner_legend_blocked"), color: palette.blocked, kind: "striped" },
-    { label: t("lan_ipv6.planner_conflict"), color: palette.error, kind: "solid" },
+    {
+      label: t("lan_ipv6.planner_legend_wan"),
+      color: palette.warning,
+      kind: "solid",
+    },
+    {
+      label: t("lan_ipv6.planner_legend_blocked"),
+      color: palette.blocked,
+      kind: "striped",
+    },
+    {
+      label: t("lan_ipv6.planner_conflict"),
+      color: palette.error,
+      kind: "solid",
+    },
   ];
 });
 
@@ -528,10 +540,11 @@ onBeforeUnmount(() => {
           <i
             class="swatch"
             :class="{ 'swatch-striped': item.kind === 'striped' }"
-            :style="{ '--swatch-color': item.color, backgroundColor: item.color }"
-          />{{
-            item.label
-          }}
+            :style="{
+              '--swatch-color': item.color,
+              backgroundColor: item.color,
+            }"
+          />{{ item.label }}
         </span>
       </div>
     </n-flex>

@@ -5,7 +5,6 @@ import {
   type LDIAPrefix,
 } from "@/api/service_ipv6pd";
 import { get_all_lan_ipv6_configs } from "@/api/service_lan_ipv6";
-import { ifaces } from "@/api/network";
 import PdPrefixPlanner from "@/components/lan_ipv6/PdPrefixPlanner.vue";
 import {
   buildPrefixPlannerViewFromGroups,
@@ -13,7 +12,6 @@ import {
   poolIndexFromPlannerUnitStart,
 } from "@/lib/ipv6_planner";
 import { ServiceStatus } from "@/lib/services";
-import { ZoneType } from "@/lib/service_ipconfig";
 import type {
   IPv6ServiceMode,
   LanIPv6ServiceConfigV2,
@@ -646,16 +644,8 @@ async function searchIpv6Pd() {
 async function loadPlannerContext() {
   prefixInfos.value = await get_current_ip_prefix_info();
   const allConfigs = await get_all_lan_ipv6_configs();
-  const netDevs = await ifaces();
-  const lanIfaceNames = new Set(
-    netDevs
-      .filter((dev) => dev.zone_type === ZoneType.Lan)
-      .map((dev) => dev.name),
-  );
   otherLanConfigsV2.value = allConfigs.filter(
-    (config) =>
-      config.iface_name !== props.currentIfaceName &&
-      lanIfaceNames.has(config.iface_name),
+    (config) => config.iface_name !== props.currentIfaceName,
   );
 }
 

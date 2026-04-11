@@ -99,10 +99,24 @@ pub enum PrefixGroupParentKey {
 
 type PrefixInfoMap = HashMap<String, Option<LDIAPrefix>>;
 
+fn normalize_ipv6_prefix(addr: Ipv6Addr, prefix_len: u8) -> Ipv6Addr {
+    let value = u128::from_be_bytes(addr.octets());
+    let masked = if prefix_len == 0 {
+        0
+    } else if prefix_len >= 128 {
+        value
+    } else {
+        let mask = (!0u128) << (128 - prefix_len as u32);
+        value & mask
+    };
+    Ipv6Addr::from(masked.to_be_bytes())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExpandedParentKey {
     Static(Ipv6Addr, u8),
-    Pd { depend_iface: String, actual_prefix: Option<Ipv6Addr>, prefix_len: u8 },
+    PdActual(Ipv6Addr, u8),
+    PdFallback(String, u8),
 }
 
 impl PrefixParentSource {
@@ -145,17 +159,12 @@ impl PrefixParentSource {
                     .and_then(|infos| infos.get(depend_iface))
                     .and_then(|prefix| prefix.as_ref())
                 {
-                    ExpandedParentKey::Pd {
-                        depend_iface: depend_iface.clone(),
-                        actual_prefix: Some(prefix.prefix_ip),
-                        prefix_len: prefix.prefix_len,
-                    }
+                    ExpandedParentKey::PdActual(
+                        normalize_ipv6_prefix(prefix.prefix_ip, prefix.prefix_len),
+                        prefix.prefix_len,
+                    )
                 } else {
-                    ExpandedParentKey::Pd {
-                        depend_iface: depend_iface.clone(),
-                        actual_prefix: None,
-                        prefix_len: *planned_parent_prefix_len,
-                    }
+                    ExpandedParentKey::PdFallback(depend_iface.clone(), *planned_parent_prefix_len)
                 }
             }
         }
@@ -542,7 +551,7 @@ pub struct ExpandedPrefixEntry {
 
 impl ExpandedPrefixEntry {
     pub fn is_dynamic(&self) -> bool {
-        matches!(self.parent, ExpandedParentKey::Pd { .. })
+        matches!(self.parent, ExpandedParentKey::PdActual(..) | ExpandedParentKey::PdFallback(..))
     }
 
     pub fn effective_index_range(&self, is_dynamic: bool) -> (u64, u64) {
@@ -745,35 +754,39 @@ pub fn validate_prefix_groups_with_prefix_infos(
     groups: &[LanPrefixGroupConfig],
     prefix_infos: Option<&PrefixInfoMap>,
 ) -> Result<(), ServiceConfigError> {
-    let mut by_parent: HashMap<PrefixGroupParentKey, Vec<&LanPrefixGroupConfig>> = HashMap::new();
-    for group in groups {
-        group.validate_with_prefix_infos(prefix_infos)?;
+    let expanded_groups: Vec<Vec<ExpandedPrefixEntry>> = groups
+        .iter()
+        .map(|group| {
+            group.validate_with_prefix_infos(prefix_infos)?;
 
-        let entries =
-            group.active_entries_with_prefix_infos(IPv6ServiceMode::SlaacDhcpv6, prefix_infos);
-        for i in 0..entries.len() {
-            for j in (i + 1)..entries.len() {
-                validate_expanded_pair(&entries[i], &entries[j], entries[i].parent_prefix_len)?;
+            let entries =
+                group.active_entries_with_prefix_infos(IPv6ServiceMode::SlaacDhcpv6, prefix_infos);
+            for i in 0..entries.len() {
+                for j in (i + 1)..entries.len() {
+                    validate_expanded_pair(
+                        &entries[i],
+                        &entries[j],
+                        entries[i].parent_prefix_len,
+                        true,
+                    )?;
+                }
             }
-        }
 
-        by_parent.entry(group.parent.parent_key()).or_default().push(group);
-    }
+            Ok(entries)
+        })
+        .collect::<Result<_, ServiceConfigError>>()?;
 
-    for groups in by_parent.values() {
-        for i in 0..groups.len() {
-            for j in (i + 1)..groups.len() {
-                let a = groups[i];
-                let b = groups[j];
-                for left in
-                    a.active_entries_with_prefix_infos(IPv6ServiceMode::SlaacDhcpv6, prefix_infos)
-                {
-                    for right in b.active_entries_with_prefix_infos(
-                        IPv6ServiceMode::SlaacDhcpv6,
-                        prefix_infos,
-                    ) {
-                        validate_expanded_pair(&left, &right, left.parent_prefix_len)?;
+    for i in 0..expanded_groups.len() {
+        for j in (i + 1)..expanded_groups.len() {
+            let left_entries = &expanded_groups[i];
+            let right_entries = &expanded_groups[j];
+
+            for left in left_entries {
+                for right in right_entries {
+                    if left.parent != right.parent {
+                        continue;
                     }
+                    validate_expanded_pair(left, right, left.parent_prefix_len, false)?;
                 }
             }
         }
@@ -786,12 +799,15 @@ fn validate_expanded_pair(
     a: &ExpandedPrefixEntry,
     b: &ExpandedPrefixEntry,
     parent_len: u8,
+    allow_ra_na_share: bool,
 ) -> Result<(), ServiceConfigError> {
-    if matches!(
-        (a.service_kind, b.service_kind),
-        (PrefixGroupServiceKind::Ra, PrefixGroupServiceKind::Na)
-            | (PrefixGroupServiceKind::Na, PrefixGroupServiceKind::Ra)
-    ) {
+    if allow_ra_na_share
+        && matches!(
+            (a.service_kind, b.service_kind),
+            (PrefixGroupServiceKind::Ra, PrefixGroupServiceKind::Na)
+                | (PrefixGroupServiceKind::Na, PrefixGroupServiceKind::Ra)
+        )
+    {
         return Ok(());
     }
 
@@ -1167,7 +1183,7 @@ pub fn validate_cross_interface_v2_with_prefix_infos(
                 if left.parent != right.parent {
                     continue;
                 }
-                validate_expanded_pair(left, &right, left.parent_prefix_len)?;
+                validate_expanded_pair(left, &right, left.parent_prefix_len, false)?;
             }
         }
     }
@@ -2044,5 +2060,202 @@ mod tests {
         );
 
         assert!(config.validate_with_prefix_infos(Some(&prefix_infos)).is_ok());
+    }
+
+    #[test]
+    fn v2_same_runtime_pd_parent_conflicts_even_if_planned_lengths_differ() {
+        let groups = vec![
+            LanPrefixGroupConfig {
+                group_id: "group-a".to_string(),
+                parent: PrefixParentSource::Pd {
+                    depend_iface: "eth0".to_string(),
+                    planned_parent_prefix_len: 60,
+                },
+                ra: Some(RaPrefixConfig {
+                    pool_index: 0,
+                    preferred_lifetime: 300,
+                    valid_lifetime: 600,
+                }),
+                na: None,
+                pd: None,
+            },
+            LanPrefixGroupConfig {
+                group_id: "group-b".to_string(),
+                parent: PrefixParentSource::Pd {
+                    depend_iface: "eth0".to_string(),
+                    planned_parent_prefix_len: 56,
+                },
+                ra: None,
+                na: None,
+                pd: Some(PdPrefixRangeConfig { pool_len: 64, start_index: 0, end_index: 0 }),
+            },
+        ];
+
+        let mut prefix_infos = HashMap::new();
+        prefix_infos.insert(
+            "eth0".to_string(),
+            Some(LDIAPrefix {
+                preferred_lifetime: 300,
+                valid_lifetime: 600,
+                prefix_len: 56,
+                prefix_ip: "2001:db8::".parse().unwrap(),
+                last_update_time: 0.0,
+            }),
+        );
+
+        assert!(validate_prefix_groups_with_prefix_infos(&groups, Some(&prefix_infos)).is_err());
+    }
+
+    #[test]
+    fn v2_cross_interface_conflicts_when_runtime_pd_prefix_matches_across_ifaces() {
+        let new_config = LanIPv6ServiceConfigV2 {
+            iface_name: "lan-a".to_string(),
+            enable: true,
+            config: LanIPv6ConfigV2 {
+                mode: IPv6ServiceMode::Slaac,
+                ad_interval: 300,
+                ra_flag: ra_flag_default(),
+                prefix_groups: vec![LanPrefixGroupConfig {
+                    group_id: "group-a".to_string(),
+                    parent: PrefixParentSource::Pd {
+                        depend_iface: "wan0".to_string(),
+                        planned_parent_prefix_len: 60,
+                    },
+                    ra: Some(RaPrefixConfig {
+                        pool_index: 0,
+                        preferred_lifetime: 300,
+                        valid_lifetime: 600,
+                    }),
+                    na: None,
+                    pd: None,
+                }],
+                dhcpv6: None,
+            },
+            update_at: 0.0,
+        };
+
+        let other_configs = vec![LanIPv6ServiceConfigV2 {
+            iface_name: "lan-b".to_string(),
+            enable: true,
+            config: LanIPv6ConfigV2 {
+                mode: IPv6ServiceMode::Stateful,
+                ad_interval: 300,
+                ra_flag: RouterFlags::from(0xc0u8),
+                prefix_groups: vec![LanPrefixGroupConfig {
+                    group_id: "group-b".to_string(),
+                    parent: PrefixParentSource::Pd {
+                        depend_iface: "wan1".to_string(),
+                        planned_parent_prefix_len: 56,
+                    },
+                    ra: None,
+                    na: None,
+                    pd: Some(PdPrefixRangeConfig { pool_len: 64, start_index: 0, end_index: 0 }),
+                }],
+                dhcpv6: Some(DHCPv6ServerConfig {
+                    enable: true,
+                    ia_na: Some(crate::dhcp::v6_server::config::DHCPv6IANAConfig {
+                        max_prefix_len: 64,
+                        pool_start: 0x100,
+                        pool_end: None,
+                        preferred_lifetime: 300,
+                        valid_lifetime: 600,
+                    }),
+                    ia_pd: None,
+                }),
+            },
+            update_at: 0.0,
+        }];
+
+        let mut prefix_infos = HashMap::new();
+        prefix_infos.insert(
+            "wan0".to_string(),
+            Some(LDIAPrefix {
+                preferred_lifetime: 300,
+                valid_lifetime: 600,
+                prefix_len: 56,
+                prefix_ip: "2001:db8::".parse().unwrap(),
+                last_update_time: 0.0,
+            }),
+        );
+        prefix_infos.insert(
+            "wan1".to_string(),
+            Some(LDIAPrefix {
+                preferred_lifetime: 300,
+                valid_lifetime: 600,
+                prefix_len: 56,
+                prefix_ip: "2001:db8::".parse().unwrap(),
+                last_update_time: 0.0,
+            }),
+        );
+
+        assert!(validate_cross_interface_v2_with_prefix_infos(
+            &new_config,
+            &other_configs,
+            Some(&prefix_infos),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn v2_cross_interface_ra_and_na_cannot_share_same_prefix() {
+        let new_config = LanIPv6ServiceConfigV2 {
+            iface_name: "lan-a".to_string(),
+            enable: true,
+            config: LanIPv6ConfigV2 {
+                mode: IPv6ServiceMode::Slaac,
+                ad_interval: 300,
+                ra_flag: ra_flag_default(),
+                prefix_groups: vec![LanPrefixGroupConfig {
+                    group_id: "group-a".to_string(),
+                    parent: PrefixParentSource::Static {
+                        base_prefix: "fd00::".parse().unwrap(),
+                        parent_prefix_len: 56,
+                    },
+                    ra: Some(RaPrefixConfig {
+                        pool_index: 0,
+                        preferred_lifetime: 300,
+                        valid_lifetime: 600,
+                    }),
+                    na: None,
+                    pd: None,
+                }],
+                dhcpv6: None,
+            },
+            update_at: 0.0,
+        };
+
+        let other_configs = vec![LanIPv6ServiceConfigV2 {
+            iface_name: "lan-b".to_string(),
+            enable: true,
+            config: LanIPv6ConfigV2 {
+                mode: IPv6ServiceMode::Stateful,
+                ad_interval: 300,
+                ra_flag: RouterFlags::from(0xc0u8),
+                prefix_groups: vec![LanPrefixGroupConfig {
+                    group_id: "group-b".to_string(),
+                    parent: PrefixParentSource::Static {
+                        base_prefix: "fd00::".parse().unwrap(),
+                        parent_prefix_len: 56,
+                    },
+                    ra: None,
+                    na: Some(NaPrefixConfig { pool_index: 0 }),
+                    pd: None,
+                }],
+                dhcpv6: Some(DHCPv6ServerConfig {
+                    enable: true,
+                    ia_na: Some(crate::dhcp::v6_server::config::DHCPv6IANAConfig {
+                        max_prefix_len: 64,
+                        pool_start: 0x100,
+                        pool_end: None,
+                        preferred_lifetime: 300,
+                        valid_lifetime: 600,
+                    }),
+                    ia_pd: None,
+                }),
+            },
+            update_at: 0.0,
+        }];
+
+        assert!(validate_cross_interface_v2(&new_config, &other_configs).is_err());
     }
 }

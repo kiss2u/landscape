@@ -30,6 +30,7 @@ type ServiceKind = "ra" | "na" | "pd";
 export interface PlannerOccupant {
   ifaceName: string;
   scope: "current" | "other";
+  groupId: string;
   serviceKind: ServiceKind;
   effectiveIndex: number;
   poolLen: number;
@@ -95,6 +96,7 @@ export interface BuildGroupPlannerOptions {
 interface OccupancyRecord {
   ifaceName: string;
   scope: "current" | "other";
+  groupId: string;
   serviceKind: ServiceKind;
   effectiveIndex: number;
   poolLen: number;
@@ -167,12 +169,18 @@ function rangesOverlap(
 
 function conflictBetweenSelection(
   selectedKind: ServiceKind,
+  selectedGroupId: string,
+  occupantGroupId: string,
+  occupantScope: "current" | "other",
   occupantKind: ServiceKind,
 ) {
-  return !(
-    (selectedKind === "ra" && occupantKind === "na") ||
-    (selectedKind === "na" && occupantKind === "ra")
-  );
+  const canShareWithinSameGroup =
+    occupantScope === "current" &&
+    selectedGroupId === occupantGroupId &&
+    ((selectedKind === "ra" && occupantKind === "na") ||
+      (selectedKind === "na" && occupantKind === "ra"));
+
+  return !canShareWithinSameGroup;
 }
 
 function ipv6ToBigInt(ip: string): bigint {
@@ -267,6 +275,11 @@ function prefixAtIndex(
   return `${bigIntToIpv6(network)}/${targetPrefixLen}`;
 }
 
+function normalizePrefix(basePrefix: string, prefixLen: number): string {
+  const base = ipv6ToBigInt(basePrefix) & maskForPrefix(prefixLen);
+  return bigIntToIpv6(base);
+}
+
 function reservedBlockOffsetForPrefix(targetPrefixLen: number): number {
   if (targetPrefixLen <= 64) {
     return 1;
@@ -280,6 +293,7 @@ function reservedBlockOffsetForPrefix(targetPrefixLen: number): number {
 
 function selectionStatus(
   selectedKind: ServiceKind,
+  selectedGroupId: string,
   records: OccupancyRecord[],
   selectedUnitStart: number,
   selectedUnitSpan: number,
@@ -303,11 +317,15 @@ function selectionStatus(
     .map((record) => ({
       ifaceName: record.ifaceName,
       scope: record.scope,
+      groupId: record.groupId,
       serviceKind: record.serviceKind,
       effectiveIndex: record.effectiveIndex,
       poolLen: record.poolLen,
       conflictsWithSelection: conflictBetweenSelection(
         selectedKind,
+        selectedGroupId,
+        record.groupId,
+        record.scope,
         record.serviceKind,
       ),
     }));
@@ -357,6 +375,9 @@ function recordsConflict(records: OccupancyRecord[]): boolean {
       if (
         conflictBetweenSelection(
           records[left].serviceKind,
+          records[left].groupId,
+          records[right].groupId,
+          records[right].scope,
           records[right].serviceKind,
         )
       ) {
@@ -464,7 +485,7 @@ function occupancyParentKeyForParent(
 
   const actualPrefix = prefixInfos.get(parent.dependIface) ?? null;
   if (actualPrefix) {
-    return `pd-actual:${parent.dependIface}:${actualPrefix.prefix_ip}/${actualPrefix.prefix_len}`;
+    return `pd-actual:${normalizePrefix(actualPrefix.prefix_ip, actualPrefix.prefix_len)}/${actualPrefix.prefix_len}`;
   }
 
   return parent.key;
@@ -653,6 +674,7 @@ function buildGroupOccupancyRecord(
   return {
     ifaceName,
     scope,
+    groupId: entry.groupId,
     serviceKind: entry.serviceKind,
     effectiveIndex: startIndex,
     poolLen: entry.poolLen,
@@ -686,23 +708,21 @@ function buildGroupOccupancyRecords(
       ),
   );
 
-  const otherRecords = options.otherConfigsV2
-    .filter((config) => config.enable)
-    .flatMap((config) =>
-      (config.config.prefix_groups ?? [])
-        // Match the current-interface canvas behavior: keep configured results visible
-        // for other LANs as well, so users can see occupied positions even when a mode
-        // would not currently activate that kind.
-        .flatMap((group) => buildEntriesForGroup(group, undefined))
-        .filter(
-          (entry) =>
-            occupancyParentKeyForParent(entry.parent, options.prefixInfos) ===
-            parentKey,
-        )
-        .map((entry) =>
-          buildGroupOccupancyRecord(config.iface_name, "other", entry),
-        ),
-    );
+  const otherRecords = options.otherConfigsV2.flatMap((config) =>
+    (config.config.prefix_groups ?? [])
+      // Match the current-interface canvas behavior: keep configured results visible
+      // for other LANs as well, so users can see occupied positions even when a mode
+      // would not currently activate that kind.
+      .flatMap((group) => buildEntriesForGroup(group, undefined))
+      .filter(
+        (entry) =>
+          occupancyParentKeyForParent(entry.parent, options.prefixInfos) ===
+          parentKey,
+      )
+      .map((entry) =>
+        buildGroupOccupancyRecord(config.iface_name, "other", entry),
+      ),
+  );
 
   return [...currentRecords, ...otherRecords];
 }
@@ -804,7 +824,8 @@ function buildGroupPlannerViewBase(
   const actualPrefix =
     options.prefixInfos.get(selectedEntry.parent.dependIface) ?? null;
   const plannedParentPrefixLen = selectedEntry.parent.plannedParentPrefixLen;
-  const effectiveParentPrefixLen = actualPrefix?.prefix_len ?? plannedParentPrefixLen;
+  const effectiveParentPrefixLen =
+    actualPrefix?.prefix_len ?? plannedParentPrefixLen;
   const occupancyParentKey = occupancyParentKeyForParent(
     selectedEntry.parent,
     options.prefixInfos,
@@ -945,6 +966,7 @@ function buildGroupPlannerView(
   const selection = base.hasSelection
     ? selectionStatus(
         base.selectedKind,
+        base.entry.groupId,
         allRecords,
         base.selectedUnitStart,
         base.selectedUnitSpan,
@@ -1045,7 +1067,13 @@ function buildGroupPlannerView(
         base.reservedUnitCount,
       );
     const conflictingRecords = blockRecords.filter((record) =>
-      conflictBetweenSelection(base.selectedKind, record.serviceKind),
+      conflictBetweenSelection(
+        base.selectedKind,
+        base.entry.groupId,
+        record.groupId,
+        record.scope,
+        record.serviceKind,
+      ),
     );
 
     if (blockHitsReserved || conflictingRecords.length > 0) {
@@ -1208,6 +1236,7 @@ export function inspectPlannerUnitRangeCandidateFromGroups(
 
   const selection = selectionStatus(
     base.selectedKind,
+    base.entry.groupId,
     buildGroupOccupancyRecords(options, base.parentKey),
     unitStart,
     unitSpan,
