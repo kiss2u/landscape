@@ -55,6 +55,46 @@ const selectedIface = computed(() =>
     (dev) => dev.index === selectedIfaceId.value,
   ),
 );
+const highlightedIfaces = computed(() => {
+  if (!selectedIface.value) {
+    return undefined;
+  }
+
+  const highlighted = new Set<number>([selectedIface.value.index]);
+
+  if (selectedIface.value.controller_id !== undefined) {
+    highlighted.add(selectedIface.value.controller_id);
+  }
+
+  for (const dev of ifaceNodeStore.visible_net_devs) {
+    if (dev.controller_id === selectedIface.value.index) {
+      highlighted.add(dev.index);
+    }
+  }
+
+  return highlighted;
+});
+const flowNodes = computed(() => {
+  const highlighted = highlightedIfaces.value;
+
+  return ifaceNodeStore.nodes.map((node) => ({
+    ...node,
+    class: highlighted && !highlighted.has(Number(node.id)) ? "is-dimmed" : "",
+  }));
+});
+const flowEdges = computed(() => {
+  const highlighted = highlightedIfaces.value;
+
+  return ifaceNodeStore.edges.map((edge) => ({
+    ...edge,
+    class:
+      highlighted &&
+      (!highlighted.has(Number(edge.source)) ||
+        !highlighted.has(Number(edge.target)))
+        ? "normal-edge is-dimmed"
+        : "normal-edge",
+  }));
+});
 const detailOpen = computed(() => selectedIface.value !== undefined);
 const miniMapMaskColor = computed(() =>
   changeColor(themeVars.value.primaryColor, { alpha: 0.08 }),
@@ -280,8 +320,8 @@ onPaneClick(() => {
     <VueFlow
       class="topology-flow"
       :style="flowStyle"
-      :nodes="ifaceNodeStore.nodes"
-      :edges="ifaceNodeStore.edges"
+      :nodes="flowNodes"
+      :edges="flowEdges"
       :nodes-draggable="false"
       :nodes-connectable="true"
       :elements-selectable="false"
@@ -295,6 +335,11 @@ onPaneClick(() => {
         <FlowNode
           :node="nodeProps.data"
           :selected="selectedIfaceId === Number(nodeProps.id)"
+          :dimmed="
+            Boolean(
+              highlightedIfaces && !highlightedIfaces.has(Number(nodeProps.id)),
+            )
+          "
         />
       </template>
 
@@ -395,11 +440,17 @@ onPaneClick(() => {
   border: none;
   box-shadow: none;
   padding: 0;
+  transition: opacity 0.18s ease;
 }
 
 .topology-flow :deep(.vue-flow__edge-path) {
   stroke-width: 2;
   stroke: var(--topology-flow-edge);
+  transition: opacity 0.18s ease;
+}
+
+.topology-flow :deep(.vue-flow__edge.is-dimmed .vue-flow__edge-path) {
+  opacity: 0.18;
 }
 
 .topology-flow :deep(.vue-flow__edge.animated path) {

@@ -42,9 +42,11 @@ const props = withDefaults(
   defineProps<{
     node: NetDev;
     selected?: boolean;
+    dimmed?: boolean;
   }>(),
   {
     selected: false,
+    dimmed: false,
   },
 );
 
@@ -336,7 +338,7 @@ const node_style = computed(() => ({
 <template>
   <div
     class="topology-node"
-    :class="{ 'is-selected': selected }"
+    :class="{ 'is-selected': selected, 'is-dimmed': dimmed }"
     :data-testid="`topology-node-${node.index}`"
     :style="node_style"
   >
@@ -509,6 +511,22 @@ const node_style = computed(() => ({
   position: relative;
   width: var(--topology-node-width);
   box-sizing: border-box;
+  transition:
+    opacity 0.18s ease,
+    filter 0.18s ease;
+}
+
+.topology-node.is-dimmed {
+  opacity: 0.34;
+  filter: saturate(0.55);
+}
+
+.topology-node.is-dimmed .topology-node__card {
+  box-shadow: none;
+}
+
+.topology-node.is-dimmed .topology-node__services {
+  opacity: 0.7;
 }
 
 .topology-node__main {
