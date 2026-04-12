@@ -41,7 +41,7 @@ export default {
     restart_unless_stopped: "除非手动停止，否则自动重启",
   },
   topology_node: {
-    confirm_toggle_iface: "确定{action}网卡吗",
+    confirm_toggle_iface: "确定要{action}该网卡吗？",
     action_disable: "关闭",
     action_enable: "开启",
     delete_btn: "删除!",
@@ -131,6 +131,10 @@ export default {
     open_mss_clamp: "MSS 钳制",
     no_services: "当前没有可用的服务入口",
     change_zone: "修改区域",
+    enable_boot: "开机启用",
+    disable_boot: "取消开机启用",
+    confirm_enable_boot: "确定将该网卡设为开机启用吗？",
+    confirm_disable_boot: "确定取消该网卡的开机启用吗？",
     edit_cpu_balance: "CPU 平衡",
     switch_to_ap: "切到 AP 模式",
     switch_to_client: "切到客户端模式",
@@ -139,6 +143,7 @@ export default {
     delete_bridge: "删除 Bridge",
     yes: "是",
     no: "否",
+    close: "取消",
   },
   route_lan: {
     title: "Lan 路由转发服务",

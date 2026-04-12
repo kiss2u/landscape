@@ -1,4 +1,5 @@
 import { NetDev } from "@/lib/dev";
+import axios from "axios";
 import {
   getIfacesOld,
   setController as add_controller,
@@ -8,6 +9,11 @@ import {
   changeDevStatus as change_iface_status,
   changeWifiMode as change_wifi_mode,
 } from "@landscape-router/types/api/interfaces/interfaces";
+import { applyInterceptors } from "@/api";
+
+const networkAxios = applyInterceptors(
+  axios.create({ baseURL: "/api/v1/interfaces", timeout: 30000 }),
+);
 
 export {
   add_controller,
@@ -24,4 +30,13 @@ export async function ifaces(): Promise<NetDev[]> {
 
 export async function create_bridge(name: string) {
   return createBridge({ name });
+}
+
+export async function change_iface_boot_status(
+  iface_name: string,
+  enable_in_boot: boolean,
+) {
+  return networkAxios.post(
+    `/${encodeURIComponent(iface_name)}/boot/${enable_in_boot}`,
+  );
 }

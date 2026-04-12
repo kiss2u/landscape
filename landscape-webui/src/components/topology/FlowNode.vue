@@ -10,6 +10,7 @@ import NATEditModal from "@/components/nat/NATEditModal.vue";
 import PPPDServiceListDrawer from "@/components/pppd/PPPDServiceListDrawer.vue";
 import RouteLanServiceEditModal from "@/components/route/lan/RouteLanServiceEditModal.vue";
 import RouteWanServiceEditModal from "@/components/route/wan/RouteWanServiceEditModal.vue";
+import WifiModeChange from "@/components/wifi/WifiModeChange.vue";
 import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
 import { Link } from "@vicons/carbon";
 import { useThemeVars } from "naive-ui";
@@ -367,6 +368,13 @@ const node_style = computed(() => ({
               </n-performant-ellipsis>
             </div>
             <div class="topology-node__header-actions">
+              <WifiModeChange
+                v-if="show_switch.wifi || show_switch.station"
+                :iface_name="node.name"
+                :wifi_info="node.wifi_mode"
+                :show_switch="show_switch"
+                @refresh="refreshGraph"
+              />
               <n-button
                 v-if="show_switch.pppd"
                 quaternary

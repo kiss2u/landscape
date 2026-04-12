@@ -27,6 +27,7 @@ pub fn get_iface_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(set_controller))
         .routes(routes!(change_zone))
         .routes(routes!(change_dev_status))
+        .routes(routes!(change_dev_boot_status))
         .routes(routes!(change_wifi_mode))
         .routes(routes!(get_cpu_balance, set_cpu_balance))
 }
@@ -180,6 +181,25 @@ async fn change_dev_status(
     Path((iface_name, enable_in_boot)): Path<(String, bool)>,
 ) -> LandscapeApiResult<()> {
     state.iface_config_service.change_dev_status(iface_name, enable_in_boot).await;
+    LandscapeApiResp::success(())
+}
+
+#[utoipa::path(
+    post,
+    path = "/{iface_name}/boot/{status}",
+    tag = "Interfaces",
+    operation_id = "change_dev_boot_status",
+    params(
+        ("iface_name" = String, Path, description = "Interface name"),
+        ("status" = bool, Path, description = "Enable in boot")
+    ),
+    responses((status = 200, description = "Success"))
+)]
+async fn change_dev_boot_status(
+    State(state): State<LandscapeApp>,
+    Path((iface_name, enable_in_boot)): Path<(String, bool)>,
+) -> LandscapeApiResult<()> {
+    state.iface_config_service.change_dev_boot_status(iface_name, enable_in_boot).await;
     LandscapeApiResp::success(())
 }
 

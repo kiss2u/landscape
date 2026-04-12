@@ -1,50 +1,23 @@
 <script setup lang="ts">
-import DHCPv4ServiceEditModal from "@/components/dhcp_v4/DHCPv4ServiceEditModal.vue";
-import FirewallServiceEditModal from "@/components/firewall/FirewallServiceEditModal.vue";
 import IfaceChangeZone from "@/components/iface/IfaceChangeZone.vue";
 import IfaceCpuSoftBalance from "@/components/iface/IfaceCpuSoftBalance.vue";
 import IfaceDisableGuardModal from "@/components/iface/IfaceDisableGuardModal.vue";
-import ICMPRaEditModal from "@/components/icmp_ra/ICMPRaEditModal.vue";
-import IpConfigModal from "@/components/ipconfig/IpConfigModal.vue";
-import IPv6PDEditModal from "@/components/ipv6pd/IPv6PDEditModal.vue";
-import MSSClampServiceEditModal from "@/components/mss_clamp/MSSClampServiceEditModal.vue";
-import NATEditModal from "@/components/nat/NATEditModal.vue";
-import PPPDServiceListDrawer from "@/components/pppd/PPPDServiceListDrawer.vue";
-import RouteLanServiceEditModal from "@/components/route/lan/RouteLanServiceEditModal.vue";
-import RouteWanServiceEditModal from "@/components/route/wan/RouteWanServiceEditModal.vue";
-import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
 import {
   add_controller,
+  change_iface_boot_status,
   change_iface_status,
-  change_wifi_mode,
   delete_bridge,
 } from "@/api/network";
-import { stop_and_del_iface_wifi } from "@/api/service_wifi";
 import { DevStateType, NetDev, WifiMode, WLANTypeTag } from "@/lib/dev";
 import { ZoneType } from "@/lib/service_ipconfig";
 import {
   canManageBridgeAttachment,
   getBridgeAttachIssue,
 } from "@/lib/topology";
-import {
-  ServiceExhibitSwitch,
-  ServiceStatus,
-  get_service_status_color,
-  get_service_status_label,
-} from "@/lib/services";
+import { ServiceExhibitSwitch } from "@/lib/services";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useIfaceNodeStore } from "@/stores/iface_node";
-import { useDHCPv4ConfigStore } from "@/stores/status_dhcp_v4";
-import { useFirewallConfigStore } from "@/stores/status_firewall";
-import { useIpConfigStore } from "@/stores/status_ipconfig";
-import { useIPv6PDStore } from "@/stores/status_ipv6pd";
-import { useLanIPv6Store } from "@/stores/status_lan_ipv6";
-import { useMSSClampConfigStore } from "@/stores/status_mss_clamp";
-import { useNATConfigStore } from "@/stores/status_nats";
-import { useRouteLanConfigStore } from "@/stores/status_route_lan";
-import { useRouteWanConfigStore } from "@/stores/status_route_wan";
-import { useWifiConfigStore } from "@/stores/status_wifi";
-import { useMessage, useThemeVars } from "naive-ui";
+import { useDialog, useMessage, useThemeVars } from "naive-ui";
 import { changeColor } from "seemly";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
@@ -56,34 +29,12 @@ const props = defineProps<{
 const emit = defineEmits(["close"]);
 
 const { t } = useI18n();
+const dialog = useDialog();
 const message = useMessage();
 const frontEndStore = useFrontEndStore();
 const ifaceNodeStore = useIfaceNodeStore();
 const themeVars = useThemeVars();
-
-const ipConfigStore = useIpConfigStore();
-const dhcpv4ConfigStore = useDHCPv4ConfigStore();
-const natConfigStore = useNATConfigStore();
-const firewallConfigStore = useFirewallConfigStore();
-const ipv6PDStore = useIPv6PDStore();
-const lanIpv6Store = useLanIPv6Store();
-const wifiConfigStore = useWifiConfigStore();
-const routeLanConfigStore = useRouteLanConfigStore();
-const routeWanConfigStore = useRouteWanConfigStore();
-const mssClampConfigStore = useMSSClampConfigStore();
-
-const show_mss_clamp_edit = ref(false);
-const iface_dhcp_v4_service_edit_show = ref(false);
-const iface_wifi_edit_show = ref(false);
-const iface_firewall_edit_show = ref(false);
-const iface_lan_ipv6_edit_show = ref(false);
-const iface_ipv6pd_edit_show = ref(false);
-const iface_nat_edit_show = ref(false);
-const iface_service_edit_show = ref(false);
 const show_zone_change = ref(false);
-const show_pppd_drawer = ref(false);
-const show_route_lan_drawer = ref(false);
-const show_route_wan_drawer = ref(false);
 const show_cpu_balance_btn = ref(false);
 const delete_loading = ref(false);
 const selected_bridge_ifindex = ref<number | null>(null);
@@ -100,37 +51,6 @@ watch(
 );
 
 const show_switch = computed(() => new ServiceExhibitSwitch(props.node));
-
-const ip_config_status = computed(
-  () => ipConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const dhcp_v4_status = computed(
-  () => dhcpv4ConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const nat_status = computed(
-  () => natConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const firewall_status = computed(
-  () => firewallConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const ipv6pd_status = computed(
-  () => ipv6PDStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const lan_ipv6_status = computed(
-  () => lanIpv6Store.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const wifi_status = computed(
-  () => wifiConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const route_lan_status = computed(
-  () => routeLanConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const route_wan_status = computed(
-  () => routeWanConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
-const mss_clamp_status = computed(
-  () => mssClampConfigStore.GET_STATUS_BY_IFACE_NAME(props.node.name).value,
-);
 
 const has_controller = computed(() => props.node.controller_id !== undefined);
 const controller_dev = computed(() => {
@@ -157,6 +77,7 @@ const can_attach_bridge = computed(
   () =>
     can_manage_controller.value && props.node.zone_type === ZoneType.Undefined,
 );
+const can_manage_device_state = computed(() => props.node.dev_type !== "ppp");
 const controller_hint = computed(() => {
   if (!can_attach_bridge.value) {
     return t("misc.topology_panel.connect_unavailable");
@@ -175,109 +96,55 @@ const controller_hint = computed(() => {
   }
   return t("misc.topology_panel.connect_hint");
 });
-const service_sections = computed(() => {
+const action_sections = computed(() => {
   const sections: Array<{
     key: string;
     short_label: string;
     label: string;
-    status?: ServiceStatus;
   }> = [];
 
-  if (show_switch.value.mss_clamp) {
+  if (can_manage_device_state.value) {
     sections.push({
-      key: "mss_clamp",
-      short_label: "MSS",
-      label: t("misc.topology_panel.open_mss_clamp"),
-      status: mss_clamp_status.value,
+      key: "toggle_device",
+      short_label: props.node.dev_status.t === DevStateType.Up ? "OFF" : "ON",
+      label:
+        props.node.dev_status.t === DevStateType.Up
+          ? t("misc.topology_node.action_disable")
+          : t("misc.topology_node.action_enable"),
+    });
+
+    sections.push({
+      key: "boot",
+      short_label: "BOOT",
+      label: props.node.enable_in_boot
+        ? t("misc.topology_panel.disable_boot")
+        : t("misc.topology_panel.enable_boot"),
     });
   }
-  if (show_switch.value.ip_config) {
+
+  if (show_switch.value.zone_type) {
     sections.push({
-      key: "ip_config",
-      short_label: "IP",
-      label: t("misc.topology_panel.open_ip_config"),
-      status: ip_config_status.value,
+      key: "change_zone",
+      short_label: "ZONE",
+      label: t("misc.topology_panel.change_zone"),
     });
   }
-  if (show_switch.value.dhcp_v4) {
+  sections.push({
+    key: "cpu_balance",
+    short_label: "CPU",
+    label: t("misc.topology_panel.edit_cpu_balance"),
+  });
+
+  if (props.node.dev_kind === "bridge" && props.node.name !== "docker0") {
     sections.push({
-      key: "dhcp_v4",
-      short_label: "DHCPv4",
-      label: t("misc.topology_panel.open_dhcp_v4"),
-      status: dhcp_v4_status.value,
-    });
-  }
-  if (show_switch.value.nat_config) {
-    sections.push({
-      key: "nat",
-      short_label: "NAT",
-      label: t("misc.topology_panel.open_nat"),
-      status: nat_status.value,
-    });
-  }
-  if (show_switch.value.firewall) {
-    sections.push({
-      key: "firewall",
-      short_label: "FW",
-      label: t("misc.topology_panel.open_firewall"),
-      status: firewall_status.value,
-    });
-  }
-  if (show_switch.value.wifi) {
-    sections.push({
-      key: "wifi",
-      short_label: "WF",
-      label: t("misc.topology_panel.open_wifi"),
-      status: wifi_status.value,
-    });
-  }
-  if (show_switch.value.ipv6pd) {
-    sections.push({
-      key: "ipv6pd",
-      short_label: "PD",
-      label: t("misc.topology_panel.open_ipv6pd"),
-      status: ipv6pd_status.value,
-    });
-  }
-  if (show_switch.value.lan_ipv6) {
-    sections.push({
-      key: "lan_ipv6",
-      short_label: "LANv6",
-      label: t("misc.topology_panel.open_icmpv6_ra"),
-      status: lan_ipv6_status.value,
-    });
-  }
-  if (show_switch.value.route_lan) {
-    sections.push({
-      key: "route_lan",
-      short_label: "LR",
-      label: t("misc.topology_panel.open_route_lan"),
-      status: route_lan_status.value,
-    });
-  }
-  if (show_switch.value.route_wan) {
-    sections.push({
-      key: "route_wan",
-      short_label: "WR",
-      label: t("misc.topology_panel.open_route_wan"),
-      status: route_wan_status.value,
-    });
-  }
-  if (show_switch.value.pppd) {
-    sections.push({
-      key: "pppd",
-      short_label: "PPP",
-      label: t("misc.topology_panel.configure_pppd"),
+      key: "delete_bridge",
+      short_label: "DEL",
+      label: t("misc.topology_panel.delete_bridge"),
     });
   }
 
   return sections;
 });
-const wifi_mode_target_label = computed(() =>
-  show_switch.value.wifi
-    ? t("misc.topology_panel.switch_to_client")
-    : t("misc.topology_panel.switch_to_ap"),
-);
 const panelStyle = computed(() => ({
   "--topology-panel-border": themeVars.value.borderColor,
   "--topology-panel-bg": changeColor(themeVars.value.cardColor, {
@@ -303,9 +170,63 @@ const panelStyle = computed(() => ({
   "--topology-panel-rail-hover": changeColor(themeVars.value.primaryColor, {
     alpha: 0.08,
   }),
+  "--topology-panel-rail-active-bg": changeColor(themeVars.value.successColor, {
+    alpha: 0.14,
+  }),
+  "--topology-panel-rail-active-border": changeColor(
+    themeVars.value.successColor,
+    {
+      alpha: 0.42,
+    },
+  ),
+  "--topology-panel-rail-active-text": themeVars.value.successColor,
+  "--topology-panel-rail-wan-bg": changeColor(themeVars.value.warningColor, {
+    alpha: 0.14,
+  }),
+  "--topology-panel-rail-wan-border": changeColor(
+    themeVars.value.warningColor,
+    {
+      alpha: 0.42,
+    },
+  ),
+  "--topology-panel-rail-wan-text": themeVars.value.warningColor,
+  "--topology-panel-rail-lan-bg": changeColor(themeVars.value.infoColor, {
+    alpha: 0.14,
+  }),
+  "--topology-panel-rail-lan-border": changeColor(themeVars.value.infoColor, {
+    alpha: 0.42,
+  }),
+  "--topology-panel-rail-lan-text": themeVars.value.infoColor,
   "--topology-panel-muted": themeVars.value.textColor3,
   "--topology-panel-text": themeVars.value.textColor1,
 }));
+
+function isActiveAction(action_key: string) {
+  switch (action_key) {
+    case "toggle_device":
+      return props.node.dev_status.t === DevStateType.Up;
+    case "boot":
+      return props.node.enable_in_boot;
+    default:
+      return false;
+  }
+}
+
+function zoneActionClass(action_key: string) {
+  if (action_key !== "change_zone") {
+    return undefined;
+  }
+
+  if (props.node.zone_type === ZoneType.Wan) {
+    return "is-wan";
+  }
+
+  if (props.node.zone_type === ZoneType.Lan) {
+    return "is-lan";
+  }
+
+  return undefined;
+}
 
 function closePanel() {
   emit("close");
@@ -347,14 +268,6 @@ function zoneTagType(zone: ZoneType) {
   return "default";
 }
 
-function serviceStatusText(status?: ServiceStatus) {
-  return get_service_status_label(status, t);
-}
-
-function serviceStatusColor(status?: ServiceStatus) {
-  return get_service_status_color(status, themeVars.value);
-}
-
 function bridgeAttachWarning(
   controller: NetDev | undefined,
   child: NetDev | undefined,
@@ -375,46 +288,59 @@ function bridgeAttachWarning(
   }
 }
 
-function openServiceEditor(service_key: string) {
-  switch (service_key) {
-    case "ip_config":
-      iface_service_edit_show.value = true;
-      break;
-    case "dhcp_v4":
-      iface_dhcp_v4_service_edit_show.value = true;
-      break;
-    case "nat":
-      iface_nat_edit_show.value = true;
-      break;
-    case "firewall":
-      iface_firewall_edit_show.value = true;
-      break;
-    case "wifi":
-      iface_wifi_edit_show.value = true;
-      break;
-    case "ipv6pd":
-      iface_ipv6pd_edit_show.value = true;
-      break;
-    case "lan_ipv6":
-      iface_lan_ipv6_edit_show.value = true;
-      break;
-    case "route_lan":
-      show_route_lan_drawer.value = true;
-      break;
-    case "route_wan":
-      show_route_wan_drawer.value = true;
-      break;
-    case "mss_clamp":
-      show_mss_clamp_edit.value = true;
-      break;
-    case "pppd":
-      show_pppd_drawer.value = true;
-      break;
-  }
-}
-
 async function refreshGraph() {
   await ifaceNodeStore.UPDATE_INFO();
+}
+
+function openQuickAction(action_key: string) {
+  switch (action_key) {
+    case "toggle_device":
+      dialog.warning({
+        title: t("misc.topology_panel.actions"),
+        content: t("misc.topology_node.confirm_toggle_iface", {
+          action:
+            props.node.dev_status.t === DevStateType.Up
+              ? t("misc.topology_node.action_disable")
+              : t("misc.topology_node.action_enable"),
+        }),
+        positiveText: t("misc.topology_panel.yes"),
+        negativeText: t("misc.topology_panel.close"),
+        onPositiveClick: () => changeDeviceStatus(),
+      });
+      break;
+    case "change_zone":
+      show_zone_change.value = true;
+      break;
+    case "boot":
+      dialog.warning({
+        title: t("misc.topology_panel.actions"),
+        content: props.node.enable_in_boot
+          ? t("misc.topology_panel.confirm_disable_boot")
+          : t("misc.topology_panel.confirm_enable_boot"),
+        positiveText: t("misc.topology_panel.yes"),
+        negativeText: t("misc.topology_panel.close"),
+        onPositiveClick: async () => {
+          await change_iface_boot_status(
+            props.node.name,
+            !props.node.enable_in_boot,
+          );
+          await refreshGraph();
+        },
+      });
+      break;
+    case "cpu_balance":
+      show_cpu_balance_btn.value = true;
+      break;
+    case "delete_bridge":
+      dialog.error({
+        title: t("misc.topology_panel.delete_bridge"),
+        content: t("misc.topology_node.delete_bridge"),
+        positiveText: t("misc.topology_node.delete_btn"),
+        negativeText: t("misc.topology_panel.close"),
+        onPositiveClick: () => handleDeleteBridge(),
+      });
+      break;
+  }
 }
 
 async function changeDeviceStatus() {
@@ -476,13 +402,6 @@ async function attachController() {
   await refreshGraph();
 }
 
-async function switchWifiMode() {
-  const next_mode = show_switch.value.wifi ? WifiMode.Client : WifiMode.AP;
-  await stop_and_del_iface_wifi(props.node.name);
-  await change_wifi_mode(props.node.name, next_mode);
-  await refreshGraph();
-}
-
 async function handleDeleteBridge() {
   try {
     delete_loading.value = true;
@@ -504,10 +423,10 @@ async function handleDeleteBridge() {
     :data-testid="`topology-detail-${node.index}`"
     :style="panelStyle"
   >
-    <div v-if="service_sections.length" class="topology-detail__rail-shell">
+    <div v-if="action_sections.length" class="topology-detail__rail-shell">
       <div class="topology-detail__rail">
         <n-tooltip
-          v-for="section in service_sections"
+          v-for="section in action_sections"
           :key="section.key"
           trigger="hover"
         >
@@ -515,19 +434,19 @@ async function handleDeleteBridge() {
             <button
               type="button"
               class="topology-detail__rail-button"
-              :data-testid="`topology-detail-${node.index}-service-${section.key}`"
-              @click="openServiceEditor(section.key)"
+              :class="[
+                { 'is-active': isActiveAction(section.key) },
+                zoneActionClass(section.key),
+              ]"
+              :data-testid="`topology-detail-${node.index}-action-${section.key}`"
+              @click="openQuickAction(section.key)"
             >
               <span class="topology-detail__rail-label">
                 {{ section.short_label }}
               </span>
-              <span
-                class="topology-detail__rail-dot"
-                :style="{ backgroundColor: serviceStatusColor(section.status) }"
-              />
             </button>
           </template>
-          {{ section.label }} · {{ serviceStatusText(section.status) }}
+          {{ section.label }}
         </n-tooltip>
       </div>
     </div>
@@ -699,156 +618,12 @@ async function handleDeleteBridge() {
                 </div>
               </n-flex>
             </n-card>
-
-            <n-card size="small" embedded>
-              <template #header>
-                {{ t("misc.topology_panel.actions") }}
-              </template>
-              <n-flex wrap size="small">
-                <n-popconfirm
-                  v-if="show_switch.enable_in_boot"
-                  @positive-click="changeDeviceStatus"
-                >
-                  <template #trigger>
-                    <n-button
-                      data-testid="topology-toggle-device"
-                      tertiary
-                      size="small"
-                    >
-                      {{
-                        node.dev_status.t === DevStateType.Up
-                          ? t("misc.topology_node.action_disable")
-                          : t("misc.topology_node.action_enable")
-                      }}
-                    </n-button>
-                  </template>
-                  {{
-                    t("misc.topology_node.confirm_toggle_iface", {
-                      action:
-                        node.dev_status.t === DevStateType.Up
-                          ? t("misc.topology_node.action_disable")
-                          : t("misc.topology_node.action_enable"),
-                    })
-                  }}
-                </n-popconfirm>
-
-                <n-button
-                  data-testid="topology-change-zone"
-                  v-if="show_switch.zone_type"
-                  tertiary
-                  size="small"
-                  @click="show_zone_change = true"
-                >
-                  {{ t("misc.topology_panel.change_zone") }}
-                </n-button>
-
-                <n-button
-                  data-testid="topology-edit-cpu-balance"
-                  tertiary
-                  size="small"
-                  @click="show_cpu_balance_btn = true"
-                >
-                  {{ t("misc.topology_panel.edit_cpu_balance") }}
-                </n-button>
-
-                <n-popconfirm
-                  v-if="show_switch.wifi || show_switch.station"
-                  @positive-click="switchWifiMode"
-                >
-                  <template #trigger>
-                    <n-button
-                      data-testid="topology-switch-wifi-mode"
-                      tertiary
-                      size="small"
-                    >
-                      {{ wifi_mode_target_label }}
-                    </n-button>
-                  </template>
-                  {{ t("misc.topology_panel.confirm_switch_wifi_mode") }}
-                </n-popconfirm>
-
-                <n-popconfirm
-                  v-if="
-                    node.dev_kind === 'bridge' &&
-                    node.name !== 'docker0' &&
-                    node.dev_status.t === DevStateType.Down
-                  "
-                  :show-icon="false"
-                  :positive-button-props="{ type: 'error', ghost: true }"
-                  :positive-text="t('misc.topology_node.delete_btn')"
-                  @positive-click="handleDeleteBridge"
-                >
-                  <template #trigger>
-                    <n-button
-                      data-testid="topology-delete-bridge"
-                      tertiary
-                      size="small"
-                      type="error"
-                      :loading="delete_loading"
-                    >
-                      {{ t("misc.topology_panel.delete_bridge") }}
-                    </n-button>
-                  </template>
-                  {{ t("misc.topology_node.delete_bridge") }}
-                </n-popconfirm>
-              </n-flex>
-            </n-card>
           </n-flex>
         </div>
       </n-scrollbar>
     </div>
-
-    <IpConfigModal
-      v-model:show="iface_service_edit_show"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
-    />
-    <DHCPv4ServiceEditModal
-      v-model:show="iface_dhcp_v4_service_edit_show"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
-    />
-    <NATEditModal
-      v-model:show="iface_nat_edit_show"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
-    />
     <IfaceChangeZone
       v-model:show="show_zone_change"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
-    />
-    <PPPDServiceListDrawer
-      v-model:show="show_pppd_drawer"
-      :attach_iface_name="node.name"
-      @refresh="refreshGraph"
-    />
-    <IPv6PDEditModal
-      v-model:show="iface_ipv6pd_edit_show"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      :mac="node.mac ?? null"
-      @refresh="refreshGraph"
-    />
-    <ICMPRaEditModal
-      v-model:show="iface_lan_ipv6_edit_show"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      :mac="node.mac"
-      @refresh="refreshGraph"
-    />
-    <FirewallServiceEditModal
-      v-model:show="iface_firewall_edit_show"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
-    />
-    <WifiServiceEditModal
-      v-model:show="iface_wifi_edit_show"
       :zone="node.zone_type"
       :iface_name="node.name"
       @refresh="refreshGraph"
@@ -856,21 +631,6 @@ async function handleDeleteBridge() {
     <IfaceCpuSoftBalance
       v-model:show="show_cpu_balance_btn"
       :iface_name="node.name"
-    />
-    <MSSClampServiceEditModal
-      v-model:show="show_mss_clamp_edit"
-      :iface_name="node.name"
-    />
-    <RouteLanServiceEditModal
-      v-model:show="show_route_lan_drawer"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
-    />
-    <RouteWanServiceEditModal
-      v-model:show="show_route_wan_drawer"
-      :zone="node.zone_type"
-      :iface_name="node.name"
-      @refresh="refreshGraph"
     />
     <IfaceDisableGuardModal
       ref="disable_guard_modal"
@@ -984,16 +744,43 @@ async function handleDeleteBridge() {
   transform: translateY(-1px);
 }
 
+.topology-detail__rail-button.is-active {
+  border-color: var(--topology-panel-rail-active-border);
+  background: var(--topology-panel-rail-active-bg);
+  color: var(--topology-panel-rail-active-text);
+}
+
+.topology-detail__rail-button.is-active:hover {
+  border-color: var(--topology-panel-rail-active-border);
+  background: var(--topology-panel-rail-active-bg);
+}
+
+.topology-detail__rail-button.is-wan {
+  border-color: var(--topology-panel-rail-wan-border);
+  background: var(--topology-panel-rail-wan-bg);
+  color: var(--topology-panel-rail-wan-text);
+}
+
+.topology-detail__rail-button.is-wan:hover {
+  border-color: var(--topology-panel-rail-wan-border);
+  background: var(--topology-panel-rail-wan-bg);
+}
+
+.topology-detail__rail-button.is-lan {
+  border-color: var(--topology-panel-rail-lan-border);
+  background: var(--topology-panel-rail-lan-bg);
+  color: var(--topology-panel-rail-lan-text);
+}
+
+.topology-detail__rail-button.is-lan:hover {
+  border-color: var(--topology-panel-rail-lan-border);
+  background: var(--topology-panel-rail-lan-bg);
+}
+
 .topology-detail__rail-label {
   font-size: 11px;
   line-height: 1;
   font-weight: 600;
-}
-
-.topology-detail__rail-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
 }
 
 .topology-detail__content {

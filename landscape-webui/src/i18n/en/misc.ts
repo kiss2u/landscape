@@ -41,7 +41,7 @@ export default {
     restart_unless_stopped: "Restart unless manually stopped",
   },
   topology_node: {
-    confirm_toggle_iface: "Are you sure to {action} this interface?",
+    confirm_toggle_iface: "Are you sure you want to {action} this interface?",
     action_disable: "disable",
     action_enable: "enable",
     delete_btn: "Delete!",
@@ -132,6 +132,10 @@ export default {
     open_mss_clamp: "MSS Clamp",
     no_services: "No service entry available",
     change_zone: "Change Zone",
+    enable_boot: "Enable in Boot",
+    disable_boot: "Disable Boot Startup",
+    confirm_enable_boot: "Enable this interface at boot?",
+    confirm_disable_boot: "Disable boot startup for this interface?",
     edit_cpu_balance: "CPU Balance",
     switch_to_ap: "Switch to AP",
     switch_to_client: "Switch to Client",
@@ -140,6 +144,7 @@ export default {
     delete_bridge: "Delete Bridge",
     yes: "Yes",
     no: "No",
+    close: "Cancel",
   },
   route_lan: {
     title: "LAN Route Forwarding Service",

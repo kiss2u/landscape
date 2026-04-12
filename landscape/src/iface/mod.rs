@@ -186,19 +186,25 @@ impl IfaceManagerService {
     }
 
     pub async fn change_dev_status(&self, iface_name: String, enable_in_boot: bool) {
-        let iface_info = crate::change_dev_status(&iface_name, enable_in_boot).await;
+        crate::change_dev_status(&iface_name, enable_in_boot).await;
+    }
 
-        if let Some(iface_info) = iface_info {
-            let mut link_config = if let Some(link_config) = self.get_iface_config(iface_name).await
-            {
-                link_config
-            } else {
-                from_phy_dev(&iface_info)
-            };
-            link_config.enable_in_boot = enable_in_boot;
-
-            self.set_iface_config(link_config).await;
+    pub async fn change_dev_boot_status(&self, iface_name: String, enable_in_boot: bool) {
+        if enable_in_boot {
+            let _ = crate::change_dev_status(&iface_name, true).await;
         }
+
+        let mut link_config =
+            if let Some(link_config) = self.get_iface_config(iface_name.clone()).await {
+                link_config
+            } else if let Some(iface_info) = get_iface_by_name(&iface_name).await {
+                from_phy_dev(&iface_info)
+            } else {
+                return;
+            };
+
+        link_config.enable_in_boot = enable_in_boot;
+        self.set_iface_config(link_config).await;
     }
 
     pub async fn change_cpu_balance(
