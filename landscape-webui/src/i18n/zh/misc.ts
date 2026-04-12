@@ -124,7 +124,7 @@ export default {
     open_firewall: "防火墙",
     open_nat: "NAT",
     open_ipv6pd: "IPv6 PD",
-    open_icmpv6_ra: "ICMPv6 RA",
+    open_lanv6: "LANv6",
     open_wifi: "无线服务",
     open_route_lan: "LAN 路由",
     open_route_wan: "WAN 路由",

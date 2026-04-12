@@ -125,7 +125,7 @@ export default {
     open_firewall: "Firewall",
     open_nat: "NAT",
     open_ipv6pd: "IPv6 PD",
-    open_icmpv6_ra: "ICMPv6 RA",
+    open_lanv6: "LANv6",
     open_wifi: "Wi-Fi",
     open_route_lan: "LAN Route",
     open_route_wan: "WAN Route",

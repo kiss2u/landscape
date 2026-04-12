@@ -277,7 +277,7 @@ const service_items = computed(() => {
   if (show_switch.value.lan_ipv6) {
     items.push({
       key: "lan_ipv6",
-      label: t("misc.topology_panel.open_icmpv6_ra"),
+      label: t("misc.topology_panel.open_lanv6"),
       short_label: "LANv6",
       status: lan_ipv6_status.value,
     });

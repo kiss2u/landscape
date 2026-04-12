@@ -110,7 +110,7 @@ async function deactivate() {
 <template>
   <n-card size="small">
     <template #header>
-      <n-ellipsis>{{ rule.name }}</n-ellipsis>
+      <n-ellipsis>{{ frontEndStore.MASK_INFO(rule.name) }}</n-ellipsis>
     </template>
 
     <n-descriptions

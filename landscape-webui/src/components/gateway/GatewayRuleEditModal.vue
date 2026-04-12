@@ -12,6 +12,7 @@ import type {
 } from "@landscape-router/types/api/schemas";
 import { computed, ref } from "vue";
 import { get_gateway_rule, push_gateway_rule } from "@/api/gateway";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
 type Props = {
@@ -22,6 +23,7 @@ const props = defineProps<Props>();
 
 const message = useMessage();
 const { t } = useI18n();
+const frontEndStore = useFrontEndStore();
 
 const emit = defineEmits(["refresh"]);
 
@@ -245,7 +247,7 @@ function upstreamSummary(upstream: HttpUpstreamConfig): string {
   if (upstream.targets.length === 0) return "-";
   if (upstream.targets.length === 1) {
     const target = upstream.targets[0];
-    return `${target.address}:${target.port}${target.tls ? " (TLS)" : ""}`;
+    return `${frontEndStore.MASK_INFO(target.address)}:${target.port}${target.tls ? " (TLS)" : ""}`;
   }
   return `${upstream.targets.length} targets`;
 }
@@ -761,7 +763,7 @@ async function saveRule() {
                           <n-flex vertical size="small">
                             <n-flex align="center" size="small">
                               <n-tag size="small" :bordered="false">
-                                {{ group.prefix }}
+                                {{ frontEndStore.MASK_INFO(group.prefix) }}
                               </n-tag>
                               <n-tag size="small" type="info" :bordered="false">
                                 {{

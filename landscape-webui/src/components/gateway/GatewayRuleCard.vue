@@ -8,9 +8,11 @@ import type {
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePreferenceStore } from "@/stores/preference";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { useMessage } from "naive-ui";
 
 const prefStore = usePreferenceStore();
+const frontEndStore = useFrontEndStore();
 const message = useMessage();
 const { t } = useI18n();
 const rule = defineModel<HttpUpstreamRuleConfig>("rule", { required: true });
@@ -59,7 +61,7 @@ function upstreamSummary(upstream: HttpUpstreamConfig): string {
   if (targets.length === 0) return "-";
   if (targets.length === 1) {
     const target = targets[0];
-    return `${target.address}:${target.port}${target.tls ? " (TLS)" : ""}`;
+    return `${frontEndStore.MASK_INFO(target.address)}:${target.port}${target.tls ? " (TLS)" : ""}`;
   }
   return `${targets.length} targets`;
 }
@@ -82,7 +84,10 @@ function pathGroups(): HttpPathGroup[] {
       @click="openEditModal()"
     >
       <template #header>
-        <StatusTitle :enable="rule.enable" :remark="rule.name" />
+        <StatusTitle
+          :enable="rule.enable"
+          :remark="frontEndStore.MASK_INFO(rule.name)"
+        />
       </template>
 
       <template #header-extra>
@@ -154,7 +159,7 @@ function pathGroups(): HttpPathGroup[] {
               size="small"
               :bordered="false"
             >
-              {{ domain }}
+              {{ frontEndStore.MASK_INFO(domain) }}
             </n-tag>
           </n-flex>
         </n-scrollbar>
@@ -178,7 +183,7 @@ function pathGroups(): HttpPathGroup[] {
               >
                 <n-flex align="center" size="small">
                   <n-tag size="small" :bordered="false">
-                    {{ group.prefix }}
+                    {{ frontEndStore.MASK_INFO(group.prefix) }}
                   </n-tag>
                   <n-text depth="3" style="font-size: 12px">
                     {{
@@ -205,7 +210,9 @@ function pathGroups(): HttpPathGroup[] {
 
         <div class="match-container">
           <div class="section-label">{{ t("gateway.path_prefix") }}</div>
-          <n-text code>{{ rule.match_rule.prefix }}</n-text>
+          <n-text code>{{
+            frontEndStore.MASK_INFO(rule.match_rule.prefix)
+          }}</n-text>
         </div>
       </template>
 

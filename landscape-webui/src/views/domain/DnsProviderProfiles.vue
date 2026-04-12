@@ -18,10 +18,12 @@ import {
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 const message = useMessage();
+const frontEndStore = useFrontEndStore();
 const items = ref<DnsProviderProfile[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
@@ -239,7 +241,12 @@ async function validateRowCredentials(row: DnsProviderProfile) {
 }
 
 const columns = computed<DataTableColumns<DnsProviderProfile>>(() => [
-  { title: t("cert.profile_name"), key: "name", minWidth: 140 },
+  {
+    title: t("cert.profile_name"),
+    key: "name",
+    minWidth: 140,
+    render: (row) => frontEndStore.MASK_INFO(row.name),
+  },
   {
     title: t("cert.provider"),
     key: "provider_config",
@@ -264,7 +271,7 @@ const columns = computed<DataTableColumns<DnsProviderProfile>>(() => [
     title: t("common.remark"),
     key: "remark",
     minWidth: 180,
-    render: (row) => row.remark || "-",
+    render: (row) => (row.remark ? frontEndStore.MASK_INFO(row.remark) : "-"),
   },
   {
     title: t("common.status"),

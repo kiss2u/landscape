@@ -25,10 +25,12 @@ import {
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
 const message = useMessage();
+const frontEndStore = useFrontEndStore();
 const items = ref<DdnsJob[]>([]);
 const runtimeMap = ref<Map<string, DdnsJobRuntime>>(new Map());
 const providerProfiles = ref<DnsProviderProfile[]>([]);
@@ -121,7 +123,7 @@ const detailDrawerWidth = computed(() => {
 
 const detailDrawerTitle = computed(() => {
   if (!selectedDetailJob.value) return t("cert.ddns_job_details");
-  return `${selectedDetailJob.value.name} · ${selectedDetailJob.value.zone_name}`;
+  return `${frontEndStore.MASK_INFO(selectedDetailJob.value.name)} · ${frontEndStore.MASK_INFO(selectedDetailJob.value.zone_name)}`;
 });
 
 function resetForm(item?: DdnsJob) {
@@ -189,8 +191,8 @@ function sourceLabel(job: DdnsJob) {
   return job.sources
     .map((source) =>
       source.t === "local_wan"
-        ? `${source.iface_name} / ${source.family.toUpperCase()}`
-        : `${t("cert.source_kind_lan_device")} / ${source.device_id}`,
+        ? `${frontEndStore.MASK_INFO(source.iface_name)} / ${source.family.toUpperCase()}`
+        : `${t("cert.source_kind_lan_device")} / ${frontEndStore.MASK_INFO(source.device_id)}`,
     )
     .join(", ");
 }
@@ -209,7 +211,9 @@ function statusType(status?: string) {
 }
 
 function recordsSummary(job: DdnsJob) {
-  return (job.records ?? []).map((record) => record.name).join(", ");
+  return (job.records ?? [])
+    .map((record) => frontEndStore.MASK_INFO(record.name))
+    .join(", ");
 }
 
 function getJobRuntime(job: DdnsJob) {
@@ -229,11 +233,11 @@ function renderFamilyStatus(status?: string) {
 }
 
 function formatIp(ip?: string | null) {
-  return ip || "-";
+  return ip ? frontEndStore.MASK_INFO(ip) : "-";
 }
 
 function formatError(err?: string | null) {
-  return err || "-";
+  return err ? frontEndStore.MASK_INFO(err) : "-";
 }
 
 function formatTimestamp(ts?: number | null) {
@@ -263,9 +267,10 @@ function formatRuntimeSummary(runtime?: {
   if (!runtime) return "-";
   const reason = runtimeReasonLabel(runtime.reason);
   const retry = formatRetry(runtime);
-  return retry === "-"
-    ? reason
-    : `${reason} · ${t("cert.next_retry_at")}: ${retry}`;
+  const summary =
+    retry === "-" ? reason : `${reason} · ${t("cert.next_retry_at")}: ${retry}`;
+  if (summary === "-") return summary;
+  return summary ? frontEndStore.MASK_INFO(summary) : summary;
 }
 
 function fallbackFamilyRuntime(
@@ -450,8 +455,18 @@ function openDetailDrawer(job: DdnsJob) {
 }
 
 const columns = computed<DataTableColumns<DdnsJob>>(() => [
-  { title: t("cert.job_name"), key: "name", minWidth: 120 },
-  { title: t("cert.zone_name"), key: "zone_name", minWidth: 160 },
+  {
+    title: t("cert.job_name"),
+    key: "name",
+    minWidth: 120,
+    render: (row) => frontEndStore.MASK_INFO(row.name),
+  },
+  {
+    title: t("cert.zone_name"),
+    key: "zone_name",
+    minWidth: 160,
+    render: (row) => frontEndStore.MASK_INFO(row.zone_name),
+  },
   {
     title: t("cert.records"),
     key: "records",
@@ -468,7 +483,8 @@ const columns = computed<DataTableColumns<DdnsJob>>(() => [
     title: t("cert.provider_profile"),
     key: "provider_profile_id",
     minWidth: 140,
-    render: (row) => providerName(row.provider_profile_id),
+    render: (row) =>
+      frontEndStore.MASK_INFO(providerName(row.provider_profile_id)),
   },
   {
     title: t("common.enable"),
@@ -606,7 +622,9 @@ onMounted(async () => {
         <template v-if="selectedDetailJob">
           <n-flex vertical :size="12">
             <n-flex :size="8" wrap>
-              <n-tag size="small">{{ selectedDetailJob.zone_name }}</n-tag>
+              <n-tag size="small">{{
+                frontEndStore.MASK_INFO(selectedDetailJob.zone_name)
+              }}</n-tag>
               <n-tag size="small">{{ sourceLabel(selectedDetailJob) }}</n-tag>
               <n-tag
                 size="small"
@@ -642,7 +660,7 @@ onMounted(async () => {
                     v-for="record in detailRecords(selectedDetailJob)"
                     :key="record.name"
                   >
-                    <td>{{ record.name }}</td>
+                    <td>{{ frontEndStore.MASK_INFO(record.name) }}</td>
                     <td>
                       <n-tag
                         size="small"

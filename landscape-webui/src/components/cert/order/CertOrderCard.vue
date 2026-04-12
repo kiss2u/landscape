@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import type { CertConfig } from "@landscape-router/types/api/schemas";
 import { delete_cert } from "@/api/cert/order";
+import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
 const props = defineProps<Props>();
 const emit = defineEmits(["refresh"]);
 const { t } = useI18n();
+const frontEndStore = useFrontEndStore();
 
 const show_edit_modal = ref(false);
 
@@ -60,7 +62,7 @@ async function del() {
 <template>
   <n-card size="small">
     <template #header>
-      <n-ellipsis>{{ rule.name }}</n-ellipsis>
+      <n-ellipsis>{{ frontEndStore.MASK_INFO(rule.name) }}</n-ellipsis>
     </template>
 
     <n-descriptions
@@ -77,7 +79,7 @@ async function del() {
       <n-descriptions-item :label="t('cert.cert_domains')">
         <n-flex size="small">
           <n-tag v-for="d in rule.domains" :key="d" size="small">
-            {{ d }}
+            {{ frontEndStore.MASK_INFO(d) }}
           </n-tag>
         </n-flex>
       </n-descriptions-item>
