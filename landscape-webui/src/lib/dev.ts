@@ -50,6 +50,10 @@ export class NetDev {
   }
   // left Handle
   has_target_hook() {
+    if (this.dev_kind == "bridge") {
+      return false;
+    }
+
     if (this.zone_type == ZoneType.Wan) {
       return false;
     } else if (this.zone_type == ZoneType.Lan) {

@@ -115,7 +115,7 @@ pub async fn create_pppd_thread(
     service_status.just_change_status(ServiceStatus::Staring);
 
     let (tx, mut rx) = oneshot::channel::<()>();
-    let (other_tx, other_rx) = oneshot::channel::<()>();
+    let (other_tx, other_rx) = oneshot::channel::<bool>();
 
     service_status.just_change_status(ServiceStatus::Running);
     let service_status_clone = service_status.clone();
@@ -130,7 +130,7 @@ pub async fn create_pppd_thread(
 
     let Ok(_) = pppd_conf.write_config(&attach_iface_name, &ppp_iface_name) else {
         tracing::error!("pppd config write error");
-        service_status.just_change_status(ServiceStatus::Stop);
+        service_status.just_change_status(ServiceStatus::Failed);
         return;
     };
 
@@ -297,19 +297,23 @@ pub async fn create_pppd_thread(
         }
 
         tracing::info!("Sent worker thread exit signal");
-        let _ = other_tx.send(());
+        let _ = other_tx.send(!should_stop);
         pppd_conf.delete_config(&ppp_iface_name);
     })
     .expect("failed to spawn pppd worker thread");
 
-    let _ = other_rx.await;
+    let exited_with_error = other_rx.await.unwrap_or(true);
     tracing::info!("Worker thread exited");
     if as_router {
         LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
     }
     route_service.remove_ipv4_wan_route(&iface_name).await;
     route_service.remove_ipv4_lan_route(&iface_name).await;
-    service_status.just_change_status(ServiceStatus::Stop);
+    service_status.just_change_status(if exited_with_error {
+        ServiceStatus::Failed
+    } else {
+        ServiceStatus::Stop
+    });
 }
 
 #[derive(Clone)]

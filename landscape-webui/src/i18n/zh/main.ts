@@ -55,6 +55,7 @@ export default {
     running: "运行中",
     stopping: "停止中",
     stopped: "停止",
+    failed: "异常停止",
     confirm_stop: "确定停止吗",
     created_at: "创建时间",
     create_bridge_device: "创建桥接设备",

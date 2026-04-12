@@ -278,6 +278,7 @@ async fn run_stateful(
         Some(c) if c.enable => c,
         _ => {
             tracing::error!("Stateful mode but DHCPv6 not enabled");
+            status.just_change_status(landscape_common::service::ServiceStatus::Failed);
             return;
         }
     };
@@ -378,6 +379,7 @@ async fn run_slaac_dhcpv6(
         Some(c) if c.enable => c,
         _ => {
             tracing::error!("SlaacDhcpv6 mode but DHCPv6 not enabled");
+            status.just_change_status(landscape_common::service::ServiceStatus::Failed);
             return;
         }
     };

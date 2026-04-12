@@ -63,7 +63,7 @@ pub async fn create_nat_service(
         Ok(handle) => handle,
         Err(err) => {
             tracing::error!("failed to start nat for {iface_name}: {err}");
-            service_status.just_change_status(ServiceStatus::Stop);
+            service_status.just_change_status(ServiceStatus::Failed);
             return;
         }
     };

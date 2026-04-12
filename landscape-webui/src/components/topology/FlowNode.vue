@@ -1,8 +1,20 @@
 <script setup lang="ts">
 import { Handle, Position } from "@vue-flow/core";
+import DHCPv4ServiceEditModal from "@/components/dhcp_v4/DHCPv4ServiceEditModal.vue";
+import FirewallServiceEditModal from "@/components/firewall/FirewallServiceEditModal.vue";
+import ICMPRaEditModal from "@/components/icmp_ra/ICMPRaEditModal.vue";
+import IpConfigModal from "@/components/ipconfig/IpConfigModal.vue";
+import IPv6PDEditModal from "@/components/ipv6pd/IPv6PDEditModal.vue";
+import MSSClampServiceEditModal from "@/components/mss_clamp/MSSClampServiceEditModal.vue";
+import NATEditModal from "@/components/nat/NATEditModal.vue";
+import PPPDServiceListDrawer from "@/components/pppd/PPPDServiceListDrawer.vue";
+import RouteLanServiceEditModal from "@/components/route/lan/RouteLanServiceEditModal.vue";
+import RouteWanServiceEditModal from "@/components/route/wan/RouteWanServiceEditModal.vue";
+import WifiServiceEditModal from "@/components/wifi/WifiServiceEditModal.vue";
+import { Link } from "@vicons/carbon";
 import { useThemeVars } from "naive-ui";
 import { changeColor } from "seemly";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { DevStateType, NetDev } from "@/lib/dev";
@@ -10,7 +22,8 @@ import { ZoneType } from "@/lib/service_ipconfig";
 import {
   ServiceExhibitSwitch,
   ServiceStatus,
-  ServiceStatusType,
+  get_service_status_color,
+  get_service_status_label,
 } from "@/lib/services";
 import { useDHCPv4ConfigStore } from "@/stores/status_dhcp_v4";
 import { useFirewallConfigStore } from "@/stores/status_firewall";
@@ -22,6 +35,7 @@ import { useNATConfigStore } from "@/stores/status_nats";
 import { useRouteLanConfigStore } from "@/stores/status_route_lan";
 import { useRouteWanConfigStore } from "@/stores/status_route_wan";
 import { useWifiConfigStore } from "@/stores/status_wifi";
+import { useIfaceNodeStore } from "@/stores/iface_node";
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +50,18 @@ const props = withDefaults(
 const { t } = useI18n();
 const themeVars = useThemeVars();
 const show_switch = computed(() => new ServiceExhibitSwitch(props.node));
+const ifaceNodeStore = useIfaceNodeStore();
+const show_mss_clamp_edit = ref(false);
+const iface_dhcp_v4_service_edit_show = ref(false);
+const iface_wifi_edit_show = ref(false);
+const iface_firewall_edit_show = ref(false);
+const iface_lan_ipv6_edit_show = ref(false);
+const iface_ipv6pd_edit_show = ref(false);
+const iface_nat_edit_show = ref(false);
+const iface_service_edit_show = ref(false);
+const show_pppd_drawer = ref(false);
+const show_route_lan_drawer = ref(false);
+const show_route_wan_drawer = ref(false);
 
 const ipConfigStore = useIpConfigStore();
 const dhcpv4ConfigStore = useDHCPv4ConfigStore();
@@ -122,30 +148,11 @@ const title_max_width = computed(
 );
 
 function serviceStatusText(status?: ServiceStatus) {
-  if (!status) {
-    return t("common.not_configured");
-  }
-
-  switch (status.t) {
-    case ServiceStatusType.Staring:
-      return t("common.starting");
-    case ServiceStatusType.Running:
-      return t("common.running");
-    case ServiceStatusType.Stopping:
-      return t("common.stopping");
-    case ServiceStatusType.Stop:
-      return t("common.stopped");
-  }
+  return get_service_status_label(status, t);
 }
 
 function serviceStatusColor(status?: ServiceStatus) {
-  if (!status) {
-    return themeVars.value.textColor3;
-  }
-
-  return status.t === ServiceStatusType.Stop
-    ? themeVars.value.errorColor
-    : themeVars.value.successColor;
+  return get_service_status_color(status, themeVars.value);
 }
 
 function serviceStatusStyle(status?: ServiceStatus) {
@@ -156,6 +163,48 @@ function serviceStatusStyle(status?: ServiceStatus) {
     backgroundColor: changeColor(color, { alpha: status ? 0.12 : 0.06 }),
     color,
   };
+}
+
+async function refreshGraph() {
+  await ifaceNodeStore.UPDATE_INFO();
+}
+
+function openServiceEditor(service_key: string) {
+  switch (service_key) {
+    case "ip_config":
+      iface_service_edit_show.value = true;
+      break;
+    case "dhcp_v4":
+      iface_dhcp_v4_service_edit_show.value = true;
+      break;
+    case "nat":
+      iface_nat_edit_show.value = true;
+      break;
+    case "firewall":
+      iface_firewall_edit_show.value = true;
+      break;
+    case "wifi":
+      iface_wifi_edit_show.value = true;
+      break;
+    case "ipv6pd":
+      iface_ipv6pd_edit_show.value = true;
+      break;
+    case "lan_ipv6":
+      iface_lan_ipv6_edit_show.value = true;
+      break;
+    case "route_lan":
+      show_route_lan_drawer.value = true;
+      break;
+    case "route_wan":
+      show_route_wan_drawer.value = true;
+      break;
+    case "mss_clamp":
+      show_mss_clamp_edit.value = true;
+      break;
+    case "pppd":
+      show_pppd_drawer.value = true;
+      break;
+  }
 }
 
 const service_items = computed(() => {
@@ -186,7 +235,7 @@ const service_items = computed(() => {
     items.push({
       key: "dhcp_v4",
       label: t("misc.topology_panel.open_dhcp_v4"),
-      short_label: "D4",
+      short_label: "DHCPv4",
       status: dhcp_v4_status.value,
     });
   }
@@ -226,7 +275,7 @@ const service_items = computed(() => {
     items.push({
       key: "lan_ipv6",
       label: t("misc.topology_panel.open_icmpv6_ra"),
-      short_label: "RA",
+      short_label: "LANv6",
       status: lan_ipv6_status.value,
     });
   }
@@ -317,9 +366,24 @@ const node_style = computed(() => ({
                 {{ node.name }}
               </n-performant-ellipsis>
             </div>
-            <n-tag size="small" :type="status_type" round>
-              {{ node.dev_status.t }}
-            </n-tag>
+            <div class="topology-node__header-actions">
+              <n-button
+                v-if="show_switch.pppd"
+                quaternary
+                circle
+                size="tiny"
+                :focusable="false"
+                data-testid="topology-node-open-pppd"
+                @click.stop="show_pppd_drawer = true"
+              >
+                <template #icon>
+                  <n-icon><Link /></n-icon>
+                </template>
+              </n-button>
+              <n-tag size="small" :type="status_type" round>
+                {{ node.dev_status.t }}
+              </n-tag>
+            </div>
           </div>
 
           <div class="topology-node__tags">
@@ -349,8 +413,13 @@ const node_style = computed(() => ({
           <template #trigger>
             <span
               class="topology-node__service-pill"
+              role="button"
+              tabindex="0"
               :data-testid="`topology-node-${node.index}-service-${item.key}`"
               :style="serviceStatusStyle(item.status)"
+              @click.stop="openServiceEditor(item.key)"
+              @keydown.enter.stop.prevent="openServiceEditor(item.key)"
+              @keydown.space.stop.prevent="openServiceEditor(item.key)"
             >
               <span>{{ item.short_label }}</span>
             </span>
@@ -359,6 +428,71 @@ const node_style = computed(() => ({
         </n-tooltip>
       </div>
     </div>
+
+    <PPPDServiceListDrawer
+      v-model:show="show_pppd_drawer"
+      :attach_iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <IpConfigModal
+      v-model:show="iface_service_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <DHCPv4ServiceEditModal
+      v-model:show="iface_dhcp_v4_service_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <NATEditModal
+      v-model:show="iface_nat_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <IPv6PDEditModal
+      v-model:show="iface_ipv6pd_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      :mac="node.mac ?? null"
+      @refresh="refreshGraph"
+    />
+    <ICMPRaEditModal
+      v-model:show="iface_lan_ipv6_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      :mac="node.mac"
+      @refresh="refreshGraph"
+    />
+    <FirewallServiceEditModal
+      v-model:show="iface_firewall_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <WifiServiceEditModal
+      v-model:show="iface_wifi_edit_show"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <MSSClampServiceEditModal
+      v-model:show="show_mss_clamp_edit"
+      :iface_name="node.name"
+    />
+    <RouteLanServiceEditModal
+      v-model:show="show_route_lan_drawer"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
+    <RouteWanServiceEditModal
+      v-model:show="show_route_wan_drawer"
+      :zone="node.zone_type"
+      :iface_name="node.name"
+      @refresh="refreshGraph"
+    />
   </div>
 </template>
 
@@ -415,6 +549,12 @@ const node_style = computed(() => ({
   gap: 10px;
 }
 
+.topology-node__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .topology-node__title {
   display: flex;
   min-width: 0;
@@ -459,6 +599,15 @@ const node_style = computed(() => ({
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.topology-node__service-pill:hover {
+  transform: translateY(-1px);
 }
 
 .topology-node__service-pill--muted {

@@ -55,6 +55,7 @@ export default {
     running: "Running",
     stopping: "Stopping",
     stopped: "Stopped",
+    failed: "Failed",
     confirm_stop: "Confirm stop?",
     created_at: "Created At",
     create_bridge_device: "Create Bridge Device",

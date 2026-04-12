@@ -44,6 +44,8 @@ pub enum ServiceStatus {
     // 停止运行
     #[default]
     Stop,
+    // 异常停止
+    Failed,
 }
 
 impl ServiceStatus {
@@ -52,12 +54,17 @@ impl ServiceStatus {
         let can = matches!(
             (self, target),
             (ServiceStatus::Stop, ServiceStatus::Staring)
+                | (ServiceStatus::Failed, ServiceStatus::Staring)
                 | (ServiceStatus::Staring, ServiceStatus::Running)
                 | (ServiceStatus::Staring, ServiceStatus::Stopping)
                 | (ServiceStatus::Staring, ServiceStatus::Stop)
+                | (ServiceStatus::Staring, ServiceStatus::Failed)
                 | (ServiceStatus::Running, ServiceStatus::Stopping)
                 | (ServiceStatus::Running, ServiceStatus::Stop)
+                | (ServiceStatus::Running, ServiceStatus::Failed)
                 | (ServiceStatus::Stopping, ServiceStatus::Stop)
+                | (ServiceStatus::Stopping, ServiceStatus::Failed)
+                | (ServiceStatus::Failed, ServiceStatus::Stop)
         );
         if !can {
             tracing::warn!("invalid status transition: {self:?} -> {target:?}");
@@ -89,7 +96,10 @@ impl WatchService {
     }
 
     pub fn is_exit(&self) -> bool {
-        matches!(*self.0.borrow(), ServiceStatus::Stopping | ServiceStatus::Stop)
+        matches!(
+            *self.0.borrow(),
+            ServiceStatus::Stopping | ServiceStatus::Stop | ServiceStatus::Failed
+        )
     }
 
     pub fn is_running(&self) -> bool {
@@ -97,7 +107,7 @@ impl WatchService {
     }
 
     pub fn is_stop(&self) -> bool {
-        matches!(*self.0.borrow(), ServiceStatus::Stop)
+        matches!(*self.0.borrow(), ServiceStatus::Stop | ServiceStatus::Failed)
     }
 
     pub fn subscribe(&self) -> watch::Receiver<ServiceStatus> {
@@ -140,7 +150,7 @@ async fn wait_status_stop(sender: &watch::Sender<ServiceStatus>) {
                 do_wait = true;
                 false
             }
-            ServiceStatus::Stop => {
+            ServiceStatus::Stop | ServiceStatus::Failed => {
                 do_wait = false;
                 false
             }
@@ -148,7 +158,10 @@ async fn wait_status_stop(sender: &watch::Sender<ServiceStatus>) {
     });
     if do_wait {
         tracing::debug!("waiting for service to stop");
-        let _ = sender.subscribe().wait_for(|status| matches!(status, ServiceStatus::Stop)).await;
+        let _ = sender
+            .subscribe()
+            .wait_for(|status| matches!(status, ServiceStatus::Stop | ServiceStatus::Failed))
+            .await;
         tracing::debug!("service stopped");
     }
 }

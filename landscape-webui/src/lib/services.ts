@@ -5,21 +5,77 @@ export type ServiceStatus =
   | { t: "staring" }
   | { t: "running" }
   | { t: "stopping" }
-  | { t: "stop" };
+  | { t: "stop" }
+  | { t: "failed" };
 
 export enum ServiceStatusType {
   Staring = "staring",
   Running = "running",
   Stopping = "stopping",
   Stop = "stop",
+  Failed = "failed",
 }
 
 export function get_service_status_color(
   status: ServiceStatus | undefined,
   themeVars: any,
 ) {
-  if (!status) return "";
-  return status.t === ServiceStatusType.Running ? themeVars.successColor : "";
+  if (!status) return themeVars.textColor3;
+
+  switch (status.t) {
+    case ServiceStatusType.Running:
+      return themeVars.successColor;
+    case ServiceStatusType.Staring:
+    case ServiceStatusType.Stopping:
+      return themeVars.warningColor;
+    case ServiceStatusType.Failed:
+      return themeVars.errorColor;
+    case ServiceStatusType.Stop:
+    default:
+      return themeVars.textColor3;
+  }
+}
+
+export function get_service_status_label(
+  status: ServiceStatus | undefined,
+  t: (key: string) => string,
+) {
+  if (!status) {
+    return t("common.not_configured");
+  }
+
+  switch (status.t) {
+    case ServiceStatusType.Staring:
+      return t("common.starting");
+    case ServiceStatusType.Running:
+      return t("common.running");
+    case ServiceStatusType.Stopping:
+      return t("common.stopping");
+    case ServiceStatusType.Failed:
+      return t("common.failed");
+    case ServiceStatusType.Stop:
+    default:
+      return t("common.stopped");
+  }
+}
+
+export function get_service_status_tag_type(status: ServiceStatus | undefined) {
+  if (!status) {
+    return "default";
+  }
+
+  switch (status.t) {
+    case ServiceStatusType.Running:
+      return "success";
+    case ServiceStatusType.Staring:
+    case ServiceStatusType.Stopping:
+      return "warning";
+    case ServiceStatusType.Failed:
+      return "error";
+    case ServiceStatusType.Stop:
+    default:
+      return "default";
+  }
 }
 
 export class ServiceExhibitSwitch {

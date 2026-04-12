@@ -88,7 +88,7 @@ pub async fn create_route_lan_service(
         Ok(handle) => handle,
         Err(err) => {
             tracing::error!("failed to start route lan for {iface_name}: {err}");
-            service_status.just_change_status(ServiceStatus::Stop);
+            service_status.just_change_status(ServiceStatus::Failed);
             return;
         }
     };

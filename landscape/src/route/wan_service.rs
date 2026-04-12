@@ -71,7 +71,7 @@ pub async fn create_route_wan_service(
         Ok(handle) => handle,
         Err(err) => {
             tracing::error!("failed to start route wan for {iface_name}: {err}");
-            service_status.just_change_status(ServiceStatus::Stop);
+            service_status.just_change_status(ServiceStatus::Failed);
             return;
         }
     };

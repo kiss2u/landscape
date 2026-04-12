@@ -7,7 +7,7 @@ use landscape_common::dhcp::v6_server::config::DHCPv6ServerConfig;
 use landscape_common::dhcp::v6_server::status::DHCPv6OfferInfo;
 use landscape_common::net::MacAddr;
 use landscape_common::net_proto::udp::dhcp::DhcpV6MessageType;
-use landscape_common::service::WatchService;
+use landscape_common::service::{ServiceStatus, WatchService};
 use landscape_common::LANDSCAPE_DEFAULE_DHCP_V6_SERVER_PORT;
 
 use dhcproto::v6::{self, IAAddr, IAPrefix, Status, StatusCode, IANA, IAPD};
@@ -104,6 +104,7 @@ pub async fn dhcp_v6_server(
 
     if let Err(e) = socket2.bind_device(Some(iface_name.as_bytes())) {
         tracing::error!("DHCPv6 bind_device error: {e:?}");
+        service_status.just_change_status(ServiceStatus::Failed);
         return;
     }
 
@@ -207,6 +208,13 @@ pub async fn dhcp_v6_server(
     }
 
     tracing::info!("DHCPv6 Server Stop on {iface_name}");
+    if !service_status.is_stop() {
+        service_status.just_change_status(if service_status.is_exit() {
+            ServiceStatus::Stop
+        } else {
+            ServiceStatus::Failed
+        });
+    }
 }
 
 async fn update_assigned_info(assigned_info: Arc<RwLock<DHCPv6OfferInfo>>, info: DHCPv6OfferInfo) {

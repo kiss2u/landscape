@@ -17,7 +17,10 @@ const show_image_drawer = ref(false);
 const { t } = useI18n();
 
 const is_down = computed(() => {
-  return dockerStatus.docker_status.t == ServiceStatusType.Stop;
+  return (
+    dockerStatus.docker_status.t == ServiceStatusType.Stop ||
+    dockerStatus.docker_status.t == ServiceStatusType.Failed
+  );
 });
 
 async function start() {

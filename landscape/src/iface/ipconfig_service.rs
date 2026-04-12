@@ -180,7 +180,7 @@ async fn init_service_from_config(
                 )
                 .await;
             } else {
-                service_status.just_change_status(ServiceStatus::Stop);
+                service_status.just_change_status(ServiceStatus::Failed);
             }
         }
     };

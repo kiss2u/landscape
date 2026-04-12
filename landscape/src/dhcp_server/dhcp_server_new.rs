@@ -150,7 +150,11 @@ pub async fn dhcp_v4_server(
     tracing::info!("DHCPv4 Server Stop: {:#?}", service_status);
 
     if !service_status.is_stop() {
-        service_status.just_change_status(ServiceStatus::Stop);
+        service_status.just_change_status(if service_status.is_exit() {
+            ServiceStatus::Stop
+        } else {
+            ServiceStatus::Failed
+        });
     }
 }
 

@@ -25,7 +25,10 @@ export const useMetricStore = defineStore("dns_metric", () => {
   const global_history_stats = ref<ConnectGlobalStats | null>(null);
 
   const is_down = computed(() => {
-    return metric_status.value.t == ServiceStatusType.Stop;
+    return (
+      metric_status.value.t == ServiceStatusType.Stop ||
+      metric_status.value.t == ServiceStatusType.Failed
+    );
   });
 
   const is_enabled = computed(() => activeModes.value.size > 0);

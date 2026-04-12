@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ServiceStatus, ServiceStatusType } from "@/lib/services";
+import {
+  ServiceStatus,
+  get_service_status_label,
+  get_service_status_tag_type,
+} from "@/lib/services";
 import { useI18n } from "vue-i18n";
 
 interface Props {
@@ -23,28 +27,8 @@ const control_show = computed(() => {
     disabled_popover: true,
   };
   if (iface_info.status != undefined) {
-    switch (iface_info.status.t) {
-      case ServiceStatusType.Staring: {
-        info.btn_type = "success";
-        info.btn_message = t("common.starting");
-        break;
-      }
-      case ServiceStatusType.Running: {
-        info.btn_type = "success";
-        info.btn_message = t("common.running");
-        break;
-      }
-      case ServiceStatusType.Stopping: {
-        info.btn_type = "success";
-        info.btn_message = t("common.stopping");
-        break;
-      }
-      case ServiceStatusType.Stop: {
-        info.btn_type = "error";
-        info.btn_message = t("common.stopped");
-        break;
-      }
-    }
+    info.btn_type = get_service_status_tag_type(iface_info.status);
+    info.btn_message = get_service_status_label(iface_info.status, t);
   } else {
   }
   return info;

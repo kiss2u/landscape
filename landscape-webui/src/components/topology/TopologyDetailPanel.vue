@@ -29,7 +29,8 @@ import {
 import {
   ServiceExhibitSwitch,
   ServiceStatus,
-  ServiceStatusType,
+  get_service_status_color,
+  get_service_status_label,
 } from "@/lib/services";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useIfaceNodeStore } from "@/stores/iface_node";
@@ -201,7 +202,7 @@ const service_sections = computed(() => {
   if (show_switch.value.dhcp_v4) {
     sections.push({
       key: "dhcp_v4",
-      short_label: "D4",
+      short_label: "DHCPv4",
       label: t("misc.topology_panel.open_dhcp_v4"),
       status: dhcp_v4_status.value,
     });
@@ -241,7 +242,7 @@ const service_sections = computed(() => {
   if (show_switch.value.lan_ipv6) {
     sections.push({
       key: "lan_ipv6",
-      short_label: "RA",
+      short_label: "LANv6",
       label: t("misc.topology_panel.open_icmpv6_ra"),
       status: lan_ipv6_status.value,
     });
@@ -347,30 +348,11 @@ function zoneTagType(zone: ZoneType) {
 }
 
 function serviceStatusText(status?: ServiceStatus) {
-  if (!status) {
-    return t("common.not_configured");
-  }
-
-  switch (status.t) {
-    case ServiceStatusType.Staring:
-      return t("common.starting");
-    case ServiceStatusType.Running:
-      return t("common.running");
-    case ServiceStatusType.Stopping:
-      return t("common.stopping");
-    case ServiceStatusType.Stop:
-      return t("common.stopped");
-  }
+  return get_service_status_label(status, t);
 }
 
 function serviceStatusColor(status?: ServiceStatus) {
-  if (!status) {
-    return themeVars.value.textColor3;
-  }
-
-  return status.t === ServiceStatusType.Stop
-    ? themeVars.value.errorColor
-    : themeVars.value.successColor;
+  return get_service_status_color(status, themeVars.value);
 }
 
 function bridgeAttachWarning(

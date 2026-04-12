@@ -195,6 +195,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
             }
         } else {
             tracing::error!("Interface {} not found", config.iface_name);
+            service_status.just_change_status(landscape_common::service::ServiceStatus::Failed);
         }
 
         service_status

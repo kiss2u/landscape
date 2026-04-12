@@ -220,7 +220,7 @@ pub async fn dhcp_v6_pd_client(
     socket2.set_nonblocking(true).unwrap();
     if let Err(e) = socket2.bind_device(Some(iface_name.as_bytes())) {
         tracing::error!("bind_device error: {e:?}");
-        service_status.just_change_status(ServiceStatus::Stop);
+        service_status.just_change_status(ServiceStatus::Failed);
         return;
     }
     // socket2.set_broadcast(true).unwrap();
@@ -382,7 +382,11 @@ pub async fn dhcp_v6_pd_client(
     tracing::info!("DHCP V6 Client Stop: {:#?}", service_status);
 
     if !service_status.is_stop() {
-        service_status.just_change_status(ServiceStatus::Stop);
+        service_status.just_change_status(if service_status.is_exit() {
+            ServiceStatus::Stop
+        } else {
+            ServiceStatus::Failed
+        });
     }
 }
 

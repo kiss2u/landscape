@@ -7,7 +7,11 @@ import {
   update_gateway_config,
   type GatewayStatus,
 } from "@/api/gateway";
-import { ServiceStatusType } from "@/lib/services";
+import {
+  ServiceStatusType,
+  get_service_status_label,
+  get_service_status_tag_type,
+} from "@/lib/services";
 import type { HttpUpstreamRuleConfig } from "@landscape-router/types/api/schemas";
 import { Settings } from "@vicons/carbon";
 import { useMessage } from "naive-ui";
@@ -78,28 +82,11 @@ function sync_status_polling(statusValue: GatewayStatus | undefined) {
 }
 
 function gateway_status_label(statusValue: GatewayStatus | undefined) {
-  switch (statusValue?.status.t) {
-    case ServiceStatusType.Staring:
-      return t("common.starting");
-    case ServiceStatusType.Running:
-      return t("common.running");
-    case ServiceStatusType.Stopping:
-      return t("common.stopping");
-    default:
-      return t("common.stopped");
-  }
+  return get_service_status_label(statusValue?.status, t);
 }
 
 function gateway_status_tag_type(statusValue: GatewayStatus | undefined) {
-  switch (statusValue?.status.t) {
-    case ServiceStatusType.Running:
-      return "success";
-    case ServiceStatusType.Staring:
-    case ServiceStatusType.Stopping:
-      return "warning";
-    default:
-      return "default";
-  }
+  return get_service_status_tag_type(statusValue?.status);
 }
 
 async function saveGatewayConfig(showSuccess = true) {

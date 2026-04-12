@@ -285,7 +285,11 @@ pub async fn dhcp_v4_client(
     route_service.remove_ipv4_lan_route(&iface_name).await;
 
     if !service_status.is_stop() {
-        service_status.just_change_status(ServiceStatus::Stop);
+        service_status.just_change_status(if service_status.is_exit() {
+            ServiceStatus::Stop
+        } else {
+            ServiceStatus::Failed
+        });
     }
 }
 

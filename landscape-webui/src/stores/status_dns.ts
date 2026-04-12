@@ -7,7 +7,10 @@ export const useDnsStore = defineStore("dns_status", () => {
   const dns_status = ref<ServiceStatus>({ t: ServiceStatusType.Stop });
 
   const is_down = computed(() => {
-    return dns_status.value.t == ServiceStatusType.Stop;
+    return (
+      dns_status.value.t == ServiceStatusType.Stop ||
+      dns_status.value.t == ServiceStatusType.Failed
+    );
   });
 
   const is_running = computed(() => {
