@@ -15,6 +15,7 @@ const NODE_HEIGHT = 136;
 const LANE_PADDING = 48;
 const GROUP_GAP = 18;
 const STACK_GAP = 8;
+const CORE_COLUMN_GAP = 14;
 const IDEAL_COLUMN_GAP = 320;
 const MIN_GRAPH_WIDTH = 940;
 const MAX_GRAPH_WIDTH = 1480;
@@ -252,9 +253,35 @@ export const useIfaceNodeStore = defineStore(
         }
 
         let center_y = 72;
+        let right_y = 72;
         for (const each of core_roots) {
-          const group_height = place_subtree(each, center_x, center_y);
-          center_y += group_height + GROUP_GAP;
+          push_node(each, center_x, center_y);
+
+          const children = child_map.get(each.index) ?? [];
+          if (children.length > 0) {
+            const child_block_height = children.reduce(
+              (total, child, index) => {
+                return (
+                  total +
+                  get_subtree_height(child) +
+                  (index > 0 ? STACK_GAP : 0)
+                );
+              },
+              0,
+            );
+            const desired_child_start =
+              center_y - Math.max((child_block_height - NODE_HEIGHT) / 2, 0);
+            let child_y = Math.max(desired_child_start, right_y);
+
+            for (const child of children) {
+              const child_height = place_subtree(child, right_x, child_y);
+              child_y += child_height + STACK_GAP;
+            }
+
+            right_y = child_y + GROUP_GAP;
+          }
+
+          center_y += NODE_HEIGHT + CORE_COLUMN_GAP;
         }
 
         let orphan_y = center_y;

@@ -454,9 +454,6 @@ async function handleDeleteBridge() {
     <div class="topology-detail">
       <div class="topology-detail__header">
         <div class="topology-detail__header-main">
-          <div class="topology-detail__eyebrow">
-            {{ t("misc.topology_panel.summary") }}
-          </div>
           <div class="topology-detail__title-row">
             <h3 class="topology-detail__title">{{ node.name }}</h3>
             <n-button quaternary circle size="small" @click="closePanel">
@@ -483,7 +480,7 @@ async function handleDeleteBridge() {
       <n-scrollbar class="topology-detail__content nowheel">
         <div class="topology-detail__content-inner">
           <n-flex vertical size="large">
-            <n-card size="small" embedded>
+            <n-card size="small" embedded class="topology-detail__card--plain">
               <template #header>
                 {{ t("misc.topology_panel.basic_info") }}
               </template>
@@ -538,7 +535,7 @@ async function handleDeleteBridge() {
               </n-descriptions>
             </n-card>
 
-            <n-card size="small" embedded>
+            <n-card size="small" embedded class="topology-detail__card--plain">
               <template #header>
                 {{ t("misc.topology_panel.relationship") }}
               </template>
@@ -682,14 +679,6 @@ async function handleDeleteBridge() {
   gap: 10px;
 }
 
-.topology-detail__eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--topology-panel-muted);
-}
-
 .topology-detail__title-row {
   display: flex;
   align-items: center;
@@ -795,6 +784,11 @@ async function handleDeleteBridge() {
 .topology-detail :deep(.n-card) {
   border: 1px solid var(--topology-panel-card-border);
   box-shadow: var(--topology-panel-card-shadow);
+}
+
+.topology-detail :deep(.topology-detail__card--plain.n-card) {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .topology-detail__controller-box {
