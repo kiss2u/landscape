@@ -317,7 +317,7 @@ int ingress_nat(struct __sk_buff *skb) {
         bpf_tail_call_static(skb, &ingress_prog_array, IPV6_NAT_INGRESS_PROG_INDEX);
     }
 
-    return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, TC_ACT_UNSPEC);
+    return TC_ACT_SHOT;
 }
 
 SEC("tc/egress")
@@ -339,5 +339,5 @@ int egress_nat(struct __sk_buff *skb) {
         bpf_tail_call_static(skb, &egress_prog_array, IPV6_NAT_EGRESS_PROG_INDEX);
     }
 
-    return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, TC_ACT_UNSPEC);
+    return TC_ACT_SHOT;
 }

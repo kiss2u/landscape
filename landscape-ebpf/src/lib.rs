@@ -80,6 +80,8 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
             ebpf_map_path
         )),
         wan_tc_pipeline_egress: PathBuf::from(format!("{}/wan_tc_pipeline_egress", ebpf_map_path)),
+        lan_tc_pipeline_ingress: PathBuf::from(format!("{}/lan_tc_pipeline_ingress", ebpf_map_path)),
+        lan_tc_pipeline_egress: PathBuf::from(format!("{}/lan_tc_pipeline_egress", ebpf_map_path)),
 
         ip_mac_v4: PathBuf::from(format!("{}/ip_mac_v4", ebpf_map_path)),
         ip_mac_v6: PathBuf::from(format!("{}/ip_mac_v6", ebpf_map_path)),
@@ -131,6 +133,8 @@ pub(crate) struct LandscapeMapPath {
 
     pub wan_tc_pipeline_ingress: PathBuf,
     pub wan_tc_pipeline_egress: PathBuf,
+    pub lan_tc_pipeline_ingress: PathBuf,
+    pub lan_tc_pipeline_egress: PathBuf,
 
     // IP MAC
     pub ip_mac_v4: PathBuf,

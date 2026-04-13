@@ -88,7 +88,7 @@ int rt4_wan_egress(struct __sk_buff *skb) {
     context.saddr = iph->saddr;
 
     if (should_not_forward(context.daddr)) {
-        return TC_ACT_UNSPEC;
+        return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
     }
 
     ret = lan_redirect_check_v4(skb, current_l3_offset, &context, false);
@@ -283,6 +283,6 @@ int route_wan_egress(struct __sk_buff *skb) {
         bpf_printk("bpf_tail_call_static error");
     }
 
-    return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
+    return TC_ACT_SHOT;
 #undef BPF_LOG_TOPIC
 }

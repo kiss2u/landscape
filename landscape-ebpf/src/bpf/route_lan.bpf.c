@@ -5,6 +5,7 @@
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_core_read.h>
 
+#include "lan_tc_pipeline.h"
 #include "landscape.h"
 #include "route_v4.h"
 #include "route_v6.h"
@@ -67,7 +68,7 @@ int rt4_lan_ingress(struct __sk_buff *skb) {
     if (ret == TC_ACT_REDIRECT) {
         setting_cache_in_lan_v4(&context, flow_mark);
     }
-    return ret;
+    return lan_tc_pipeline_continue_ingress(skb, LAN_INGRESS_STAGE_ROUTE, ret);
 #undef BPF_LOG_TOPIC
 }
 
@@ -116,7 +117,7 @@ int rt6_lan_ingress(struct __sk_buff *skb) {
     if (ret == TC_ACT_REDIRECT) {
         setting_cache_in_lan_v6(&context, flow_mark);
     }
-    return ret;
+    return lan_tc_pipeline_continue_ingress(skb, LAN_INGRESS_STAGE_ROUTE, ret);
 #undef BPF_LOG_TOPIC
 }
 
@@ -150,7 +151,7 @@ int route_lan_ingress(struct __sk_buff *skb) {
 
     ret = current_pkg_type(skb, current_l3_offset, &is_ipv4);
     if (unlikely(ret != TC_ACT_OK)) {
-        return TC_ACT_UNSPEC;
+        return lan_tc_pipeline_continue_ingress(skb, LAN_INGRESS_STAGE_ROUTE, TC_ACT_UNSPEC);
     }
 
     if (is_ipv4) {
@@ -169,6 +170,6 @@ SEC("tc/egress")
 int route_lan_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "<<< route_lan_egress <<<"
 
-    return TC_ACT_UNSPEC;
+    return lan_tc_pipeline_continue_egress(skb, LAN_EGRESS_STAGE_ROUTE, TC_ACT_UNSPEC);
 #undef BPF_LOG_TOPIC
 }
