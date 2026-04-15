@@ -47,5 +47,8 @@ export default {
   invalid_bindings_title: "Detected invalid IP-MAC bindings",
   invalid_bindings_warning:
     "After DHCP changes on interface {iface}, {count} IP-MAC bindings are out of current subnet. Please update them.",
+  lease_ip_mismatch: "Current IP does not match configured device IP",
+  configured_ip: "Configured IP",
+  observed_ip: "Current IP",
   go_to_manage: "Go to manage",
 };

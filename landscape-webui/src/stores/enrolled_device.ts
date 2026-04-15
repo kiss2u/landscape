@@ -196,10 +196,17 @@ export const useEnrolledDeviceStore = defineStore("enrolled_device", () => {
     return binding ? (binding.id ?? null) : null;
   }
 
+  function GET_BINDING(
+    key: string | undefined | null,
+  ): EnrolledDevice | undefined {
+    return lookupBinding(key);
+  }
+
   return {
     bindings,
     loading,
     UPDATE_INFO,
+    GET_BINDING,
     GET_DISPLAY_NAME,
     GET_NAME_WITH_FALLBACK,
     GET_BINDING_ID,

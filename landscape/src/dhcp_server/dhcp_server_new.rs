@@ -110,6 +110,10 @@ pub async fn dhcp_v4_server(
     tokio::pin!(timeout_timer);
     let mut dhcp_server = DHCPv4Server::init(config);
 
+    // Publish the freshly initialized lease/static-binding view immediately so
+    // UI state reflects the new DHCP instance instead of any stale pre-restart cache.
+    update_assign_info(assigned_ips.clone(), dhcp_server.get_offered_info()).await;
+
     loop {
         tokio::select! {
             // 处理消息分支
@@ -281,6 +285,10 @@ pub struct DHCPv4Server {
     allocated_host: HashMap<Ipv4Addr, bool>,
     /// 已分配的 IP
     offered_ip: HashMap<MacAddr, DHCPv4ServerOfferedCache>,
+    /// Configured static binding IP for each MAC.
+    static_binding_ip_by_mac: HashMap<MacAddr, Ipv4Addr>,
+    /// Configured static binding owner for each IP.
+    static_binding_mac_by_ip: HashMap<Ipv4Addr, MacAddr>,
 
     /// 持有的 OPTIONS
     options_map: HashMap<u8, DhcpOptions>,
@@ -339,8 +347,12 @@ impl DHCPv4Server {
 
         let mut allocated_host = HashMap::new();
         let mut offered_ip = HashMap::new();
+        let mut static_binding_ip_by_mac = HashMap::new();
+        let mut static_binding_mac_by_ip = HashMap::new();
         for each in config.mac_binding_records {
             allocated_host.insert(each.ip, true);
+            static_binding_ip_by_mac.insert(each.mac, each.ip);
+            static_binding_mac_by_ip.insert(each.ip, each.mac);
             offered_ip.insert(
                 each.mac,
                 DHCPv4ServerOfferedCache {
@@ -364,6 +376,8 @@ impl DHCPv4Server {
             range_capacity,
             allocated_host,
             offered_ip,
+            static_binding_ip_by_mac,
+            static_binding_mac_by_ip,
             options_map,
             address_lease_time,
         }
@@ -467,6 +481,34 @@ impl DHCPv4Server {
         ip_u32 >= start && ip_u32 <= end
     }
 
+    fn conflicts_with_static_binding(&self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
+        if let Some(static_ip) = self.static_binding_ip_by_mac.get(mac_addr) {
+            if *static_ip != ip_addr {
+                tracing::warn!(
+                    "client {:?} requested {:?}, but static binding requires {:?}",
+                    mac_addr,
+                    ip_addr,
+                    static_ip
+                );
+                return true;
+            }
+        }
+
+        if let Some(static_mac) = self.static_binding_mac_by_ip.get(&ip_addr) {
+            if static_mac != mac_addr {
+                tracing::warn!(
+                    "client {:?} requested static IP {:?} owned by {:?}",
+                    mac_addr,
+                    ip_addr,
+                    static_mac
+                );
+                return true;
+            }
+        }
+
+        false
+    }
+
     #[cfg(test)]
     fn ack_request_without_hostname(&mut self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
         self.ack_request(mac_addr, ip_addr, None)
@@ -479,6 +521,10 @@ impl DHCPv4Server {
         ip_addr: Ipv4Addr,
         hostname: Option<String>,
     ) -> bool {
+        if self.conflicts_with_static_binding(mac_addr, ip_addr) {
+            return false;
+        }
+
         if let Some(offered_cache) = self.offered_ip.get_mut(mac_addr) {
             if offered_cache.ip == ip_addr {
                 offered_cache.hostname = hostname;
@@ -693,7 +739,10 @@ mod tests {
     use std::{net::Ipv4Addr, thread::sleep, time::Duration};
 
     use cidr::Ipv4Inet;
-    use landscape_common::{dhcp::v4_server::config::DHCPv4ServerConfig, net::MacAddr};
+    use landscape_common::{
+        dhcp::v4_server::config::{DHCPv4ServerConfig, MacBindingRecord},
+        net::MacAddr,
+    };
 
     use crate::dhcp_server::dhcp_server_new::DHCPv4Server;
 
@@ -744,5 +793,40 @@ mod tests {
         let mac1 = MacAddr::from_str("00:00:00:00:00:04").unwrap();
         let result = dhcp_server.offer_ip_without_hostname(&mac1);
         tracing::debug!("result: {:?}", result);
+    }
+
+    #[test]
+    fn static_binding_rejects_old_ip_for_same_mac() {
+        let mut config = DHCPv4ServerConfig::default();
+        let mac = MacAddr::from_str("00:00:00:00:00:01").unwrap();
+        let static_ip = Ipv4Addr::new(192, 168, 5, 10);
+        let old_ip = Ipv4Addr::new(192, 168, 5, 20);
+        config.mac_binding_records.push(MacBindingRecord {
+            mac,
+            ip: static_ip,
+            expire_time: 86400,
+        });
+
+        let mut dhcp_server = DHCPv4Server::init(config);
+
+        assert!(!dhcp_server.ack_request_without_hostname(&mac, old_ip));
+        assert!(dhcp_server.ack_request_without_hostname(&mac, static_ip));
+    }
+
+    #[test]
+    fn static_binding_rejects_other_mac_requesting_reserved_ip() {
+        let mut config = DHCPv4ServerConfig::default();
+        let owner = MacAddr::from_str("00:00:00:00:00:01").unwrap();
+        let other = MacAddr::from_str("00:00:00:00:00:02").unwrap();
+        let static_ip = Ipv4Addr::new(192, 168, 5, 10);
+        config.mac_binding_records.push(MacBindingRecord {
+            mac: owner,
+            ip: static_ip,
+            expire_time: 86400,
+        });
+
+        let mut dhcp_server = DHCPv4Server::init(config);
+
+        assert!(!dhcp_server.ack_request_without_hostname(&other, static_ip));
     }
 }

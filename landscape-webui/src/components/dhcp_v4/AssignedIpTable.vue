@@ -14,6 +14,7 @@ import { Key } from "@vicons/tabler";
 import { AddAlt, Edit } from "@vicons/carbon";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
 import EnrolledDeviceEditModal from "@/components/device/EnrolledDeviceEditModal.vue";
+import type { EnrolledDevice } from "@landscape-router/types/api/schemas";
 
 const frontEndStore = useFrontEndStore();
 const enrolledDeviceStore = useEnrolledDeviceStore();
@@ -151,6 +152,29 @@ function build_ip_map(data: ArpScanInfo[]): Map<string, ArpInfo> {
   return map;
 }
 
+function getBindingByMac(mac?: string): EnrolledDevice | undefined {
+  return enrolledDeviceStore.GET_BINDING(mac);
+}
+
+function bindingAppliesToCurrentIface(binding?: EnrolledDevice): boolean {
+  if (!binding) return false;
+  return !binding.iface_name || binding.iface_name === props.iface_name;
+}
+
+function hasConfiguredIpv4Mismatch(observedIp: string, mac?: string): boolean {
+  const binding = getBindingByMac(mac);
+  if (!bindingAppliesToCurrentIface(binding)) return false;
+
+  const configuredIpv4 = binding?.ipv4;
+  return !!configuredIpv4 && configuredIpv4 !== observedIp;
+}
+
+function getConfiguredIpv4(mac?: string): string | undefined {
+  const binding = getBindingByMac(mac);
+  if (!bindingAppliesToCurrentIface(binding)) return undefined;
+  return binding?.ipv4;
+}
+
 const showQuickBind = ref(false);
 const initialValues = ref<{
   mac?: string;
@@ -241,7 +265,30 @@ function quickBind(ip: string, mac?: string, hostname?: string | null) {
             </DHCPMacExhibit>
           </td>
           <td class="assign-item">
-            {{ frontEndStore.MASK_INFO(item.ip) }}
+            <n-flex justify="center" align="center" size="small">
+              <span>{{ frontEndStore.MASK_INFO(item.ip) }}</span>
+              <n-tooltip
+                v-if="hasConfiguredIpv4Mismatch(item.ip, item.mac)"
+                trigger="hover"
+              >
+                <template #trigger>
+                  <n-tag size="small" type="warning" :bordered="false">
+                    IP
+                  </n-tag>
+                </template>
+                <div>{{ t("enrolled_device.lease_ip_mismatch") }}</div>
+                <div>
+                  {{ t("enrolled_device.observed_ip") }}:
+                  {{ frontEndStore.MASK_INFO(item.ip) }}
+                </div>
+                <div>
+                  {{ t("enrolled_device.configured_ip") }}:
+                  {{
+                    frontEndStore.MASK_INFO(getConfiguredIpv4(item.mac) || "")
+                  }}
+                </div>
+              </n-tooltip>
+            </n-flex>
           </td>
 
           <td class="assign-item">
@@ -300,7 +347,39 @@ function quickBind(ip: string, mac?: string, hostname?: string | null) {
             </DHCPMacExhibit>
           </td>
           <td class="not-assign-item">
-            {{ frontEndStore.MASK_INFO(item.ip) }}
+            <n-flex justify="center" align="center" size="small">
+              <span>{{ frontEndStore.MASK_INFO(item.ip) }}</span>
+              <n-tooltip
+                v-if="
+                  hasConfiguredIpv4Mismatch(
+                    item.ip,
+                    Array.from(arp_ip_map.get(item.ip)?.macs || [])[0],
+                  )
+                "
+                trigger="hover"
+              >
+                <template #trigger>
+                  <n-tag size="small" type="warning" :bordered="false">
+                    IP
+                  </n-tag>
+                </template>
+                <div>{{ t("enrolled_device.lease_ip_mismatch") }}</div>
+                <div>
+                  {{ t("enrolled_device.observed_ip") }}:
+                  {{ frontEndStore.MASK_INFO(item.ip) }}
+                </div>
+                <div>
+                  {{ t("enrolled_device.configured_ip") }}:
+                  {{
+                    frontEndStore.MASK_INFO(
+                      getConfiguredIpv4(
+                        Array.from(arp_ip_map.get(item.ip)?.macs || [])[0],
+                      ) || "",
+                    )
+                  }}
+                </div>
+              </n-tooltip>
+            </n-flex>
           </td>
           <td class="not-assign-item">
             {{ t("dhcp_editor.assigned.unknown") }}

@@ -47,5 +47,8 @@ export default {
   invalid_bindings_title: "检测到失效的 IP-MAC 绑定",
   invalid_bindings_warning:
     "网卡 {iface} 的 DHCP 修改完成后，检测到有 {count} 个 IP-MAC 绑定不再属于当前网段，请及时调整。",
+  lease_ip_mismatch: "当前 IP 与设备配置不一致",
+  configured_ip: "配置 IP",
+  observed_ip: "当前 IP",
   go_to_manage: "前往管理",
 };
