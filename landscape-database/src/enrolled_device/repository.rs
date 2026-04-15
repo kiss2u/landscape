@@ -121,8 +121,7 @@ impl EnrolledDeviceRepository {
                 sea_orm::Condition::all().add(Column::IfaceName.eq(iface_name)).add(
                     sea_orm::Condition::any()
                         .add(Column::Ipv4Int.lt(network_start))
-                        .add(Column::Ipv4Int.gt(network_end))
-                        .add(Column::Ipv4Int.is_null()),
+                        .add(Column::Ipv4Int.gt(network_end)),
                 ),
             )
             .all(self.db())

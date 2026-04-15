@@ -1,29 +1,16 @@
 <script lang="ts" setup>
 import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { get_enrolled_devices } from "@/api/enrolled_device";
-import type { EnrolledDevice } from "@landscape-router/types/api/schemas";
 import EnrolledDeviceCard from "@/components/device/EnrolledDeviceCard.vue";
 import EnrolledDeviceEditModal from "@/components/device/EnrolledDeviceEditModal.vue";
 import { Add } from "@vicons/carbon";
+import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
 
 const { t } = useI18n();
-const bindings = ref<EnrolledDevice[]>([]);
-const loading = ref(false);
-
-async function refresh() {
-  loading.value = true;
-  try {
-    bindings.value = await get_enrolled_devices();
-  } catch (e) {
-    console.error(e);
-  } finally {
-    loading.value = false;
-  }
-}
+const enrolledDeviceStore = useEnrolledDeviceStore();
 
 onMounted(async () => {
-  await refresh();
+  await enrolledDeviceStore.UPDATE_INFO();
 });
 
 const show_edit_modal = ref(false);
@@ -42,15 +29,21 @@ const show_edit_modal = ref(false);
 
     <n-divider />
 
-    <n-spin :show="loading">
+    <n-spin :show="enrolledDeviceStore.loading">
       <n-grid x-gap="12" y-gap="12" cols="1 600:2 1000:3 1400:4">
-        <n-grid-item v-for="item in bindings" :key="item.id">
-          <EnrolledDeviceCard :rule="item" @refresh="refresh" />
+        <n-grid-item
+          v-for="item in enrolledDeviceStore.bindings"
+          :key="item.id"
+        >
+          <EnrolledDeviceCard :rule="item" />
         </n-grid-item>
       </n-grid>
 
       <n-empty
-        v-if="bindings?.length === 0 && !loading"
+        v-if="
+          enrolledDeviceStore.bindings?.length === 0 &&
+          !enrolledDeviceStore.loading
+        "
         :description="t('enrolled_device.empty_desc')"
         style="margin-top: 100px"
       >
@@ -62,11 +55,7 @@ const show_edit_modal = ref(false);
       </n-empty>
     </n-spin>
 
-    <EnrolledDeviceEditModal
-      :rule_id="null"
-      @refresh="refresh"
-      v-model:show="show_edit_modal"
-    />
+    <EnrolledDeviceEditModal :rule_id="null" v-model:show="show_edit_modal" />
   </n-flex>
 </template>
 

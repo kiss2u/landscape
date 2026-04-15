@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import type { EnrolledDevice } from "@landscape-router/types/api/schemas";
 import {
   delete_enrolled_device,
@@ -9,7 +9,7 @@ import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 import { Settings, TrashCan } from "@vicons/carbon";
 import EnrolledDeviceEditModal from "./EnrolledDeviceEditModal.vue";
-import { computed, onMounted } from "vue";
+import { computed } from "vue";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
 
 const enrolledDeviceStore = useEnrolledDeviceStore();
@@ -34,8 +34,6 @@ const props = withDefaults(defineProps<Props>(), {
   show_action: true,
 });
 
-const emit = defineEmits(["refresh"]);
-
 const show_edit_modal = ref(false);
 
 async function validate() {
@@ -53,15 +51,18 @@ async function validate() {
   }
 }
 
-onMounted(() => {
-  validate();
-});
+watch(
+  () => [props.rule.iface_name, props.rule.ipv4],
+  () => {
+    void validate();
+  },
+  { immediate: true },
+);
 
 async function del() {
   if (props.rule.id) {
     await delete_enrolled_device(props.rule.id);
     await enrolledDeviceStore.UPDATE_INFO();
-    emit("refresh");
   }
 }
 </script>
@@ -184,7 +185,6 @@ async function del() {
   </n-card>
 
   <EnrolledDeviceEditModal
-    @refresh="emit('refresh')"
     :rule_id="rule.id ?? null"
     v-model:show="show_edit_modal"
   />

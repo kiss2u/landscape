@@ -32,6 +32,8 @@ export default {
   remark_placeholder: "关于该设备的更多信息...",
 
   save_success: "保存成功",
+  save_failed: "保存失败",
+  load_failed: "加载失败",
   cancel: "取消",
   save: "保存",
 

@@ -32,6 +32,8 @@ export default {
   remark_placeholder: "More details about this device...",
 
   save_success: "Saved successfully",
+  save_failed: "Save failed",
+  load_failed: "Load failed",
   cancel: "Cancel",
   save: "Save",
 

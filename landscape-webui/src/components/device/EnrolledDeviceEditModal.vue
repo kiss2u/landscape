@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMessage } from "naive-ui";
 import { isIP, isIPv4 } from "is-ip";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { EnrolledDevice } from "@landscape-router/types/api/schemas";
 import {
   get_enrolled_device_by_id,
@@ -41,41 +41,169 @@ const rule = ref<EnrolledDevice>({
 
 const commit_spin = ref(false);
 const ifaceOptions = ref<{ label: string; value: string }[]>([]);
+const ipv4RangeStatus = ref<"success" | "error" | undefined>(undefined);
+const ipv4RangeFeedback = ref("");
+const ipv4ValidationToken = ref(0);
+const enterToken = ref(0);
+
+function isValidMac(value: string) {
+  return /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(value);
+}
+
+function isValidIpv6Suffix(value?: string) {
+  if (!value) return true;
+  return /^::[\da-fA-F]{1,4}(::?[\da-fA-F]{1,4})*$/.test(value);
+}
+
+function normalizeOptionalString(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function buildPayload(): EnrolledDevice {
+  return {
+    ...rule.value,
+    iface_name: normalizeOptionalString(rule.value.iface_name),
+    fake_name: normalizeOptionalString(rule.value.fake_name),
+    remark: normalizeOptionalString(rule.value.remark),
+    ipv4: normalizeOptionalString(rule.value.ipv4),
+    ipv6: normalizeOptionalString(rule.value.ipv6),
+  };
+}
+
+const hasBasicValidity = computed(() => {
+  return (
+    !!rule.value.name &&
+    !!rule.value.mac &&
+    isValidMac(rule.value.mac) &&
+    (!rule.value.ipv4 || isIP(rule.value.ipv4)) &&
+    isValidIpv6Suffix(rule.value.ipv6)
+  );
+});
+
+const hasValidIpv4Range = computed(() => {
+  return ipv4RangeStatus.value !== "error";
+});
 
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
-async function enter() {
-  // 加载可用的网卡列表
+const canSave = computed(() => {
+  return (
+    hasBasicValidity.value &&
+    hasValidIpv4Range.value &&
+    (props.rule_id ? isModified.value : true)
+  );
+});
+
+function resetIpv4RangeValidation() {
+  ipv4RangeStatus.value = undefined;
+  ipv4RangeFeedback.value = "";
+}
+
+async function syncIpv4RangeValidation() {
+  const ipv4 = rule.value.ipv4;
+  const ifaceName = rule.value.iface_name;
+
+  if (!show.value || !ipv4 || !ifaceName || !isIPv4(ipv4)) {
+    resetIpv4RangeValidation();
+    return;
+  }
+
+  const token = ++ipv4ValidationToken.value;
+
   try {
-    const statusMap = await get_all_dhcp_v4_status();
+    const isValid = await validate_enrolled_device_ip(ifaceName, ipv4);
+    if (token !== ipv4ValidationToken.value) return;
+
+    if (isValid) {
+      resetIpv4RangeValidation();
+      return;
+    }
+
+    ipv4RangeStatus.value = "error";
+    ipv4RangeFeedback.value = t("enrolled_device.ipv4_out_of_range", {
+      iface: ifaceName,
+    });
+  } catch (e) {
+    if (token !== ipv4ValidationToken.value) return;
+    resetIpv4RangeValidation();
+    console.error("IP validation failed", e);
+  }
+}
+
+function exit() {
+  enterToken.value += 1;
+  ipv4ValidationToken.value += 1;
+  commit_spin.value = false;
+  origin_rule_json.value = "";
+  ifaceOptions.value = [];
+  rule.value = {
+    name: "",
+    mac: "",
+    tag: [],
+  };
+  resetIpv4RangeValidation();
+  formRef.value?.restoreValidation?.();
+}
+
+async function enter() {
+  const token = ++enterToken.value;
+
+  try {
+    const [statusMap, fetched] = await Promise.all([
+      get_all_dhcp_v4_status(),
+      props.rule_id
+        ? get_enrolled_device_by_id(props.rule_id)
+        : Promise.resolve(null),
+    ]);
+
+    if (token !== enterToken.value || !show.value) return;
+
     ifaceOptions.value = Array.from(statusMap.keys()).map((name) => ({
       label: name,
       value: name,
     }));
-  } catch (e) {
-    console.error("Failed to fetch DHCP status", e);
-  }
 
-  if (props.rule_id) {
-    const fetched = await get_enrolled_device_by_id(props.rule_id);
     if (fetched) {
       rule.value = fetched;
+    } else {
+      if (props.rule_id) {
+        message.error(t("enrolled_device.load_failed"));
+        show.value = false;
+        return;
+      }
+
+      rule.value = {
+        name: props.initialValues?.name ?? "",
+        mac: props.initialValues?.mac ?? "",
+        tag: [],
+        remark: "",
+        fake_name: "",
+        ipv4: props.initialValues?.ipv4 ?? undefined,
+        ipv6: undefined,
+        iface_name: props.initialValues?.iface_name ?? undefined,
+      };
     }
-  } else {
-    rule.value = {
-      name: props.initialValues?.name ?? "",
-      mac: props.initialValues?.mac ?? "",
-      tag: [],
-      remark: "",
-      fake_name: "",
-      ipv4: props.initialValues?.ipv4 ?? undefined,
-      ipv6: undefined,
-      iface_name: props.initialValues?.iface_name ?? undefined,
-    };
+  } catch (e) {
+    if (token !== enterToken.value || !show.value) return;
+
+    console.error("Failed to load enrolled device modal data", e);
+    message.error(
+      (e as { response?: { data?: string }; message?: string })?.response
+        ?.data ||
+        (e as { message?: string })?.message ||
+        t("enrolled_device.load_failed"),
+    );
+    show.value = false;
+    return;
   }
+
+  if (token !== enterToken.value || !show.value) return;
+
   origin_rule_json.value = JSON.stringify(rule.value);
+  void syncIpv4RangeValidation();
 }
 
 const formRef = ref();
@@ -84,12 +212,17 @@ const macRule = {
   trigger: ["input", "blur"],
   validator(_: unknown, value: string) {
     if (!value) return new Error(t("enrolled_device.mac_required"));
-    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
-    if (!macRegex.test(value))
-      return new Error(t("enrolled_device.mac_invalid"));
+    if (!isValidMac(value)) return new Error(t("enrolled_device.mac_invalid"));
     return true;
   },
 };
+
+watch(
+  () => [show.value, rule.value.iface_name, rule.value.ipv4],
+  () => {
+    void syncIpv4RangeValidation();
+  },
+);
 
 const ipRule = {
   trigger: ["input", "blur"],
@@ -130,9 +263,7 @@ const rules = {
     trigger: ["input", "blur"],
     validator(_: unknown, value: string) {
       if (!value) return true;
-      // Basic IPv6 suffix validation (e.g., ::100, ::1)
-      const ipv6Regex = /^::[\da-fA-F]{1,4}(::?[\da-fA-F]{1,4})*$/;
-      if (!ipv6Regex.test(value))
+      if (!isValidIpv6Suffix(value))
         return new Error("请输入有效的 IPv6 后缀 (如 ::100)");
       return true;
     },
@@ -140,13 +271,16 @@ const rules = {
 };
 
 async function saveRule() {
+  await formRef.value?.validate();
+
   try {
-    await formRef.value?.validate();
     commit_spin.value = true;
+    const payload = buildPayload();
+
     if (props.rule_id) {
-      await update_enrolled_device(props.rule_id, rule.value);
+      await update_enrolled_device(props.rule_id, payload);
     } else {
-      await create_enrolled_device(rule.value);
+      await create_enrolled_device(payload);
     }
     message.success(t("enrolled_device.save_success"));
     show.value = false;
@@ -154,6 +288,12 @@ async function saveRule() {
     emit("refresh");
   } catch (e) {
     console.error(e);
+    message.error(
+      (e as { response?: { data?: string }; message?: string })?.response
+        ?.data ||
+        (e as { message?: string })?.message ||
+        t("enrolled_device.save_failed"),
+    );
   } finally {
     commit_spin.value = false;
   }
@@ -172,6 +312,7 @@ async function saveRule() {
         : t('enrolled_device.add_title')
     "
     @after-enter="enter"
+    @after-leave="exit"
   >
     <n-form
       v-if="rule"
@@ -224,7 +365,12 @@ async function saveRule() {
           />
         </n-form-item-gi>
 
-        <n-form-item-gi :label="t('enrolled_device.ipv4')" path="ipv4">
+        <n-form-item-gi
+          :label="t('enrolled_device.ipv4')"
+          path="ipv4"
+          :validation-status="ipv4RangeStatus"
+          :feedback="ipv4RangeFeedback"
+        >
           <n-input
             v-model:value="rule.ipv4"
             :placeholder="t('enrolled_device.ipv4_placeholder')"
@@ -266,7 +412,7 @@ async function saveRule() {
             type="primary"
             :loading="commit_spin"
             @click="saveRule"
-            :disabled="!isModified"
+            :disabled="!canSave"
           >
             {{ t("enrolled_device.save") }}
           </n-button>
