@@ -10,6 +10,40 @@ use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
 
+const PPP_IFACE_NAME_MAX_LEN: usize = 15;
+
+pub fn validate_ppp_iface_name(iface_name: &str) -> Result<(), ServiceConfigError> {
+    let trimmed = iface_name.trim();
+    if trimmed.is_empty() {
+        return Err(ServiceConfigError::InvalidConfig {
+            reason: "PPPoE interface name must not be empty".to_string(),
+        });
+    }
+
+    if trimmed != iface_name {
+        return Err(ServiceConfigError::InvalidConfig {
+            reason: "PPPoE interface name must not have leading or trailing whitespace".to_string(),
+        });
+    }
+
+    if iface_name.len() > PPP_IFACE_NAME_MAX_LEN {
+        return Err(ServiceConfigError::InvalidConfig {
+            reason: format!(
+                "PPPoE interface name must be at most {PPP_IFACE_NAME_MAX_LEN} characters"
+            ),
+        });
+    }
+
+    if !iface_name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')) {
+        return Err(ServiceConfigError::InvalidConfig {
+            reason: "PPPoE interface name may only contain ASCII letters, digits, '-' and '_'"
+                .to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
@@ -112,10 +146,20 @@ impl PPPDConfig {
     }
 
     pub fn delete_config(&self, ppp_iface_name: &str) {
-        let _ = std::fs::remove_file(format!("/etc/ppp/peers/{}", ppp_iface_name));
+        if let Err(e) = validate_ppp_iface_name(ppp_iface_name) {
+            tracing::error!("invalid PPP interface name for delete_config: {e}");
+            return;
+        }
+
+        let _ = std::fs::remove_file(PathBuf::from("/etc/ppp/peers").join(ppp_iface_name));
     }
 
     pub fn write_config(&self, attach_iface_name: &str, ppp_iface_name: &str) -> Result<(), ()> {
+        if let Err(e) = validate_ppp_iface_name(ppp_iface_name) {
+            tracing::error!("invalid PPP interface name for write_config: {e}");
+            return Err(());
+        }
+
         let path = PathBuf::from("/etc/ppp/peers");
         if !path.exists() {
             tracing::error!("The directory /etc/ppp/peers does not exist, please check whether ppp is installed");
@@ -126,7 +170,7 @@ impl PPPDConfig {
             .write(true)
             .truncate(true)
             .create(true)
-            .open(format!("/etc/ppp/peers/{}", ppp_iface_name))
+            .open(path.join(ppp_iface_name))
         else {
             tracing::error!("Error opening file handle");
             return Err(());

@@ -225,7 +225,7 @@ impl LandscapeApp {
         }
     }
 
-    pub(crate) async fn remove_all_iface_service(&self, iface_name: &str) {
+    pub(crate) async fn remove_direct_iface_service(&self, iface_name: &str) {
         self.mss_clamp_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.wan_ip_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.firewall_service.delete_and_stop_iface_service(iface_name.to_string()).await;
@@ -235,7 +235,11 @@ impl LandscapeApp {
         self.dhcp_v4_server_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.lan_ipv6_service.delete_and_stop_iface_service(iface_name.to_string()).await;
         self.route_lan_service.delete_and_stop_iface_service(iface_name.to_string()).await;
-        self.pppd_service.stop_pppds_by_attach_iface_name(iface_name.to_string()).await;
+    }
+
+    pub(crate) async fn remove_all_iface_service(&self, iface_name: &str) {
+        self.remove_direct_iface_service(iface_name).await;
+        crate::services::pppoe::delete_ppp_ifaces_by_attach_name(self, iface_name).await;
     }
 
     pub async fn shutdown(&self) {

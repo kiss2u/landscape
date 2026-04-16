@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { new_ifaces } from "@/api/iface";
 import { update_iface_pppd_config } from "@/api/service_pppd";
 import { PPPDServiceConfig } from "@/lib/pppd";
 import { computed, ref } from "vue";
@@ -19,22 +20,29 @@ const props = defineProps<{
   origin_value: PPPDServiceConfig | undefined;
 }>();
 
-// const origin_value = defineModel<PPPDServiceConfig>("config", {
-//   required: true,
-// });
-
 const emit = defineEmits(["refresh"]);
 const value = ref<PPPDServiceConfig>(
   new PPPDServiceConfig({
     attach_iface_name: props.attach_iface_name,
   }),
 );
+const isEditing = computed(() => props.origin_value !== undefined);
+const existingIfaceNames = ref<string[]>([]);
+const PPP_IFACE_NAME_PATTERN = /^[A-Za-z0-9_-]{1,15}$/;
 
 const isModified = computed(() => {
   return JSON.stringify(value.value) !== JSON.stringify(props.origin_value);
 });
 
 async function init_conf_value() {
+  const iface_infos = (await new_ifaces()) as unknown as {
+    managed: Array<{ config: { name: string } }>;
+    unmanaged: Array<{ status: { name: string } }>;
+  };
+  existingIfaceNames.value = [
+    ...iface_infos.managed.map((iface) => iface.config.name),
+    ...iface_infos.unmanaged.map((iface) => iface.status.name),
+  ];
   value.value = new PPPDServiceConfig(
     props.origin_value
       ? props.origin_value
@@ -45,12 +53,37 @@ async function init_conf_value() {
 }
 
 async function confirm_config() {
-  if (isModified) {
+  if (isModified.value) {
     if (!value.value.iface_name || value.value.iface_name.trim() === "") {
       window.$message.error(t("pppd_editor.iface_required"));
       return;
     }
-    await update_iface_pppd_config(value.value);
+
+    if (
+      value.value.iface_name !== value.value.iface_name.trim() ||
+      !PPP_IFACE_NAME_PATTERN.test(value.value.iface_name)
+    ) {
+      window.$message.error(t("pppd_editor.iface_invalid_format"));
+      return;
+    }
+
+    if (value.value.iface_name === value.value.attach_iface_name) {
+      window.$message.error(t("pppd_editor.iface_same_as_attach"));
+      return;
+    }
+
+    const hasIfaceConflict = existingIfaceNames.value.includes(
+      value.value.iface_name,
+    );
+    if (
+      hasIfaceConflict &&
+      value.value.iface_name !== props.origin_value?.iface_name
+    ) {
+      window.$message.error(t("pppd_editor.iface_conflict_existing"));
+      return;
+    }
+
+    await update_iface_pppd_config(value.value, props.origin_value?.iface_name);
     show.value = false;
     emit("refresh");
   }
@@ -84,7 +117,11 @@ async function confirm_config() {
         </n-form-item-gi>
 
         <n-form-item-gi :label="t('pppd_editor.ppp_iface_name')" :span="2">
-          <n-input v-model:value="value.iface_name" clearable />
+          <n-input
+            v-model:value="value.iface_name"
+            clearable
+            :disabled="isEditing"
+          />
         </n-form-item-gi>
       </n-grid>
 

@@ -356,11 +356,14 @@ impl PPPDServiceConfigManagerService {
         self.store.get_pppd_configs_by_attach_iface_name(attach_name).await.unwrap()
     }
 
-    pub async fn stop_pppds_by_attach_iface_name(&self, attach_name: String) {
+    pub async fn delete_and_stop_pppd(&self, iface_name: String) -> Option<WatchService> {
+        self.delete_and_stop_iface_service(iface_name).await
+    }
+
+    pub async fn delete_and_stop_pppds_by_attach_iface_name(&self, attach_name: String) {
         let configs = self.get_pppd_configs_by_attach_iface_name(attach_name).await;
         for each in configs {
-            self.service.stop_service(each.iface_name.clone()).await;
-            self.get_repository().delete(each.iface_name).await.unwrap();
+            self.delete_and_stop_pppd(each.iface_name).await;
         }
     }
 }

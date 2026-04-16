@@ -5,6 +5,7 @@ import {
   getAllPppdConfigs,
   getIfacePppdConfig,
   handleIfacePppdConfig,
+  updateExistingIfacePppdConfig,
   deleteAndStopIfacePppd,
   deleteAndStopIfacePppdByAttachIfaceName,
   getIfacePppdConfigByAttachIfaceName,
@@ -37,7 +38,13 @@ export async function get_iface_pppd_config(
 
 export async function update_iface_pppd_config(
   pppd_config: PPPDServiceConfig,
+  origin_iface_name?: string,
 ): Promise<void> {
+  if (origin_iface_name) {
+    await updateExistingIfacePppdConfig(origin_iface_name, pppd_config as any);
+    return;
+  }
+
   await handleIfacePppdConfig(pppd_config as any);
 }
 
