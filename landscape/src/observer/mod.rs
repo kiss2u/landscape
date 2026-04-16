@@ -5,6 +5,8 @@ pub use crate::netlink::observer::{
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::observer::dev_observer;
 
     #[tokio::test]
@@ -12,7 +14,7 @@ mod tests {
         landscape_common::init_tracing!();
         let mut info = dev_observer().await;
 
-        while let Ok(msg) = info.recv().await {
+        if let Ok(Ok(msg)) = tokio::time::timeout(Duration::from_millis(200), info.recv()).await {
             tracing::debug!("msg: {msg:#?}");
         }
     }
