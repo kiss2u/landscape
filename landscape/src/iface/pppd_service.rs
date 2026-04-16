@@ -1,14 +1,13 @@
+use std::io;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
-use std::process::Command;
-use std::process::Stdio;
+use std::os::unix::process::CommandExt;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use landscape_common::route::LanRouteInfo;
 use landscape_common::route::LanRouteMode;
 use landscape_common::route::RouteTargetInfo;
-use landscape_common::SYSCTL_IPV6_RA_ACCEPT_PATTERN;
-use sysctl::Sysctl as _;
 use tokio::sync::{oneshot, watch};
 
 use landscape_common::database::LandscapeStore;
@@ -34,6 +33,30 @@ use crate::route::IpRouteService;
 
 const PPPD_RETRY_BASE_SECS: u64 = 4;
 const PPPD_RETRY_MAX_SECS: u64 = 10 * 60;
+const PPPD_STARTUP_TIMEOUT_SECS: u64 = 90;
+const PPPD_STOP_GRACE_SECS: u64 = 5;
+const PPPD_STOP_KILL_WAIT_SECS: u64 = 2;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PppIpv4State {
+    Missing,
+    Partial { ifindex: u32, local: Option<Ipv4Addr>, peer: Option<Ipv4Addr> },
+    Ready { ifindex: u32, local: Ipv4Addr, peer: Ipv4Addr },
+}
+
+impl PppIpv4State {
+    fn from_snapshot(ip4addr: Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)>) -> Self {
+        match ip4addr {
+            Some((ifindex, Some(local), Some(peer))) => Self::Ready { ifindex, local, peer },
+            Some((ifindex, local, peer)) => Self::Partial { ifindex, local, peer },
+            None => Self::Missing,
+        }
+    }
+
+    fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready { .. })
+    }
+}
 
 fn calc_pppd_retry_backoff_secs(failure_count: u32) -> u64 {
     let exp = failure_count.saturating_sub(1).min(31);
@@ -56,6 +79,129 @@ fn wait_stop_or_timeout(rx: &mut oneshot::Receiver<()>, duration: Duration) -> b
 
         let remain = deadline.saturating_duration_since(now);
         std::thread::sleep(remain.min(Duration::from_millis(200)));
+    }
+}
+
+fn wait_child_exit(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait()? {
+            Some(status) => return Ok(Some(status)),
+            None => {
+                if Instant::now() >= deadline {
+                    return Ok(None);
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+    }
+}
+
+fn signal_child_process_group(child: &Child, signal: i32) -> io::Result<()> {
+    let pid = i32::try_from(child.id()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("child pid {} exceeds i32 range", child.id()),
+        )
+    })?;
+
+    let result = unsafe { libc::killpg(pid, signal) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+fn stop_pppd_process(child: &mut Child, ppp_iface_name: &str) {
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            tracing::info!(
+                "pppd process for {} already exited before stop handling: {:?}",
+                ppp_iface_name,
+                status
+            );
+            return;
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tracing::warn!("failed to probe pppd child state for {}: {}", ppp_iface_name, e);
+        }
+    }
+
+    if let Err(e) = signal_child_process_group(child, libc::SIGTERM) {
+        tracing::warn!(
+            "failed to send SIGTERM to pppd process group for {}: {}",
+            ppp_iface_name,
+            e
+        );
+        if let Err(kill_err) = child.kill() {
+            tracing::warn!("failed to kill pppd process for {}: {}", ppp_iface_name, kill_err);
+        }
+    }
+
+    match wait_child_exit(child, Duration::from_secs(PPPD_STOP_GRACE_SECS)) {
+        Ok(Some(status)) => {
+            tracing::info!(
+                "pppd process for {} exited after SIGTERM: {:?}",
+                ppp_iface_name,
+                status
+            );
+            return;
+        }
+        Ok(None) => {
+            tracing::warn!(
+                "pppd process group for {} did not exit within {}s; escalating to SIGKILL",
+                ppp_iface_name,
+                PPPD_STOP_GRACE_SECS
+            );
+        }
+        Err(e) => {
+            tracing::warn!(
+                "failed while waiting for pppd process {} to exit: {}",
+                ppp_iface_name,
+                e
+            );
+        }
+    }
+
+    if let Err(e) = signal_child_process_group(child, libc::SIGKILL) {
+        tracing::warn!(
+            "failed to send SIGKILL to pppd process group for {}: {}",
+            ppp_iface_name,
+            e
+        );
+        if let Err(kill_err) = child.kill() {
+            tracing::warn!(
+                "failed to force kill pppd process for {} after SIGKILL failure: {}",
+                ppp_iface_name,
+                kill_err
+            );
+        }
+    }
+
+    match wait_child_exit(child, Duration::from_secs(PPPD_STOP_KILL_WAIT_SECS)) {
+        Ok(Some(status)) => {
+            tracing::info!(
+                "pppd process for {} exited after SIGKILL: {:?}",
+                ppp_iface_name,
+                status
+            );
+        }
+        Ok(None) => {
+            tracing::error!(
+                "pppd process for {} still did not exit after SIGKILL within {}s",
+                ppp_iface_name,
+                PPPD_STOP_KILL_WAIT_SECS
+            );
+        }
+        Err(e) => {
+            tracing::error!(
+                "failed while waiting for pppd process {} after SIGKILL: {}",
+                ppp_iface_name,
+                e
+            );
+        }
     }
 }
 
@@ -135,25 +281,33 @@ pub async fn create_pppd_thread(
     };
 
     let as_router = pppd_conf.default_route;
+    let initial_ppp_ipv4_state =
+        PppIpv4State::from_snapshot(crate::get_ppp_address(&ppp_iface_name).await);
+    let (ppp_ipv4_state_tx, ppp_ipv4_state_rx) = watch::channel(initial_ppp_ipv4_state.clone());
 
     let (updata_ip, mut updata_ip_rx) = watch::channel(());
     let ppp_iface_name_clone = ppp_iface_name.clone();
     let route_service_clone = route_service.clone();
+    let ppp_ipv4_state_tx_clone = ppp_ipv4_state_tx.clone();
+    let initial_ppp_ipv4_state_clone = initial_ppp_ipv4_state.clone();
     spawn_task_with_resource(
         task_label::task::PPPD_IP_WATCH,
         ppp_iface_name_clone.clone(),
         async move {
             let mut ip4addr: Option<(u32, Option<Ipv4Addr>, Option<Ipv4Addr>)> = None;
+            let mut ppp_ipv4_state = initial_ppp_ipv4_state_clone;
             while let Ok(_) = updata_ip_rx.changed().await {
                 let new_ip4addr = crate::get_ppp_address(&ppp_iface_name_clone).await;
+                let new_ppp_ipv4_state = PppIpv4State::from_snapshot(new_ip4addr);
+                if ppp_ipv4_state != new_ppp_ipv4_state {
+                    ppp_ipv4_state_tx_clone.send_replace(new_ppp_ipv4_state.clone());
+                    ppp_ipv4_state = new_ppp_ipv4_state;
+                }
+
                 if let Some(new_ip4addr) = new_ip4addr {
                     let update = if let Some(data) = ip4addr { data != new_ip4addr } else { true };
                     if update {
                         if let (Some(ip), Some(peer_ip)) = (new_ip4addr.1, new_ip4addr.2) {
-                            // Temporarily disable forcing accept_ra=2 on PPP interfaces
-                            // so we can observe whether PPP IPv6 still behaves correctly
-                            // with the kernel/default setting.
-                            // set_iface_ipv6_ra_accept_to_2(&ppp_iface_name_clone);
                             landscape_ebpf::map_setting::add_ipv4_wan_ip(
                                 new_ip4addr.0,
                                 ip.clone(),
@@ -203,6 +357,8 @@ pub async fn create_pppd_thread(
                         }
                     }
                     ip4addr = Some(new_ip4addr);
+                } else {
+                    ip4addr = None;
                 }
             }
         },
@@ -210,24 +366,41 @@ pub async fn create_pppd_thread(
 
     tracing::info!("PPPD config written successfully");
     let iface_name = ppp_iface_name.clone();
+    let ppp_ipv4_state_rx = ppp_ipv4_state_rx.clone();
     spawn_named_thread(short_thread_name(thread_name::prefix::PPPD, &ppp_iface_name), move || {
         let mut connect_failure_count: u32 = 0;
         let mut should_stop = false;
 
         'restart: loop {
             if wait_stop_or_timeout(&mut rx, Duration::from_secs(0)) {
+                should_stop = true;
                 break;
             }
 
+            let baseline_ppp_ipv4_state = ppp_ipv4_state_rx.borrow().clone();
+            let mut saw_reset = !baseline_ppp_ipv4_state.is_ready();
+
             tracing::info!("Starting PPPD");
-            let mut child = match Command::new("pppd")
+            let mut command = Command::new("pppd");
+            command
                 .arg("nodetach")
                 .arg("call")
                 .arg(&ppp_iface_name)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-            {
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
+
+            unsafe {
+                command.pre_exec(|| {
+                    let result = libc::setpgid(0, 0);
+                    if result == 0 {
+                        Ok(())
+                    } else {
+                        Err(io::Error::last_os_error())
+                    }
+                });
+            }
+
+            let mut child = match command.spawn() {
                 Ok(child) => child,
                 Err(e) => {
                     connect_failure_count = connect_failure_count.saturating_add(1);
@@ -239,6 +412,7 @@ pub async fn create_pppd_thread(
                         connect_failure_count
                     );
                     if wait_stop_or_timeout(&mut rx, Duration::from_secs(backoff)) {
+                        should_stop = true;
                         break;
                     }
                     continue 'restart;
@@ -246,6 +420,7 @@ pub async fn create_pppd_thread(
             };
             let mut check_error_times = 0;
             let mut healthy_once = false;
+            let startup_deadline = Instant::now() + Duration::from_secs(PPPD_STARTUP_TIMEOUT_SECS);
             loop {
                 std::thread::sleep(Duration::from_secs(1));
                 updata_ip.send_replace(());
@@ -256,9 +431,27 @@ pub async fn create_pppd_thread(
                     }
                     Ok(None) => {
                         check_error_times = 0;
-                        if !healthy_once {
+
+                        let current_ppp_ipv4_state = ppp_ipv4_state_rx.borrow().clone();
+                        if !current_ppp_ipv4_state.is_ready() {
+                            saw_reset = true;
+                        }
+
+                        if !healthy_once
+                            && current_ppp_ipv4_state.is_ready()
+                            && (saw_reset || current_ppp_ipv4_state != baseline_ppp_ipv4_state)
+                        {
                             healthy_once = true;
                             connect_failure_count = 0;
+                        }
+
+                        if !healthy_once && Instant::now() >= startup_deadline {
+                            tracing::warn!(
+                                "pppd startup timed out after {}s without acquiring IPv4 local/peer addresses on {}",
+                                PPPD_STARTUP_TIMEOUT_SECS,
+                                ppp_iface_name
+                            );
+                            break;
                         }
                     }
                     Err(e) => {
@@ -279,7 +472,7 @@ pub async fn create_pppd_thread(
                     }
                 }
             }
-            let _ = child.kill();
+            stop_pppd_process(&mut child, &ppp_iface_name);
             if should_stop {
                 break;
             }
@@ -292,6 +485,7 @@ pub async fn create_pppd_thread(
                 connect_failure_count
             );
             if wait_stop_or_timeout(&mut rx, Duration::from_secs(backoff)) {
+                should_stop = true;
                 break;
             }
         }
@@ -364,22 +558,6 @@ impl PPPDServiceConfigManagerService {
         let configs = self.get_pppd_configs_by_attach_iface_name(attach_name).await;
         for each in configs {
             self.delete_and_stop_pppd(each.iface_name).await;
-        }
-    }
-}
-
-#[allow(dead_code)]
-fn set_iface_ipv6_ra_accept_to_2(iface_name: &str) {
-    if let Ok(ctl) = sysctl::Ctl::new(&SYSCTL_IPV6_RA_ACCEPT_PATTERN.replace("{}", iface_name)) {
-        match ctl.set_value_string("2") {
-            Ok(value) => {
-                if value != "2" {
-                    tracing::error!("modify value error: {:?}", value)
-                }
-            }
-            Err(e) => {
-                tracing::error!("err: {e:?}")
-            }
         }
     }
 }
