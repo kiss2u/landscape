@@ -12,7 +12,7 @@ cd "$SCRIPT_DIR"
 
 pnpm_cmd install --frozen-lockfile
 
-"$SCRIPT_DIR/gen_ts_bindings.sh"
+"$SCRIPT_DIR/gen_ts_bindings.sh" --if-stale
 
 echo "复制 Scalar API Reference 资源到 output/static/scalar..."
 SCALAR_OUTPUT_DIR="$SCRIPT_DIR/output/static/scalar"

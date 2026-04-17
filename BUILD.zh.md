@@ -9,7 +9,7 @@
 - 前端命令使用 `pnpm`。如果你没有全局安装 `pnpm`，再使用 `corepack pnpm`
 - 只有在整仓联调或发布式构建时才使用 `bash ./build.sh -t <arch>`
 
-不要把 `build.sh` 当作日常开发入口。它会重建前端、重新生成 API 类型、整理 release 用静态资源，并产出 release 级别的构建结果。
+不要把 `build.sh` 当作日常开发入口。它会重建前端、按需确保 API 类型产物存在、整理 release 用静态资源，并产出 release 级别的构建结果。
 
 ## 环境要求
 
@@ -70,6 +70,20 @@ pnpm install --frozen-lockfile
 
 `./gen_ts_bindings.sh` 会导出 `openapi.json` 并重新生成 TypeScript client。修改了后端 OpenAPI 路由或 schema 之后，需要重新执行一次。
 
+直接执行 `./gen_ts_bindings.sh` 时，默认总是强制重新导出并重新生成。
+
+`bash ./build.sh -t <arch>` 不同：它内部会调用 `./gen_ts_bindings.sh --if-stale`，这样重复执行整仓构建时，只要生成产物和 lock 文件已经存在，就不会重复生成。
+
+`./web.sh` 也会在启动前端 dev server 前调用 `./gen_ts_bindings.sh --if-stale`，这样前端开发时也能避免每次启动都重复生成。
+
+如果你希望在完整构建流程之外也显式使用这种基于 lock 的跳过行为，可以用：
+
+```bash
+./gen_ts_bindings.sh --if-stale
+```
+
+只有当 `landscape-types/openapi.json`、`landscape-types/src/api/schemas/index.ts` 和 `landscape-types/.bindings.lock` 都存在时，它才会跳过；任意一个缺失都会重新生成。
+
 ## 日常开发
 
 ### 后端
@@ -84,6 +98,8 @@ cargo test --workspace
 ```bash
 ./web.sh
 ```
+
+`./web.sh` 会在启动 `landscape-webui` 开发模式前执行同样的基于 lock 的 API 类型检查。
 
 等价原生命令：
 
@@ -103,7 +119,7 @@ pnpm --filter landscape-webui dev
 bash ./build.sh -t x86_64
 ```
 
-`build.sh` 会安装前端依赖，通过 `./gen_ts_bindings.sh` 导出 OpenAPI 并重新生成 TypeScript 类型、构建 Web UI、把 Scalar 静态资源整理到 `output/static`，然后再构建 release 后端二进制。
+`build.sh` 会安装前端依赖，只在生成产物或 lock 文件缺失时重新生成 API 类型，构建 Web UI、把 Scalar 静态资源整理到 `output/static`，然后再构建 release 后端二进制。
 
 ## `sudo`
 

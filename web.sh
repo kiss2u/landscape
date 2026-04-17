@@ -7,5 +7,6 @@ source "$SCRIPT_DIR/scripts/pnpm_cmd.sh"
 
 (
     cd "$SCRIPT_DIR"
+    "$SCRIPT_DIR/gen_ts_bindings.sh" --if-stale
     pnpm_cmd --filter landscape-webui dev "$@"
 )

@@ -9,7 +9,7 @@ This is the canonical local development guide for the repository.
 - Use `pnpm` for direct frontend commands. If you do not have a global `pnpm`, use `corepack pnpm`.
 - Use `bash ./build.sh -t <arch>` only for full integration or release-style builds.
 
-Do not use `build.sh` for every edit. It rebuilds the frontend, regenerates API bindings, stages release static assets, and produces release artifacts.
+Do not use `build.sh` for every edit. It rebuilds the frontend, ensures API bindings exist when needed, stages release static assets, and produces release artifacts.
 
 ## Requirements
 
@@ -70,6 +70,20 @@ The frontend imports generated code from `landscape-types`, so generate it befor
 
 `./gen_ts_bindings.sh` exports `openapi.json` and regenerates the TypeScript client. Run it again whenever you change backend OpenAPI routes or schemas.
 
+Directly running `./gen_ts_bindings.sh` always forces a fresh export and regeneration.
+
+`bash ./build.sh -t <arch>` is different: it calls `./gen_ts_bindings.sh --if-stale` internally so repeated full builds do not regenerate bindings once the generated files and lock file already exist.
+
+`./web.sh` also calls `./gen_ts_bindings.sh --if-stale` before starting the frontend dev server, so frontend development avoids paying the regeneration cost on every run.
+
+If you explicitly want the same lock-based skip behavior outside the full build flow, use:
+
+```bash
+./gen_ts_bindings.sh --if-stale
+```
+
+This skips regeneration only when `landscape-types/openapi.json`, `landscape-types/src/api/schemas/index.ts`, and `landscape-types/.bindings.lock` all exist.
+
 ## Daily development
 
 ### Backend
@@ -84,6 +98,8 @@ cargo test --workspace
 ```bash
 ./web.sh
 ```
+
+`./web.sh` performs the same lock-based API bindings check before starting `landscape-webui` in dev mode.
 
 Equivalent direct command:
 
@@ -103,7 +119,7 @@ Use this when you want the same general flow as CI:
 bash ./build.sh -t x86_64
 ```
 
-`build.sh` installs frontend dependencies, exports OpenAPI through `./gen_ts_bindings.sh`, regenerates TypeScript bindings, builds the web UI, stages the Scalar static assets under `output/static`, and then builds the release backend binary.
+`build.sh` installs frontend dependencies, regenerates API bindings only when the generated files or lock file are missing, builds the web UI, stages the Scalar static assets under `output/static`, and then builds the release backend binary.
 
 ## `sudo`
 
