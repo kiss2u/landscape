@@ -1,31 +1,41 @@
+use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::process;
 
-use landscape_common::service::ServiceStatus;
-use tokio::sync::{mpsc, oneshot, watch};
-
-use super::{DEFAULT_CLIENT_MRU, ETH_P_PPOED, ETH_P_PPOES, LCP_ECHO_INTERVAL};
-use crate::dump::pppoe::tags::PPPoETag;
-use crate::dump::pppoe::{PPPOption, PPPoEFrame, PointToPoint};
-use crate::pppoe_client::DEFAULT_TIME_OUT;
+use landscape_common::global_const::default_router::{RouteInfo, RouteType, LD_ALL_ROUTERS};
 use landscape_common::net::MacAddr;
+use landscape_common::net_proto::ppp::{PPPOption, PointToPoint};
+use landscape_common::net_proto::pppoe::{PPPoEFrame, PPPoETag};
+use landscape_common::route::{LanRouteInfo, LanRouteMode, RouteTargetInfo};
+use landscape_common::service::{ServiceStatus, WatchService};
+use tokio::sync::{mpsc, oneshot};
+
+use super::{PPPoEClientConfig, ETH_P_PPOED, ETH_P_PPOES, LCP_ECHO_INTERVAL};
+use crate::pppoe_client::DEFAULT_TIME_OUT;
+use crate::route::IpRouteService;
 use landscape_ebpf::pppoe;
 
 pub async fn create_pppoe_client(
-    index: u32,
-    iface_name: String,
-    iface_mac: MacAddr,
-    peer_id: String,
-    password: String,
-    service_status: watch::Sender<ServiceStatus>,
+    config: PPPoEClientConfig,
+    service_status: WatchService,
+    route_service: Option<IpRouteService>,
 ) {
-    service_status.send_replace(ServiceStatus::Staring);
+    service_status.just_change_status(ServiceStatus::Staring);
 
-    let (tx, mut rx) = pppoe::start(index).await.unwrap();
+    let Ok((tx, mut rx)) = pppoe::start(config.index).await else {
+        service_status.just_change_status(ServiceStatus::Failed);
+        return;
+    };
 
-    let mut pkt_manager = PPPoEClientManager::new(iface_mac, peer_id, password);
+    let mut pkt_manager = PPPoEClientManager::new(
+        config.iface_mac,
+        config.requested_mru,
+        config.peer_id.clone(),
+        config.password.clone(),
+    );
 
     let mut bpf_thread_notice = None;
+    let mut exited_with_error = false;
 
     let mut timeout_times = 0_u64;
     let resend_timeout_timer = tokio::time::sleep(tokio::time::Duration::from_secs(0));
@@ -46,17 +56,22 @@ pub async fn create_pppoe_client(
                     pkt_manager.handle_packet(*receive_data, &tx).await;
                     if pkt_manager.error_count > 10 {
                         tracing::error!("出现致命错误, 退出");
+                        exited_with_error = true;
                         break;
                     }
 
                     if bpf_thread_notice.is_none() {
                         if pkt_manager.can_enable_ebpf_prog() {
-                            bpf_thread_notice = pkt_manager.enable_ebpf(index, &iface_name).await;
+                            bpf_thread_notice = pkt_manager.enable_ebpf(&config, route_service.clone()).await;
+                            if bpf_thread_notice.is_some() {
+                                service_status.just_change_status(ServiceStatus::Running);
+                            }
                         }
                     }
                     timeout_times = 0;
                     resend_timeout_timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(DEFAULT_TIME_OUT));
                 } else {
+                    exited_with_error = true;
                     break
                 }
             },
@@ -64,6 +79,7 @@ pub async fn create_pppoe_client(
             _ = &mut resend_timeout_timer => {
                 if timeout_times > 3 {
                     tracing::error!("超时次数过多");
+                    exited_with_error = true;
                     break;
                 }
                 pkt_manager.send_packet(&tx).await;
@@ -75,6 +91,7 @@ pub async fn create_pppoe_client(
             _ = &mut echo_timeout_timer => {
                 if let Some((cueernt_timeout_times, wait_time)) = pkt_manager.get_keep_alive_pkt(&tx).await {
                     if cueernt_timeout_times > 5 {
+                        exited_with_error = true;
                         break;
                     }
                     echo_timeout_timer.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(wait_time));
@@ -86,6 +103,7 @@ pub async fn create_pppoe_client(
             change_result = service_status_rx.changed() => {
                 if let Err(_) = change_result {
                     tracing::error!("get change result error. exit loop");
+                    exited_with_error = true;
                     break;
                 }
 
@@ -94,7 +112,7 @@ pub async fn create_pppoe_client(
                     pkt_manager.send_packet(&tx).await;
                 }
 
-                let current_status = &*service_status.borrow();
+                let current_status = &*service_status_rx.borrow();
                 match current_status {
                     ServiceStatus::Stopping => {
                         tracing::error!("pppoe reciver thread exit");
@@ -113,7 +131,11 @@ pub async fn create_pppoe_client(
         }
     }
 
-    service_status.send_replace(ServiceStatus::Stop);
+    if matches!(*service_status.0.borrow(), ServiceStatus::Stopping) || !exited_with_error {
+        service_status.just_change_status(ServiceStatus::Stop);
+    } else {
+        service_status.just_change_status(ServiceStatus::Failed);
+    }
     tracing::info!("pppoe client down");
 }
 
@@ -145,7 +167,7 @@ struct PPPoEClientManager {
 }
 
 impl PPPoEClientManager {
-    pub fn new(client_mac: MacAddr, peer_id: String, password: String) -> Self {
+    pub fn new(client_mac: MacAddr, requested_mru: u16, peer_id: String, password: String) -> Self {
         let my_host_id = process::id().swap_bytes();
         // let my_host_id =
         //     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs() as u32;
@@ -154,7 +176,7 @@ impl PPPoEClientManager {
             client_mac,
             my_host_id,
             pppoe_status: PPPoEConnectState::Discovering,
-            lcp_status: LCPStatus::new(client_mac.clone()),
+            lcp_status: LCPStatus::new(client_mac, requested_mru),
             peer_id,
             password,
         }
@@ -270,7 +292,10 @@ impl PPPoEClientManager {
                 [server_mac_addr, self.client_mac.octets().as_ref(), &ETH_P_PPOES.to_be_bytes()]
                     .concat();
 
-            let lcp = PointToPoint::new(&pppoe_data.payload).unwrap();
+            let Some(lcp) = PointToPoint::new(&pppoe_data.payload) else {
+                self.error_count += 1;
+                return None;
+            };
 
             if lcp.is_lcp_config() {
                 if lcp.is_ack() {
@@ -338,6 +363,7 @@ impl PPPoEClientManager {
                             let request = PPPoEFrame::get_ppp_mru_config_request(
                                 *session_id,
                                 self.lcp_status.cfg_req_id,
+                                cfg.mru,
                                 cfg.magic_number,
                             );
 
@@ -389,6 +415,7 @@ impl PPPoEClientManager {
                             let request = PPPoEFrame::get_ppp_mru_config_request(
                                 *session_id,
                                 self.lcp_status.cfg_req_id,
+                                cfg.mru,
                                 cfg.magic_number,
                             );
 
@@ -719,6 +746,7 @@ impl PPPoEClientManager {
             let request = PPPoEFrame::get_ppp_mru_config_request(
                 *sid,
                 self.lcp_status.cfg_req_id,
+                cfg.mru,
                 cfg.magic_number,
             );
 
@@ -795,11 +823,11 @@ impl PPPoEClientManager {
 
     pub async fn enable_ebpf(
         &self,
-        index: u32,
-        iface_name: &str,
+        config: &PPPoEClientConfig,
+        route_service: Option<IpRouteService>,
     ) -> Option<oneshot::Sender<oneshot::Sender<()>>> {
         let mru = if let TagValue::Ack(client_cfg) = &self.lcp_status.client_config {
-            client_cfg.mru
+            client_cfg.mru.min(config.requested_mru)
         } else {
             return None;
         };
@@ -823,7 +851,10 @@ impl PPPoEClientManager {
         );
 
         let (outside_notice_tx, outside_notice_rx) = oneshot::channel::<oneshot::Sender<()>>();
-        let iface_name = iface_name.to_string();
+        let index = config.index;
+        let iface_name = config.iface_name.clone();
+        let iface_mac = config.iface_mac;
+        let default_router = config.default_router;
         let session_id = session_id.clone();
         let server_mac_addr = server_mac_addr.clone();
         tokio::spawn(async move {
@@ -832,7 +863,7 @@ impl PPPoEClientManager {
                 client_ip,
                 Some(server_ip.clone()),
                 32,
-                None,
+                Some(iface_mac),
             );
             let _ = std::process::Command::new("ip")
                 .args(&["link", "set", "dev", &iface_name, "mtu", &format!("{}", mru)])
@@ -849,9 +880,46 @@ impl PPPoEClientManager {
                     &iface_name,
                 ])
                 .output();
-            let _ = std::process::Command::new("ip")
-                .args(&["route", "replace", "default", "via", &format!("{}", server_ip)])
-                .output();
+
+            let lan_info = LanRouteInfo {
+                ifindex: index,
+                iface_name: iface_name.clone(),
+                iface_ip: IpAddr::V4(client_ip),
+                mac: Some(iface_mac),
+                prefix: 32,
+                mode: LanRouteMode::Reachable,
+            };
+            if let Some(route_service) = route_service.as_ref() {
+                route_service.insert_ipv4_lan_route(&iface_name, lan_info).await;
+                route_service
+                    .insert_ipv4_wan_route(
+                        &iface_name,
+                        RouteTargetInfo {
+                            ifindex: index,
+                            weight: 1,
+                            mac: Some(iface_mac),
+                            is_docker: false,
+                            iface_name: iface_name.clone(),
+                            iface_ip: IpAddr::V4(client_ip),
+                            default_route: default_router,
+                            gateway_ip: IpAddr::V4(server_ip),
+                        },
+                    )
+                    .await;
+            }
+
+            if default_router {
+                LD_ALL_ROUTERS
+                    .add_route(RouteInfo {
+                        iface_name: iface_name.clone(),
+                        weight: 1,
+                        route: RouteType::Ipv4(server_ip),
+                    })
+                    .await;
+            } else {
+                LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
+            }
+
             let neight_run_result = std::process::Command::new("ip")
                 .args(&[
                     "neigh",
@@ -899,6 +967,13 @@ impl PPPoEClientManager {
                 ])
                 .output();
 
+            if default_router {
+                LD_ALL_ROUTERS.del_route_by_iface(&iface_name).await;
+            }
+            if let Some(route_service) = route_service.as_ref() {
+                route_service.remove_ipv4_wan_route(&iface_name).await;
+                route_service.remove_ipv4_lan_route(&iface_name).await;
+            }
             landscape_ebpf::map_setting::del_ipv4_wan_ip(index);
             let _ = std::process::Command::new("ip")
                 .args(&["link", "set", "dev", &iface_name, "mtu", "1500"])
@@ -919,11 +994,11 @@ struct LcpBaseConfig {
 }
 
 impl LcpBaseConfig {
-    pub fn new_client() -> Self {
+    pub fn new_client(requested_mru: u16) -> Self {
         let now =
             std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap();
         let magic_number = now.as_secs() as u32;
-        LcpBaseConfig { mru: DEFAULT_CLIENT_MRU, magic_number }
+        LcpBaseConfig { mru: requested_mru, magic_number }
     }
 }
 
@@ -954,7 +1029,7 @@ struct LCPStatus {
 }
 
 impl LCPStatus {
-    pub fn new(client_mac: MacAddr) -> Self {
+    pub fn new(client_mac: MacAddr, requested_mru: u16) -> Self {
         let mut ipv6_interface_id = [0_u8; 8];
         let mac_addr = client_mac.octets();
         // let process_id = process::id().to_le_bytes();
@@ -974,8 +1049,8 @@ impl LCPStatus {
         LCPStatus {
             lcp_echo_times: 0,
             echo_req_id: 0,
-            client_config: TagValue::Nak(LcpBaseConfig::new_client()),
-            server_config: TagValue::Nak(LcpBaseConfig::new_client()),
+            client_config: TagValue::Nak(LcpBaseConfig::new_client(requested_mru)),
+            server_config: TagValue::Nak(LcpBaseConfig::new_client(requested_mru)),
             cfg_req_id: 1,
             auth_type: TagValue::Nak(0),
             pap: (false, None),

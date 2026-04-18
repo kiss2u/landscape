@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::database::LandscapeStore;
+use landscape_common::iface::ip_config::IfaceIpModelConfig;
 use landscape_common::iface::ppp::{validate_ppp_iface_name, PPPDServiceConfig};
 use landscape_common::service::controller::{ConfigController, ControllerService};
 use landscape_common::service::{ServiceStatus, WatchService};
@@ -47,6 +48,21 @@ async fn validate_pppd_config(
                 config.iface_name
             ),
         });
+    }
+
+    if config.enable {
+        if let Some(ip_config) =
+            state.wan_ip_service.get_config_by_name(config.attach_iface_name.clone()).await
+        {
+            if ip_config.enable && matches!(ip_config.ip_model, IfaceIpModelConfig::PPPoE { .. }) {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "Interface '{}' already uses native PPPoE in IP Config; disable it before enabling PPPD-based PPPoE",
+                        config.attach_iface_name
+                    ),
+                });
+            }
+        }
     }
 
     Ok(())

@@ -1,6 +1,8 @@
 pub mod error;
 pub mod icmpv6;
 pub mod options;
+pub mod ppp;
+pub mod pppoe;
 pub mod udp;
 pub use udp::dhcp;
 

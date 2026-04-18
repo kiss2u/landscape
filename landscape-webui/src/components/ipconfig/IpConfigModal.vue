@@ -38,10 +38,10 @@ const ip_config_options = computed(() => {
     },
   ];
   if (iface_info.zone == ZoneType.Wan) {
-    // result.push({
-    //   label: "PPPoE",
-    //   value: IfaceIpMode.PPPoE,
-    // });
+    result.push({
+      label: t("ipconfig_editor.mode_pppoe_native"),
+      value: IfaceIpMode.PPPoE,
+    });
     result.push({
       label: t("ipconfig_editor.mode_dhcp_client"),
       value: IfaceIpMode.DHCPClient,
@@ -179,23 +179,50 @@ function select_ip_model(value: IfaceIpMode) {
               </n-grid>
             </n-form>
           </n-flex>
-          <n-flex v-else-if="iface_data.ip_model.t === IfaceIpMode.PPPoE">
-            <n-input-group>
-              <n-input-group-label>{{
-                t("ipconfig_editor.username")
-              }}</n-input-group-label>
-              <n-input
-                v-model:value="iface_data.ip_model.username"
-                placeholder=""
-              />
-              <n-input-group-label>{{
-                t("ipconfig_editor.password")
-              }}</n-input-group-label>
-              <n-input
-                v-model:value="iface_data.ip_model.password"
-                placeholder=""
-              />
-            </n-input-group>
+          <n-flex
+            vertical
+            style="flex: 1"
+            v-else-if="iface_data.ip_model.t === IfaceIpMode.PPPoE"
+          >
+            <n-form style="flex: 1" :model="iface_data.ip_model" :cols="5">
+              <n-grid :cols="5">
+                <n-form-item-gi :label="t('ipconfig_editor.username')" :span="5">
+                  <n-input
+                    v-model:value="iface_data.ip_model.username"
+                    placeholder=""
+                  />
+                </n-form-item-gi>
+                <n-form-item-gi :label="t('ipconfig_editor.password')" :span="5">
+                  <n-input
+                    v-model:value="iface_data.ip_model.password"
+                    type="password"
+                    show-password-on="click"
+                    placeholder=""
+                  />
+                </n-form-item-gi>
+                <n-form-item-gi
+                  :label="t('ipconfig_editor.set_default_route')"
+                  :span="5"
+                >
+                  <n-switch v-model:value="iface_data.ip_model.default_router">
+                    <template #checked>
+                      {{ t("ipconfig_editor.yes") }}
+                    </template>
+                    <template #unchecked>
+                      {{ t("ipconfig_editor.no") }}
+                    </template>
+                  </n-switch>
+                </n-form-item-gi>
+                <n-form-item-gi :label="t('ipconfig_editor.mtu')" :span="5">
+                  <n-input-number
+                    v-model:value="iface_data.ip_model.mtu"
+                    :min="576"
+                    :max="1492"
+                    style="width: 100%"
+                  />
+                </n-form-item-gi>
+              </n-grid>
+            </n-form>
           </n-flex>
 
           <n-flex

@@ -1,5 +1,6 @@
 use clap::Parser;
 use landscape_common::service::ServiceStatus;
+use landscape_common::service::WatchService;
 use tokio::sync::oneshot;
 
 #[derive(Parser, Clone, Debug)]
@@ -18,7 +19,7 @@ pub struct CmdArgs {
 #[tokio::main]
 async fn main() {
     let params = CmdArgs::parse();
-    let (service_status, _) = tokio::sync::watch::channel(ServiceStatus::Staring);
+    let service_status = WatchService::new();
     let all_interfaces = pnet::datalink::interfaces();
     let target_interface = all_interfaces.iter().find(|e| e.index == params.ifindex);
     let Some(interface) = target_interface else {
@@ -31,12 +32,17 @@ async fn main() {
     let service_status_clone = service_status.clone();
     tokio::spawn(async move {
         landscape::pppoe_client::pppoe_client_v2::create_pppoe_client(
-            params.ifindex,
-            iface_name,
-            iface_mac,
-            params.username,
-            params.pass,
+            landscape::pppoe_client::PPPoEClientConfig::new(
+                params.ifindex,
+                iface_name,
+                iface_mac,
+                params.username,
+                params.pass,
+                true,
+                1492,
+            ),
             service_status_clone,
+            None,
         )
         .await;
 
@@ -49,7 +55,7 @@ async fn main() {
     tokio::signal::ctrl_c().await.expect("failed to listen for ctrl+c");
     println!("开始断连");
 
-    service_status.send_replace(ServiceStatus::Stopping);
+    service_status.just_change_status(ServiceStatus::Stopping);
 
     println!("开始等待结束");
     if let Err(e) = notice_rx.await {

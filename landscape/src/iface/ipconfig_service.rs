@@ -20,6 +20,7 @@ use landscape_database::{
 use tokio::sync::broadcast;
 
 use crate::iface::get_iface_by_name;
+use crate::pppoe_client::PPPoEClientConfig;
 use crate::route::IpRouteService;
 use landscape_common::dev::LandscapeInterface;
 
@@ -144,25 +145,25 @@ async fn init_service_from_config(
                 service_status.just_change_status(ServiceStatus::Stop);
             }
         }
-        IfaceIpModelConfig::PPPoE { username: _, password: _, mtu: _, .. } => {
-            // TODO： 重构 PPPoE ebpf 版本
-            // if let Some(mac_addr) = iface.mac {
-            //     let iface_name = iface.name.clone();
-            //     let service_status = ip_config.clone();
-            //     crate::pppoe_client::pppoe_client_v2::create_pppoe_client(
-            //         iface.index,
-            //         iface_name,
-            //         mac_addr,
-            //         username,
-            //         password,
-            //         service_status,
-            //     )
-            //     .await;
-            // } else {
-            //     ip_config.send_replace(ServiceStatus::Stop {
-            //         message: Some("mac addr is empty".into()),
-            //     });
-            // }
+        IfaceIpModelConfig::PPPoE { default_router, username, password, mtu } => {
+            if let Some(mac_addr) = iface.mac {
+                crate::pppoe_client::pppoe_client_v2::create_pppoe_client(
+                    PPPoEClientConfig::new(
+                        iface.index,
+                        iface.name,
+                        mac_addr,
+                        username,
+                        password,
+                        default_router,
+                        u16::try_from(mtu).unwrap_or(u16::MAX),
+                    ),
+                    service_status,
+                    Some(route_service),
+                )
+                .await;
+            } else {
+                service_status.just_change_status(ServiceStatus::Failed);
+            }
         }
         IfaceIpModelConfig::DhcpClient { default_router, hostname, custome_opts: _ } => {
             if let Some(mac_addr) = iface.mac {
