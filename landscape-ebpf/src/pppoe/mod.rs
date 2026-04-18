@@ -1,7 +1,7 @@
 use std::{
     mem::MaybeUninit,
     os::{
-        fd::{AsFd, AsRawFd},
+        fd::{AsFd, AsRawFd, FromRawFd},
         raw::c_void,
     },
 };
@@ -11,7 +11,8 @@ use libbpf_rs::skel::{OpenSkel, SkelBuilder};
 use libc::{
     socket, socklen_t, AF_PACKET, SOCK_CLOEXEC, SOCK_NONBLOCK, SOCK_RAW, SOL_SOCKET, SO_ATTACH_BPF,
 };
-use pnet::datalink::Channel::Ethernet;
+use socket2::Socket;
+use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
 mod landscape_pppoe_client {
@@ -19,6 +20,7 @@ mod landscape_pppoe_client {
 }
 
 pub mod pppoe_tc;
+
 fn open_raw_socket(prog_fd: i32) -> Result<i32, ()> {
     const ETH_P_ALL: u16 = 0x0003;
     unsafe {
@@ -38,6 +40,26 @@ fn open_raw_socket(prog_fd: i32) -> Result<i32, ()> {
         Ok(target_socket)
     }
 }
+
+fn bind_raw_socket(socket: &Socket, ifindex: u32) -> Result<(), ()> {
+    let mut addr: libc::sockaddr_ll = unsafe { std::mem::zeroed() };
+    addr.sll_family = AF_PACKET as u16;
+    addr.sll_ifindex = ifindex as i32;
+    addr.sll_protocol = 0x0003_u16.to_be();
+
+    let storage = unsafe {
+        let mut s = std::mem::zeroed::<socket2::SockAddrStorage>();
+        std::ptr::copy_nonoverlapping(&addr, &mut s as *mut _ as *mut libc::sockaddr_ll, 1);
+        s
+    };
+    let sockaddr =
+        unsafe { socket2::SockAddr::new(storage, std::mem::size_of::<libc::sockaddr_ll>() as u32) };
+
+    socket.bind(&sockaddr).map_err(|e| {
+        tracing::error!("pppoe socket bind failed: {e:?}");
+    })
+}
+
 pub async fn start(
     index: u32,
 ) -> Result<(mpsc::Sender<Box<Vec<u8>>>, mpsc::Receiver<Box<Vec<u8>>>), ()> {
@@ -56,51 +78,64 @@ pub async fn start(
 
     let pppoe_pnet_filter_fd = pppoe_pnet_progs.pppoe_pnet_filter.as_fd().as_raw_fd();
 
-    let pnet_socket = open_raw_socket(pppoe_pnet_filter_fd).unwrap();
-
-    let all_interfaces = pnet::datalink::interfaces();
-    let target_interface = all_interfaces.iter().find(|e| e.index == index);
-    let Some(interface) = target_interface else {
-        return Err(());
-    };
-
-    let mut pnet_config = pnet::datalink::Config::default();
-    pnet_config.socket_fd = Some(pnet_socket);
-
-    let (mut tx, mut rx) = match pnet::datalink::channel(&interface, pnet_config) {
-        Ok(Ethernet(tx, rx)) => (tx, rx),
-        Ok(_) => panic!("Unhandled channel type"),
-        Err(e) => panic!("An error occurred when creating the datalink channel: {}", e),
-    };
+    let raw_socket_fd = open_raw_socket(pppoe_pnet_filter_fd)?;
+    let socket = unsafe { Socket::from_raw_fd(raw_socket_fd) };
+    bind_raw_socket(&socket, index)?;
+    let async_fd = AsyncFd::new(socket).map_err(|e| {
+        tracing::error!("pppoe async fd init failed: {e:?}");
+    })?;
 
     let (in_tx, mut in_rx) = tokio::sync::mpsc::channel::<Box<Vec<u8>>>(1024);
     let (out_tx, out_rx) = tokio::sync::mpsc::channel::<Box<Vec<u8>>>(1024);
-    let (stop_tx, mut stop_rx) = tokio::sync::oneshot::channel::<()>();
-    let _handler = std::thread::Builder::new()
-        .name("landscape_pppoe_thread".into())
-        .spawn(move || {
-            //
-            loop {
-                match rx.next() {
-                    Ok(packet) => {
-                        tracing::info!("{:?}", packet);
-                        out_tx.try_send(Box::new(packet.to_vec())).unwrap();
-                    }
-                    Err(e) => {
-                        panic!("An error occurred while reading: {}", e);
+
+    tokio::spawn(async move {
+        let mut recv_buf = [std::mem::MaybeUninit::<u8>::uninit(); 2048];
+
+        loop {
+            tokio::select! {
+                maybe_data = in_rx.recv() => {
+                    let Some(data) = maybe_data else {
+                        break;
+                    };
+
+                    loop {
+                        let Ok(mut guard) = async_fd.writable().await else {
+                            return;
+                        };
+                        match guard.try_io(|inner| inner.get_ref().send(&data)) {
+                            Ok(Ok(_)) => break,
+                            Ok(Err(e)) => {
+                                tracing::error!("pppoe socket send failed: {e:?}");
+                                return;
+                            }
+                            Err(_) => continue,
+                        }
                     }
                 }
-                if let Err(tokio::sync::oneshot::error::TryRecvError::Empty) = stop_rx.try_recv() {
-                    continue;
+                recv_ready = async_fd.readable() => {
+                    let Ok(mut guard) = recv_ready else {
+                        return;
+                    };
+
+                    match guard.try_io(|inner| inner.get_ref().recv(&mut recv_buf)) {
+                        Ok(Ok(len)) => {
+                            let packet = unsafe {
+                                std::slice::from_raw_parts(recv_buf.as_ptr() as *const u8, len)
+                            };
+                            if out_tx.send(Box::new(packet.to_vec())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            tracing::error!("pppoe socket recv failed: {e:?}");
+                            return;
+                        }
+                        Err(_) => continue,
+                    }
                 }
             }
-        })
-        .unwrap();
-    tokio::spawn(async move {
-        while let Some(data) = in_rx.recv().await {
-            tx.send_to(&data, None);
         }
-        stop_tx.send(()).unwrap();
     });
+
     Ok((in_tx, out_rx))
 }

@@ -186,13 +186,19 @@ function select_ip_model(value: IfaceIpMode) {
           >
             <n-form style="flex: 1" :model="iface_data.ip_model" :cols="5">
               <n-grid :cols="5">
-                <n-form-item-gi :label="t('ipconfig_editor.username')" :span="5">
+                <n-form-item-gi
+                  :label="t('ipconfig_editor.username')"
+                  :span="5"
+                >
                   <n-input
                     v-model:value="iface_data.ip_model.username"
                     placeholder=""
                   />
                 </n-form-item-gi>
-                <n-form-item-gi :label="t('ipconfig_editor.password')" :span="5">
+                <n-form-item-gi
+                  :label="t('ipconfig_editor.password')"
+                  :span="5"
+                >
                   <n-input
                     v-model:value="iface_data.ip_model.password"
                     type="password"
