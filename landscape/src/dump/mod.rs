@@ -11,7 +11,6 @@ use landscape_common::net::MacAddr;
 pub mod eth;
 pub mod icmp;
 pub mod ipv4;
-pub mod pppoe;
 pub mod udp_packet;
 
 /// Create Dump Thread
