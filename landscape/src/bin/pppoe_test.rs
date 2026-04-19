@@ -124,7 +124,7 @@ async fn main() {
     let username = params.username.clone();
     let password = params.pass.clone();
     tokio::spawn(async move {
-        landscape::pppoe_client::pppoe_client_v2::create_pppoe_client(
+        landscape::pppoe_client::create_pppoe_client(
             landscape::pppoe_client::PPPoEClientConfig::new(
                 iface_index,
                 iface_name,

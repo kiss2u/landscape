@@ -1,6 +1,11 @@
 use landscape_common::net::MacAddr;
 
-pub mod pppoe_client_v2;
+pub(crate) mod runtime;
+pub(crate) mod session;
+pub(crate) mod state;
+pub(crate) mod system;
+
+pub use runtime::create_pppoe_client;
 
 const DEFAULT_TIME_OUT: u64 = 3;
 const LCP_ECHO_INTERVAL: u64 = 20;
