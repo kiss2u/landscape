@@ -184,12 +184,18 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
 
     // flow verdict and forward
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.rt4_lan_map, &paths.rt4_lan_map);
-    reuse_pinned_map_or_recreate(&mut landscape_open.maps.rt4_target_map, &paths.rt4_target_map);
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.rt4_target_slot_map,
+        &paths.rt4_target_slot_map,
+    );
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.flow4_dns_map, &paths.flow4_dns_map);
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.flow4_ip_map, &paths.flow4_ip_map);
 
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.rt6_lan_map, &paths.rt6_lan_map);
-    reuse_pinned_map_or_recreate(&mut landscape_open.maps.rt6_target_map, &paths.rt6_target_map);
+    reuse_pinned_map_or_recreate(
+        &mut landscape_open.maps.rt6_target_slot_map,
+        &paths.rt6_target_slot_map,
+    );
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.flow6_dns_map, &paths.flow6_dns_map);
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.flow6_ip_map, &paths.flow6_ip_map);
 

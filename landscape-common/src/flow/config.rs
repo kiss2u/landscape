@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
-use crate::flow::{FlowEntryRule, FlowTarget};
+use crate::flow::{FlowEntryRule, WeightedFlowTarget};
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 
@@ -21,7 +21,7 @@ pub struct FlowConfig {
     pub flow_match_rules: Vec<FlowEntryRule>,
     /// 处理流量目标网卡, 目前只取第一个
     /// 暂定, 可能会移动到具体的网卡上进行设置
-    pub flow_targets: Vec<FlowTarget>,
+    pub flow_targets: Vec<WeightedFlowTarget>,
     /// 备注
     pub remark: String,
 
@@ -39,5 +39,40 @@ impl LandscapeDBStore<Uuid> for FlowConfig {
     }
     fn set_update_at(&mut self, ts: f64) {
         self.update_at = ts;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_weighted_flow_targets_preserves_weight() {
+        let json = serde_json::json!({
+            "id": Uuid::nil(),
+            "enable": true,
+            "flow_id": 1,
+            "flow_match_rules": [],
+            "flow_targets": [
+                {
+                    "target": { "t": "interface", "name": "wan0" },
+                    "weight": 3
+                }
+            ],
+            "remark": "weighted",
+            "update_at": 0.0
+        });
+
+        let config: FlowConfig =
+            serde_json::from_value(json).expect("deserialize weighted flow config");
+
+        assert_eq!(config.flow_targets.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&config.flow_targets[0]).unwrap(),
+            serde_json::json!({
+                "target": { "t": "interface", "name": "wan0" },
+                "weight": 3
+            })
+        );
     }
 }

@@ -8,11 +8,11 @@ import { computed } from "vue";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import FlowMatchRule from "./match/FlowMatchRule.vue";
-import { flow_config_default, FlowTargetTypes } from "@/lib/default_value";
+import { flow_config_default } from "@/lib/default_value";
 import type {
   FlowConfig,
   FlowEntryRule,
-  FlowTarget,
+  WeightedFlowTarget,
 } from "@landscape-router/types/api/schemas";
 import { useFrontEndStore } from "@/stores/front_end_config";
 interface Props {
@@ -45,6 +45,8 @@ async function enter() {
     rule.value = flow_config_default();
   }
 
+  rule.value.flow_targets = normalizeFlowTargets(rule.value.flow_targets);
+
   rule_json.value = JSON.stringify(rule.value);
 }
 
@@ -75,8 +77,18 @@ async function saveRule() {
     return;
   }
 
+  rule.value.flow_targets = normalizeFlowTargets(rule.value.flow_targets);
+
   if (rule.value.flow_id == -1) {
     message.warning(t("flow.edit.duplicate_id_warning"));
+    return;
+  }
+
+  if (
+    rule.value.flow_targets.length > 0 &&
+    rule.value.flow_targets.every((target) => (target.weight ?? 1) === 0)
+  ) {
+    message.warning(t("flow.edit.all_zero_weight_warning"));
     return;
   }
 
@@ -99,11 +111,14 @@ async function saveRule() {
   emit("refresh");
 }
 
-function create_target(): FlowTarget {
-  return { t: FlowTargetTypes.INTERFACE, name: "" };
+function normalizeFlowTargets(
+  flowTargets: WeightedFlowTarget[],
+): WeightedFlowTarget[] {
+  return flowTargets.map((target) => ({
+    ...target,
+    weight: target.weight ?? 1,
+  }));
 }
-
-function switch_target() {}
 </script>
 
 <template>

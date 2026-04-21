@@ -19,6 +19,11 @@ pub fn get_flow_rule_config_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_flow_rule_by_flow_id))
 }
 
+fn has_only_zero_weight_targets(flow_rule: &FlowConfig) -> bool {
+    !flow_rule.flow_targets.is_empty()
+        && flow_rule.flow_targets.iter().all(|target| target.weight == 0)
+}
+
 #[utoipa::path(
     get,
     path = "/rules",
@@ -86,6 +91,10 @@ async fn add_flow_rule(
     State(state): State<LandscapeApp>,
     JsonBody(flow_rule): JsonBody<FlowConfig>,
 ) -> LandscapeApiResult<FlowConfig> {
+    if has_only_zero_weight_targets(&flow_rule) {
+        Err(FlowRuleError::InvalidTargetWeight)?;
+    }
+
     // Check for duplicate entry rules within the submitted config itself
     {
         let mut seen = std::collections::HashSet::new();

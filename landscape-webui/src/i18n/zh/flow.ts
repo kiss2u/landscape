@@ -15,12 +15,14 @@ export default {
     remark: "备注",
     duplicate_id_warning: "**ID** 值不能为 -1, 且不能重复, 否则将会覆盖规则",
     duplicate_entry_warning: "入口匹配规则存在重复项: {dup}",
+    all_zero_weight_warning: "至少需要一个出口权重大于 0",
     entry_rules_title: "分流入口匹配规则",
     entry_rules_desc_1: "符合规则的客户端将会使用这个流",
     entry_rules_desc_2: "注意优先级 IP > Mac",
     entry_rules_desc_3: "注意不同 Flow 的规则是否重叠",
-    target_rules_title: "分流出口规则 ( 当前仅支持一个出口 )",
-    target_rules_desc_1: "符合规则的客户端将会默认使用这个出口进行发送流量",
+    target_rules_title: "分流出口规则",
+    target_rules_desc_1:
+      "符合规则的客户端将会默认按权重使用这些出口进行发送流量",
     target_rules_desc_2: "除非 `DNS 规则` 或者 `目标 IP` 将流量重定向到别的流",
   },
   trace: {
@@ -120,6 +122,7 @@ export default {
     type_docker: "Docker",
     iface_placeholder: "网卡名称",
     container_placeholder: "容器名称",
+    weight_placeholder: "权重",
   },
   wan_rule_card: {
     match_rules: "匹配规则",

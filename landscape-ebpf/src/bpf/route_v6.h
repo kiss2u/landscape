@@ -208,18 +208,24 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
 #define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id_v6"
 
     int ret;
-    struct route_target_key_v6 wan_key = {0};
-    wan_key.flow_id = get_flow_id(flow_id);
+    const u32 resolved_flow_id = get_flow_id(flow_id);
 
-    struct route_target_info_v6 *target_info = bpf_map_lookup_elem(&rt6_target_map, &wan_key);
+    struct route_target_slot_key_v6 slot_key = {
+        .flow_id = resolved_flow_id,
+        .slot = (((u32)context->saddr.all[0]) ^ ((u32)context->saddr.all[1]) ^
+                 (((u32)context->daddr.all[0]) << 1) ^ (((u32)context->daddr.all[1]) << 2) ^
+                 ((u32)context->daddr.all[2]) ^ (((u32)context->daddr.all[3]) << 1) ^
+                 (((u32)context->l4_protocol) << 24)) & 0xF,
+    };
+    struct route_target_info_v6 *target_info = bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
 
     // 找不到转发的 target 按照原有计划进行处理
     if (target_info == NULL) {
-        if (wan_key.flow_id == 0) {
+        if (resolved_flow_id == 0) {
             // Default flow PASS
             return TC_ACT_UNSPEC;
         } else {
-            ld_bpf_log("DROP flow_id v6: %d", wan_key.flow_id);
+            ld_bpf_log("DROP flow_id v6: %d", resolved_flow_id);
             // Other DROP
             return TC_ACT_SHOT;
         }
@@ -238,7 +244,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
     }
 
     if (target_info->is_docker) {
-        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, get_flow_vlan_id(wan_key.flow_id));
+        ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, get_flow_vlan_id(resolved_flow_id));
         if (ret) {
             ld_bpf_log("bpf_skb_vlan_push error");
         }

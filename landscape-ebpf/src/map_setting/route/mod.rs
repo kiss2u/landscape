@@ -17,12 +17,12 @@ use crate::{
     map_setting::share_map::types::{
         flow_dns_match_key_v4, flow_dns_match_key_v6, flow_dns_match_value_v4,
         flow_dns_match_value_v6, flow_ip_trie_key_v4, flow_ip_trie_key_v6, flow_ip_trie_value_v4,
-        flow_ip_trie_value_v6, flow_match_key, route_target_info_v6, route_target_key_v6,
-        rt_cache_key_v4, rt_cache_key_v6, rt_cache_value_v4, rt_cache_value_v6,
+        flow_ip_trie_value_v6, flow_match_key, route_target_info_v6, rt_cache_key_v4,
+        rt_cache_key_v6, rt_cache_value_v4, rt_cache_value_v6,
     },
     route::lan_v2::route_lan::types::{
         lan_route_info_v4, lan_route_info_v6, lan_route_key_v4, lan_route_key_v6,
-        route_target_info_v4, route_target_key_v4,
+        route_target_info_v4,
     },
     LANDSCAPE_IPV4_TYPE, LANDSCAPE_IPV6_TYPE, MAP_PATHS,
 };
@@ -34,9 +34,20 @@ const FLOW_ENTRY_MODE_IP: u8 = 1;
 const FLOW_ID_MASK: u32 = 0x000000FF;
 const FLOW_ACTION_MASK: u32 = 0x00007F00;
 const LAN_CACHE: u32 = 1;
+const FLOW_TARGET_SLOT_COUNT: usize = 16;
 
-fn invalidate_wan_route_cache() {
-    cache::recreate_route_wan_cache_inner_map();
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct route_target_slot_key_v4 {
+    flow_id: u32,
+    slot: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct route_target_slot_key_v6 {
+    flow_id: u32,
+    slot: u32,
 }
 
 fn invalidate_lan_route_cache_with_outer_maps<T, U>(rt4_cache_map: &T, rt6_cache_map: &U)
@@ -694,194 +705,355 @@ where
     true
 }
 
-pub fn add_wan_route(flow_id: FlowId, wan_info: RouteTargetInfo) {
-    let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_target_map).unwrap();
-    let changed_v4 = add_wan_route_inner_v4(&rt_target_map, flow_id, &wan_info);
-    let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_target_map).unwrap();
-    let changed_v6 = add_wan_route_inner_v6(&rt_target_map, flow_id, &wan_info);
-
-    if changed_v4 || changed_v6 {
-        invalidate_wan_route_cache();
-    }
+pub fn replace_wan_route_slots_v4(flow_id: FlowId, targets: &[(RouteTargetInfo, u32)]) {
+    let rt_target_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_target_slot_map).unwrap();
+    replace_wan_route_slots_v4_with_map(&rt_target_map, flow_id, targets);
 }
 
-pub(crate) fn add_wan_route_inner_v4<'obj, T>(
+pub fn replace_wan_route_slots_v6(flow_id: FlowId, targets: &[(RouteTargetInfo, u32)]) {
+    let rt_target_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_target_slot_map).unwrap();
+    replace_wan_route_slots_v6_with_map(&rt_target_map, flow_id, targets);
+}
+
+pub fn del_wan_route_slots_v4(flow_id: FlowId) {
+    let rt_target_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_target_slot_map).unwrap();
+    clear_wan_route_slots_v4(&rt_target_map, flow_id);
+}
+
+pub fn del_wan_route_slots_v6(flow_id: FlowId) {
+    let rt_target_map =
+        libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_target_slot_map).unwrap();
+    clear_wan_route_slots_v6(&rt_target_map, flow_id);
+}
+
+fn build_slot_indices(weights: &[u32]) -> Vec<usize> {
+    let total_weight: u32 = weights.iter().sum();
+    if total_weight == 0 {
+        return Vec::new();
+    }
+
+    let mut current = vec![0i64; weights.len()];
+    let mut slots = Vec::with_capacity(FLOW_TARGET_SLOT_COUNT);
+    for _ in 0..FLOW_TARGET_SLOT_COUNT {
+        let mut best_idx = None;
+        let mut best_score = i64::MIN;
+        for (idx, weight) in weights.iter().enumerate() {
+            if *weight == 0 {
+                continue;
+            }
+            current[idx] += *weight as i64;
+            if current[idx] > best_score {
+                best_score = current[idx];
+                best_idx = Some(idx);
+            }
+        }
+
+        let Some(best_idx) = best_idx else {
+            break;
+        };
+
+        current[best_idx] -= total_weight as i64;
+        slots.push(best_idx);
+    }
+    slots
+}
+
+pub(crate) fn replace_wan_route_slots_v4_with_map<T>(
     rt_target_map: &T,
     flow_id: FlowId,
-    wan_info: &RouteTargetInfo,
-) -> bool
-where
+    targets: &[(RouteTargetInfo, u32)],
+) where
     T: MapCore,
 {
-    let mut key = route_target_key_v4::default();
-    key.flow_id = flow_id;
-
-    let mut value = route_target_info_v4::default();
-    value.ifindex = wan_info.ifindex;
-    if wan_info.is_docker {
-        value.is_docker = 1;
-    } else {
-        value.is_docker = 0;
-    };
-
-    match wan_info.gateway_ip {
-        std::net::IpAddr::V4(ipv4_addr) => value.gate_addr = ipv4_addr.to_bits().to_be(),
-        std::net::IpAddr::V6(_) => {
-            return false;
-        }
+    let filtered: Vec<_> = targets
+        .iter()
+        .filter(|(target, weight)| *weight > 0 && matches!(target.gateway_ip, IpAddr::V4(_)))
+        .collect();
+    if filtered.is_empty() {
+        clear_wan_route_slots_v4(rt_target_map, flow_id);
+        return;
     }
 
-    match wan_info.mac {
-        Some(mac) => {
-            value.has_mac = 1;
-            value.mac = mac.octets();
+    let weights: Vec<u32> = filtered.iter().map(|(_, weight)| *weight).collect();
+    let slots = build_slot_indices(&weights);
+    let slot_count = slots.len() as u32;
+    let mut keys =
+        Vec::with_capacity(slots.len() * std::mem::size_of::<route_target_slot_key_v4>());
+    let mut values = Vec::with_capacity(slots.len() * std::mem::size_of::<route_target_info_v4>());
+
+    for (slot, target_index) in slots.into_iter().enumerate() {
+        let (target, _) = filtered[target_index];
+        let mut key = route_target_slot_key_v4::default();
+        key.flow_id = flow_id;
+        key.slot = slot as u32;
+
+        let mut value = route_target_info_v4::default();
+        value.ifindex = target.ifindex;
+        value.is_docker = u8::from(target.is_docker);
+        if let IpAddr::V4(ipv4_addr) = target.gateway_ip {
+            value.gate_addr = ipv4_addr.to_bits().to_be();
         }
-        None => {
-            value.has_mac = 0;
+        match target.mac {
+            Some(mac) => {
+                value.has_mac = 1;
+                value.mac = mac.octets();
+            }
+            None => value.has_mac = 0,
         }
+
+        keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
+        values.extend_from_slice(unsafe { plain::as_bytes(&value) });
     }
 
-    let key = unsafe { plain::as_bytes(&key) };
-    let value = unsafe { plain::as_bytes(&value) };
-
-    if let Ok(Some(existing)) = rt_target_map.lookup(&key, MapFlags::ANY) {
-        if existing.as_slice() == value {
-            return false;
-        }
+    if let Err(e) =
+        rt_target_map.update_batch(&keys, &values, slot_count, MapFlags::ANY, MapFlags::ANY)
+    {
+        tracing::error!("replace ipv4 wan slot batch error:{e:?}");
     }
-
-    if let Err(e) = rt_target_map.update(&key, &value, MapFlags::ANY) {
-        tracing::error!("add wan config error:{e:?}");
-        return false;
-    }
-
-    true
 }
 
-pub(crate) fn add_wan_route_inner_v6<'obj, T>(
+pub(crate) fn replace_wan_route_slots_v6_with_map<T>(
     rt_target_map: &T,
     flow_id: FlowId,
-    wan_info: &RouteTargetInfo,
-) -> bool
+    targets: &[(RouteTargetInfo, u32)],
+) where
+    T: MapCore,
+{
+    let filtered: Vec<_> = targets
+        .iter()
+        .filter(|(target, weight)| *weight > 0 && matches!(target.gateway_ip, IpAddr::V6(_)))
+        .collect();
+    if filtered.is_empty() {
+        clear_wan_route_slots_v6(rt_target_map, flow_id);
+        return;
+    }
+
+    let weights: Vec<u32> = filtered.iter().map(|(_, weight)| *weight).collect();
+    let slots = build_slot_indices(&weights);
+    let slot_count = slots.len() as u32;
+    let mut keys =
+        Vec::with_capacity(slots.len() * std::mem::size_of::<route_target_slot_key_v6>());
+    let mut values = Vec::with_capacity(slots.len() * std::mem::size_of::<route_target_info_v6>());
+
+    for (slot, target_index) in slots.into_iter().enumerate() {
+        let (target, _) = filtered[target_index];
+        let mut key = route_target_slot_key_v6::default();
+        key.flow_id = flow_id;
+        key.slot = slot as u32;
+
+        let mut value = route_target_info_v6::default();
+        value.ifindex = target.ifindex;
+        value.is_docker = u8::from(target.is_docker);
+        if let IpAddr::V6(ipv6_addr) = target.gateway_ip {
+            value.gate_addr.bytes = ipv6_addr.to_bits().to_be_bytes();
+        }
+        match target.mac {
+            Some(mac) => {
+                value.has_mac = 1;
+                value.mac = mac.octets();
+            }
+            None => value.has_mac = 0,
+        }
+
+        keys.extend_from_slice(unsafe { plain::as_bytes(&key) });
+        values.extend_from_slice(unsafe { plain::as_bytes(&value) });
+    }
+
+    if let Err(e) =
+        rt_target_map.update_batch(&keys, &values, slot_count, MapFlags::ANY, MapFlags::ANY)
+    {
+        tracing::error!("replace ipv6 wan slot batch error:{e:?}");
+    }
+}
+
+fn clear_wan_route_slots_v4<T>(rt_target_map: &T, flow_id: FlowId)
 where
     T: MapCore,
 {
-    let mut key = route_target_key_v6::default();
-    key.flow_id = flow_id;
-
-    let mut value = route_target_info_v6::default();
-    value.ifindex = wan_info.ifindex;
-    if wan_info.is_docker {
-        value.is_docker = 1;
-    } else {
-        value.is_docker = 0;
-    };
-
-    match wan_info.gateway_ip {
-        std::net::IpAddr::V4(_) => {
-            return false;
-        }
-        std::net::IpAddr::V6(ipv6_addr) => {
-            value.gate_addr.bytes = ipv6_addr.to_bits().to_be_bytes()
-        }
-    }
-
-    match wan_info.mac {
-        Some(mac) => {
-            value.has_mac = 1;
-            value.mac = mac.octets();
-        }
-        None => {
-            value.has_mac = 0;
+    let mut keys = Vec::with_capacity(
+        FLOW_TARGET_SLOT_COUNT * std::mem::size_of::<route_target_slot_key_v4>(),
+    );
+    let mut count = 0;
+    for slot in 0..FLOW_TARGET_SLOT_COUNT as u32 {
+        let mut key = route_target_slot_key_v4::default();
+        key.flow_id = flow_id;
+        key.slot = slot;
+        let key_bytes = unsafe { plain::as_bytes(&key) };
+        match rt_target_map.lookup(key_bytes, MapFlags::ANY) {
+            Ok(Some(_)) => {
+                count += 1;
+                keys.extend_from_slice(key_bytes);
+            }
+            Ok(None) => {}
+            Err(e) => tracing::error!("lookup ipv4 wan slot before delete error:{e:?}"),
         }
     }
 
-    let key = unsafe { plain::as_bytes(&key) };
-    let value = unsafe { plain::as_bytes(&value) };
-
-    if let Ok(Some(existing)) = rt_target_map.lookup(&key, MapFlags::ANY) {
-        if existing.as_slice() == value {
-            return false;
+    if count > 0 {
+        if let Err(e) = rt_target_map.delete_batch(&keys, count, MapFlags::ANY, MapFlags::ANY) {
+            tracing::error!("delete ipv4 wan slot batch error:{e:?}");
         }
-    }
-
-    if let Err(e) = rt_target_map.update(&key, &value, MapFlags::ANY) {
-        tracing::error!("add wan config error:{e:?}");
-        return false;
-    }
-
-    true
-}
-
-pub fn del_ipv6_wan_route(flow_id: FlowId) {
-    let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt6_target_map).unwrap();
-    if del_wan_route_v6(&rt_target_map, flow_id) {
-        invalidate_wan_route_cache();
     }
 }
 
-pub fn del_ipv4_wan_route(flow_id: FlowId) {
-    let rt_target_map = libbpf_rs::MapHandle::from_pinned_path(&MAP_PATHS.rt4_target_map).unwrap();
-    if del_wan_route_v4(&rt_target_map, flow_id) {
-        invalidate_wan_route_cache();
-    }
-}
-
-fn del_wan_route_v4<'obj, T>(rt_target_map: &T, flow_id: FlowId) -> bool
+fn clear_wan_route_slots_v6<T>(rt_target_map: &T, flow_id: FlowId)
 where
     T: MapCore,
 {
-    let mut key = route_target_key_v4::default();
-    key.flow_id = flow_id;
-
-    let key = unsafe { plain::as_bytes(&key) };
-
-    match rt_target_map.lookup(&key, MapFlags::ANY) {
-        Ok(Some(_)) => {}
-        Ok(None) => return false,
-        Err(e) => {
-            tracing::error!("lookup wan config before delete error:{e:?}");
-            return false;
+    let mut keys = Vec::with_capacity(
+        FLOW_TARGET_SLOT_COUNT * std::mem::size_of::<route_target_slot_key_v6>(),
+    );
+    let mut count = 0;
+    for slot in 0..FLOW_TARGET_SLOT_COUNT as u32 {
+        let mut key = route_target_slot_key_v6::default();
+        key.flow_id = flow_id;
+        key.slot = slot;
+        let key_bytes = unsafe { plain::as_bytes(&key) };
+        match rt_target_map.lookup(key_bytes, MapFlags::ANY) {
+            Ok(Some(_)) => {
+                count += 1;
+                keys.extend_from_slice(key_bytes);
+            }
+            Ok(None) => {}
+            Err(e) => tracing::error!("lookup ipv6 wan slot before delete error:{e:?}"),
         }
     }
 
-    if let Err(e) = rt_target_map.delete(&key) {
-        tracing::error!("del wan config error:{e:?}");
-        return false;
+    if count > 0 {
+        if let Err(e) = rt_target_map.delete_batch(&keys, count, MapFlags::ANY, MapFlags::ANY) {
+            tracing::error!("delete ipv6 wan slot batch error:{e:?}");
+        }
     }
-
-    true
 }
 
-fn del_wan_route_v6<'obj, T>(rt_target_map: &T, flow_id: FlowId) -> bool
-where
-    T: MapCore,
-{
-    let mut key = route_target_key_v6::default();
-    key.flow_id = flow_id;
+#[cfg(test)]
+mod slot_tests {
+    use super::build_slot_indices;
 
-    let key = unsafe { plain::as_bytes(&key) };
-
-    match rt_target_map.lookup(&key, MapFlags::ANY) {
-        Ok(Some(_)) => {}
-        Ok(None) => return false,
-        Err(e) => {
-            tracing::error!("lookup wan config before delete error:{e:?}");
-            return false;
+    fn counts(slots: &[usize], target_count: usize) -> Vec<usize> {
+        let mut counts = vec![0; target_count];
+        for &slot in slots {
+            counts[slot] += 1;
         }
+        counts
     }
 
-    if let Err(e) = rt_target_map.delete(&key) {
-        tracing::error!("del wan config error:{e:?}");
-        return false;
+    #[test]
+    fn slot_builder_balances_equal_weights() {
+        let slots = build_slot_indices(&[1, 1]);
+        assert_eq!(slots.len(), 16);
+        assert_eq!(counts(&slots, 2), vec![8, 8]);
     }
 
-    true
+    #[test]
+    fn slot_builder_respects_three_to_one_ratio() {
+        let slots = build_slot_indices(&[3, 1]);
+        assert_eq!(slots.len(), 16);
+        assert_eq!(counts(&slots, 2), vec![12, 4]);
+    }
+
+    #[test]
+    fn slot_builder_skips_zero_weight_targets() {
+        let slots = build_slot_indices(&[2, 0, 1]);
+        assert_eq!(slots.len(), 16);
+        assert_eq!(counts(&slots, 3), vec![11, 0, 5]);
+    }
+
+    #[test]
+    fn slot_builder_fills_all_slots_for_single_target() {
+        let slots = build_slot_indices(&[1]);
+        assert_eq!(slots.len(), 16);
+        assert_eq!(counts(&slots, 1), vec![16]);
+    }
+
+    #[test]
+    fn slot_builder_distributes_prime_sum_weights() {
+        let slots = build_slot_indices(&[5, 2]);
+        assert_eq!(slots.len(), 16);
+        // 5:2 ratio over 16 slots → 11:5 (nearest integer distribution)
+        assert_eq!(counts(&slots, 2), vec![11, 5]);
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv6Addr};
+
+    use libbpf_rs::{libbpf_sys, MapHandle, MapType};
+
     use super::*;
+
+    fn dummy_v6_route_target(ifindex: u32) -> RouteTargetInfo {
+        RouteTargetInfo {
+            weight: 0,
+            ifindex,
+            mac: None,
+            default_route: false,
+            is_docker: false,
+            iface_name: String::new(),
+            iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+            gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+        }
+    }
+
+    fn create_test_slot_map_v6() -> MapHandle {
+        #[allow(clippy::needless_update)]
+        let opts = libbpf_sys::bpf_map_create_opts {
+            sz: std::mem::size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
+            ..Default::default()
+        };
+        MapHandle::create(
+            MapType::Hash,
+            None::<&str>,
+            std::mem::size_of::<route_target_slot_key_v6>() as u32,
+            std::mem::size_of::<route_target_info_v6>() as u32,
+            256,
+            &opts,
+        )
+        .expect("create test slot map v6")
+    }
+
+    fn insert_v6_slot(map: &MapHandle, flow_id: u32, slot: u32, ifindex: u32) {
+        let mut key = route_target_slot_key_v6::default();
+        key.flow_id = flow_id;
+        key.slot = slot;
+
+        let mut value = route_target_info_v6::default();
+        value.ifindex = ifindex;
+
+        let key_bytes = unsafe { plain::as_bytes(&key) };
+        let value_bytes = unsafe { plain::as_bytes(&value) };
+        map.update(key_bytes, value_bytes, MapFlags::ANY).expect("insert test slot entry");
+    }
+
+    fn lookup_v6_slot(map: &MapHandle, flow_id: u32, slot: u32) -> bool {
+        let mut key = route_target_slot_key_v6::default();
+        key.flow_id = flow_id;
+        key.slot = slot;
+        map.lookup(unsafe { plain::as_bytes(&key) }, MapFlags::ANY).is_ok_and(|v| v.is_some())
+    }
+
+    #[test]
+    fn replace_slots_with_all_zero_weights_clears_existing_entries() {
+        let map = create_test_slot_map_v6();
+
+        // Pre-populate some slots for flow_id 5
+        insert_v6_slot(&map, 5, 0, 11);
+        insert_v6_slot(&map, 5, 1, 11);
+        assert!(lookup_v6_slot(&map, 5, 0));
+        assert!(lookup_v6_slot(&map, 5, 1));
+
+        // Call replace with all-zero weights
+        let zero_weight_target = (dummy_v6_route_target(11), 0);
+        replace_wan_route_slots_v6_with_map(&map, 5, &[zero_weight_target]);
+
+        // Slots should be cleared
+        assert!(!lookup_v6_slot(&map, 5, 0));
+        assert!(!lookup_v6_slot(&map, 5, 1));
+    }
 
     #[test]
     fn pick_effective_flow_prefers_ip_then_mac_then_default() {

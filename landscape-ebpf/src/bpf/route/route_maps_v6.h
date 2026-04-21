@@ -86,8 +86,9 @@ struct {
     __array(values, struct each_flow_ip_trie_v6);
 } flow6_ip_map SEC(".maps");
 
-struct route_target_key_v6 {
+struct route_target_slot_key_v6 {
     __u32 flow_id;
+    __u32 slot;
 };
 
 struct route_target_info_v6 {
@@ -100,12 +101,12 @@ struct route_target_info_v6 {
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct route_target_key_v6);
+    __type(key, struct route_target_slot_key_v6);
     __type(value, struct route_target_info_v6);
-    __uint(max_entries, 1024);
+    __uint(max_entries, 4096);
     __uint(map_flags, BPF_F_NO_PREALLOC);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
-} rt6_target_map SEC(".maps");
+} rt6_target_slot_map SEC(".maps");
 
 struct rt_cache_key_v6 {
     union u_inet6_addr local_addr;

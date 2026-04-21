@@ -140,17 +140,19 @@ fn sync_removed_lan_routes(routes: impl IntoIterator<Item = LanRouteInfo>) {
 
 fn sync_default_ipv4_wan_route(default_route: Option<RouteTargetInfo>) {
     if let Some(route) = default_route {
-        landscape_ebpf::map_setting::route::add_wan_route(0, route);
+        let default_target = [(route, 1)];
+        landscape_ebpf::map_setting::route::replace_wan_route_slots_v4(0, &default_target);
     } else {
-        landscape_ebpf::map_setting::route::del_ipv4_wan_route(0);
+        landscape_ebpf::map_setting::route::del_wan_route_slots_v4(0);
     }
 }
 
 fn sync_default_ipv6_wan_route(default_route: Option<RouteTargetInfo>) {
     if let Some(route) = default_route {
-        landscape_ebpf::map_setting::route::add_wan_route(0, route);
+        let default_target = [(route, 1)];
+        landscape_ebpf::map_setting::route::replace_wan_route_slots_v6(0, &default_target);
     } else {
-        landscape_ebpf::map_setting::route::del_ipv6_wan_route(0);
+        landscape_ebpf::map_setting::route::del_wan_route_slots_v6(0);
     }
 }
 
@@ -167,7 +169,7 @@ fn find_route_target<'a>(
 fn collect_target_refresh_result(
     flow_configs: &Vec<FlowConfig>,
     wan_infos: &WanRoutesByOwner,
-) -> HashMap<FlowId, Vec<RouteTargetInfo>> {
+) -> HashMap<FlowId, Vec<(RouteTargetInfo, u32)>> {
     let mut result = HashMap::new();
 
     for flow_config in flow_configs {
@@ -175,7 +177,11 @@ fn collect_target_refresh_result(
             flow_config
                 .flow_targets
                 .iter()
-                .filter_map(|target| find_route_target(wan_infos, target).cloned())
+                .filter_map(|target| {
+                    find_route_target(wan_infos, &target.target)
+                        .cloned()
+                        .map(|route| (route, target.weight))
+                })
                 .collect()
         } else {
             Vec::new()
@@ -187,18 +193,26 @@ fn collect_target_refresh_result(
     result
 }
 
-fn apply_target_refresh_result(
-    label: &str,
-    result: HashMap<FlowId, Vec<RouteTargetInfo>>,
-    delete_route: fn(FlowId),
-) {
-    tracing::info!("{label} flow target refresh result: {result:#?}");
+fn apply_ipv4_target_refresh_result(result: HashMap<FlowId, Vec<(RouteTargetInfo, u32)>>) {
+    tracing::info!("ipv4 flow target refresh result: {result:#?}");
 
     for (flow_id, configs) in result {
-        if let Some(info) = configs.into_iter().next() {
-            landscape_ebpf::map_setting::route::add_wan_route(flow_id, info);
+        if configs.is_empty() {
+            landscape_ebpf::map_setting::route::del_wan_route_slots_v4(flow_id);
         } else {
-            delete_route(flow_id);
+            landscape_ebpf::map_setting::route::replace_wan_route_slots_v4(flow_id, &configs);
+        }
+    }
+}
+
+fn apply_ipv6_target_refresh_result(result: HashMap<FlowId, Vec<(RouteTargetInfo, u32)>>) {
+    tracing::info!("ipv6 flow target refresh result: {result:#?}");
+
+    for (flow_id, configs) in result {
+        if configs.is_empty() {
+            landscape_ebpf::map_setting::route::del_wan_route_slots_v6(flow_id);
+        } else {
+            landscape_ebpf::map_setting::route::replace_wan_route_slots_v6(flow_id, &configs);
         }
     }
 }
@@ -648,11 +662,7 @@ pub fn refresh_ipv4_target_bpf_map(
     ipv4_wan_infos: HashMap<String, RouteTargetInfo>,
 ) {
     let result = collect_target_refresh_result(flow_configs, &ipv4_wan_infos);
-    apply_target_refresh_result(
-        "ipv4",
-        result,
-        landscape_ebpf::map_setting::route::del_ipv4_wan_route,
-    );
+    apply_ipv4_target_refresh_result(result);
 }
 
 pub fn refresh_ipv6_target_bpf_map(
@@ -660,11 +670,7 @@ pub fn refresh_ipv6_target_bpf_map(
     ipv6_wan_infos: HashMap<String, RouteTargetInfo>,
 ) {
     let result = collect_target_refresh_result(flow_configs, &ipv6_wan_infos);
-    apply_target_refresh_result(
-        "ipv6",
-        result,
-        landscape_ebpf::map_setting::route::del_ipv6_wan_route,
-    );
+    apply_ipv6_target_refresh_result(result);
 }
 
 pub async fn test_used_ip_route() -> (mpsc::Sender<RouteEvent>, IpRouteService) {
@@ -678,8 +684,12 @@ pub async fn test_used_ip_route() -> (mpsc::Sender<RouteEvent>, IpRouteService) 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
+
+    use landscape_common::flow::WeightedFlowTarget;
+    use uuid::Uuid;
+
+    use super::*;
 
     fn ipv4_wan_route(iface_name: &str, iface_ip: Ipv4Addr) -> RouteTargetInfo {
         RouteTargetInfo {
@@ -1116,5 +1126,130 @@ mod tests {
                 &vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))]
             );
         });
+    }
+
+    // ── collect_target_refresh_result ──────────────────────────────
+
+    fn flow_config(flow_id: u32, enable: bool, targets: Vec<WeightedFlowTarget>) -> FlowConfig {
+        FlowConfig {
+            id: Uuid::nil(),
+            enable,
+            flow_id,
+            flow_match_rules: vec![],
+            flow_targets: targets,
+            remark: String::new(),
+            update_at: 0.0,
+        }
+    }
+
+    fn iface_target(name: &str, weight: u32) -> WeightedFlowTarget {
+        WeightedFlowTarget::new(FlowTarget::Interface { name: name.to_string() }, weight)
+    }
+
+    fn netns_target(container_name: &str, weight: u32) -> WeightedFlowTarget {
+        WeightedFlowTarget::new(
+            FlowTarget::Netns { container_name: container_name.to_string() },
+            weight,
+        )
+    }
+
+    #[test]
+    fn collect_refresh_enabled_flow_with_matching_targets() {
+        let mut wan_infos = WanRoutesByOwner::new();
+        wan_infos
+            .insert("wan0".to_string(), ipv4_wan_route("wan0", Ipv4Addr::new(198, 51, 100, 1)));
+        wan_infos.insert("wan1".to_string(), ipv4_wan_route("wan1", Ipv4Addr::new(203, 0, 113, 1)));
+
+        let configs =
+            vec![flow_config(5, true, vec![iface_target("wan0", 3), iface_target("wan1", 1)])];
+
+        let result = collect_target_refresh_result(&configs, &wan_infos);
+
+        let targets = result.get(&5).expect("flow_id 5 should be present");
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].1, 3); // weight preserved
+        assert_eq!(targets[1].1, 1);
+        assert_eq!(targets[0].0.iface_name, "wan0");
+        assert_eq!(targets[1].0.iface_name, "wan1");
+    }
+
+    #[test]
+    fn collect_refresh_disabled_flow_yields_empty() {
+        let mut wan_infos = WanRoutesByOwner::new();
+        wan_infos
+            .insert("wan0".to_string(), ipv4_wan_route("wan0", Ipv4Addr::new(198, 51, 100, 1)));
+
+        let configs = vec![flow_config(5, false, vec![iface_target("wan0", 1)])];
+
+        let result = collect_target_refresh_result(&configs, &wan_infos);
+
+        let targets = result.get(&5).expect("flow_id 5 should be present");
+        assert!(targets.is_empty());
+    }
+
+    #[test]
+    fn collect_refresh_enabled_flow_with_unresolved_targets_yields_empty() {
+        let wan_infos = WanRoutesByOwner::new(); // no routes registered
+
+        let configs = vec![flow_config(5, true, vec![iface_target("missing_wan", 2)])];
+
+        let result = collect_target_refresh_result(&configs, &wan_infos);
+
+        let targets = result.get(&5).expect("flow_id 5 should be present");
+        assert!(targets.is_empty());
+    }
+
+    #[test]
+    fn collect_refresh_partial_match_keeps_only_resolved() {
+        let mut wan_infos = WanRoutesByOwner::new();
+        wan_infos
+            .insert("wan0".to_string(), ipv4_wan_route("wan0", Ipv4Addr::new(198, 51, 100, 1)));
+
+        let configs = vec![flow_config(
+            5,
+            true,
+            vec![iface_target("wan0", 3), iface_target("missing_wan", 1)],
+        )];
+
+        let result = collect_target_refresh_result(&configs, &wan_infos);
+
+        let targets = result.get(&5).expect("flow_id 5 should be present");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].0.iface_name, "wan0");
+        assert_eq!(targets[0].1, 3);
+    }
+
+    #[test]
+    fn collect_refresh_netns_target_resolves_by_container_name() {
+        let mut wan_infos = WanRoutesByOwner::new();
+        wan_infos.insert("ns0".to_string(), ipv4_wan_route("ns0", Ipv4Addr::new(10, 0, 0, 1)));
+
+        let configs = vec![flow_config(3, true, vec![netns_target("ns0", 5)])];
+
+        let result = collect_target_refresh_result(&configs, &wan_infos);
+
+        let targets = result.get(&3).expect("flow_id 3 should be present");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].0.iface_name, "ns0");
+        assert_eq!(targets[0].1, 5);
+    }
+
+    #[test]
+    fn collect_refresh_multiple_flows_independent() {
+        let mut wan_infos = WanRoutesByOwner::new();
+        wan_infos
+            .insert("wan0".to_string(), ipv4_wan_route("wan0", Ipv4Addr::new(198, 51, 100, 1)));
+
+        let configs = vec![
+            flow_config(1, true, vec![iface_target("wan0", 2)]),
+            flow_config(2, false, vec![iface_target("wan0", 1)]),
+            flow_config(3, true, vec![iface_target("missing", 1)]),
+        ];
+
+        let result = collect_target_refresh_result(&configs, &wan_infos);
+
+        assert_eq!(result.get(&1).unwrap().len(), 1);
+        assert!(result.get(&2).unwrap().is_empty());
+        assert!(result.get(&3).unwrap().is_empty());
     }
 }

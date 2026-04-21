@@ -25,6 +25,10 @@ pub enum FlowRuleError {
     #[error("Entry rule '{rule}' conflicts with flow '{flow_remark}' (ID: {flow_id})")]
     #[api_error(id = "flow_rule.conflict_entry", status = 400)]
     ConflictEntryRule { rule: String, flow_remark: String, flow_id: u32 },
+
+    #[error("At least one configured flow target must have a positive weight")]
+    #[api_error(id = "flow_rule.invalid_target_weight", status = 400)]
+    InvalidTargetWeight,
 }
 
 /// Flow 入口匹配规则
@@ -88,6 +92,24 @@ fn default_prefix_len() -> u8 {
 pub enum FlowTarget {
     Interface { name: String },
     Netns { container_name: String },
+}
+
+fn default_flow_target_weight() -> u32 {
+    1
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct WeightedFlowTarget {
+    pub target: FlowTarget,
+    #[serde(default = "default_flow_target_weight")]
+    pub weight: u32,
+}
+
+impl WeightedFlowTarget {
+    pub fn new(target: FlowTarget, weight: u32) -> Self {
+        Self { target, weight }
+    }
 }
 
 /// 用于 Flow ebpf DNS Map 记录操作

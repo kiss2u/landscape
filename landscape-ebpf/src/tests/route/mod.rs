@@ -23,7 +23,9 @@ mod tests {
     use zerocopy::IntoBytes;
 
     use crate::{
-        map_setting::{flow_wanip::create_inner_flow_match_map_v6, route::add_wan_route_inner_v6},
+        map_setting::{
+            flow_wanip::create_inner_flow_match_map_v6, route::replace_wan_route_slots_v6_with_map,
+        },
         route::wan_v2::route_wan::RouteWanSkelBuilder,
         tests::{
             route::package::{isolated_pin_root, simple_ipv6_tcp_syn},
@@ -59,10 +61,8 @@ mod tests {
         }];
         create_inner_flow_match_map_v6(&skel.maps.flow6_ip_map, 0, &rules).unwrap();
 
-        add_wan_route_inner_v6(
-            &skel.maps.rt6_target_map,
-            5,
-            &RouteTargetInfo {
+        let targets = [(
+            RouteTargetInfo {
                 weight: 0,
                 ifindex: 11,
                 mac: None,
@@ -72,7 +72,9 @@ mod tests {
                 iface_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                 gateway_ip: IpAddr::V6(Ipv6Addr::UNSPECIFIED),
             },
-        );
+            1,
+        )];
+        replace_wan_route_slots_v6_with_map(&skel.maps.rt6_target_slot_map, 5, &targets);
 
         let mut packet = simple_ipv6_tcp_syn(local_addr(), remote_addr());
         let mut ctx_in = TestSkb::default();

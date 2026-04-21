@@ -7,7 +7,7 @@ use std::{
 use landscape_common::net::MacAddr;
 use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder as _},
-    ProgramInput,
+    MapCore, MapFlags, ProgramInput,
 };
 use zerocopy::IntoBytes;
 
@@ -15,7 +15,7 @@ use crate::{
     map_setting::add_wan_ip,
     tests::{
         route::package::{
-            create_route_cache_inner_map_v6, insert_ip_mac_v6, isolated_pin_root,
+            as_bytes, create_route_cache_inner_map_v6, insert_ip_mac_v6, isolated_pin_root,
             lookup_rt6_cache_value, put_rt6_cache_ifindex, simple_ipv6_tcp_syn, WAN_CACHE,
         },
         TestSkb,
@@ -45,6 +45,34 @@ mod tests {
 
     fn gateway_addr() -> Ipv6Addr {
         Ipv6Addr::from_str("2001:db8:ffff::1").unwrap()
+    }
+
+    fn put_rt6_target_slot(
+        skel: &test_route::TestRouteSkel<'_>,
+        flow_id: u32,
+        slot: u32,
+        ifindex: u32,
+    ) {
+        #[repr(C)]
+        #[derive(Default, Clone, Copy)]
+        struct RouteTargetSlotKeyV6 {
+            flow_id: u32,
+            slot: u32,
+        }
+
+        let mut key = RouteTargetSlotKeyV6::default();
+        key.flow_id = flow_id;
+        key.slot = slot;
+
+        let mut value = test_route::types::route_target_info_v6::default();
+        value.ifindex = ifindex;
+        value.has_mac = 0;
+        value.is_docker = 0;
+
+        skel.maps
+            .rt6_target_slot_map
+            .update(as_bytes(&key), as_bytes(&value), MapFlags::ANY)
+            .expect("insert rt6 target slot");
     }
 
     #[test]
@@ -207,5 +235,89 @@ mod tests {
             .is_none(),
             "forward-direction WAN cache entry should not exist"
         );
+    }
+
+    #[test]
+    fn default_flow_reads_target_from_slot_map() {
+        let mut builder = TestRouteSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-helper-v6-slot-priority");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        put_rt6_target_slot(&skel, 0, 0, 21);
+
+        let mut packet = simple_ipv6_tcp_syn(Ipv6Addr::UNSPECIFIED, Ipv6Addr::UNSPECIFIED);
+        let result = skel
+            .progs
+            .test_route_v6_pick_wan_by_flow_id_default
+            .test_run(ProgramInput { data_in: Some(&mut packet), ..Default::default() })
+            .expect("run test_route_v6_pick_wan_by_flow_id_default");
+
+        assert_eq!(result.return_value as i32, 21);
+    }
+
+    #[test]
+    fn non_default_flow_reads_target_from_slot_map() {
+        let mut builder = TestRouteSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-helper-v6-slot-non-default");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        put_rt6_target_slot(&skel, 5, 0, 21);
+
+        let mut packet = simple_ipv6_tcp_syn(Ipv6Addr::UNSPECIFIED, Ipv6Addr::UNSPECIFIED);
+        let result = skel
+            .progs
+            .test_route_v6_pick_wan_by_flow_id_non_default
+            .test_run(ProgramInput { data_in: Some(&mut packet), ..Default::default() })
+            .expect("run test_route_v6_pick_wan_by_flow_id_non_default");
+
+        assert_eq!(result.return_value as i32, 21);
+    }
+
+    #[test]
+    fn default_flow_without_slots_passes() {
+        let mut builder = TestRouteSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-helper-v6-slot-default-miss");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        let mut packet = simple_ipv6_tcp_syn(Ipv6Addr::UNSPECIFIED, Ipv6Addr::UNSPECIFIED);
+        let result = skel
+            .progs
+            .test_route_v6_pick_wan_by_flow_id_default
+            .test_run(ProgramInput { data_in: Some(&mut packet), ..Default::default() })
+            .expect("run test_route_v6_pick_wan_by_flow_id_default miss");
+
+        assert_eq!(result.return_value as i32, -1);
+    }
+
+    #[test]
+    fn non_default_flow_without_slots_drops() {
+        let mut builder = TestRouteSkelBuilder::default();
+        let pin_root = isolated_pin_root("route-helper-v6-slot-non-default-miss");
+        builder.object_builder_mut().pin_root_path(&pin_root).unwrap();
+
+        let mut open_object = MaybeUninit::uninit();
+        let open = builder.open(&mut open_object).unwrap();
+        let skel = open.load().unwrap();
+
+        let mut packet = simple_ipv6_tcp_syn(Ipv6Addr::UNSPECIFIED, Ipv6Addr::UNSPECIFIED);
+        let result = skel
+            .progs
+            .test_route_v6_pick_wan_by_flow_id_non_default
+            .test_run(ProgramInput { data_in: Some(&mut packet), ..Default::default() })
+            .expect("run test_route_v6_pick_wan_by_flow_id_non_default miss");
+
+        assert_eq!(result.return_value as i32, 2);
     }
 }

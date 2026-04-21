@@ -16,14 +16,15 @@ export default {
     duplicate_id_warning:
       "**ID** cannot be -1 and must be unique, or it may overwrite existing rules",
     duplicate_entry_warning: "Duplicate entry match rule found: {dup}",
+    all_zero_weight_warning:
+      "At least one egress target must have a positive weight",
     entry_rules_title: "Flow Entry Match Rules",
     entry_rules_desc_1: "Matched clients will use this flow",
     entry_rules_desc_2: "Priority: IP > MAC",
     entry_rules_desc_3: "Avoid overlap between rules across different flows",
-    target_rules_title:
-      "Flow Egress Rules (currently only one egress is supported)",
+    target_rules_title: "Flow Egress Rules",
     target_rules_desc_1:
-      "Matched clients will send traffic through this egress by default",
+      "Matched clients will send traffic through these egress targets by weight by default",
     target_rules_desc_2:
       "unless DNS rules or destination IP rules redirect traffic to another flow",
   },
@@ -125,6 +126,7 @@ export default {
     type_docker: "Docker",
     iface_placeholder: "Interface name",
     container_placeholder: "Container name",
+    weight_placeholder: "Weight",
   },
   wan_rule_card: {
     match_rules: "Match rules",

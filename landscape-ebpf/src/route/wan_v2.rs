@@ -67,12 +67,12 @@ pub fn route_wan(ifindex: u32, has_mac: bool) -> LdEbpfResult<RouteWanHandle> {
         "route_wan prepare rt6_lan_map failed"
     )?;
     crate::bpf_ctx!(
-        pin_and_reuse_map(&mut open_skel.maps.rt4_target_map, &MAP_PATHS.rt4_target_map),
-        "route_wan prepare rt4_target_map failed"
+        pin_and_reuse_map(&mut open_skel.maps.rt4_target_slot_map, &MAP_PATHS.rt4_target_slot_map),
+        "route_wan prepare rt4_target_slot_map failed"
     )?;
     crate::bpf_ctx!(
-        pin_and_reuse_map(&mut open_skel.maps.rt6_target_map, &MAP_PATHS.rt6_target_map),
-        "route_wan prepare rt6_target_map failed"
+        pin_and_reuse_map(&mut open_skel.maps.rt6_target_slot_map, &MAP_PATHS.rt6_target_slot_map),
+        "route_wan prepare rt6_target_slot_map failed"
     )?;
     crate::bpf_ctx!(
         pin_and_reuse_map(&mut open_skel.maps.flow4_dns_map, &MAP_PATHS.flow4_dns_map),

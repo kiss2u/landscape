@@ -150,12 +150,15 @@ const title_name = computed(() =>
     <template #action>
       <n-tag v-for="each in config.flow_targets" :bordered="false">
         {{
-          each.t === "netns"
-            ? frontEndStore.MASK_INFO(each.container_name)
-            : frontEndStore.MASK_INFO(each.name)
+          each.target.t === "netns"
+            ? frontEndStore.MASK_INFO(each.target.container_name)
+            : frontEndStore.MASK_INFO(each.target.name)
         }}
+        <span v-if="(each.weight ?? 1) !== 1"> ×{{ each.weight ?? 1 }}</span>
         <template #icon>
-          <n-icon :component="each.t === 'netns' ? Docker : NetworkWired" />
+          <n-icon
+            :component="each.target.t === 'netns' ? Docker : NetworkWired"
+          />
         </template>
       </n-tag>
     </template>
