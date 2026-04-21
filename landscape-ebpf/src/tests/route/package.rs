@@ -118,7 +118,7 @@ pub fn put_rt6_cache_ifindex<T: MapCore>(
     let inner = lookup_inner_map(outer_map, cache_index);
     let key = make_rt6_cache_key(local, remote);
     let mut value = rt_cache_value_v6::default();
-    value.__anon_rt_cache_value_v4_1.ifindex = ifindex;
+    value.ifindex = ifindex;
     value.has_mac = has_mac as u8;
     inner
         .update(as_bytes(&key), as_bytes(&value), MapFlags::ANY)

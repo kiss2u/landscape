@@ -199,6 +199,10 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.flow6_dns_map, &paths.flow6_dns_map);
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.flow6_ip_map, &paths.flow6_ip_map);
 
+    // 每次启动重建 cache 外层 map（含内层 map），避免结构体变更后大小不匹配。
+    let _ = std::fs::remove_file(&paths.rt4_cache_map);
+    let _ = std::fs::remove_file(&paths.rt6_cache_map);
+
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.rt4_cache_map, &paths.rt4_cache_map);
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.rt6_cache_map, &paths.rt6_cache_map);
 

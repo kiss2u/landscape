@@ -409,7 +409,7 @@ fn trace_cache_check_v4(
                 let val = unsafe {
                     std::ptr::read_unaligned(val_bytes.as_ptr() as *const rt_cache_value_v4)
                 };
-                let cached_mark_value = unsafe { val.__anon_rt_cache_value_v4_1.mark_value };
+                let cached_mark_value = val.mark_value;
                 let consistent = cached_mark_value == expected_cache_mark;
                 Some((true, Some(cached_mark_value), consistent))
             }
@@ -445,7 +445,7 @@ fn trace_cache_check_v6(
                 let val = unsafe {
                     std::ptr::read_unaligned(val_bytes.as_ptr() as *const rt_cache_value_v6)
                 };
-                let cached_mark_value = unsafe { val.__anon_rt_cache_value_v4_1.mark_value };
+                let cached_mark_value = val.mark_value;
                 let consistent = cached_mark_value == expected_cache_mark;
                 Some((true, Some(cached_mark_value), consistent))
             }

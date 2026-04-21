@@ -222,7 +222,7 @@ mod tests {
             remote_addr(),
         )
         .expect("reverse WAN cache entry missing");
-        assert_eq!(unsafe { reverse.__anon_rt_cache_value_v4_1.ifindex }, WAN_IFINDEX);
+        assert_eq!(reverse.ifindex, WAN_IFINDEX);
         assert_eq!(reverse.has_mac, 1);
 
         assert!(

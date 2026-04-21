@@ -113,12 +113,14 @@ struct rt_cache_key_v4 {
 } _rt_cache_key_v4;
 
 struct rt_cache_value_v4 {
-    union {
-        __u32 mark_value;
-        __u32 ifindex;
-    };
+    __u32 mark_value;
     u8 has_mac;
-    u8 l2_data[14];
+    u8 is_docker;
+    u8 _pad[2];
+    __u32 ifindex;
+    __be32 gate_addr;
+    u8 mac[6];
+    u8 l2_data[8];
 } _rt_cache_value_v4;
 
 // 缓存

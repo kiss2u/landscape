@@ -311,6 +311,46 @@ static __always_inline int is_current_wan_packet_v4(struct __sk_buff *skb, u32 c
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int redirect_by_cached_target_v4(struct __sk_buff *skb,
+                                                        u32 current_l3_offset,
+                                                        struct rt_cache_value_v4 *target) {
+    if (target->ifindex == skb->ifindex) {
+        return TC_ACT_UNSPEC;
+    }
+
+    if (current_l3_offset == 0 && target->has_mac) {
+        if (prepend_dummy_mac(skb) != 0) {
+            return TC_ACT_SHOT;
+        }
+    }
+
+    if (target->is_docker) {
+        int ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, 0);
+        if (ret) {
+            return ret;
+        }
+        ret = bpf_redirect(target->ifindex, 0);
+        return ret;
+    }
+
+    if (!target->has_mac) {
+        return bpf_redirect(target->ifindex, 0);
+    } else {
+        struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &target->gate_addr);
+        if (mac_value) {
+            int ret = store_mac_v4(skb, &mac_value->mac, target->mac);
+            if (!ret) {
+                return bpf_redirect(target->ifindex, 0);
+            }
+        }
+    }
+
+    struct bpf_redir_neigh param;
+    param.nh_family = AF_INET;
+    param.ipv6_nh[0] = target->gate_addr;
+    return bpf_redirect_neigh(target->ifindex, &param, sizeof(param), 0);
+}
+
 static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb,
                                                   const u32 current_l3_offset,
                                                   const struct route_context_v4 *context,
@@ -375,6 +415,9 @@ static __always_inline int search_route_in_lan_v4(struct __sk_buff *skb,
         struct rt_cache_value_v4 *target = bpf_map_lookup_elem(lan_cache, &search_key);
         if (target) {
             *flow_mark = target->mark_value;
+            if (target->ifindex != 0) {
+                return redirect_by_cached_target_v4(skb, current_l3_offset, target);
+            }
             return pick_wan_and_send_by_flow_id_v4(skb, current_l3_offset, context,
                                                    target->mark_value);
         }
@@ -472,18 +515,26 @@ static __always_inline int setting_cache_in_lan_v4(const struct route_context_v4
         if (target) {
             target->mark_value = flow_mark;
         } else {
+            const u32 resolved_flow_id = get_flow_id(flow_mark);
+            struct route_target_slot_key_v4 slot_key = {
+                .flow_id = resolved_flow_id,
+                .slot = (((u32)context->saddr) ^ (((u32)context->daddr) << 1) ^
+                         (((u32)context->l4_protocol) << 24)) & 0xF,
+            };
+            struct route_target_info_v4 *slot_target =
+                bpf_map_lookup_elem(&rt4_target_slot_map, &slot_key);
+
             struct rt_cache_value_v4 new_target_cache = {0};
             new_target_cache.mark_value = flow_mark;
+            if (slot_target != NULL) {
+                new_target_cache.ifindex = slot_target->ifindex;
+                new_target_cache.has_mac = slot_target->has_mac;
+                new_target_cache.is_docker = slot_target->is_docker;
+                new_target_cache.gate_addr = slot_target->gate_addr;
+                __builtin_memcpy(new_target_cache.mac, slot_target->mac, 6);
+            }
             bpf_map_update_elem(lan_cache, &search_key, &new_target_cache, BPF_ANY);
         }
-
-        // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-        //     ld_bpf_log("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
-        //                  search_key.remote_addr.in6_u.u6_addr8);
-        // } else {
-        //     ld_bpf_log("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
-        //                  search_key.remote_addr.in6_u.u6_addr8);
-        // }
     }
 
     return TC_ACT_OK;

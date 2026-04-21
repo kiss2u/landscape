@@ -114,11 +114,13 @@ struct rt_cache_key_v6 {
 } _rt_cache_key_v6;
 
 struct rt_cache_value_v6 {
-    union {
-        __u32 mark_value;
-        __u32 ifindex;
-    };
+    __u32 mark_value;
     u8 has_mac;
+    u8 is_docker;
+    u8 _pad[2];
+    __u32 ifindex;
+    union u_inet6_addr gate_addr;
+    u8 mac[6];
 } _rt_cache_value_v6;
 
 // 缓存

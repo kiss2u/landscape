@@ -102,7 +102,7 @@ mod tests {
         )
         .expect("LAN cache entry missing after IPv6 redirect");
 
-        assert_eq!(unsafe { cache_value.__anon_rt_cache_value_v4_1.mark_value }, 0x0305);
+        assert_eq!(cache_value.mark_value, 0x0305);
     }
 
     #[test]

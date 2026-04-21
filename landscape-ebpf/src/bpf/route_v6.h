@@ -308,6 +308,46 @@ static __always_inline int is_current_wan_packet_v6(struct __sk_buff *skb, u32 c
 #undef BPF_LOG_TOPIC
 }
 
+static __always_inline int redirect_by_cached_target_v6(struct __sk_buff *skb,
+                                                        u32 current_l3_offset,
+                                                        struct rt_cache_value_v6 *target) {
+    if (target->ifindex == skb->ifindex) {
+        return TC_ACT_UNSPEC;
+    }
+
+    if (current_l3_offset == 0 && target->has_mac) {
+        if (prepend_dummy_mac_v6(skb) != 0) {
+            return TC_ACT_SHOT;
+        }
+    }
+
+    if (target->is_docker) {
+        int ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, 0);
+        if (ret) {
+            return ret;
+        }
+        ret = bpf_redirect(target->ifindex, 0);
+        return ret;
+    }
+
+    if (!target->has_mac) {
+        return bpf_redirect(target->ifindex, 0);
+    } else {
+        struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &target->gate_addr);
+        if (mac_value) {
+            int ret = store_mac_v6(skb, &mac_value->mac, target->mac);
+            if (!ret) {
+                return bpf_redirect(target->ifindex, 0);
+            }
+        }
+    }
+
+    struct bpf_redir_neigh param;
+    param.nh_family = AF_INET6;
+    COPY_ADDR_FROM(param.ipv6_nh, target->gate_addr.bytes);
+    return bpf_redirect_neigh(target->ifindex, &param, sizeof(param), 0);
+}
+
 static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
                                                   const u32 current_l3_offset,
                                                   const struct route_context_v6 *context,
@@ -377,6 +417,9 @@ static __always_inline int search_route_in_lan_v6(struct __sk_buff *skb,
         target = bpf_map_lookup_elem(lan_cache, &search_key);
         if (target) {
             *flow_mark = target->mark_value;
+            if (target->ifindex != 0) {
+                return redirect_by_cached_target_v6(skb, current_l3_offset, target);
+            }
             return pick_wan_and_send_by_flow_id_v6(skb, current_l3_offset, context,
                                                    target->mark_value);
         }
@@ -465,18 +508,28 @@ static __always_inline int setting_cache_in_lan_v6(const struct route_context_v6
         if (target) {
             target->mark_value = flow_mark;
         } else {
+            const u32 resolved_flow_id = get_flow_id(flow_mark);
+            struct route_target_slot_key_v6 slot_key = {
+                .flow_id = resolved_flow_id,
+                .slot = (((u32)context->saddr.all[0]) ^ ((u32)context->saddr.all[1]) ^
+                         (((u32)context->daddr.all[0]) << 1) ^ (((u32)context->daddr.all[1]) << 2) ^
+                         ((u32)context->daddr.all[2]) ^ (((u32)context->daddr.all[3]) << 1) ^
+                         (((u32)context->l4_protocol) << 24)) & 0xF,
+            };
+            struct route_target_info_v6 *slot_target =
+                bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
+
             struct rt_cache_value_v6 new_target_cache = {0};
             new_target_cache.mark_value = flow_mark;
+            if (slot_target != NULL) {
+                new_target_cache.ifindex = slot_target->ifindex;
+                new_target_cache.has_mac = slot_target->has_mac;
+                new_target_cache.is_docker = slot_target->is_docker;
+                __builtin_memcpy(new_target_cache.gate_addr.bytes, slot_target->gate_addr.bytes, 16);
+                __builtin_memcpy(new_target_cache.mac, slot_target->mac, 6);
+            }
             bpf_map_update_elem(lan_cache, &search_key, &new_target_cache, BPF_ANY);
         }
-
-        // if (context->l3_protocol == LANDSCAPE_IPV4_TYPE) {
-        //     ld_bpf_log("cache %pI4 -> %pI4", search_key.local_addr.in6_u.u6_addr8,
-        //                  search_key.remote_addr.in6_u.u6_addr8);
-        // } else {
-        //     ld_bpf_log("cache %pI6 -> %pI6", search_key.local_addr.in6_u.u6_addr8,
-        //                  search_key.remote_addr.in6_u.u6_addr8);
-        // }
     }
 
     return TC_ACT_OK;
