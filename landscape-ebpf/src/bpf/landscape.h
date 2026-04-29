@@ -268,6 +268,10 @@ static __always_inline bool inet6_addr_equal(const union inet6_addr *a, const un
            a->all[3] == b->all[3];
 }
 
+static __always_inline bool ip_addr_is_zero(const union u_inet_addr *a) {
+    return a->all[0] == 0 && a->all[1] == 0 && a->all[2] == 0 && a->all[3] == 0;
+}
+
 static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const union u_inet_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];

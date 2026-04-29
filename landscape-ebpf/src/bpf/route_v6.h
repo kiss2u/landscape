@@ -15,11 +15,13 @@
 
 // TODO: split two function
 static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 current_l3_offset,
-                                                 struct route_context_v6 *context) {
+                                                 struct route_context_v6 *context, bool is_lan) {
 #define BPF_LOG_TOPIC "lan_redirect_check_v6"
 
     int ret;
     struct lan_route_key_v6 lan_search_key = {0};
+    struct mac_key_v6 mac_key_search = {0};
+    struct mac_value_v6 *mac_value = NULL;
 
     lan_search_key.prefixlen = 128;
     COPY_ADDR_FROM(lan_search_key.addr.bytes, context->daddr.bytes);
@@ -33,6 +35,16 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
 
     // is LAN Packet, redirect to lan
     if (unlikely(lan_info->ifindex == skb->ifindex)) {
+        if (is_lan && lan_info->has_mac && !ip_addr_is_zero(&lan_info->addr) &&
+            !ip_addr_equal(&lan_info->addr, &context->daddr)) {
+            COPY_ADDR_FROM(mac_key_search.addr.all, context->daddr.all);
+            mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key_search);
+            if (mac_value) {
+                if (!bpf_skb_store_bytes(skb, 0, &mac_value->mac, 14, 0)) {
+                    return bpf_redirect(lan_info->ifindex, 0);
+                }
+            }
+        }
         // current iface
         return TC_ACT_UNSPEC;
     }
@@ -52,7 +64,6 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
     }
 
     bool target_has_mac = lan_info->has_mac;
-    struct mac_key_v6 mac_key_search = {0};
     if (unlikely(lan_info->is_next_hop)) {
         COPY_ADDR_FROM(mac_key_search.addr.all, lan_info->addr.all);
     } else {
@@ -60,7 +71,7 @@ static __always_inline int lan_redirect_check_v6(struct __sk_buff *skb, u32 curr
     }
 
     if (target_has_mac) {
-        struct mac_value_v6 *mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key_search);
+        mac_value = bpf_map_lookup_elem(&ip_mac_v6, &mac_key_search);
         if (mac_value) {
             ret = store_mac_v6(skb, &mac_value->mac, lan_info->mac_addr);
             if (!ret) {
@@ -215,7 +226,8 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
         .slot = (((u32)context->saddr.all[0]) ^ ((u32)context->saddr.all[1]) ^
                  (((u32)context->daddr.all[0]) << 1) ^ (((u32)context->daddr.all[1]) << 2) ^
                  ((u32)context->daddr.all[2]) ^ (((u32)context->daddr.all[3]) << 1) ^
-                 (((u32)context->l4_protocol) << 24)) & 0xF,
+                 (((u32)context->l4_protocol) << 24)) &
+                0xF,
     };
     struct route_target_info_v6 *target_info = bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
 
@@ -514,7 +526,8 @@ static __always_inline int setting_cache_in_lan_v6(const struct route_context_v6
                 .slot = (((u32)context->saddr.all[0]) ^ ((u32)context->saddr.all[1]) ^
                          (((u32)context->daddr.all[0]) << 1) ^ (((u32)context->daddr.all[1]) << 2) ^
                          ((u32)context->daddr.all[2]) ^ (((u32)context->daddr.all[3]) << 1) ^
-                         (((u32)context->l4_protocol) << 24)) & 0xF,
+                         (((u32)context->l4_protocol) << 24)) &
+                        0xF,
             };
             struct route_target_info_v6 *slot_target =
                 bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
@@ -525,7 +538,8 @@ static __always_inline int setting_cache_in_lan_v6(const struct route_context_v6
                 new_target_cache.ifindex = slot_target->ifindex;
                 new_target_cache.has_mac = slot_target->has_mac;
                 new_target_cache.is_docker = slot_target->is_docker;
-                __builtin_memcpy(new_target_cache.gate_addr.bytes, slot_target->gate_addr.bytes, 16);
+                __builtin_memcpy(new_target_cache.gate_addr.bytes, slot_target->gate_addr.bytes,
+                                 16);
                 __builtin_memcpy(new_target_cache.mac, slot_target->mac, 6);
             }
             bpf_map_update_elem(lan_cache, &search_key, &new_target_cache, BPF_ANY);

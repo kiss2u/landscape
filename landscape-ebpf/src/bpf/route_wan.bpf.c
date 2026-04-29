@@ -26,7 +26,6 @@ SEC("tc/ingress")
 int rt4_wan_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "rt4_wan_ingress"
     int ret = 0;
-    u32 flow_mark = skb->mark;
     struct route_context_v4 context = {0};
 
     struct iphdr *iph;
@@ -137,7 +136,7 @@ int rt6_wan_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = lan_redirect_check_v6(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v6(skb, current_l3_offset, &context, false);
     if (ret == TC_ACT_REDIRECT) {
         u8 mark = get_cache_mask(skb->mark);
         if (mark == INGRESS_STATIC_MARK) {
@@ -173,7 +172,7 @@ int rt6_wan_egress(struct __sk_buff *skb) {
         return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
     }
 
-    ret = lan_redirect_check_v6(skb, current_l3_offset, &context);
+    ret = lan_redirect_check_v6(skb, current_l3_offset, &context, false);
     if (ret != TC_ACT_OK) {
         return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, ret);
     }
@@ -236,7 +235,7 @@ int route_wan_ingress(struct __sk_buff *skb) {
 
     ret = current_pkg_type(skb, current_l3_offset, &is_ipv4);
     if (unlikely(ret != TC_ACT_OK)) {
-        return TC_ACT_UNSPEC;
+        return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
     }
 
     if (is_ipv4) {

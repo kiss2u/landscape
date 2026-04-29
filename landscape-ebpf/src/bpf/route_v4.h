@@ -220,7 +220,8 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
     struct route_target_slot_key_v4 slot_key = {
         .flow_id = resolved_flow_id,
         .slot = (((u32)context->saddr) ^ (((u32)context->daddr) << 1) ^
-                 (((u32)context->l4_protocol) << 24)) & 0xF,
+                 (((u32)context->l4_protocol) << 24)) &
+                0xF,
     };
     struct route_target_info_v4 *target_info = bpf_map_lookup_elem(&rt4_target_slot_map, &slot_key);
 
@@ -457,9 +458,8 @@ static __always_inline int setting_cache_in_wan_v4(const struct route_context_v4
     if (wan_cache) {
         target = bpf_map_lookup_elem(wan_cache, &search_key);
         if (target) {
-            if (target->ifindex != ifindex) {
-                bpf_map_delete_elem(wan_cache, &search_key);
-            }
+            target->ifindex = ifindex;
+            target->has_mac = current_l3_offset > 0;
         } else {
             struct rt_cache_value_v4 new_target_cache = {0};
             new_target_cache.has_mac = current_l3_offset > 0;
@@ -519,7 +519,8 @@ static __always_inline int setting_cache_in_lan_v4(const struct route_context_v4
             struct route_target_slot_key_v4 slot_key = {
                 .flow_id = resolved_flow_id,
                 .slot = (((u32)context->saddr) ^ (((u32)context->daddr) << 1) ^
-                         (((u32)context->l4_protocol) << 24)) & 0xF,
+                         (((u32)context->l4_protocol) << 24)) &
+                        0xF,
             };
             struct route_target_info_v4 *slot_target =
                 bpf_map_lookup_elem(&rt4_target_slot_map, &slot_key);
