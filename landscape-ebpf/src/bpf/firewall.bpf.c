@@ -115,8 +115,14 @@ static __always_inline int fragment_track(struct __sk_buff *skb, struct ip_conte
 /// ICMP Related Start
 static __always_inline int icmp_err_l3_offset(int l4_off) { return l4_off + ICMP_HDR_LEN; }
 
+static __always_inline int icmp6_err_l3_offset(int l4_off) { return l4_off + ICMP6_HDR_LEN; }
+
 static __always_inline __be16 get_icmpx_query_id(struct icmphdr *icmph) {
     return icmph->un.echo.id;
+}
+
+static __always_inline __be16 get_icmp6_query_id(struct icmp6hdr *icmp6h) {
+    return icmp6h->icmp6_dataun.u_echo.identifier;
 }
 
 static __always_inline int extract_iphdr_info(struct __sk_buff *skb, u32 *l3_offset,
@@ -491,15 +497,15 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         pcxt->ip_hdr.pair_ip.src_port = udph->source;
         pcxt->ip_hdr.pair_ip.dst_port = udph->dest;
     } else if (pcxt->ip_hdr.ip_protocol == IPPROTO_ICMPV6) {
-        struct icmphdr *icmph;
-        if (VALIDATE_READ_DATA(skb, &icmph, pcxt->l4_payload_offset, sizeof(struct icmphdr))) {
+        struct icmp6hdr *icmp6h;
+        if (VALIDATE_READ_DATA(skb, &icmp6h, pcxt->l4_payload_offset, sizeof(struct icmp6hdr))) {
             return TC_ACT_SHOT;
         }
-        pcxt->ip_hdr.icmp_type = icmph->type;
-        switch (icmp6_msg_type(icmph)) {
+        pcxt->ip_hdr.icmp_type = icmp6h->icmp6_type;
+        switch (icmp6_msg_type(icmp6h)) {
         case ICMP_ERROR_MSG: {
             struct ip_context icmp_error_ip_ctx = {0};
-            pcxt->icmp_error_payload_offset = icmp_err_l3_offset(pcxt->l4_payload_offset);
+            pcxt->icmp_error_payload_offset = icmp6_err_l3_offset(pcxt->l4_payload_offset);
             if (extract_ipv6hdr_info(skb, &pcxt->icmp_error_payload_offset, &icmp_error_ip_ctx)) {
                 return TC_ACT_SHOT;
             }
@@ -534,7 +540,7 @@ extract_v6_packet_info(struct __sk_buff *skb, struct packet_context *pcxt, u32 c
         }
         case ICMP_QUERY_MSG: {
             pcxt->ip_hdr.pair_ip.src_port = pcxt->ip_hdr.pair_ip.dst_port =
-                get_icmpx_query_id(icmph);
+                get_icmp6_query_id(icmp6h);
             // ld_bpf_log("ICMP query, id:%d", bpf_ntohs(pcxt->ip_hdr.pair_ip.src_port));
             break;
         }

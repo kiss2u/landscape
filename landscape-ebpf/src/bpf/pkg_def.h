@@ -89,6 +89,7 @@ struct route_context_test {
 };
 
 #define ICMP_HDR_LEN sizeof(struct icmphdr)
+#define ICMP6_HDR_LEN sizeof(struct icmp6hdr)
 
 static __always_inline void print_route_context(struct route_context_test *ctx) {
 #define BPF_LOG_TOPIC "print_route_context"

@@ -68,7 +68,7 @@ static __always_inline int lan_redirect_check_v4(struct __sk_buff *skb, u32 curr
         if (target_has_mac) {
             mac_value = bpf_map_lookup_elem(&ip_mac_v4, &mac_key_search);
             if (mac_value) {
-                ret = store_mac_v4(skb, &mac_value->mac, lan_info->mac_addr);
+                ret = store_mac_v4(skb, mac_value->mac, lan_info->mac_addr);
                 if (!ret) {
                     return bpf_redirect(lan_info->ifindex, 0);
                 }
@@ -268,7 +268,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
     } else {
         struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &target_info->gate_addr);
         if (mac_value) {
-            ret = store_mac_v4(skb, &mac_value->mac, target_info->mac);
+            ret = store_mac_v4(skb, mac_value->mac, target_info->mac);
             if (!ret) {
                 return bpf_redirect(target_info->ifindex, 0);
             }
@@ -339,7 +339,7 @@ static __always_inline int redirect_by_cached_target_v4(struct __sk_buff *skb,
     } else {
         struct mac_value_v4 *mac_value = bpf_map_lookup_elem(&ip_mac_v4, &target->gate_addr);
         if (mac_value) {
-            int ret = store_mac_v4(skb, &mac_value->mac, target->mac);
+            int ret = store_mac_v4(skb, mac_value->mac, target->mac);
             if (!ret) {
                 return bpf_redirect(target->ifindex, 0);
             }

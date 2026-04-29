@@ -582,7 +582,7 @@ ipv6_ingress_prefix_check_and_replace(struct __sk_buff *skb, struct packet_offse
             COPY_ADDR_FROM(&local_client_prefix, ct_value->client_prefix);
 
             if (ct_value->is_allow_reuse == 0 && offset_info->l4_protocol != IPPROTO_ICMPV6) {
-                if (!ip_addr_equal(&ip_pair->src_addr, &ct_value->trigger_addr) ||
+                if (!ip_addr_equal_x(&ip_pair->src_addr, &ct_value->trigger_addr) ||
                     ip_pair->src_port != ct_value->trigger_port) {
                     bpf_printk("FLOW_ALLOW_REUSE MARK not set, DROP PACKET");
                     bpf_printk("src info: [%pI6]:%u", &ip_pair->src_addr,
