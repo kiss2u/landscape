@@ -29,6 +29,10 @@ pub enum FlowRuleError {
     #[error("At least one configured flow target must have a positive weight")]
     #[api_error(id = "flow_rule.invalid_target_weight", status = 400)]
     InvalidTargetWeight,
+
+    #[error("Flow rule cannot have more than 16 targets (load balancing uses 16 slots)")]
+    #[api_error(id = "flow_rule.too_many_targets", status = 400)]
+    TooManyTargets,
 }
 
 /// Flow 入口匹配规则

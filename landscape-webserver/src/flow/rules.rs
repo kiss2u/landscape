@@ -19,9 +19,15 @@ pub fn get_flow_rule_config_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_flow_rule_by_flow_id))
 }
 
+const MAX_FLOW_TARGETS: usize = 16;
+
 fn has_only_zero_weight_targets(flow_rule: &FlowConfig) -> bool {
     !flow_rule.flow_targets.is_empty()
         && flow_rule.flow_targets.iter().all(|target| target.weight == 0)
+}
+
+fn has_too_many_targets(flow_rule: &FlowConfig) -> bool {
+    flow_rule.flow_targets.len() > MAX_FLOW_TARGETS
 }
 
 #[utoipa::path(
@@ -93,6 +99,10 @@ async fn add_flow_rule(
 ) -> LandscapeApiResult<FlowConfig> {
     if has_only_zero_weight_targets(&flow_rule) {
         Err(FlowRuleError::InvalidTargetWeight)?;
+    }
+
+    if has_too_many_targets(&flow_rule) {
+        Err(FlowRuleError::TooManyTargets)?;
     }
 
     // Check for duplicate entry rules within the submitted config itself

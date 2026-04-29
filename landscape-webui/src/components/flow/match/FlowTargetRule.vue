@@ -104,7 +104,12 @@ function handleUpdateValue(value: FlowTarget["t"], index: number) {
 <template>
   <!-- {{ docker_options }} -->
   <!-- {{ docker_containers }} -->
-  <n-dynamic-input :min="0" v-model:value="target_rules" :on-create="onCreate">
+  <n-dynamic-input
+    :min="0"
+    :max="16"
+    v-model:value="target_rules"
+    :on-create="onCreate"
+  >
     <template #create-button-default>
       {{ t("flow.target_rule.add_target_rule") }}
     </template>
