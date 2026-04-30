@@ -112,7 +112,7 @@ struct nat_timer_value_v6 {
     u64 server_status;
     u64 client_status;
     u64 status;
-    union inet6_addr trigger_addr;
+    inet6_addr trigger_addr;
     u16 trigger_port;
     u8 is_allow_reuse;
     u8 flow_id;

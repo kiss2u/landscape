@@ -21,12 +21,12 @@ struct static_nat_mapping_key_v6 {
     u8 _pad[3];
     // INGRESS:  only use u32 for ifindex match
     // EGRESS: match lan client ip
-    union inet6_addr addr;
+    inet6_addr addr;
 };
 
 struct static_nat_mapping_value_v6 {
-    union inet6_addr addr;
-    union inet6_addr trigger_addr;
+    inet6_addr addr;
+    inet6_addr trigger_addr;
     __be16 port;
     __be16 trigger_port;
     u8 is_static;

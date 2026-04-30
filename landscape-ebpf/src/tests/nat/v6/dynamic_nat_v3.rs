@@ -83,7 +83,7 @@ fn add_ct6_entry<T: MapCore>(
         is_allow_reuse: 1,
         ..Default::default()
     };
-    value.trigger_addr = types::inet6_addr { bytes: trigger_addr.octets() };
+    value.trigger_addr = types::u_inet6_addr { bytes: trigger_addr.octets() };
     value.trigger_port = trigger_port.to_be();
     value.client_prefix.copy_from_slice(&src.octets()[..8]);
 

@@ -244,16 +244,11 @@ struct inet4_pair {
     __be16 dst_port;
 };
 
-union inet6_addr {
-    __be32 all[4];
-    __be32 ip;
-    __be32 ip6[4];
-    u8 bytes[16];
-};
+typedef union u_inet6_addr inet6_addr;
 
 struct inet6_pair {
-    union inet6_addr src_addr;
-    union inet6_addr dst_addr;
+    inet6_addr src_addr;
+    inet6_addr dst_addr;
     __be16 src_port;
     __be16 dst_port;
 };
@@ -263,7 +258,7 @@ static __always_inline bool inet4_addr_equal(const struct inet4_addr *a,
     return a->addr == b->addr;
 }
 
-static __always_inline bool inet6_addr_equal(const union inet6_addr *a, const union inet6_addr *b) {
+static __always_inline bool inet6_addr_equal(const inet6_addr *a, const inet6_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];
 }
@@ -272,7 +267,7 @@ static __always_inline bool ip_addr_is_zero(const union u_inet_addr *a) {
     return a->all[0] == 0 && a->all[1] == 0 && a->all[2] == 0 && a->all[3] == 0;
 }
 
-static __always_inline bool ip_addr_is_zero_in6(const union inet6_addr *a) {
+static __always_inline bool ip_addr_is_zero_in6(const inet6_addr *a) {
     return a->all[0] == 0 && a->all[1] == 0 && a->all[2] == 0 && a->all[3] == 0;
 }
 
@@ -281,13 +276,12 @@ static __always_inline bool ip_addr_equal(const union u_inet_addr *a, const unio
            a->all[3] == b->all[3];
 }
 
-static __always_inline bool ip_addr_equal_in6(const union inet6_addr *a,
-                                              const union inet6_addr *b) {
+static __always_inline bool ip_addr_equal_in6(const inet6_addr *a, const inet6_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];
 }
 
-static __always_inline bool ip_addr_equal_x(const union u_inet_addr *a, const union inet6_addr *b) {
+static __always_inline bool ip_addr_equal_x(const union u_inet_addr *a, const inet6_addr *b) {
     return a->all[0] == b->all[0] && a->all[1] == b->all[1] && a->all[2] == b->all[2] &&
            a->all[3] == b->all[3];
 }

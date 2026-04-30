@@ -116,11 +116,10 @@ static __always_inline int flow_verdict_v4(struct __sk_buff *skb, u32 current_l3
                                            struct route_context_v4 *context, u32 *init_flow_id_) {
 #define BPF_LOG_TOPIC "flow_verdict_v4"
 
-    int ret;
     volatile u32 flow_id = *init_flow_id_ & 0xff;
     u8 flow_action;
 
-    if (match_flow_id_v4(skb, current_l3_offset, context->saddr, &flow_id)) {
+    if (match_flow_id_v4(skb, current_l3_offset, context->saddr, (u32 *)&flow_id)) {
         return TC_ACT_SHOT;
     }
 
@@ -210,7 +209,7 @@ keep_going:
 
 static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb,
                                                            u32 current_l3_offset,
-                                                           struct route_context_v4 *context,
+                                                           const struct route_context_v4 *context,
                                                            const u32 flow_id) {
 #define BPF_LOG_TOPIC "pick_wan_and_send_by_flow_id_v4"
 
