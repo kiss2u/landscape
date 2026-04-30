@@ -66,6 +66,19 @@ const handleSearchTuple = (conn: any) => {
   liveFilter.port_start = conn.src_port;
   liveFilter.port_end = conn.dst_port;
 };
+
+function queryString(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === "string" && raw.length > 0 ? raw : undefined;
+}
+
+function queryNumber(value: unknown) {
+  const raw = queryString(value);
+  if (raw === undefined) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 // System-wide summary
 const systemStats = computed(() => {
   const stats = {
@@ -111,6 +124,8 @@ const filteredConnectMetrics = computed(() => {
       return false;
     if (liveFilter.gress !== null && item.gress !== liveFilter.gress)
       return false;
+    if (liveFilter.ifindex !== null && item.ifindex !== liveFilter.ifindex)
+      return false;
     return true;
   });
 
@@ -154,14 +169,19 @@ const totalStats = computed(() => {
 
 onMounted(async () => {
   // Initialize filters from route query
-  if (route.query.src_ip) liveFilter.src_ip = route.query.src_ip as string;
-  if (route.query.dst_ip) liveFilter.dst_ip = route.query.dst_ip as string;
-  if (route.query.port_start)
-    liveFilter.port_start = parseInt(route.query.port_start as string);
-  if (route.query.port_end)
-    liveFilter.port_end = parseInt(route.query.port_end as string);
-  if (route.query.flow_id)
-    liveFilter.flow_id = parseInt(route.query.flow_id as string);
+  const srcIp = queryString(route.query.src_ip);
+  const dstIp = queryString(route.query.dst_ip);
+  const portStart = queryNumber(route.query.port_start);
+  const portEnd = queryNumber(route.query.port_end);
+  const flowId = queryNumber(route.query.flow_id);
+  const ifindex = queryNumber(route.query.ifindex);
+
+  if (srcIp) liveFilter.src_ip = srcIp;
+  if (dstIp) liveFilter.dst_ip = dstIp;
+  if (portStart !== null) liveFilter.port_start = portStart;
+  if (portEnd !== null) liveFilter.port_end = portEnd;
+  if (flowId !== null) liveFilter.flow_id = flowId;
+  if (ifindex !== null) liveFilter.ifindex = ifindex;
 
   metricStore.SET_ENABLE("live", true);
   await metricStore.UPDATE_INFO();

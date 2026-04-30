@@ -2,8 +2,8 @@ use axum::extract::{Query, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::metric::connect::{
     ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectMetricPoint,
-    ConnectRealtimeStatus, GetConnectGlobalStatsParams, IpHistoryStat, IpRealtimeStat,
-    MetricChartRequest,
+    ConnectRealtimeStatus, GetConnectGlobalStatsParams, IfaceRealtimeStat, IpHistoryStat,
+    IpRealtimeStat, MetricChartRequest,
 };
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse,
@@ -25,6 +25,7 @@ pub fn get_metric_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_connect_metric_info))
         .routes(routes!(get_connect_history))
         .routes(routes!(get_connect_global_stats))
+        .routes(routes!(get_iface_stats))
         .routes(routes!(get_src_ip_stats))
         .routes(routes!(get_dst_ip_stats))
         .routes(routes!(get_history_src_ip_stats))
@@ -32,6 +33,20 @@ pub fn get_metric_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_dns_history))
         .routes(routes!(get_dns_summary))
         .routes(routes!(get_dns_lightweight_summary))
+}
+
+#[utoipa::path(
+    get,
+    path = "/connections/iface_stats",
+    tag = "Metric",
+    operation_id = "get_iface_stats",
+    responses((status = 200, body = CommonApiResp<Vec<IfaceRealtimeStat>>))
+)]
+async fn get_iface_stats(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<Vec<IfaceRealtimeStat>> {
+    let data = state.metric_service.get_realtime_iface_stats().await;
+    LandscapeApiResp::success(data)
 }
 
 #[utoipa::path(

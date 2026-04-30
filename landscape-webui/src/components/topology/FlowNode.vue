@@ -20,6 +20,7 @@ import { useI18n } from "vue-i18n";
 
 import { DevStateType, NetDev } from "@/lib/dev";
 import { ZoneType } from "@/lib/service_ipconfig";
+import { formatPackets, formatRate } from "@/lib/util";
 import {
   ServiceExhibitSwitch,
   ServiceStatus,
@@ -37,10 +38,12 @@ import { useRouteLanConfigStore } from "@/stores/status_route_lan";
 import { useRouteWanConfigStore } from "@/stores/status_route_wan";
 import { useWifiConfigStore } from "@/stores/status_wifi";
 import { useIfaceNodeStore } from "@/stores/iface_node";
+import type { IfaceRealtimeStat } from "@landscape-router/types/api/schemas";
 
 const props = withDefaults(
   defineProps<{
     node: NetDev;
+    metric?: IfaceRealtimeStat;
     selected?: boolean;
     dimmed?: boolean;
   }>(),
@@ -148,6 +151,13 @@ const is_wan_node = computed(() => props.node.zone_type === ZoneType.Wan);
 const node_width = computed(() => (is_wan_node.value ? 235 : 235));
 const title_max_width = computed(
   () => `${Math.max(node_width.value - 126, 140)}px`,
+);
+const has_metric = computed(
+  () =>
+    props.metric !== undefined &&
+    ((props.metric.stats.ingress_bps || 0) > 0 ||
+      (props.metric.stats.egress_bps || 0) > 0 ||
+      (props.metric.stats.active_conns || 0) > 0),
 );
 
 function serviceStatusText(status?: ServiceStatus) {
@@ -325,6 +335,8 @@ const node_style = computed(() => ({
   }),
   "--topology-node-service-border": themeVars.value.borderColor,
   "--topology-node-service-text": themeVars.value.textColor3,
+  "--topology-node-egress": themeVars.value.infoColor,
+  "--topology-node-ingress": themeVars.value.successColor,
   "--topology-node-handle-bg": changeColor(themeVars.value.primaryColor, {
     alpha: 0.9,
   }),
@@ -403,6 +415,29 @@ const node_style = computed(() => ({
             <n-tag v-for="tag in role_tags" :key="tag" size="tiny" tertiary>
               {{ tag }}
             </n-tag>
+          </div>
+
+          <div v-if="has_metric && metric" class="topology-node__metric">
+            <div class="topology-node__metric-row">
+              <span
+                class="topology-node__metric-label topology-node__metric-label--egress"
+                >↑</span
+              >
+              <span>{{ formatRate(metric.stats.egress_bps || 0) }}</span>
+              <span class="topology-node__metric-pps">{{
+                formatPackets(metric.stats.egress_pps || 0)
+              }}</span>
+            </div>
+            <div class="topology-node__metric-row">
+              <span
+                class="topology-node__metric-label topology-node__metric-label--ingress"
+                >↓</span
+              >
+              <span>{{ formatRate(metric.stats.ingress_bps || 0) }}</span>
+              <span class="topology-node__metric-pps">{{
+                formatPackets(metric.stats.ingress_pps || 0)
+              }}</span>
+            </div>
           </div>
         </div>
 
@@ -604,6 +639,48 @@ const node_style = computed(() => ({
   margin-top: 8px;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.topology-node__metric {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--topology-node-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.topology-node__metric-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--topology-node-service-bg);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.topology-node__metric-label {
+  font-weight: 800;
+}
+
+.topology-node__metric-label--egress {
+  color: var(--topology-node-egress);
+}
+
+.topology-node__metric-label--ingress {
+  color: var(--topology-node-ingress);
+}
+
+.topology-node__metric-pps {
+  overflow: hidden;
+  color: var(--topology-node-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
 }
 
 .topology-node__services {

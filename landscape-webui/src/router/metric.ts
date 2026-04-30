@@ -2,6 +2,7 @@ import { RouteRecordRaw } from "vue-router";
 import DNSMetric from "@/views/metric/DNSMetric.vue";
 import LiveMetric from "@/views/metric/conn/LiveMetric.vue";
 import HistoryMetric from "@/views/metric/conn/HistoryMetric.vue";
+import IfaceMetric from "@/views/metric/conn/IfaceMetric.vue";
 import SrcIpMetric from "@/views/metric/conn/SrcIpMetric.vue";
 import DstIpMetric from "@/views/metric/conn/DstIpMetric.vue";
 import HistorySrcIpMetric from "@/views/metric/conn/HistorySrcIpMetric.vue";
@@ -17,6 +18,11 @@ const metric_route: Array<RouteRecordRaw> = [
     path: "/metric/conn/history",
     name: "routes.connect-history",
     component: HistoryMetric,
+  },
+  {
+    path: "/metric/conn/iface",
+    name: "routes.connect-iface",
+    component: IfaceMetric,
   },
   {
     path: "/metric/conn/src",

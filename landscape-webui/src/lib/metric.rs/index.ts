@@ -7,6 +7,7 @@ export class ConnectFilter {
   l4_proto: number | null;
   flow_id: number | null;
   gress: number | null;
+  ifindex: number | null;
 
   constructor(obj: Partial<ConnectFilter> = {}) {
     this.src_ip = obj.src_ip ?? null;
@@ -17,5 +18,6 @@ export class ConnectFilter {
     this.l4_proto = obj.l4_proto ?? null;
     this.flow_id = obj.flow_id ?? null;
     this.gress = obj.gress ?? null;
+    this.ifindex = obj.ifindex ?? null;
   }
 }

@@ -134,6 +134,7 @@ const fetchHistory = async () => {
       l4_proto: historyFilter.l4_proto || undefined,
       flow_id: historyFilter.flow_id || undefined,
       gress: historyFilter.gress ?? undefined,
+      ifindex: historyFilter.ifindex ?? undefined,
       sort_key: sortKey.value,
       sort_order: sortOrder.value,
     });
@@ -164,7 +165,20 @@ const handleSearchTuple = (history: any) => {
   historyFilter.dst_ip = history.dst_ip;
   historyFilter.port_start = history.src_port;
   historyFilter.port_end = history.dst_port;
+  historyFilter.ifindex = history.ifindex;
 };
+
+function queryString(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === "string" && raw.length > 0 ? raw : undefined;
+}
+
+function queryNumber(value: unknown) {
+  const raw = queryString(value);
+  if (raw === undefined) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 // 4. Computed values
 const filteredHistory = computed(() => {
@@ -232,14 +246,19 @@ watch(
 
 onMounted(() => {
   // Initialize filters from route query params.
-  if (route.query.src_ip) historyFilter.src_ip = route.query.src_ip as string;
-  if (route.query.dst_ip) historyFilter.dst_ip = route.query.dst_ip as string;
-  if (route.query.port_start)
-    historyFilter.port_start = parseInt(route.query.port_start as string);
-  if (route.query.port_end)
-    historyFilter.port_end = parseInt(route.query.port_end as string);
-  if (route.query.flow_id)
-    historyFilter.flow_id = parseInt(route.query.flow_id as string);
+  const srcIp = queryString(route.query.src_ip);
+  const dstIp = queryString(route.query.dst_ip);
+  const portStart = queryNumber(route.query.port_start);
+  const portEnd = queryNumber(route.query.port_end);
+  const flowId = queryNumber(route.query.flow_id);
+  const ifindex = queryNumber(route.query.ifindex);
+
+  if (srcIp) historyFilter.src_ip = srcIp;
+  if (dstIp) historyFilter.dst_ip = dstIp;
+  if (portStart !== null) historyFilter.port_start = portStart;
+  if (portEnd !== null) historyFilter.port_end = portEnd;
+  if (flowId !== null) historyFilter.flow_id = flowId;
+  if (ifindex !== null) historyFilter.ifindex = ifindex;
 
   refreshGlobalStats(false);
   fetchHistory();

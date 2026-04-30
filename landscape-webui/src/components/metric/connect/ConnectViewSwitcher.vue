@@ -11,7 +11,7 @@ const viewMode = computed({
     return lastPart || "live";
   },
   set: (val) => {
-    router.push(`/metric/conn/${val}`);
+    router.push({ path: `/metric/conn/${val}`, query: { ...route.query } });
   },
 });
 </script>
@@ -22,9 +22,10 @@ const viewMode = computed({
       v-model:value="viewMode"
       type="segment"
       size="small"
-      style="min-width: 600px"
+      style="min-width: 700px"
     >
       <n-tab name="live">{{ $t("metric.connect.switcher.live") }}</n-tab>
+      <n-tab name="iface">{{ $t("metric.connect.switcher.iface") }}</n-tab>
       <n-tab name="src">{{ $t("metric.connect.switcher.src") }}</n-tab>
       <n-tab name="dst">{{ $t("metric.connect.switcher.dst") }}</n-tab>
       <n-tab name="history">{{ $t("metric.connect.switcher.history") }}</n-tab>
@@ -37,7 +38,7 @@ const viewMode = computed({
     </n-tabs>
 
     <n-tag
-      v-if="['live', 'src', 'dst'].includes(viewMode)"
+      v-if="['live', 'iface', 'src', 'dst'].includes(viewMode)"
       :bordered="false"
       type="info"
       size="small"

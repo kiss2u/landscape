@@ -80,6 +80,7 @@ const goToHistory = (conn: ConnectRealtimeStatus) => {
       port_start: conn.src_port,
       port_end: conn.dst_port,
       flow_id: conn.flow_id,
+      ifindex: conn.ifindex,
     },
   });
 };
@@ -144,7 +145,7 @@ const emit = defineEmits([
 
           <n-flex
             style="
-              width: 240px;
+              width: 300px;
               font-variant-numeric: tabular-nums;
               font-family: monospace;
             "
@@ -171,6 +172,9 @@ const emit = defineEmits([
               size="small"
             >
               FLOW: {{ conn.flow_id }}
+            </n-tag>
+            <n-tag :bordered="false" size="small">
+              IF: {{ conn.ifindex }}
             </n-tag>
           </n-flex>
 

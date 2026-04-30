@@ -76,6 +76,7 @@ const goToLive = (history: ConnectHistoryStatus) => {
       port_start: history.src_port.toString(),
       port_end: history.dst_port.toString(),
       flow_id: history.flow_id.toString(),
+      ifindex: history.ifindex.toString(),
     },
   });
 };
@@ -138,7 +139,7 @@ const emit = defineEmits([
 
           <n-flex
             style="
-              width: 240px;
+              width: 300px;
               font-variant-numeric: tabular-nums;
               font-family: monospace;
             "
@@ -156,6 +157,9 @@ const emit = defineEmits([
               size="small"
             >
               IN
+            </n-tag>
+            <n-tag :bordered="false" size="small">
+              IF: {{ history.ifindex }}
             </n-tag>
           </n-flex>
 

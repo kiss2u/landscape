@@ -8,7 +8,8 @@ use landscape_common::{
     event::{ConnectMessage, DnsMetricMessage},
     metric::connect::{
         ConnectGlobalStats, ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey,
-        ConnectMetricPoint, ConnectRealtimeStatus, IpHistoryStat, IpRealtimeStat, MetricResolution,
+        ConnectMetricPoint, ConnectRealtimeStatus, IfaceRealtimeStat, IpHistoryStat,
+        IpRealtimeStat, MetricResolution,
     },
     metric::dns::{
         DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse,
@@ -120,6 +121,15 @@ impl MetricBackend {
             Self::Memory(store) => store.get_realtime_ip_stats(is_src).await,
             #[cfg(feature = "metric-duckdb")]
             Self::Duckdb(store) => store.get_realtime_ip_stats(is_src).await,
+        }
+    }
+
+    async fn get_realtime_iface_stats(&self) -> Vec<IfaceRealtimeStat> {
+        match self {
+            Self::Off => Vec::new(),
+            Self::Memory(store) => store.get_realtime_iface_stats().await,
+            #[cfg(feature = "metric-duckdb")]
+            Self::Duckdb(store) => store.get_realtime_iface_stats().await,
         }
     }
 
@@ -330,6 +340,10 @@ impl MetricService {
 
     pub async fn get_realtime_ip_stats(&self, is_src: bool) -> Vec<IpRealtimeStat> {
         self.current_backend().get_realtime_ip_stats(is_src).await
+    }
+
+    pub async fn get_realtime_iface_stats(&self) -> Vec<IfaceRealtimeStat> {
+        self.current_backend().get_realtime_iface_stats().await
     }
 
     pub async fn query_metric_by_key(

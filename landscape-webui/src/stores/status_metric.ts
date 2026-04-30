@@ -6,22 +6,25 @@ import {
   get_connect_metric_info,
   get_src_ip_stats,
   get_dst_ip_stats,
+  get_iface_stats,
   get_connect_global_stats,
 } from "@/api/metric";
 import { ServiceStatus, ServiceStatusType } from "@/lib/services";
 import type {
   ConnectKey,
   ConnectRealtimeStatus,
+  IfaceRealtimeStat,
   IpRealtimeStat,
   ConnectGlobalStats,
 } from "@landscape-router/types/api/schemas";
 
 export const useMetricStore = defineStore("dns_metric", () => {
-  const activeModes = ref(new Set<"live" | "src" | "dst">());
+  const activeModes = ref(new Set<"live" | "src" | "dst" | "iface">());
   const metric_status = ref<ServiceStatus>({ t: ServiceStatusType.Stop });
   const firewall_info = ref<ConnectRealtimeStatus[]>();
   const src_ip_stats = ref<IpRealtimeStat[]>([]);
   const dst_ip_stats = ref<IpRealtimeStat[]>([]);
+  const iface_stats = ref<IfaceRealtimeStat[]>([]);
   const global_history_stats = ref<ConnectGlobalStats | null>(null);
 
   const is_down = computed(() => {
@@ -44,7 +47,11 @@ export const useMetricStore = defineStore("dns_metric", () => {
       // But SrcIpMetric/DstIpMetric only need firewall_info if they have filters.
       // For simplicity, if ANY mode is active, we might need basic info.
       // However, we can be more precise:
-      if (activeModes.value.has("live") || activeModes.value.size > 0) {
+      if (
+        activeModes.value.has("live") ||
+        activeModes.value.has("src") ||
+        activeModes.value.has("dst")
+      ) {
         promises.push(
           get_connects_info().then((res) => (firewall_info.value = res)),
         );
@@ -62,6 +69,12 @@ export const useMetricStore = defineStore("dns_metric", () => {
         );
       }
 
+      if (activeModes.value.has("iface")) {
+        promises.push(
+          get_iface_stats().then((res) => (iface_stats.value = res)),
+        );
+      }
+
       await Promise.all(promises);
     }
   }
@@ -72,7 +85,10 @@ export const useMetricStore = defineStore("dns_metric", () => {
     );
   }
 
-  async function SET_ENABLE(mode: "live" | "src" | "dst", value: boolean) {
+  async function SET_ENABLE(
+    mode: "live" | "src" | "dst" | "iface",
+    value: boolean,
+  ) {
     if (value) {
       activeModes.value.add(mode);
     } else {
@@ -87,6 +103,7 @@ export const useMetricStore = defineStore("dns_metric", () => {
     firewall_info,
     src_ip_stats,
     dst_ip_stats,
+    iface_stats,
     global_history_stats,
     UPDATE_INFO,
     UPDATE_GLOBAL_HISTORY_STATS,

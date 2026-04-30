@@ -4,7 +4,7 @@ use landscape_common::config::MetricRuntimeConfig;
 use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 use landscape_common::metric::connect::{
     ConnectHistoryQueryParams, ConnectHistoryStatus, ConnectKey, ConnectMetricPoint,
-    ConnectRealtimeStatus, IpHistoryStat, IpRealtimeStat, MetricResolution,
+    ConnectRealtimeStatus, IfaceRealtimeStat, IpHistoryStat, IpRealtimeStat, MetricResolution,
 };
 use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
@@ -21,9 +21,13 @@ use super::connect::{cleanup, query as connect_query, schema as connect_schema};
 use super::dns::{history as dns_history, schema as dns_schema, summary as dns_summary};
 use super::hot_sqlite;
 use super::ingest::{
-    cleanup_flow_cache, collect_connect_infos, collect_realtime_ip_stats, finalize_all_flows,
-    process_connect_metric, second_points_by_key, second_ring_capacity, second_window_ms,
-    BucketWrite, FlowCache, PersistenceBatch, CHANNEL_CAPACITY, MS_PER_DAY,
+    cleanup_flow_cache, collect_connect_realtime_snapshot, collect_realtime_iface_stats,
+    collect_realtime_ip_stats, drain_iface_buckets, finalize_all_flows,
+    new_connect_realtime_snapshot, new_iface_realtime_snapshot, process_connect_metric,
+    publish_connect_realtime_snapshot, publish_iface_realtime_snapshot, second_points_by_key,
+    second_ring_capacity, second_window_ms, BucketWrite, ConnectRealtimeSnapshot, FlowCache,
+    IfaceBucketCache, IfaceBucketWrite, IfaceRealtimeCache, IfaceRealtimeSnapshot,
+    PersistenceBatch, CHANNEL_CAPACITY, MS_PER_DAY,
 };
 
 #[derive(Clone)]
@@ -35,6 +39,8 @@ pub struct DuckMetricStore {
     pub(crate) hot_pool: SqlitePool,
     pub(crate) cold_pool: Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
     pub(crate) flow_cache: FlowCache,
+    pub(crate) connect_snapshot: ConnectRealtimeSnapshot,
+    pub(crate) iface_snapshot: IfaceRealtimeSnapshot,
 }
 
 type StoreInitResult<T> = Result<T, String>;
@@ -45,7 +51,7 @@ const COLD_RETRY_DELAY_SECS: u64 = 5;
 
 #[derive(Debug)]
 enum ColdEvent {
-    Buckets(Vec<BucketWrite>),
+    Buckets(Vec<BucketWrite>, Vec<IfaceBucketWrite>),
     Dns(DnsMetric),
 }
 
@@ -280,8 +286,9 @@ async fn flush_pending_hot_batch(
 
     let batch = std::mem::take(pending_batch);
     let bucket_writes = batch.bucket_writes.clone();
+    let iface_bucket_writes = batch.iface_bucket_writes.clone();
     apply_hot_batch(hot_pool, &batch).await;
-    try_enqueue_cold_buckets(cold_tx, cold_pool_cell, bucket_writes);
+    try_enqueue_cold_buckets(cold_tx, cold_pool_cell, bucket_writes, iface_bucket_writes);
 }
 
 fn cold_store_ready(
@@ -294,12 +301,15 @@ fn try_enqueue_cold_buckets(
     cold_tx: &mpsc::Sender<ColdEvent>,
     cold_pool_cell: &Arc<RwLock<Option<r2d2::Pool<DuckdbConnectionManager>>>>,
     bucket_writes: Vec<BucketWrite>,
+    iface_bucket_writes: Vec<IfaceBucketWrite>,
 ) {
-    if bucket_writes.is_empty() || !cold_store_ready(cold_pool_cell) {
+    if (bucket_writes.is_empty() && iface_bucket_writes.is_empty())
+        || !cold_store_ready(cold_pool_cell)
+    {
         return;
     }
 
-    if let Err(error) = cold_tx.try_send(ColdEvent::Buckets(bucket_writes)) {
+    if let Err(error) = cold_tx.try_send(ColdEvent::Buckets(bucket_writes, iface_bucket_writes)) {
         tracing::debug!("dropping cold metric bucket batch: {:?}", error);
     }
 }
@@ -326,6 +336,10 @@ async fn run_hot_thread(
     cold_tx: mpsc::Sender<ColdEvent>,
     metric_config: MetricRuntimeConfig,
     flow_cache: FlowCache,
+    iface_realtime: IfaceRealtimeCache,
+    iface_buckets: IfaceBucketCache,
+    connect_snapshot: ConnectRealtimeSnapshot,
+    iface_snapshot: IfaceRealtimeSnapshot,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
     let cleanup_interval_duration = Duration::from_secs(metric_config.cleanup_interval_secs.max(1));
@@ -339,6 +353,8 @@ async fn run_hot_thread(
     cleanup_interval.tick().await;
     let mut flush_interval = tokio::time::interval(flush_interval_duration);
     flush_interval.tick().await;
+    let mut snapshot_interval = tokio::time::interval(Duration::from_secs(1));
+    snapshot_interval.tick().await;
 
     let mut pending_batch = PersistenceBatch::default();
     let mut connect_closed = false;
@@ -347,12 +363,16 @@ async fn run_hot_thread(
     loop {
         tokio::select! {
             _ = cleanup_interval.tick() => {
+                pending_batch.extend_iface_buckets(drain_iface_buckets(&iface_buckets, &iface_realtime));
                 flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
 
                 let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-                let (flow_stats, batch) = cleanup_flow_cache(&flow_cache, now_ms, second_window);
+                let (flow_stats, batch) = cleanup_flow_cache(&flow_cache, &iface_realtime, now_ms, second_window);
                 pending_batch.extend(batch);
+                pending_batch.extend_iface_buckets(drain_iface_buckets(&iface_buckets, &iface_realtime));
                 flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+                publish_connect_realtime_snapshot(&flow_cache, &connect_snapshot, now_ms);
+                publish_iface_realtime_snapshot(&flow_cache, &iface_snapshot, now_ms);
 
                 let summary_cutoff = now_ms.saturating_sub(metric_config.connect_1d_retention_days * MS_PER_DAY);
                 if let Err(error) = hot_sqlite::cleanup_old_summaries(&hot_pool, summary_cutoff).await {
@@ -368,7 +388,13 @@ async fn run_hot_thread(
                 );
             }
             _ = flush_interval.tick() => {
+                pending_batch.extend_iface_buckets(drain_iface_buckets(&iface_buckets, &iface_realtime));
                 flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+            }
+            _ = snapshot_interval.tick() => {
+                let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+                publish_connect_realtime_snapshot(&flow_cache, &connect_snapshot, now_ms);
+                publish_iface_realtime_snapshot(&flow_cache, &iface_snapshot, now_ms);
             }
             changed = shutdown_rx.changed() => {
                 if changed.is_err() || *shutdown_rx.borrow() {
@@ -380,12 +406,15 @@ async fn run_hot_thread(
                     Some(ConnectMessage::Metric(metric)) => {
                         let batch = process_connect_metric(
                             &flow_cache,
+                            &iface_realtime,
+                            &iface_buckets,
                             metric,
                             second_window,
                             second_ring_cap,
                         );
                         pending_batch.extend(batch);
                         if pending_batch.op_count() >= write_batch_size {
+                            pending_batch.extend_iface_buckets(drain_iface_buckets(&iface_buckets, &iface_realtime));
                             flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
                         }
                     }
@@ -407,19 +436,25 @@ async fn run_hot_thread(
         }
     }
 
+    pending_batch.extend_iface_buckets(drain_iface_buckets(&iface_buckets, &iface_realtime));
     flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
 
-    let final_batch = finalize_all_flows(&flow_cache);
+    let final_batch = finalize_all_flows(&flow_cache, &iface_realtime);
     pending_batch.extend(final_batch);
+    pending_batch.extend_iface_buckets(drain_iface_buckets(&iface_buckets, &iface_realtime));
     flush_pending_hot_batch(&hot_pool, &cold_tx, &cold_pool_cell, &mut pending_batch).await;
+    let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
+    publish_connect_realtime_snapshot(&flow_cache, &connect_snapshot, now_ms);
+    publish_iface_realtime_snapshot(&flow_cache, &iface_snapshot, now_ms);
     hot_pool.close().await;
 }
 
 fn persist_cold_bucket_writes(
     cold_pool: &r2d2::Pool<DuckdbConnectionManager>,
     bucket_writes: &[BucketWrite],
+    iface_bucket_writes: &[IfaceBucketWrite],
 ) -> StoreInitResult<()> {
-    if bucket_writes.is_empty() {
+    if bucket_writes.is_empty() && iface_bucket_writes.is_empty() {
         return Ok(());
     }
 
@@ -441,10 +476,25 @@ fn persist_cold_bucket_writes(
             bucket.metric.egress_packets,
             status,
             bucket.metric.create_time_ms,
+            bucket.metric.ifindex,
         )
         .map_err(|error| {
             format!("failed to write cold bucket row into {}: {}", bucket.kind.table_name(), error)
         })?;
+    }
+
+    for bucket in iface_bucket_writes {
+        connect_schema::upsert_iface_metric_bucket_values(
+            &conn,
+            bucket.ifindex,
+            bucket.report_time,
+            bucket.ingress_bytes,
+            bucket.ingress_packets,
+            bucket.egress_bytes,
+            bucket.egress_packets,
+            bucket.active_conns,
+        )
+        .map_err(|error| format!("failed to write cold iface bucket row: {}", error))?;
     }
 
     Ok(())
@@ -482,7 +532,9 @@ fn persist_cold_event(
     event: ColdEvent,
 ) -> StoreInitResult<()> {
     match event {
-        ColdEvent::Buckets(bucket_writes) => persist_cold_bucket_writes(cold_pool, &bucket_writes),
+        ColdEvent::Buckets(bucket_writes, iface_bucket_writes) => {
+            persist_cold_bucket_writes(cold_pool, &bucket_writes, &iface_bucket_writes)
+        }
         ColdEvent::Dns(metric) => persist_cold_dns_metric(cold_pool, &metric),
     }
 }
@@ -510,9 +562,10 @@ fn cleanup_cold_store(
         metric_config.cleanup_slice_window_secs,
     );
     tracing::info!(
-        "phase=cold_duckdb.cleanup elapsed_ms={} budget_hit={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_dns_before={}",
+        "phase=cold_duckdb.cleanup elapsed_ms={} budget_hit={} deleted_iface_5s={} deleted_1m={} deleted_1h={} deleted_1d={} deleted_dns_before={}",
         stats.elapsed_ms,
         stats.budget_hit,
+        stats.deleted_iface_5s,
         stats.deleted_1m,
         stats.deleted_1h,
         stats.deleted_1d,
@@ -640,10 +693,18 @@ impl DuckMetricStore {
         );
 
         let flow_cache: FlowCache = Arc::new(RwLock::new(HashMap::new()));
+        let iface_realtime: IfaceRealtimeCache = Arc::new(RwLock::new(HashMap::new()));
+        let iface_buckets: IfaceBucketCache = Arc::new(RwLock::new(HashMap::new()));
+        let connect_snapshot = new_connect_realtime_snapshot();
+        let iface_snapshot = new_iface_realtime_snapshot();
         let cold_pool = Arc::new(RwLock::new(None));
 
         let hot_thread_pool = hot_pool.clone();
         let hot_thread_cache = flow_cache.clone();
+        let hot_thread_iface_realtime = iface_realtime.clone();
+        let hot_thread_iface_buckets = iface_buckets.clone();
+        let hot_thread_connect_snapshot = connect_snapshot.clone();
+        let hot_thread_iface_snapshot = iface_snapshot.clone();
         let hot_thread_cold_pool = cold_pool.clone();
         let hot_thread_cold_tx = cold_tx;
         let hot_thread_config = config.clone();
@@ -659,6 +720,10 @@ impl DuckMetricStore {
                 hot_thread_cold_tx,
                 hot_thread_config,
                 hot_thread_cache,
+                hot_thread_iface_realtime,
+                hot_thread_iface_buckets,
+                hot_thread_connect_snapshot,
+                hot_thread_iface_snapshot,
                 hot_thread_shutdown,
             ));
         })
@@ -705,6 +770,8 @@ impl DuckMetricStore {
             hot_pool,
             cold_pool,
             flow_cache,
+            connect_snapshot,
+            iface_snapshot,
         })
     }
 
@@ -721,8 +788,12 @@ impl DuckMetricStore {
     }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
+        collect_connect_realtime_snapshot(&self.connect_snapshot)
+    }
+
+    pub async fn get_realtime_iface_stats(&self) -> Vec<IfaceRealtimeStat> {
         let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-        collect_connect_infos(&self.flow_cache, now_ms)
+        collect_realtime_iface_stats(&self.flow_cache, now_ms)
     }
 
     pub async fn get_realtime_ip_stats(&self, is_src: bool) -> Vec<IpRealtimeStat> {
@@ -879,6 +950,7 @@ mod tests {
             flow_id: cpu_id as u8,
             trace_id: cpu_id as u8,
             gress: 0,
+            ifindex: cpu_id + 10,
             report_time,
             create_time_ms: create_time,
             ingress_bytes,
@@ -970,6 +1042,7 @@ mod tests {
         let batch = PersistenceBatch {
             summary_metrics: vec![metric_a_initial, metric_a_latest, metric_b],
             bucket_writes: Vec::new(),
+            iface_bucket_writes: Vec::new(),
         };
         hot_sqlite::apply_persistence_batch(&hot_pool, &batch).await.unwrap();
         sqlx::query(

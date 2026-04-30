@@ -147,6 +147,7 @@ export default {
     "metric-group": "Metrics",
     "connect-info": "Connections",
     "connect-live": "Active Connections",
+    "connect-iface": "Iface Live",
     "connect-history": "History Query",
     "connect-src": "Src IP Stats",
     "connect-dst": "Dst IP Stats",

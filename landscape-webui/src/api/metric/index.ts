@@ -6,6 +6,7 @@ import type {
   ConnectHistoryStatus,
   ConnectGlobalStats,
   GetConnectGlobalStatsParams,
+  IfaceRealtimeStat,
   IpRealtimeStat,
   IpHistoryStat,
   GetConnectHistoryParams as ConnectHistoryQueryParams,
@@ -21,6 +22,7 @@ import {
   getConnectMetricInfo as _getConnectMetricInfo,
   getHistorySrcIpStats as _getHistorySrcIpStats,
   getHistoryDstIpStats as _getHistoryDstIpStats,
+  getIfaceStats as _getIfaceStats,
 } from "@landscape-router/types/api/metric/metric";
 
 export * from "./dns";
@@ -31,6 +33,10 @@ export async function get_src_ip_stats(): Promise<IpRealtimeStat[]> {
 
 export async function get_dst_ip_stats(): Promise<IpRealtimeStat[]> {
   return _getDstIpStats();
+}
+
+export async function get_iface_stats(): Promise<IfaceRealtimeStat[]> {
+  return _getIfaceStats();
 }
 
 export async function get_connect_global_stats(

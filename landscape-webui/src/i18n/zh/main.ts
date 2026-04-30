@@ -145,6 +145,7 @@ export default {
     "metric-group": "指标监控",
     "connect-info": "连接信息",
     "connect-live": "活跃连接",
+    "connect-iface": "网卡实时",
     "connect-history": "历史查询",
     "connect-src": "源 IP 统计",
     "connect-dst": "目的 IP 统计",

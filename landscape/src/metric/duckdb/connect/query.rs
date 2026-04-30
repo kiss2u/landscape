@@ -17,6 +17,7 @@ pub fn query_metric_by_key(
         "
         SELECT
             report_time,
+            ifindex,
             ingress_bytes,
             ingress_packets,
             egress_bytes,
@@ -44,11 +45,11 @@ pub fn query_metric_by_key(
     let rows = stmt.query_map(params![key.create_time as i64, key.cpu_id as i64], |row| {
         Ok(ConnectMetricPoint {
             report_time: row.get(0)?,
-            ingress_bytes: row.get(1)?,
-            ingress_packets: row.get(2)?,
-            egress_bytes: row.get(3)?,
-            egress_packets: row.get(4)?,
-            status: row.get::<_, u8>(5)?.into(),
+            ingress_bytes: row.get(2)?,
+            ingress_packets: row.get(3)?,
+            egress_bytes: row.get(4)?,
+            egress_packets: row.get(5)?,
+            status: row.get::<_, u8>(6)?.into(),
         })
     });
 

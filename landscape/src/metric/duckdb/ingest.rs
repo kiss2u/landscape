@@ -1,7 +1,8 @@
+use arc_swap::ArcSwap;
 use landscape_common::config::MetricRuntimeConfig;
 use landscape_common::metric::connect::{
     ConnectKey, ConnectMetric, ConnectMetricPoint, ConnectRealtimeStatus, ConnectStatusType,
-    IpAggregatedStats, IpRealtimeStat,
+    IfaceRealtimeStat, IpAggregatedStats, IpRealtimeStat,
 };
 use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
@@ -11,6 +12,7 @@ pub(crate) const CHANNEL_CAPACITY: usize = 1024;
 pub(crate) const MS_PER_MINUTE: u64 = 60 * 1000;
 pub(crate) const MS_PER_HOUR: u64 = 60 * MS_PER_MINUTE;
 pub(crate) const MS_PER_DAY: u64 = 24 * MS_PER_HOUR;
+pub(crate) const IFACE_BUCKET_MS: u64 = 5 * 1000;
 const MS_PER_TEN_MINUTES: u64 = 10 * MS_PER_MINUTE;
 const STALE_TIMEOUT_MS: u64 = 5 * MS_PER_MINUTE;
 const DEFAULT_CONNECT_SAMPLE_INTERVAL_MS: u64 = 5 * 1000;
@@ -76,6 +78,7 @@ fn metric_to_realtime(metric: &ConnectMetric) -> ConnectRealtimeStatus {
         flow_id: metric.flow_id,
         trace_id: metric.trace_id,
         gress: metric.gress,
+        ifindex: metric.ifindex,
         create_time_ms: metric.create_time_ms,
         ingress_bps: 0,
         egress_bps: 0,
@@ -110,24 +113,202 @@ pub(crate) struct BucketWrite {
     pub bucket_report_time: u64,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct FlowRateContribution {
+    pub ifindex: u32,
+    pub ingress_bps: u64,
+    pub egress_bps: u64,
+    pub ingress_pps: u64,
+    pub egress_pps: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct IfaceRealtimeAcc {
+    pub ingress_bps: u64,
+    pub egress_bps: u64,
+    pub ingress_pps: u64,
+    pub egress_pps: u64,
+    pub active_conns: u32,
+    pub last_report_time: u64,
+}
+
+impl IfaceRealtimeAcc {
+    fn add_contribution(&mut self, contribution: FlowRateContribution, report_time: u64) {
+        self.ingress_bps = self.ingress_bps.saturating_add(contribution.ingress_bps);
+        self.egress_bps = self.egress_bps.saturating_add(contribution.egress_bps);
+        self.ingress_pps = self.ingress_pps.saturating_add(contribution.ingress_pps);
+        self.egress_pps = self.egress_pps.saturating_add(contribution.egress_pps);
+        self.active_conns = self.active_conns.saturating_add(1);
+        self.last_report_time = self.last_report_time.max(report_time);
+    }
+
+    fn remove_contribution(&mut self, contribution: FlowRateContribution) {
+        self.ingress_bps = self.ingress_bps.saturating_sub(contribution.ingress_bps);
+        self.egress_bps = self.egress_bps.saturating_sub(contribution.egress_bps);
+        self.ingress_pps = self.ingress_pps.saturating_sub(contribution.ingress_pps);
+        self.egress_pps = self.egress_pps.saturating_sub(contribution.egress_pps);
+        self.active_conns = self.active_conns.saturating_sub(1);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct IfaceBucketKey {
+    pub ifindex: u32,
+    pub bucket_start: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct IfaceBucketAcc {
+    pub ingress_bytes: u64,
+    pub ingress_packets: u64,
+    pub egress_bytes: u64,
+    pub egress_packets: u64,
+    pub active_conns: u32,
+    pub last_report_time: u64,
+}
+
+impl IfaceBucketAcc {
+    fn add_delta(&mut self, delta: MetricDelta, report_time: u64) {
+        self.ingress_bytes = self.ingress_bytes.saturating_add(delta.ingress_bytes);
+        self.ingress_packets = self.ingress_packets.saturating_add(delta.ingress_packets);
+        self.egress_bytes = self.egress_bytes.saturating_add(delta.egress_bytes);
+        self.egress_packets = self.egress_packets.saturating_add(delta.egress_packets);
+        self.last_report_time = self.last_report_time.max(report_time);
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct MetricDelta {
+    ingress_bytes: u64,
+    ingress_packets: u64,
+    egress_bytes: u64,
+    egress_packets: u64,
+}
+
+impl MetricDelta {
+    fn from_metrics(previous: &ConnectMetric, current: &ConnectMetric) -> Self {
+        Self {
+            ingress_bytes: current.ingress_bytes.saturating_sub(previous.ingress_bytes),
+            ingress_packets: current.ingress_packets.saturating_sub(previous.ingress_packets),
+            egress_bytes: current.egress_bytes.saturating_sub(previous.egress_bytes),
+            egress_packets: current.egress_packets.saturating_sub(previous.egress_packets),
+        }
+    }
+
+    fn from_initial(metric: &ConnectMetric) -> Self {
+        Self {
+            ingress_bytes: metric.ingress_bytes,
+            ingress_packets: metric.ingress_packets,
+            egress_bytes: metric.egress_bytes,
+            egress_packets: metric.egress_packets,
+        }
+    }
+
+    fn is_zero(self) -> bool {
+        self.ingress_bytes == 0
+            && self.ingress_packets == 0
+            && self.egress_bytes == 0
+            && self.egress_packets == 0
+    }
+
+    fn scale(self, numerator: u64, denominator: u64) -> Self {
+        if denominator == 0 {
+            return Self::default();
+        }
+        Self {
+            ingress_bytes: scale_u64(self.ingress_bytes, numerator, denominator),
+            ingress_packets: scale_u64(self.ingress_packets, numerator, denominator),
+            egress_bytes: scale_u64(self.egress_bytes, numerator, denominator),
+            egress_packets: scale_u64(self.egress_packets, numerator, denominator),
+        }
+    }
+
+    fn saturating_sub(self, other: Self) -> Self {
+        Self {
+            ingress_bytes: self.ingress_bytes.saturating_sub(other.ingress_bytes),
+            ingress_packets: self.ingress_packets.saturating_sub(other.ingress_packets),
+            egress_bytes: self.egress_bytes.saturating_sub(other.egress_bytes),
+            egress_packets: self.egress_packets.saturating_sub(other.egress_packets),
+        }
+    }
+
+    fn saturating_add(self, other: Self) -> Self {
+        Self {
+            ingress_bytes: self.ingress_bytes.saturating_add(other.ingress_bytes),
+            ingress_packets: self.ingress_packets.saturating_add(other.ingress_packets),
+            egress_bytes: self.egress_bytes.saturating_add(other.egress_bytes),
+            egress_packets: self.egress_packets.saturating_add(other.egress_packets),
+        }
+    }
+}
+
+fn scale_u64(value: u64, numerator: u64, denominator: u64) -> u64 {
+    ((value as u128).saturating_mul(numerator as u128) / denominator as u128) as u64
+}
+
+pub(crate) type IfaceRealtimeCache = Arc<RwLock<HashMap<u32, IfaceRealtimeAcc>>>;
+pub(crate) type IfaceBucketCache = Arc<RwLock<HashMap<IfaceBucketKey, IfaceBucketAcc>>>;
+pub(crate) type IfaceRealtimeSnapshot = Arc<ArcSwap<Vec<IfaceRealtimeStat>>>;
+pub(crate) type ConnectRealtimeSnapshot = Arc<ArcSwap<Vec<ConnectRealtimeStatus>>>;
+
+pub(crate) fn new_iface_realtime_snapshot() -> IfaceRealtimeSnapshot {
+    Arc::new(ArcSwap::from_pointee(Vec::new()))
+}
+
+pub(crate) fn new_connect_realtime_snapshot() -> ConnectRealtimeSnapshot {
+    Arc::new(ArcSwap::from_pointee(Vec::new()))
+}
+
+pub(crate) fn publish_iface_realtime_snapshot(
+    flow_cache: &FlowCache,
+    snapshot: &IfaceRealtimeSnapshot,
+    now_ms: u64,
+) {
+    snapshot.store(Arc::new(collect_realtime_iface_stats(flow_cache, now_ms)));
+}
+
+pub(crate) fn collect_iface_realtime_snapshot(
+    snapshot: &IfaceRealtimeSnapshot,
+) -> Vec<IfaceRealtimeStat> {
+    snapshot.load_full().as_ref().clone()
+}
+
+pub(crate) fn publish_connect_realtime_snapshot(
+    flow_cache: &FlowCache,
+    snapshot: &ConnectRealtimeSnapshot,
+    now_ms: u64,
+) {
+    snapshot.store(Arc::new(collect_connect_infos(flow_cache, now_ms)));
+}
+
+pub(crate) fn collect_connect_realtime_snapshot(
+    snapshot: &ConnectRealtimeSnapshot,
+) -> Vec<ConnectRealtimeStatus> {
+    snapshot.load_full().as_ref().clone()
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PersistenceBatch {
     pub summary_metrics: Vec<ConnectMetric>,
     pub bucket_writes: Vec<BucketWrite>,
+    pub iface_bucket_writes: Vec<IfaceBucketWrite>,
 }
 
 impl PersistenceBatch {
     pub(crate) fn is_empty(&self) -> bool {
-        self.summary_metrics.is_empty() && self.bucket_writes.is_empty()
+        self.summary_metrics.is_empty()
+            && self.bucket_writes.is_empty()
+            && self.iface_bucket_writes.is_empty()
     }
 
     pub(crate) fn op_count(&self) -> usize {
-        self.summary_metrics.len() + self.bucket_writes.len()
+        self.summary_metrics.len() + self.bucket_writes.len() + self.iface_bucket_writes.len()
     }
 
     pub(crate) fn extend(&mut self, other: Self) {
         self.summary_metrics.extend(other.summary_metrics);
         self.bucket_writes.extend(other.bucket_writes);
+        self.iface_bucket_writes.extend(other.iface_bucket_writes);
     }
 
     fn push_summary(&mut self, metric: ConnectMetric) {
@@ -137,12 +318,29 @@ impl PersistenceBatch {
     fn push_bucket(&mut self, kind: BucketKind, metric: ConnectMetric, bucket_report_time: u64) {
         self.bucket_writes.push(BucketWrite { kind, metric, bucket_report_time });
     }
+
+    pub(crate) fn extend_iface_buckets(&mut self, writes: Vec<IfaceBucketWrite>) {
+        self.iface_bucket_writes.extend(writes);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IfaceBucketWrite {
+    pub ifindex: u32,
+    pub report_time: u64,
+    pub ingress_bytes: u64,
+    pub ingress_packets: u64,
+    pub egress_bytes: u64,
+    pub egress_packets: u64,
+    pub active_conns: u32,
 }
 
 #[derive(Clone)]
 pub(crate) struct FlowState {
     last_metric: ConnectMetric,
     realtime: ConnectRealtimeStatus,
+    rate: FlowRateContribution,
+    counted_in_iface_realtime: bool,
     second_ring: VecDeque<ConnectMetricPoint>,
     last_minute_slot: u64,
     last_hour_refresh_slot: u64,
@@ -156,9 +354,15 @@ impl FlowState {
         let mut second_ring = VecDeque::with_capacity(ring_cap.max(1));
         second_ring.push_back(metric_to_point(&metric));
 
+        let rate = initial_rate_contribution(&metric);
+        let mut realtime = metric_to_realtime(&metric);
+        apply_rate_to_realtime(&mut realtime, rate);
+
         let mut state = Self {
-            realtime: metric_to_realtime(&metric),
+            realtime,
             last_metric: metric,
+            rate,
+            counted_in_iface_realtime: false,
             second_ring,
             last_minute_slot: minute_slot(report_time),
             last_hour_refresh_slot: hour_refresh_slot(report_time),
@@ -170,23 +374,16 @@ impl FlowState {
     }
 
     fn update_from_metric(&mut self, metric: ConnectMetric, window_ms: u64, ring_cap: usize) {
-        if metric.report_time > self.last_metric.report_time {
+        let next_rate = if metric.report_time > self.last_metric.report_time {
             let delta_t = metric.report_time.saturating_sub(self.last_metric.report_time);
-            if delta_t > 0 {
-                self.realtime.ingress_bps =
-                    metric.ingress_bytes.saturating_sub(self.last_metric.ingress_bytes) * 8000
-                        / delta_t;
-                self.realtime.egress_bps =
-                    metric.egress_bytes.saturating_sub(self.last_metric.egress_bytes) * 8000
-                        / delta_t;
-                self.realtime.ingress_pps =
-                    metric.ingress_packets.saturating_sub(self.last_metric.ingress_packets) * 1000
-                        / delta_t;
-                self.realtime.egress_pps =
-                    metric.egress_packets.saturating_sub(self.last_metric.egress_packets) * 1000
-                        / delta_t;
-            }
-        }
+            rate_from_delta(
+                metric.ifindex,
+                MetricDelta::from_metrics(&self.last_metric, &metric),
+                delta_t,
+            )
+        } else {
+            FlowRateContribution { ifindex: metric.ifindex, ..self.rate }
+        };
 
         self.realtime.last_report_time = metric.report_time;
         self.realtime.src_ip = metric.src_ip;
@@ -198,15 +395,22 @@ impl FlowState {
         self.realtime.flow_id = metric.flow_id;
         self.realtime.trace_id = metric.trace_id;
         self.realtime.gress = metric.gress;
+        self.realtime.ifindex = metric.ifindex;
         self.realtime.create_time_ms = metric.create_time_ms;
+        apply_rate_to_realtime(&mut self.realtime, next_rate);
         if metric.status != ConnectStatusType::Unknow {
             self.realtime.status = metric.status.clone();
         }
 
         self.last_metric = metric.clone();
+        self.rate = next_rate;
         self.second_ring.push_back(metric_to_point(&metric));
         self.finalized = false;
         self.trim_second_ring(window_ms, ring_cap);
+    }
+
+    fn should_count_iface_realtime(&self) -> bool {
+        !self.finalized && self.realtime.status != ConnectStatusType::Disabled
     }
 
     fn trim_second_ring(&mut self, window_ms: u64, ring_cap: usize) {
@@ -237,12 +441,86 @@ impl FlowState {
     }
 }
 
+fn rate_from_delta(ifindex: u32, delta: MetricDelta, delta_t_ms: u64) -> FlowRateContribution {
+    if delta_t_ms == 0 {
+        return FlowRateContribution { ifindex, ..Default::default() };
+    }
+
+    FlowRateContribution {
+        ifindex,
+        ingress_bps: delta.ingress_bytes.saturating_mul(8000) / delta_t_ms,
+        egress_bps: delta.egress_bytes.saturating_mul(8000) / delta_t_ms,
+        ingress_pps: delta.ingress_packets.saturating_mul(1000) / delta_t_ms,
+        egress_pps: delta.egress_packets.saturating_mul(1000) / delta_t_ms,
+    }
+}
+
+fn initial_rate_contribution(metric: &ConnectMetric) -> FlowRateContribution {
+    let start_time = metric.create_time_ms.min(metric.report_time);
+    let delta_t = metric.report_time.saturating_sub(start_time);
+    rate_from_delta(metric.ifindex, MetricDelta::from_initial(metric), delta_t)
+}
+
+fn apply_rate_to_realtime(realtime: &mut ConnectRealtimeStatus, rate: FlowRateContribution) {
+    realtime.ingress_bps = rate.ingress_bps;
+    realtime.egress_bps = rate.egress_bps;
+    realtime.ingress_pps = rate.ingress_pps;
+    realtime.egress_pps = rate.egress_pps;
+}
+
 pub(crate) type FlowCache = Arc<RwLock<HashMap<ConnectKey, FlowState>>>;
 
-fn finalize_state_batch(state: &mut FlowState, mark_disabled: bool, batch: &mut PersistenceBatch) {
+fn add_iface_realtime_contribution(
+    iface_realtime: &IfaceRealtimeCache,
+    contribution: FlowRateContribution,
+    report_time: u64,
+) {
+    let mut cache = iface_realtime.write().expect("metric iface realtime cache poisoned");
+    cache.entry(contribution.ifindex).or_default().add_contribution(contribution, report_time);
+}
+
+fn remove_iface_realtime_contribution(
+    iface_realtime: &IfaceRealtimeCache,
+    contribution: FlowRateContribution,
+) {
+    let mut cache = iface_realtime.write().expect("metric iface realtime cache poisoned");
+    if let Some(acc) = cache.get_mut(&contribution.ifindex) {
+        acc.remove_contribution(contribution);
+        if acc.active_conns == 0 {
+            cache.remove(&contribution.ifindex);
+        }
+    }
+}
+
+fn remove_state_iface_realtime(iface_realtime: &IfaceRealtimeCache, state: &mut FlowState) {
+    if !state.counted_in_iface_realtime {
+        return;
+    }
+
+    remove_iface_realtime_contribution(iface_realtime, state.rate);
+    state.counted_in_iface_realtime = false;
+}
+
+fn add_state_iface_realtime(iface_realtime: &IfaceRealtimeCache, state: &mut FlowState) {
+    if state.counted_in_iface_realtime || !state.should_count_iface_realtime() {
+        return;
+    }
+
+    add_iface_realtime_contribution(iface_realtime, state.rate, state.realtime.last_report_time);
+    state.counted_in_iface_realtime = true;
+}
+
+fn finalize_state_batch(
+    state: &mut FlowState,
+    mark_disabled: bool,
+    batch: &mut PersistenceBatch,
+    iface_realtime: &IfaceRealtimeCache,
+) {
     if state.finalized {
         return;
     }
+
+    remove_state_iface_realtime(iface_realtime, state);
 
     let mut metric = state.last_metric.clone();
     if mark_disabled {
@@ -266,8 +544,91 @@ fn finalize_state_batch(state: &mut FlowState, mark_disabled: bool, batch: &mut 
     state.finalized = true;
 }
 
+fn record_iface_delta(
+    iface_buckets: &IfaceBucketCache,
+    ifindex: u32,
+    start_time: u64,
+    end_time: u64,
+    delta: MetricDelta,
+) {
+    if delta.is_zero() {
+        return;
+    }
+
+    let mut cache = iface_buckets.write().expect("metric iface bucket cache poisoned");
+    if end_time <= start_time {
+        let bucket_start = bucket_start(end_time, IFACE_BUCKET_MS);
+        cache
+            .entry(IfaceBucketKey { ifindex, bucket_start })
+            .or_default()
+            .add_delta(delta, end_time);
+        return;
+    }
+
+    let total_duration = end_time - start_time;
+    let mut cursor = start_time;
+    let mut assigned = MetricDelta::default();
+    while cursor < end_time {
+        let bucket = bucket_start(cursor, IFACE_BUCKET_MS);
+        let bucket_end = bucket.saturating_add(IFACE_BUCKET_MS).min(end_time);
+        let segment_duration = bucket_end.saturating_sub(cursor);
+        let mut segment_delta = delta.scale(segment_duration, total_duration);
+        let is_last = bucket_end >= end_time;
+        if is_last {
+            segment_delta = delta.saturating_sub(assigned);
+        } else {
+            assigned = assigned.saturating_add(segment_delta);
+        }
+
+        cache
+            .entry(IfaceBucketKey { ifindex, bucket_start: bucket })
+            .or_default()
+            .add_delta(segment_delta, bucket_end);
+        cursor = bucket_end;
+    }
+}
+
+fn record_metric_iface_delta(
+    iface_buckets: &IfaceBucketCache,
+    previous: Option<&ConnectMetric>,
+    metric: &ConnectMetric,
+) {
+    let (start_time, delta) = match previous {
+        Some(previous) => (previous.report_time, MetricDelta::from_metrics(previous, metric)),
+        None => return,
+    };
+    record_iface_delta(iface_buckets, metric.ifindex, start_time, metric.report_time, delta);
+}
+
+pub(crate) fn drain_iface_buckets(
+    iface_buckets: &IfaceBucketCache,
+    iface_realtime: &IfaceRealtimeCache,
+) -> Vec<IfaceBucketWrite> {
+    let realtime = iface_realtime.read().expect("metric iface realtime cache poisoned");
+    let mut buckets = iface_buckets.write().expect("metric iface bucket cache poisoned");
+    let mut writes: Vec<_> = buckets
+        .drain()
+        .map(|(key, acc)| {
+            let active_conns = realtime.get(&key.ifindex).map(|acc| acc.active_conns).unwrap_or(0);
+            IfaceBucketWrite {
+                ifindex: key.ifindex,
+                report_time: key.bucket_start,
+                ingress_bytes: acc.ingress_bytes,
+                ingress_packets: acc.ingress_packets,
+                egress_bytes: acc.egress_bytes,
+                egress_packets: acc.egress_packets,
+                active_conns,
+            }
+        })
+        .collect();
+    writes.sort_by(|a, b| (a.report_time, a.ifindex).cmp(&(b.report_time, b.ifindex)));
+    writes
+}
+
 pub(crate) fn process_connect_metric(
     flow_cache: &FlowCache,
+    iface_realtime: &IfaceRealtimeCache,
+    iface_buckets: &IfaceBucketCache,
     metric: ConnectMetric,
     second_window_ms: u64,
     second_ring_cap: usize,
@@ -284,6 +645,9 @@ pub(crate) fn process_connect_metric(
             if metric.report_time < state.last_metric.report_time {
                 return batch;
             }
+
+            record_metric_iface_delta(iface_buckets, Some(&state.last_metric), &metric);
+            remove_state_iface_realtime(iface_realtime, state);
 
             let previous_minute_bucket = minute_slot(state.last_metric.report_time);
             let previous_hour_bucket = bucket_start(state.last_metric.report_time, MS_PER_HOUR);
@@ -306,14 +670,19 @@ pub(crate) fn process_connect_metric(
             let should_finalize = metric.status == ConnectStatusType::Disabled;
             state.update_from_metric(metric, second_window_ms, second_ring_cap);
             if should_finalize {
-                finalize_state_batch(state, true, &mut batch);
+                finalize_state_batch(state, true, &mut batch, iface_realtime);
+            } else {
+                add_state_iface_realtime(iface_realtime, state);
             }
         }
         std::collections::hash_map::Entry::Vacant(entry) => {
+            record_metric_iface_delta(iface_buckets, None, &metric);
             let should_finalize = metric.status == ConnectStatusType::Disabled;
             let mut state = FlowState::new(metric, second_window_ms, second_ring_cap);
             if should_finalize {
-                finalize_state_batch(&mut state, true, &mut batch);
+                finalize_state_batch(&mut state, true, &mut batch, iface_realtime);
+            } else {
+                add_state_iface_realtime(iface_realtime, &mut state);
             }
             entry.insert(state);
         }
@@ -332,6 +701,7 @@ pub(crate) struct FlowCacheStats {
 
 pub(crate) fn cleanup_flow_cache(
     flow_cache: &FlowCache,
+    iface_realtime: &IfaceRealtimeCache,
     now_ms: u64,
     second_window_ms: u64,
 ) -> (FlowCacheStats, PersistenceBatch) {
@@ -345,7 +715,7 @@ pub(crate) fn cleanup_flow_cache(
 
     for (key, state) in cache.iter_mut() {
         if !state.finalized && state.realtime.last_report_time < stale_cutoff {
-            finalize_state_batch(state, true, &mut batch);
+            finalize_state_batch(state, true, &mut batch, iface_realtime);
             stats.finalized_in_run += 1;
         }
 
@@ -370,11 +740,14 @@ pub(crate) fn cleanup_flow_cache(
     (stats, batch)
 }
 
-pub(crate) fn finalize_all_flows(flow_cache: &FlowCache) -> PersistenceBatch {
+pub(crate) fn finalize_all_flows(
+    flow_cache: &FlowCache,
+    iface_realtime: &IfaceRealtimeCache,
+) -> PersistenceBatch {
     let mut cache = flow_cache.write().expect("metric flow cache poisoned");
     let mut batch = PersistenceBatch::default();
     for state in cache.values_mut() {
-        finalize_state_batch(state, true, &mut batch);
+        finalize_state_batch(state, true, &mut batch, iface_realtime);
     }
     batch
 }
@@ -412,6 +785,41 @@ pub(crate) fn collect_realtime_ip_stats(
     }
 
     stats_map.into_iter().map(|(ip, stats)| IpRealtimeStat { ip, stats }).collect()
+}
+
+pub(crate) fn collect_realtime_iface_stats(
+    flow_cache: &FlowCache,
+    now_ms: u64,
+) -> Vec<IfaceRealtimeStat> {
+    let cache = flow_cache.read().expect("metric flow cache poisoned");
+    let mut stats_map: HashMap<u32, IfaceRealtimeAcc> = HashMap::new();
+
+    for state in cache.values().filter(|state| state.is_active(now_ms)) {
+        let stats = stats_map.entry(state.realtime.ifindex).or_default();
+        stats.ingress_bps = stats.ingress_bps.saturating_add(state.realtime.ingress_bps);
+        stats.egress_bps = stats.egress_bps.saturating_add(state.realtime.egress_bps);
+        stats.ingress_pps = stats.ingress_pps.saturating_add(state.realtime.ingress_pps);
+        stats.egress_pps = stats.egress_pps.saturating_add(state.realtime.egress_pps);
+        stats.active_conns = stats.active_conns.saturating_add(1);
+        stats.last_report_time = stats.last_report_time.max(state.realtime.last_report_time);
+    }
+
+    let mut stats: Vec<_> = stats_map
+        .into_iter()
+        .map(|(ifindex, acc)| IfaceRealtimeStat {
+            ifindex,
+            stats: IpAggregatedStats {
+                ingress_bps: acc.ingress_bps,
+                egress_bps: acc.egress_bps,
+                ingress_pps: acc.ingress_pps,
+                egress_pps: acc.egress_pps,
+                active_conns: acc.active_conns,
+            },
+            last_report_time: acc.last_report_time,
+        })
+        .collect();
+    stats.sort_by(|a, b| b.stats.ingress_bps.cmp(&a.stats.ingress_bps));
+    stats
 }
 
 pub(crate) fn second_points_by_key(

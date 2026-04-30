@@ -148,6 +148,7 @@ async fn initialize_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             l3_proto INTEGER NOT NULL,
             flow_id INTEGER NOT NULL,
             trace_id INTEGER NOT NULL,
+            ifindex INTEGER NOT NULL,
             last_report_time INTEGER NOT NULL,
             total_ingress_bytes INTEGER NOT NULL,
             total_egress_bytes INTEGER NOT NULL,
@@ -261,10 +262,14 @@ async fn upsert_summary_tx(
     let status: u8 = metric.status.clone().into();
     sqlx::query(
         "INSERT INTO conn_summaries (
-            create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,
+            create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id, ifindex,
             last_report_time, total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, status, create_time_ms, gress
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
         ON CONFLICT (create_time, cpu_id) DO UPDATE SET
+            ifindex = CASE
+                WHEN excluded.last_report_time >= conn_summaries.last_report_time THEN excluded.ifindex
+                ELSE conn_summaries.ifindex
+            END,
             last_report_time = MAX(conn_summaries.last_report_time, excluded.last_report_time),
             total_ingress_bytes = MAX(conn_summaries.total_ingress_bytes, excluded.total_ingress_bytes),
             total_egress_bytes = MAX(conn_summaries.total_egress_bytes, excluded.total_egress_bytes),
@@ -285,6 +290,7 @@ async fn upsert_summary_tx(
     .bind(metric.l3_proto as i64)
     .bind(metric.flow_id as i64)
     .bind(metric.trace_id as i64)
+    .bind(metric.ifindex as i64)
     .bind(metric.report_time as i64)
     .bind(metric.ingress_bytes as i64)
     .bind(metric.egress_bytes as i64)
@@ -434,6 +440,10 @@ fn push_connect_common_filters(
         push_clause(qb, has_where, "flow_id = ");
         qb.push_bind(flow_id as i64);
     }
+    if let Some(ifindex) = params.ifindex {
+        push_clause(qb, has_where, "ifindex = ");
+        qb.push_bind(ifindex as i64);
+    }
 }
 
 fn push_connect_summary_filters(
@@ -496,7 +506,7 @@ pub async fn query_historical_summaries_complex(
     let mut qb = QueryBuilder::<Sqlite>::new(
         "SELECT
             create_time, cpu_id, src_ip, dst_ip, src_port, dst_port, l4_proto, l3_proto, flow_id, trace_id,
-            total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, last_report_time, status, create_time_ms, gress
+            ifindex, total_ingress_bytes, total_egress_bytes, total_ingress_pkts, total_egress_pkts, last_report_time, status, create_time_ms, gress
         FROM conn_summaries",
     );
     let mut has_where = false;
@@ -523,14 +533,15 @@ pub async fn query_historical_summaries_complex(
             l3_proto: row.get::<i64, _>(7) as u8,
             flow_id: row.get::<i64, _>(8) as u8,
             trace_id: row.get::<i64, _>(9) as u8,
-            total_ingress_bytes: row.get::<i64, _>(10).max(0) as u64,
-            total_egress_bytes: row.get::<i64, _>(11).max(0) as u64,
-            total_ingress_pkts: row.get::<i64, _>(12).max(0) as u64,
-            total_egress_pkts: row.get::<i64, _>(13).max(0) as u64,
-            last_report_time: row.get::<i64, _>(14).max(0) as u64,
-            status: row.get::<i64, _>(15) as u8,
-            create_time_ms: row.get::<i64, _>(16).max(0) as u64,
-            gress: row.get::<i64, _>(17) as u8,
+            ifindex: row.get::<i64, _>(10).max(0) as u32,
+            total_ingress_bytes: row.get::<i64, _>(11).max(0) as u64,
+            total_egress_bytes: row.get::<i64, _>(12).max(0) as u64,
+            total_ingress_pkts: row.get::<i64, _>(13).max(0) as u64,
+            total_egress_pkts: row.get::<i64, _>(14).max(0) as u64,
+            last_report_time: row.get::<i64, _>(15).max(0) as u64,
+            status: row.get::<i64, _>(16) as u8,
+            create_time_ms: row.get::<i64, _>(17).max(0) as u64,
+            gress: row.get::<i64, _>(18) as u8,
         })
         .collect())
 }

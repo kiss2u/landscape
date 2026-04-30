@@ -76,6 +76,7 @@ pub struct ConnectMetric {
     pub flow_id: u8,
     pub trace_id: u8,
     pub gress: u8,
+    pub ifindex: u32,
 
     pub report_time: u64,
 
@@ -128,6 +129,7 @@ pub struct ConnectRealtimeStatus {
     pub flow_id: u8,
     pub trace_id: u8,
     pub gress: u8,
+    pub ifindex: u32,
 
     pub create_time_ms: u64,
 
@@ -211,6 +213,8 @@ pub struct ConnectHistoryQueryParams {
     pub status: Option<u8>, // 0: Active, 1: Closed
     #[cfg_attr(feature = "openapi", schema(nullable = false))]
     pub gress: Option<u8>,
+    #[cfg_attr(feature = "openapi", schema(nullable = false))]
+    pub ifindex: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -231,6 +235,7 @@ pub struct ConnectHistoryStatus {
     pub flow_id: u8,
     pub trace_id: u8,
     pub gress: u8,
+    pub ifindex: u32,
 
     pub create_time_ms: u64,
 
@@ -259,6 +264,14 @@ pub struct IpRealtimeStat {
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub ip: IpAddr,
     pub stats: IpAggregatedStats,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct IfaceRealtimeStat {
+    pub ifindex: u32,
+    pub stats: IpAggregatedStats,
+    pub last_report_time: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

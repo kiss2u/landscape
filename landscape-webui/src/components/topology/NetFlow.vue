@@ -4,7 +4,7 @@ import { MiniMap } from "@vue-flow/minimap";
 import { useElementSize } from "@vueuse/core";
 import { useMessage, useThemeVars } from "naive-ui";
 import { changeColor } from "seemly";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { add_controller } from "@/api/network";
@@ -15,6 +15,7 @@ import { NetDev, WLANTypeTag } from "@/lib/dev";
 import { getBridgeAttachIssue } from "@/lib/topology";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { useIfaceNodeStore } from "@/stores/iface_node";
+import { useMetricStore } from "@/stores/status_metric";
 
 interface Props {
   fit_padding?: number;
@@ -35,6 +36,7 @@ const {
 } = useVueFlow();
 const message = useMessage();
 const ifaceNodeStore = useIfaceNodeStore();
+const metricStore = useMetricStore();
 const themeVars = useThemeVars();
 const containerRef = ref<HTMLElement | null>(null);
 const { width } = useElementSize(containerRef);
@@ -82,6 +84,9 @@ const flowNodes = computed(() => {
     class: highlighted && !highlighted.has(Number(node.id)) ? "is-dimmed" : "",
   }));
 });
+const ifaceStatsByIfindex = computed(
+  () => new Map(metricStore.iface_stats.map((item) => [item.ifindex, item])),
+);
 const flowEdges = computed(() => {
   const highlighted = highlightedIfaces.value;
 
@@ -304,6 +309,12 @@ watch(selectedIface, (value) => {
 
 onMounted(() => {
   ifaceNodeStore.UPDATE_INFO();
+  metricStore.SET_ENABLE("iface", true);
+  metricStore.UPDATE_INFO();
+});
+
+onUnmounted(() => {
+  metricStore.SET_ENABLE("iface", false);
 });
 
 onNodeClick(({ node }) => {
@@ -334,6 +345,7 @@ onPaneClick(() => {
       <template #node-netflow="nodeProps">
         <FlowNode
           :node="nodeProps.data"
+          :metric="ifaceStatsByIfindex.get(Number(nodeProps.id))"
           :selected="selectedIfaceId === Number(nodeProps.id)"
           :dimmed="
             Boolean(
