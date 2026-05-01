@@ -1,7 +1,20 @@
 use libbpf_cargo::SkeletonBuilder;
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+fn emit_rerun_if_changed(path: &Path) {
+    println!("cargo:rerun-if-changed={}", path.display());
+
+    if !path.is_dir() {
+        return;
+    }
+
+    for entry in fs::read_dir(path).expect("Failed to read bpf source directory") {
+        let path = entry.expect("Failed to read bpf source entry").path();
+        emit_rerun_if_changed(&path);
+    }
+}
 
 /// Main function of the build script.
 fn main() {
@@ -15,7 +28,7 @@ fn main() {
 
     println!("build target arch is: {}", target_arch);
 
-    println!("cargo:rerun-if-changed=src/bpf/*");
+    emit_rerun_if_changed(Path::new("src/bpf"));
 
     let vmlinux_path = vmlinux::include_path_root().join(&target_arch);
     let mut clang_args = vec![

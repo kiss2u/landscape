@@ -9,6 +9,7 @@
 #include "wan_tc_pipeline.h"
 #include "route_v4.h"
 #include "route_v6.h"
+#include "route/route_packet.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -27,20 +28,21 @@ int rt4_wan_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "rt4_wan_ingress"
     int ret = 0;
     struct route_context_v4 context = {0};
+    struct packet_offset_info offset_info = {0};
 
-    struct iphdr *iph;
-
-    if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
-        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
+    ret = scan_route_packet(skb, current_l3_offset, &offset_info);
+    if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
-    context.l4_protocol = iph->protocol;
-    context.daddr = iph->daddr;
-    context.saddr = iph->saddr;
-
-    if (should_not_forward(context.daddr)) {
+    ret = read_route_context_v4_from_scan(skb, &offset_info, &context);
+    if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
+    }
+
+    ret = route_should_forward_v4(&context);
+    if (ret != TC_ACT_OK) {
+        return ret;
     }
 
     ret = is_current_wan_packet_v4(skb, current_l3_offset, &context);
@@ -68,26 +70,24 @@ int rt4_wan_egress(struct __sk_buff *skb) {
     int ret = 0;
     u32 flow_mark = skb->mark;
     struct route_context_v4 context = {0};
+    struct packet_offset_info offset_info = {0};
 
-    struct iphdr *iph;
-    if (VALIDATE_READ_DATA(skb, &iph, current_l3_offset, sizeof(struct iphdr))) {
-        ld_bpf_log("ipv4 bpf_skb_load_bytes error");
-        u8 *mac;
-        if (VALIDATE_READ_DATA(skb, &mac, 6, 6)) {
-            ld_bpf_log("read mac error");
-            return TC_ACT_SHOT;
-        }
-        PRINT_MAC_ADDR(mac);
-
-        return TC_ACT_SHOT;
+    ret = scan_route_packet(skb, current_l3_offset, &offset_info);
+    if (ret == LD_SCAN_ERR) {
+        return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_SHOT);
+    }
+    if (ret != TC_ACT_OK) {
+        return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
     }
 
-    context.l4_protocol = iph->protocol;
-    context.daddr = iph->daddr;
-    context.saddr = iph->saddr;
-
-    if (should_not_forward(context.daddr)) {
+    ret = read_route_context_v4_from_scan(skb, &offset_info, &context);
+    if (ret != TC_ACT_OK) {
         return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
+    }
+
+    ret = route_should_forward_v4(&context);
+    if (ret != TC_ACT_OK) {
+        return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, ret);
     }
 
     ret = lan_redirect_check_v4(skb, current_l3_offset, &context, false);
@@ -114,20 +114,21 @@ int rt6_wan_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "rt6_wan_ingress"
     int ret = 0;
     struct route_context_v6 context = {0};
+    struct packet_offset_info offset_info = {0};
 
-    struct ipv6hdr *ip6h;
-
-    if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
-        ld_bpf_log("ipv6 bpf_skb_load_bytes error");
+    ret = scan_route_packet(skb, current_l3_offset, &offset_info);
+    if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
     }
 
-    COPY_ADDR_FROM(context.saddr.all, ip6h->saddr.in6_u.u6_addr32);
-    COPY_ADDR_FROM(context.daddr.all, ip6h->daddr.in6_u.u6_addr32);
-
-    if (is_broadcast_ip6(context.daddr.bytes)) {
-        ld_bpf_log("is_broadcast_ip6: %pI6", context.daddr.bytes);
+    ret = read_route_context_v6_from_scan(skb, &offset_info, &context);
+    if (ret != TC_ACT_OK) {
         return TC_ACT_UNSPEC;
+    }
+
+    ret = route_should_forward_v6(&context);
+    if (ret != TC_ACT_OK) {
+        return ret;
     }
 
     ret = is_current_wan_packet_v6(skb, current_l3_offset, &context);
@@ -157,19 +158,21 @@ int rt6_wan_egress(struct __sk_buff *skb) {
     int ret = 0;
     u32 flow_mark = skb->mark;
     struct route_context_v6 context = {0};
+    struct packet_offset_info offset_info = {0};
 
-    struct ipv6hdr *ip6h;
-
-    if (VALIDATE_READ_DATA(skb, &ip6h, current_l3_offset, sizeof(struct ipv6hdr))) {
-        ld_bpf_log("ipv6 bpf_skb_load_bytes error");
+    ret = scan_route_packet(skb, current_l3_offset, &offset_info);
+    if (ret != TC_ACT_OK) {
         return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
     }
 
-    COPY_ADDR_FROM(context.saddr.all, ip6h->saddr.in6_u.u6_addr32);
-    COPY_ADDR_FROM(context.daddr.all, ip6h->daddr.in6_u.u6_addr32);
-
-    if (is_broadcast_ip6(context.daddr.bytes)) {
+    ret = read_route_context_v6_from_scan(skb, &offset_info, &context);
+    if (ret != TC_ACT_OK) {
         return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, TC_ACT_UNSPEC);
+    }
+
+    ret = route_should_forward_v6(&context);
+    if (ret != TC_ACT_OK) {
+        return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_WAN_ROUTE, ret);
     }
 
     ret = lan_redirect_check_v6(skb, current_l3_offset, &context, false);

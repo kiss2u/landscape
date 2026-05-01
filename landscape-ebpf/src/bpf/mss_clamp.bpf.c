@@ -145,34 +145,11 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
 static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, u32 current_l3_offset,
                                               __u32 *ip_hdr_len) {
     int ret = 0;
-    bool is_ipv4;
-    if (current_l3_offset != 0) {
-        struct ethhdr *eth;
-        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-            return TC_ACT_UNSPEC;
-        }
+    u8 l3_protocol = 0;
+    ret = current_l3_protocol(skb, current_l3_offset, &l3_protocol);
+    if (ret != TC_ACT_OK) return TC_ACT_UNSPEC;
 
-        if (eth->h_proto == ETH_IPV4) {
-            is_ipv4 = true;
-        } else if (eth->h_proto == ETH_IPV6) {
-            is_ipv4 = false;
-        } else {
-            return TC_ACT_UNSPEC;
-        }
-    } else {
-        u8 *p_version;
-        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
-            return TC_ACT_UNSPEC;
-        }
-        u8 ip_version = (*p_version) >> 4;
-        if (ip_version == 4) {
-            is_ipv4 = true;
-        } else if (ip_version == 6) {
-            is_ipv4 = false;
-        } else {
-            return TC_ACT_UNSPEC;
-        }
-    }
+    bool is_ipv4 = l3_protocol == LANDSCAPE_IPV4_TYPE;
     __u32 l3_offset = current_l3_offset;
 
     if (is_ipv4) {

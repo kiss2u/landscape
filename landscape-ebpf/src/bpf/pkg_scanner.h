@@ -335,38 +335,10 @@ static __always_inline int scan_packet_l3(struct __sk_buff *skb, u32 current_l3_
 #define BPF_LOG_TOPIC "scan_packet_l3"
 
     bool is_ipv4;
-
-    if (current_l3_offset != 0) {
-        struct ethhdr *eth;
-        if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-            return LD_SCAN_ERR;
-        }
-
-        if (eth->h_proto == ETH_IPV4) {
-            offset_info->l3_protocol = LANDSCAPE_IPV4_TYPE;
-            is_ipv4 = true;
-        } else if (eth->h_proto == ETH_IPV6) {
-            offset_info->l3_protocol = LANDSCAPE_IPV6_TYPE;
-            is_ipv4 = false;
-        } else {
-            return LD_SCAN_UNSPEC;
-        }
-    } else {
-        u8 *p_version;
-        if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
-            return LD_SCAN_ERR;
-        }
-        u8 ip_version = (*p_version) >> 4;
-        if (ip_version == 4) {
-            offset_info->l3_protocol = LANDSCAPE_IPV4_TYPE;
-            is_ipv4 = true;
-        } else if (ip_version == 6) {
-            offset_info->l3_protocol = LANDSCAPE_IPV6_TYPE;
-            is_ipv4 = false;
-        } else {
-            return LD_SCAN_UNSPEC;
-        }
-    }
+    int ret = current_l3_protocol(skb, current_l3_offset, &offset_info->l3_protocol);
+    if (ret == TC_ACT_SHOT) return LD_SCAN_ERR;
+    if (ret != TC_ACT_OK) return LD_SCAN_UNSPEC;
+    is_ipv4 = offset_info->l3_protocol == LANDSCAPE_IPV4_TYPE;
 
     struct ip_scanner_ctx ctx = {0};
     offset_info->l3_offset_when_scan = current_l3_offset;

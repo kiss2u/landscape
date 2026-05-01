@@ -288,36 +288,46 @@ static __always_inline bool ip_addr_equal_x(const union u_inet_addr *a, const in
 
 #define COPY_ADDR_FROM(t, s) (__builtin_memcpy((t), (s), sizeof(t)))
 
-static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
-                                            bool *is_ipv4_) {
-    bool is_ipv4;
+static __always_inline int current_l3_protocol(struct __sk_buff *skb, u32 current_l3_offset,
+                                               u8 *l3_protocol) {
     if (current_l3_offset != 0) {
         struct ethhdr *eth;
         if (VALIDATE_READ_DATA(skb, &eth, 0, sizeof(*eth))) {
-            return TC_ACT_UNSPEC;
+            return TC_ACT_SHOT;
         }
 
         if (eth->h_proto == ETH_IPV4) {
-            is_ipv4 = true;
+            *l3_protocol = LANDSCAPE_IPV4_TYPE;
         } else if (eth->h_proto == ETH_IPV6) {
-            is_ipv4 = false;
+            *l3_protocol = LANDSCAPE_IPV6_TYPE;
         } else {
             return TC_ACT_UNSPEC;
         }
     } else {
         u8 *p_version;
         if (VALIDATE_READ_DATA(skb, &p_version, 0, sizeof(*p_version))) {
-            return TC_ACT_UNSPEC;
+            return TC_ACT_SHOT;
         }
         u8 ip_version = (*p_version) >> 4;
         if (ip_version == 4) {
-            is_ipv4 = true;
+            *l3_protocol = LANDSCAPE_IPV4_TYPE;
         } else if (ip_version == 6) {
-            is_ipv4 = false;
+            *l3_protocol = LANDSCAPE_IPV6_TYPE;
         } else {
             return TC_ACT_UNSPEC;
         }
     }
+
+    return TC_ACT_OK;
+}
+
+static __always_inline int current_pkg_type(struct __sk_buff *skb, u32 current_l3_offset,
+                                            bool *is_ipv4_) {
+    u8 l3_protocol = 0;
+    int ret = current_l3_protocol(skb, current_l3_offset, &l3_protocol);
+    if (ret != TC_ACT_OK) return TC_ACT_UNSPEC;
+
+    bool is_ipv4 = l3_protocol == LANDSCAPE_IPV4_TYPE;
     *is_ipv4_ = is_ipv4;
     return TC_ACT_OK;
 }

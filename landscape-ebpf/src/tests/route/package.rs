@@ -1,5 +1,5 @@
 use std::{
-    net::Ipv6Addr,
+    net::{Ipv4Addr, Ipv6Addr},
     os::fd::{AsFd, AsRawFd},
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -169,5 +169,47 @@ pub fn simple_ipv6_tcp_syn(src: Ipv6Addr, dst: Ipv6Addr) -> Vec<u8> {
     let payload = [0x11_u8, 0x22, 0x33, 0x44];
     let mut packet = Vec::with_capacity(builder.size(payload.len()));
     builder.write(&mut packet, &payload).expect("build ipv6 tcp packet");
+    packet
+}
+
+pub fn simple_ipv4_tcp(src: Ipv4Addr, dst: Ipv4Addr) -> Vec<u8> {
+    let builder = PacketBuilder::ethernet2(
+        [0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
+        [0x02, 0x00, 0x00, 0x00, 0x00, 0x02],
+    )
+    .ipv4(src.octets(), dst.octets(), 64)
+    .tcp(12345, 443, 0x1020_3040, 4096);
+
+    let payload = [0x11_u8, 0x22, 0x33, 0x44];
+    let mut packet = Vec::with_capacity(builder.size(payload.len()));
+    builder.write(&mut packet, &payload).expect("build ipv4 tcp packet");
+    packet
+}
+
+pub fn simple_ipv4_udp(src: Ipv4Addr, dst: Ipv4Addr) -> Vec<u8> {
+    let builder = PacketBuilder::ethernet2(
+        [0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
+        [0x02, 0x00, 0x00, 0x00, 0x00, 0x02],
+    )
+    .ipv4(src.octets(), dst.octets(), 64)
+    .udp(10000, 53);
+
+    let payload = [0x11_u8, 0x22, 0x33, 0x44];
+    let mut packet = Vec::with_capacity(builder.size(payload.len()));
+    builder.write(&mut packet, &payload).expect("build ipv4 udp packet");
+    packet
+}
+
+pub fn simple_ipv6_udp(src: Ipv6Addr, dst: Ipv6Addr) -> Vec<u8> {
+    let builder = PacketBuilder::ethernet2(
+        [0x02, 0x00, 0x00, 0x00, 0x00, 0x01],
+        [0x02, 0x00, 0x00, 0x00, 0x00, 0x02],
+    )
+    .ipv6(src.octets(), dst.octets(), 64)
+    .udp(10000, 53);
+
+    let payload = [0x11_u8, 0x22, 0x33, 0x44];
+    let mut packet = Vec::with_capacity(builder.size(payload.len()));
+    builder.write(&mut packet, &payload).expect("build ipv6 udp packet");
     packet
 }
