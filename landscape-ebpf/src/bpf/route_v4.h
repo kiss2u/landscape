@@ -218,9 +218,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v4(struct __sk_buff *skb
 
     struct route_target_slot_key_v4 slot_key = {
         .flow_id = resolved_flow_id,
-        .slot = (((u32)context->saddr) ^ (((u32)context->daddr) << 1) ^
-                 (((u32)context->l4_protocol) << 24)) &
-                0xF,
+        .slot = route_target_slot_v4(context->daddr),
     };
     struct route_target_info_v4 *target_info = bpf_map_lookup_elem(&rt4_target_slot_map, &slot_key);
 
@@ -518,9 +516,7 @@ static __always_inline int setting_cache_in_lan_v4(const struct route_context_v4
             const u32 resolved_flow_id = get_flow_id(flow_mark);
             struct route_target_slot_key_v4 slot_key = {
                 .flow_id = resolved_flow_id,
-                .slot = (((u32)context->saddr) ^ (((u32)context->daddr) << 1) ^
-                         (((u32)context->l4_protocol) << 24)) &
-                        0xF,
+                .slot = route_target_slot_v4(context->daddr),
             };
             struct route_target_info_v4 *slot_target =
                 bpf_map_lookup_elem(&rt4_target_slot_map, &slot_key);

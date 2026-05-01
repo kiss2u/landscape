@@ -49,4 +49,18 @@ static __always_inline u16 route_flow_mark_vlan_id(u32 mark_value) {
     return get_flow_vlan_id(get_flow_id(mark_value));
 }
 
+static __always_inline u32 route_target_slot_v4(__be32 daddr) {
+    u32 hash = (u32)daddr;
+    hash ^= hash >> 16;
+    hash ^= hash >> 8;
+    return hash & 0xF;
+}
+
+static __always_inline u32 route_target_slot_v6(const union u_inet6_addr *daddr) {
+    u32 hash = (u32)daddr->all[0] ^ (u32)daddr->all[1];
+    hash ^= hash >> 16;
+    hash ^= hash >> 8;
+    return hash & 0xF;
+}
+
 #endif /* __LD_ROUTE_INDEX_H__ */

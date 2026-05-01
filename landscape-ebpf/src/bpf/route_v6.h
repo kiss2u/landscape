@@ -222,11 +222,7 @@ static __always_inline int pick_wan_and_send_by_flow_id_v6(struct __sk_buff *skb
 
     struct route_target_slot_key_v6 slot_key = {
         .flow_id = resolved_flow_id,
-        .slot = (((u32)context->saddr.all[0]) ^ ((u32)context->saddr.all[1]) ^
-                 (((u32)context->daddr.all[0]) << 1) ^ (((u32)context->daddr.all[1]) << 2) ^
-                 ((u32)context->daddr.all[2]) ^ (((u32)context->daddr.all[3]) << 1) ^
-                 (((u32)context->l4_protocol) << 24)) &
-                0xF,
+        .slot = route_target_slot_v6(&context->daddr),
     };
     struct route_target_info_v6 *target_info = bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
 
@@ -523,11 +519,7 @@ static __always_inline int setting_cache_in_lan_v6(const struct route_context_v6
             const u32 resolved_flow_id = get_flow_id(flow_mark);
             struct route_target_slot_key_v6 slot_key = {
                 .flow_id = resolved_flow_id,
-                .slot = (((u32)context->saddr.all[0]) ^ ((u32)context->saddr.all[1]) ^
-                         (((u32)context->daddr.all[0]) << 1) ^ (((u32)context->daddr.all[1]) << 2) ^
-                         ((u32)context->daddr.all[2]) ^ (((u32)context->daddr.all[3]) << 1) ^
-                         (((u32)context->l4_protocol) << 24)) &
-                        0xF,
+                .slot = route_target_slot_v6(&context->daddr),
             };
             struct route_target_info_v6 *slot_target =
                 bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
