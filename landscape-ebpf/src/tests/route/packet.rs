@@ -48,10 +48,6 @@ mod tests {
 
     const TC_ACT_OK: i32 = 0;
     const TC_ACT_UNSPEC: i32 = -1;
-    const FRAG_FIRST: u8 = 1;
-    const FRAG_LAST: u8 = 3;
-    const IPPROTO_TCP: u8 = 6;
-    const IPPROTO_UDP: u8 = 17;
     const LANDSCAPE_IPV4_TYPE: u8 = 0;
     const LANDSCAPE_IPV6_TYPE: u8 = 1;
 
@@ -64,7 +60,6 @@ mod tests {
         assert_eq!(result.read_ret, TC_ACT_OK);
         assert_eq!(result.forward_ret, TC_ACT_OK);
         assert_eq!(result.offset.l3_protocol, LANDSCAPE_IPV4_TYPE);
-        assert_eq!(result.v4.l4_protocol, IPPROTO_TCP);
         assert_eq!(Ipv4Addr::from(result.v4.saddr.to_be()), src);
         assert_eq!(Ipv4Addr::from(result.v4.daddr.to_be()), dst);
     }
@@ -75,7 +70,6 @@ mod tests {
         let dst = Ipv4Addr::new(10, 0, 0, 20);
         let result = run_route_packet_test(simple_ipv4_udp(src, dst));
         assert_eq!(result.forward_ret, TC_ACT_OK);
-        assert_eq!(result.v4.l4_protocol, IPPROTO_UDP);
         assert_eq!(Ipv4Addr::from(result.v4.saddr.to_be()), src);
         assert_eq!(Ipv4Addr::from(result.v4.daddr.to_be()), dst);
     }
@@ -109,7 +103,6 @@ mod tests {
         let result = run_route_packet_test(simple_ipv6_tcp_syn(src, dst));
         assert_eq!(result.forward_ret, TC_ACT_OK);
         assert_eq!(result.offset.l3_protocol, LANDSCAPE_IPV6_TYPE);
-        assert_eq!(result.v6.l4_protocol, IPPROTO_TCP);
         assert_eq!(Ipv6Addr::from(ipv6_bytes(&result.v6.saddr)), src);
         assert_eq!(Ipv6Addr::from(ipv6_bytes(&result.v6.daddr)), dst);
     }
@@ -120,7 +113,6 @@ mod tests {
         let dst = Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 20);
         let result = run_route_packet_test(simple_ipv6_udp(src, dst));
         assert_eq!(result.forward_ret, TC_ACT_OK);
-        assert_eq!(result.v6.l4_protocol, IPPROTO_UDP);
         assert_eq!(Ipv6Addr::from(ipv6_bytes(&result.v6.saddr)), src);
         assert_eq!(Ipv6Addr::from(ipv6_bytes(&result.v6.daddr)), dst);
     }
@@ -153,7 +145,6 @@ mod tests {
         assert_eq!(result.scan_ret, TC_ACT_OK);
         assert_eq!(result.read_ret, TC_ACT_OK);
         assert_eq!(result.offset.l3_protocol, LANDSCAPE_IPV6_TYPE);
-        assert_eq!(result.offset.fragment_type, FRAG_FIRST);
     }
 
     #[test]
@@ -162,6 +153,5 @@ mod tests {
         assert_eq!(result.scan_ret, TC_ACT_OK);
         assert_eq!(result.read_ret, TC_ACT_OK);
         assert_eq!(result.offset.l3_protocol, LANDSCAPE_IPV6_TYPE);
-        assert_eq!(result.offset.fragment_type, FRAG_LAST);
     }
 }

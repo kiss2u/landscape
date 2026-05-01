@@ -27,7 +27,7 @@ static __always_inline int read_route_context_v4_from_scan(struct __sk_buff *skb
 
     context->saddr = iph->saddr;
     context->daddr = iph->daddr;
-    context->l4_protocol = offset->l4_protocol;
+    context->l4_protocol = 0;
     context->tos = iph->tos;
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC
@@ -46,7 +46,7 @@ static __always_inline int read_route_context_v6_from_scan(struct __sk_buff *skb
 
     COPY_ADDR_FROM(context->saddr.all, ip6h->saddr.in6_u.u6_addr32);
     COPY_ADDR_FROM(context->daddr.all, ip6h->daddr.in6_u.u6_addr32);
-    context->l4_protocol = offset->l4_protocol;
+    context->l4_protocol = 0;
     context->tos = 0;
     return TC_ACT_OK;
 #undef BPF_LOG_TOPIC

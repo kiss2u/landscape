@@ -334,6 +334,19 @@ static __always_inline int scan_packet_l3(struct __sk_buff *skb, u32 current_l3_
                                           struct packet_offset_info *offset_info) {
 #define BPF_LOG_TOPIC "scan_packet_l3"
 
+    int ret = current_l3_protocol(skb, current_l3_offset, &offset_info->l3_protocol);
+    if (ret == TC_ACT_SHOT) return LD_SCAN_ERR;
+    if (ret != TC_ACT_OK) return LD_SCAN_UNSPEC;
+
+    offset_info->l3_offset_when_scan = current_l3_offset;
+    return LD_SCAN_OK;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline int scan_packet_outer_l4(struct __sk_buff *skb, u32 current_l3_offset,
+                                                struct packet_offset_info *offset_info) {
+#define BPF_LOG_TOPIC "scan_packet_outer_l4"
+
     bool is_ipv4;
     int ret = current_l3_protocol(skb, current_l3_offset, &offset_info->l3_protocol);
     if (ret == TC_ACT_SHOT) return LD_SCAN_ERR;
@@ -371,7 +384,7 @@ static __always_inline int scan_packet_full(struct __sk_buff *skb, u32 current_l
                                             struct packet_offset_info *offset_info) {
 #define BPF_LOG_TOPIC "scan_packet_full"
 
-    int ret = scan_packet_l3(skb, current_l3_offset, offset_info);
+    int ret = scan_packet_outer_l4(skb, current_l3_offset, offset_info);
     if (ret) return ret;
 
     if (offset_info->fragment_type >= FRAG_MIDDLE) {
