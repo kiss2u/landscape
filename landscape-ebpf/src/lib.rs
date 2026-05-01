@@ -11,7 +11,6 @@ pub mod map_setting;
 pub mod metric;
 pub mod mss_clamp;
 pub mod nat;
-pub mod ns_proxy;
 pub(crate) mod pipeline;
 pub mod pppoe;
 pub mod route;
