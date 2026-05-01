@@ -8,6 +8,7 @@
 #include "land_nat4_v3.h"
 #include "land_nat6_v3.h"
 #include "landscape.h"
+#include "nat/nat_packet.h"
 #include "wan_tc_pipeline.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -65,11 +66,11 @@ int nat_v4_egress(struct __sk_buff *skb) {
     bool created = false;
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
     ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
-    ret = read_packet_info4(skb, &pkg_offset, &ip_pair);
+    ret = read_nat_packet_info4(skb, &pkg_offset, &ip_pair);
     if (ret) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
     ret = is_broadcast_ip4_pair(&ip_pair);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
@@ -158,7 +159,8 @@ int nat_v4_egress(struct __sk_buff *skb) {
     ret = modify_headers_v4(skb, is_icmpx_error, nat_l4_protocol, current_l3_offset,
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, true,
                             &action);
-    return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret ? TC_ACT_SHOT : TC_ACT_UNSPEC);
+    return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT,
+                                           ret ? TC_ACT_SHOT : TC_ACT_UNSPEC);
 #undef BPF_LOG_TOPIC
 }
 
@@ -170,11 +172,11 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     struct nat_mapping_value_v4_v3 *nat_ingress_value = NULL;
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
     ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
-    ret = read_packet_info4(skb, &pkg_offset, &ip_pair);
+    ret = read_nat_packet_info4(skb, &pkg_offset, &ip_pair);
     if (ret) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
     ret = is_broadcast_ip4_pair(&ip_pair);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
@@ -250,7 +252,8 @@ int nat_v4_ingress(struct __sk_buff *skb) {
     ret = modify_headers_v4(skb, is_icmpx_error, nat_l4_protocol, current_l3_offset,
                             pkg_offset.l4_offset, pkg_offset.icmp_error_inner_l4_offset, false,
                             &action);
-    return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret ? TC_ACT_SHOT : TC_ACT_UNSPEC);
+    return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT,
+                                            ret ? TC_ACT_SHOT : TC_ACT_UNSPEC);
 #undef BPF_LOG_TOPIC
 }
 
@@ -261,11 +264,11 @@ int nat_v6_egress(struct __sk_buff *skb) {
     struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
     ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    ret = read_nat_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
     ret = is_broadcast_ip_pair(pkg_offset.l3_protocol, &ip_pair);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, ret);
@@ -283,11 +286,11 @@ int nat_v6_ingress(struct __sk_buff *skb) {
     struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
     ret = is_handle_protocol(pkg_offset.l4_protocol);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    ret = read_nat_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
     ret = is_broadcast_ip_pair(pkg_offset.l3_protocol, &ip_pair);
     if (ret != TC_ACT_OK) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, ret);
@@ -309,7 +312,8 @@ int ingress_nat(struct __sk_buff *skb) {
     }
 
     ret = current_pkg_type(skb, current_l3_offset, &is_ipv4);
-    if (unlikely(ret != TC_ACT_OK)) return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, TC_ACT_UNSPEC);
+    if (unlikely(ret != TC_ACT_OK))
+        return wan_tc_pipeline_continue_ingress(skb, INGRESS_STAGE_NAT, TC_ACT_UNSPEC);
 
     if (is_ipv4) {
         bpf_tail_call_static(skb, &ingress_prog_array, IPV4_NAT_INGRESS_PROG_INDEX);
@@ -331,7 +335,8 @@ int egress_nat(struct __sk_buff *skb) {
     }
 
     ret = current_pkg_type(skb, current_l3_offset, &is_ipv4);
-    if (unlikely(ret != TC_ACT_OK)) return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, TC_ACT_UNSPEC);
+    if (unlikely(ret != TC_ACT_OK))
+        return wan_tc_pipeline_continue_egress(skb, EGRESS_STAGE_NAT, TC_ACT_UNSPEC);
 
     if (is_ipv4) {
         bpf_tail_call_static(skb, &egress_prog_array, IPV4_NAT_EGRESS_PROG_INDEX);

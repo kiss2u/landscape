@@ -3,7 +3,7 @@
 #include "landscape.h"
 #include "nat/nat_maps.h"
 #include "land_wan_ip.h"
-#include "firewall_share.h"
+#include "firewall/firewall_share.h"
 #include "metric.h"
 #include "flow_match.h"
 #include "land_dns_dispatcher.h"

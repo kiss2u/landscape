@@ -14,7 +14,7 @@ use zerocopy::FromBytes;
 use zerocopy::IntoBytes;
 use zerocopy::{byteorder::*, Immutable};
 
-mod package;
+pub(crate) mod package;
 mod performance;
 
 #[repr(C, packed)]

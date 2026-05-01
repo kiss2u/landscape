@@ -21,6 +21,10 @@ pub(crate) mod test_scanner {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_scanner.skel.rs"));
 }
 
+pub(crate) mod test_firewall_packet {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_firewall_packet.skel.rs"));
+}
+
 unsafe impl plain::Plain for packet_info {}
 
 impl u_inet_addr {

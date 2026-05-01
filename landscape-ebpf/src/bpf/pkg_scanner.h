@@ -159,6 +159,13 @@ enum land_scan_result {
     LD_SCAN_UNSPEC = -1,
 };
 
+enum packet_scan_depth {
+    LD_SCAN_DEPTH_NONE = 0,
+    LD_SCAN_DEPTH_PROTO = 1,
+    LD_SCAN_DEPTH_L3 = 2,
+    LD_SCAN_DEPTH_FULL = 3,
+};
+
 union u_ld_ip {
     __be32 all[4];
     __be32 ip;
@@ -323,9 +330,9 @@ static __always_inline int icmp6_msg_type(struct icmp6hdr *icmp6h) {
     return ICMP_ACT_UNSPEC;
 }
 
-static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_offset,
-                                       struct packet_offset_info *offset_info) {
-#define BPF_LOG_TOPIC "scan_packet"
+static __always_inline int scan_packet_l3(struct __sk_buff *skb, u32 current_l3_offset,
+                                          struct packet_offset_info *offset_info) {
+#define BPF_LOG_TOPIC "scan_packet_l3"
 
     bool is_ipv4;
 
@@ -377,20 +384,29 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
     }
 
     __builtin_memcpy(&offset_info->l4_protocol, &ctx, sizeof(struct ip_scanner_ctx));
-    // offset_info->l4_protocol = ctx.l4_protocol;
-    // offset_info->fragment_type = ctx.fragment_type;
-    // offset_info->fragment_off = ctx.fragment_off;
-    // offset_info->fragment_id = ctx.fragment_id;
-    // offset_info->l4_offset = ctx.l4_offset;
 
     if (offset_info->fragment_type >= FRAG_MIDDLE) {
         // 不是第一个数据包， 整个都是 payload
         // 因为没有头部信息, 所以 需要进行查询已有的 track 记录
         offset_info->l4_offset = 0;
+    }
+
+    return LD_SCAN_OK;
+#undef BPF_LOG_TOPIC
+}
+
+static __always_inline int scan_packet_full(struct __sk_buff *skb, u32 current_l3_offset,
+                                            struct packet_offset_info *offset_info) {
+#define BPF_LOG_TOPIC "scan_packet_full"
+
+    int ret = scan_packet_l3(skb, current_l3_offset, offset_info);
+    if (ret) return ret;
+
+    if (offset_info->fragment_type >= FRAG_MIDDLE) {
         return LD_SCAN_OK;
     }
 
-    __builtin_memset(&ctx, 0, sizeof(ctx));
+    struct ip_scanner_ctx ctx = {0};
     if (offset_info->l4_protocol == IPPROTO_ICMP) {
         struct icmphdr *icmph;
         if (VALIDATE_READ_DATA(skb, &icmph, offset_info->l4_offset, sizeof(struct icmphdr))) {
@@ -511,6 +527,11 @@ static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_off
 
     return LD_SCAN_OK;
 #undef BPF_LOG_TOPIC
+}
+
+static __always_inline int scan_packet(struct __sk_buff *skb, u32 current_l3_offset,
+                                       struct packet_offset_info *offset_info) {
+    return scan_packet_full(skb, current_l3_offset, offset_info);
 }
 
 static __always_inline bool is_icmp_error_pkt(const struct packet_offset_info *offset) {

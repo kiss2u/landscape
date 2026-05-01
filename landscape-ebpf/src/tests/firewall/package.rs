@@ -26,3 +26,50 @@ pub fn icmpv6_ping_ingress() -> Vec<u8> {
     ]
     .to_vec()
 }
+
+pub fn icmpv6_error_with_inner_udp() -> Vec<u8> {
+    build_icmpv6_error_with_inner_udp(false)
+}
+
+pub fn icmpv6_error_with_mismatched_inner_source() -> Vec<u8> {
+    build_icmpv6_error_with_inner_udp(true)
+}
+
+fn build_icmpv6_error_with_inner_udp(mismatch_outer_dst: bool) -> Vec<u8> {
+    let outer_src = [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+    let inner_src = [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02];
+    let inner_dst = [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03];
+    let outer_dst = if mismatch_outer_dst {
+        [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x04]
+    } else {
+        inner_src
+    };
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0x11, 0x22, 0x33, 0x44, 0x55, 0x66]);
+    bytes.extend_from_slice(&[0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
+    bytes.extend_from_slice(&[0x86, 0xdd]);
+
+    let payload_len: u16 = 8 + 40 + 8;
+    bytes.extend_from_slice(&[0x60, 0, 0, 0]);
+    bytes.extend_from_slice(&payload_len.to_be_bytes());
+    bytes.push(58);
+    bytes.push(64);
+    bytes.extend_from_slice(&outer_src);
+    bytes.extend_from_slice(&outer_dst);
+
+    bytes.extend_from_slice(&[1, 4, 0, 0, 0, 0, 0, 0]);
+
+    bytes.extend_from_slice(&[0x60, 0, 0, 0]);
+    bytes.extend_from_slice(&(8u16).to_be_bytes());
+    bytes.push(17);
+    bytes.push(30);
+    bytes.extend_from_slice(&inner_src);
+    bytes.extend_from_slice(&inner_dst);
+
+    bytes.extend_from_slice(&(657u16).to_be_bytes());
+    bytes.extend_from_slice(&(9u16).to_be_bytes());
+    bytes.extend_from_slice(&(8u16).to_be_bytes());
+    bytes.extend_from_slice(&(0x1234u16).to_be_bytes());
+    bytes
+}

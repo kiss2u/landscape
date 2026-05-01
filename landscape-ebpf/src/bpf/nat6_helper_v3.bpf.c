@@ -7,6 +7,7 @@
 
 #include "land_nat6_v3.h"
 #include "landscape.h"
+#include "nat/nat_packet.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -22,12 +23,12 @@ int handle_ipv6_egress(struct __sk_buff *skb) {
     struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
 
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    ret = read_nat_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) {
         return ret;
     }
@@ -49,7 +50,7 @@ int handle_ipv6_ingress(struct __sk_buff *skb) {
     struct inet_pair ip_pair = {0};
     int ret = 0;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
@@ -63,7 +64,7 @@ int handle_ipv6_ingress(struct __sk_buff *skb) {
         return TC_ACT_OK;
     }
 
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    ret = read_nat_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) {
         return ret;
     }
