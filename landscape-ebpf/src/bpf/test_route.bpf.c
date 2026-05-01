@@ -101,3 +101,29 @@ int test_route_v6_pick_wan_by_flow_id_non_default(struct __sk_buff *skb) {
     return (int)target_info->ifindex;
 #undef BPF_LOG_TOPIC
 }
+
+SEC("tc")
+int test_route_cached_docker_vlan_id(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "test_route_cached_docker_vlan_id"
+    struct rt_cache_value_v6 target = {0};
+    target.mark_value = 0x0305;
+
+    return route_flow_mark_vlan_id(target.mark_value);
+#undef BPF_LOG_TOPIC
+}
+
+SEC("tc")
+int test_route_cached_docker_redirect_v6(struct __sk_buff *skb) {
+#define BPF_LOG_TOPIC "test_route_cached_docker_redirect_v6"
+    struct rt_cache_value_v6 target = {0};
+    target.mark_value = 0x0305;
+
+    int ret = bpf_skb_vlan_push(skb, ETH_P_8021Q,
+                                route_flow_mark_vlan_id(target.mark_value));
+    if (ret) {
+        return ret;
+    }
+
+    return skb->vlan_tci;
+#undef BPF_LOG_TOPIC
+}

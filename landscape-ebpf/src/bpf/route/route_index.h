@@ -45,4 +45,8 @@ static __always_inline bool should_not_forward(__be32 daddr) {
     return false;
 }
 
+static __always_inline u16 route_flow_mark_vlan_id(u32 mark_value) {
+    return get_flow_vlan_id(get_flow_id(mark_value));
+}
+
 #endif /* __LD_ROUTE_INDEX_H__ */
