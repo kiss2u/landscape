@@ -12,7 +12,11 @@ pub static LAND_HOSTNAME: Lazy<String> = Lazy::new(|| {
 
 pub static LAND_ARGS: Lazy<WebCommArgs> = Lazy::new(|| {
     dotenvy::dotenv().ok();
-    WebCommArgs::parse()
+    if std::env::var_os("LANDSCAPE_IGNORE_CLI_ARGS").is_some() {
+        WebCommArgs::try_parse().unwrap_or_default()
+    } else {
+        WebCommArgs::parse()
+    }
 });
 
 pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
@@ -26,7 +30,7 @@ pub static LAND_HOME_PATH: Lazy<PathBuf> = Lazy::new(|| {
     }
 });
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Default)]
 #[command(version, about, long_about = None)]
 pub struct WebCommArgs {
     /// Static HTML location [default: /root/.landscape-router/static]
