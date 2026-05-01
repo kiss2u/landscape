@@ -16,6 +16,7 @@ mod nat;
 mod route;
 mod scanner;
 mod time;
+mod tproxy;
 
 pub(crate) mod test_scanner {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_scanner.skel.rs"));
@@ -27,6 +28,10 @@ pub(crate) mod test_firewall_packet {
 
 pub(crate) mod test_route_packet {
     include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_route_packet.skel.rs"));
+}
+
+pub(crate) mod test_tproxy_packet {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/bpf_rs/test_tproxy_packet.skel.rs"));
 }
 
 unsafe impl plain::Plain for packet_info {}

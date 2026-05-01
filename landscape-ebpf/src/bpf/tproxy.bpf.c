@@ -6,7 +6,7 @@
 #include <bpf/bpf_core_read.h>
 
 #include "landscape.h"
-#include "pkg_scanner.h"
+#include "tproxy/tproxy_packet.h"
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -139,9 +139,9 @@ int tproxy_ingress(struct __sk_buff *skb) {
 
     int ret = 0;
 
-    ret = scan_packet(skb, 14, &pkg_offset);
+    ret = scan_tproxy_packet(skb, 14, &pkg_offset);
     if (ret) {
-        ld_bpf_log("scan_packet ret %d", ret);
+        ld_bpf_log("scan_tproxy_packet ret %d", ret);
         return ret;
     }
 
@@ -151,9 +151,9 @@ int tproxy_ingress(struct __sk_buff *skb) {
         return ret;
     }
 
-    ret = read_packet_info(skb, &pkg_offset, &ip_pair);
+    ret = read_tproxy_packet_info(skb, &pkg_offset, &ip_pair);
     if (ret) {
-        ld_bpf_log("read_packet_info ret %d", ret);
+        ld_bpf_log("read_tproxy_packet_info ret %d", ret);
         return ret;
     }
     ret = handle_pkg(skb, &pkg_offset, &ip_pair, be_flow_port);

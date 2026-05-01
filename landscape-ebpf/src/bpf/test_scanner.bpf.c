@@ -228,7 +228,7 @@ int scanner_without_offset_info(struct __sk_buff *skb) {
     struct packet_offset_info pkg_offset = {0};
     struct inet_pair ip_pair;
 
-    ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+    ret = scan_packet_full(skb, current_l3_offset, &pkg_offset);
     if (ret) {
         return ret;
     }
@@ -255,7 +255,7 @@ int scanner_has_offset(struct __sk_buff *skb) {
         cb_to_packet_offset_info(skb, &pkg_offset, current_l3_offset);
     } else {
         pkg_offset.status = 1;
-        ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+        ret = scan_packet_full(skb, current_l3_offset, &pkg_offset);
         if (ret) {
             return ret;
         }
@@ -349,7 +349,7 @@ int test_scanner(struct __sk_buff *skb) {
     struct packet_info info = {};
     __builtin_memset(&info, 0, sizeof(info));
 
-    ret = scan_packet(skb, current_l3_offset, &info.offset);
+    ret = scan_packet_full(skb, current_l3_offset, &info.offset);
     if (ret) {
         return ret;
     }
@@ -385,14 +385,14 @@ int test_scanner(struct __sk_buff *skb) {
 //         cb_to_packet_offset_info(skb, &pkg_offset, current_l3_offset);
 //     } else {
 //         pkg_offset.status = 1;
-//         ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+//         ret = scan_packet_full(skb, current_l3_offset, &pkg_offset);
 //         if (ret) {
 //             return ret;
 //         }
 //         PACKET_OFFSET_INFO_TO_CB(skb, &pkg_offset);
 //     }
 
-//     // ret = scan_packet(skb, current_l3_offset, &pkg_offset);
+//     // ret = scan_packet_full(skb, current_l3_offset, &pkg_offset);
 //     // if (ret) {
 //     //     return ret;
 //     // }
