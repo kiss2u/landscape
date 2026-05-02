@@ -21,7 +21,7 @@ use super::connect::{cleanup, query as connect_query, schema as connect_schema};
 use super::dns::{history as dns_history, schema as dns_schema, summary as dns_summary};
 use super::hot_sqlite;
 use super::ingest::{
-    cleanup_flow_cache, collect_connect_realtime_snapshot, collect_realtime_iface_stats,
+    cleanup_flow_cache, collect_connect_realtime_snapshot, collect_iface_realtime_snapshot,
     collect_realtime_ip_stats, drain_iface_buckets, finalize_all_flows,
     new_connect_realtime_snapshot, new_iface_realtime_snapshot, process_connect_metric,
     publish_connect_realtime_snapshot, publish_iface_realtime_snapshot, second_points_by_key,
@@ -792,8 +792,7 @@ impl DuckMetricStore {
     }
 
     pub async fn get_realtime_iface_stats(&self) -> Vec<IfaceRealtimeStat> {
-        let now_ms = landscape_common::utils::time::get_current_time_ms().unwrap_or_default();
-        collect_realtime_iface_stats(&self.flow_cache, now_ms)
+        collect_iface_realtime_snapshot(&self.iface_snapshot)
     }
 
     pub async fn get_realtime_ip_stats(&self, is_src: bool) -> Vec<IpRealtimeStat> {
