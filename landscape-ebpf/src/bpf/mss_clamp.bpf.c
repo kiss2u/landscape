@@ -18,11 +18,9 @@ const volatile u16 mtu_size = 1492;
 const volatile u32 current_l3_offset = 14;
 
 #define MAX_SEGMENT_SIZE 2
-
-struct tcp_option_hdr {
-    u8 kind;
-    u8 len;
-};
+#define TCP_OPT_EOL 0
+#define TCP_OPT_NOP 1
+#define TCP_HDR_LEN 20
 
 static __always_inline int extract_ipv6_tcp_offset(struct __sk_buff *skb, u32 l3_offset,
                                                    u32 *ip_hdr_len) {
@@ -35,18 +33,16 @@ static __always_inline int extract_ipv6_tcp_offset(struct __sk_buff *skb, u32 l3
     u32 len = sizeof(struct ipv6hdr);
     u8 nexthdr = ip6h->nexthdr;
     struct ipv6_opt_hdr *opthdr;
-    bool seen_fragment = false;
 
 #pragma unroll
     for (int i = 0; i < LD_MAX_IPV6_EXT_NUM; i++) {
         switch (nexthdr) {
         case NEXTHDR_FRAGMENT:
-            seen_fragment = true;
-            // fallthrough
+        case NEXTHDR_AUTH:
+            return TC_ACT_UNSPEC;
         case NEXTHDR_HOP:
         case NEXTHDR_ROUTING:
-        case NEXTHDR_DEST:
-        case NEXTHDR_AUTH: {
+        case NEXTHDR_DEST: {
             if (VALIDATE_READ_DATA(skb, &opthdr, offset + len, sizeof(*opthdr))) return TC_ACT_SHOT;
 
             nexthdr = opthdr->nexthdr;
@@ -59,8 +55,6 @@ static __always_inline int extract_ipv6_tcp_offset(struct __sk_buff *skb, u32 l3
     }
 
 found_tcp:
-    if (seen_fragment) return TC_ACT_UNSPEC;
-
     if (nexthdr != NEXTHDR_TCP) return TC_ACT_UNSPEC;
 
     *ip_hdr_len = len;
@@ -77,24 +71,43 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
         return;
     }
     u8 tcp_size = (tcph->doff * 4);
-    if (tcp_size <= 20) {
+    if (tcp_size <= TCP_HDR_LEN) {
         return;
     }
-    // tcp option start offset
-    u32 option_offset = offset + 20;
-    u32 option_offset_end = offset + tcp_size;
-    u16 *mss;
-    // tcp hdr max is 60 - 20 = 40; 40 / 2 = 20;
-    int times = (tcp_size - 20) / 2;
-    times = times > 20 ? 20 : times;
-    struct tcp_option_hdr *top_hdr;
-    for (int i = 0; i < times; i++) {
-        if (VALIDATE_READ_DATA(skb, &top_hdr, option_offset, sizeof(*top_hdr))) {
+    u8 options_len = tcp_size - TCP_HDR_LEN;
+    u8 option_pos = 0;
+
+    // tcp hdr max is 60; options max is 40 bytes.
+    for (int i = 0; i < 40; i++) {
+        if (option_pos >= options_len) {
             return;
         }
 
-        if (top_hdr->kind == MAX_SEGMENT_SIZE) {
-#if defined(LAND_ARCH_RISCV)
+        u8 remaining = options_len - option_pos;
+        u32 option_offset = offset + TCP_HDR_LEN + option_pos;
+        u8 kind_val;
+        if (bpf_skb_load_bytes(skb, option_offset, &kind_val, sizeof(kind_val))) return;
+
+        if (kind_val == TCP_OPT_EOL) {
+            return;
+        }
+
+        if (kind_val == TCP_OPT_NOP) {
+            option_pos += 1;
+            continue;
+        }
+
+        if (remaining < 2) {
+            return;
+        }
+        u8 opt_len_val;
+        if (bpf_skb_load_bytes(skb, option_offset + 1, &opt_len_val, sizeof(opt_len_val))) return;
+        if (opt_len_val < 2 || opt_len_val > remaining) return;
+
+        if (kind_val == MAX_SEGMENT_SIZE) {
+            if (opt_len_val != 4) {
+                return;
+            }
             __be16 mss_val;
             if (bpf_skb_load_bytes(skb, option_offset + 2, &mss_val, sizeof(mss_val))) {
                 return;
@@ -112,31 +125,10 @@ static __always_inline void do_mss_clamp(struct __sk_buff *skb, u32 offset, u16 
                     return;
                 }
             }
-#else
-            u16 *mss;
-            if (VALIDATE_READ_DATA(skb, &mss, option_offset + 2, sizeof(*mss))) {
-                return;
-            }
-            if (bpf_ntohs(*mss) > mss_value) {
-                __be16 target_mss = bpf_htons(mss_value);
-                if (bpf_l4_csum_replace(skb, offset + offsetof(struct tcphdr, check), *mss,
-                                        target_mss, 2 | 0)) {
-                    ld_bpf_log("modify checksum error");
-                    return;
-                }
-                if (bpf_skb_store_bytes(skb, option_offset + 2, &target_mss, sizeof(target_mss),
-                                        0)) {
-                    ld_bpf_log("modify mss error");
-                    return;
-                }
-            }
-#endif
             return;
         }
-        option_offset = option_offset + top_hdr->len;
-        if (option_offset >= option_offset_end) {
-            return;
-        }
+
+        option_pos += opt_len_val;
     }
 
 #undef BPF_LOG_TOPIC
@@ -169,8 +161,6 @@ static __always_inline int find_and_clamp_tcp(struct __sk_buff *skb, u32 current
     }
     return TC_ACT_OK;
 }
-
-#define TCP_HDR_LEN 20
 
 SEC("tc/ingress")
 int clamp_ingress(struct __sk_buff *skb) {
