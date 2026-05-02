@@ -48,7 +48,7 @@ impl EnrolledDeviceService {
             let ip_u32 = u32::from(*ipv4);
             let is_valid = self
                 .dhcp_repo
-                .is_ip_in_range(iface.clone(), ip_u32)
+                .is_ip_in_subnet(iface.clone(), ip_u32)
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -128,7 +128,7 @@ impl EnrolledDeviceService {
         };
 
         let ip_u32 = u32::from(ipv4);
-        self.dhcp_repo.is_ip_in_range(iface_name, ip_u32).await
+        self.dhcp_repo.is_ip_in_subnet(iface_name, ip_u32).await
     }
 
     pub async fn find_out_of_range_bindings(

@@ -853,6 +853,8 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
             (DhcpOptionMessageType::Nak, Ipv4Addr::UNSPECIFIED)
         };
 
+    let is_nak = matches!(message_type, DhcpOptionMessageType::Nak);
+
     let mut options = DhcpOptionFrame {
         message_type,
         options,
@@ -863,7 +865,9 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
     options.update_or_create_option(DhcpOptions::AddressLeaseTime(server.address_lease_time));
     options.update_or_create_option(DhcpOptions::ServerIdentifier(server.server_ip));
 
-    options.apply_custom_and_filter(custom_opts, &filter_set);
+    if !is_nak {
+        options.apply_custom_and_filter(custom_opts, &filter_set);
+    }
 
     let offer = DhcpEthFrame {
         op: 2,

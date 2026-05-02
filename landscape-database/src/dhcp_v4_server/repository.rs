@@ -15,7 +15,7 @@ impl DHCPv4ServerRepository {
         Self { db }
     }
 
-    pub async fn is_ip_in_range(&self, iface_name: String, ip: u32) -> Result<bool, String> {
+    pub async fn is_ip_in_subnet(&self, iface_name: String, ip: u32) -> Result<bool, String> {
         use crate::dhcp_v4_server::entity::Column;
         use crate::repository::Repository;
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
