@@ -1,3 +1,4 @@
+pub mod auth_config;
 pub mod config;
 pub mod dns_config;
 pub mod gateway_config;

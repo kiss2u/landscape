@@ -69,6 +69,10 @@ impl LandscapeConfigService {
         self.config.load().ui.clone()
     }
 
+    pub fn get_auth_config(&self) -> landscape_common::config::AuthRuntimeConfig {
+        self.config.load().auth.clone()
+    }
+
     pub fn get_metric_config_from_memory(&self) -> LandscapeMetricConfig {
         self.config.load().file_config.metric.clone()
     }
@@ -178,8 +182,14 @@ impl LandscapeConfigService {
             let new_content = doc.to_string();
 
             let tmp_path = path.with_extension("toml.tmp");
-            let mut tmp_file =
-                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut tmp_file = opts.open(&tmp_path)?;
 
             tmp_file.write_all(new_content.as_bytes())?;
             tmp_file.sync_all()?;
@@ -242,8 +252,14 @@ impl LandscapeConfigService {
             let new_content = doc.to_string();
 
             let tmp_path = path.with_extension("toml.tmp");
-            let mut tmp_file =
-                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut tmp_file = opts.open(&tmp_path)?;
 
             tmp_file.write_all(new_content.as_bytes())?;
             tmp_file.sync_all()?;
@@ -307,8 +323,14 @@ impl LandscapeConfigService {
             let new_content = doc.to_string();
 
             let tmp_path = path.with_extension("toml.tmp");
-            let mut tmp_file =
-                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut tmp_file = opts.open(&tmp_path)?;
 
             tmp_file.write_all(new_content.as_bytes())?;
             tmp_file.sync_all()?;
@@ -372,8 +394,14 @@ impl LandscapeConfigService {
             let new_content = doc.to_string();
 
             let tmp_path = path.with_extension("toml.tmp");
-            let mut tmp_file =
-                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut tmp_file = opts.open(&tmp_path)?;
 
             tmp_file.write_all(new_content.as_bytes())?;
             tmp_file.sync_all()?;
@@ -438,8 +466,14 @@ impl LandscapeConfigService {
             let new_content = doc.to_string();
 
             let tmp_path = path.with_extension("toml.tmp");
-            let mut tmp_file =
-                OpenOptions::new().write(true).create(true).truncate(true).open(&tmp_path)?;
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut tmp_file = opts.open(&tmp_path)?;
 
             tmp_file.write_all(new_content.as_bytes())?;
             tmp_file.sync_all()?;
@@ -459,6 +493,58 @@ impl LandscapeConfigService {
             let mut new_config = (**old).clone();
             new_config.gateway = GatewayRuntimeConfig::from_file_config(&new_gateway);
             new_config.file_config.gateway = new_gateway.clone();
+            new_config
+        });
+
+        Ok(())
+    }
+
+    pub fn update_auth_password(&self, new_password: String) -> LdResult<()> {
+        let path = self.get_config_path();
+
+        let file = OpenOptions::new().read(true).write(true).create(true).open(&path)?;
+
+        file.lock_exclusive()?;
+
+        let result = (|| {
+            let mut content = String::new();
+            (&file).read_to_string(&mut content)?;
+
+            let mut doc =
+                content.parse::<DocumentMut>().map_err(|e| LdError::ConfigError(e.to_string()))?;
+
+            doc["auth"]["admin_pass"] = toml_edit::value(&new_password);
+
+            let new_content = doc.to_string();
+
+            let tmp_path = path.with_extension("toml.tmp");
+            let mut opts = OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut tmp_file = opts.open(&tmp_path)?;
+
+            tmp_file.write_all(new_content.as_bytes())?;
+            tmp_file.sync_all()?;
+
+            std::fs::rename(&tmp_path, &path)?;
+
+            Ok::<(), LdError>(())
+        })();
+
+        if file.unlock().is_err() {
+            tracing::warn!("Failed to release file lock on {}", path.display());
+        }
+
+        result?;
+
+        self.config.rcu(|old| {
+            let mut new_config = (**old).clone();
+            new_config.auth.admin_pass = new_password.clone();
+            new_config.file_config.auth.admin_pass = Some(new_password.clone());
             new_config
         });
 

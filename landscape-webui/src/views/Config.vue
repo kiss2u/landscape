@@ -10,6 +10,7 @@ import UIConfigCard from "@/views/config_parts/UIConfigCard.vue";
 import DNSConfigCard from "@/views/config_parts/DNSConfigCard.vue";
 import MetricConfigCard from "@/views/config_parts/MetricConfigCard.vue";
 import BackupConfigCard from "@/views/config_parts/BackupConfigCard.vue";
+import PasswordConfigCard from "@/views/config_parts/PasswordConfigCard.vue";
 
 const { t } = useI18n();
 const prefStore = usePreferenceStore();
@@ -44,6 +45,7 @@ onMounted(async () => {
         <UIConfigCard />
         <DNSConfigCard />
         <MetricConfigCard />
+        <PasswordConfigCard />
         <BackupConfigCard />
         <div style="height: 400px"></div>
       </n-space>
@@ -71,6 +73,10 @@ onMounted(async () => {
           <n-anchor-link
             :title="t('config.metric_title')"
             href="#metric-config"
+          />
+          <n-anchor-link
+            :title="t('config.password_title')"
+            href="#password-config"
           />
           <n-anchor-link
             :title="t('config.backup_title')"

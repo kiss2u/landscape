@@ -1,6 +1,8 @@
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
+
+use arc_swap::ArcSwap;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -84,7 +86,7 @@ fn create_jwt(user_id: &str, expiration: usize) -> Result<String, AuthError> {
 }
 
 pub async fn auth_handler(
-    State(auth): State<Arc<AuthRuntimeConfig>>,
+    State(auth): State<Arc<ArcSwap<AuthRuntimeConfig>>>,
     req: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, LandscapeApiError> {
@@ -106,7 +108,7 @@ pub async fn auth_handler(
         return Err(AuthError::InvalidToken)?;
     };
 
-    if token_data.claims.sub == auth.admin_user {
+    if token_data.claims.sub == auth.load().admin_user {
         let mut response = next.run(req).await;
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize;
@@ -129,7 +131,7 @@ pub async fn auth_handler(
 }
 
 pub async fn auth_handler_from_query(
-    State(auth): State<Arc<AuthRuntimeConfig>>,
+    State(auth): State<Arc<ArcSwap<AuthRuntimeConfig>>>,
     req: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, LandscapeApiError> {
@@ -151,7 +153,7 @@ pub async fn auth_handler_from_query(
         return Err(AuthError::InvalidToken)?;
     };
 
-    if token_data.claims.sub == auth.admin_user {
+    if token_data.claims.sub == auth.load().admin_user {
         Ok(next.run(req).await)
     } else {
         Err(AuthError::UnauthorizedUser)?
@@ -160,11 +162,11 @@ pub async fn auth_handler_from_query(
 
 /// Build the OpenApiRouter for auth (different state type from LandscapeApp).
 /// Used by openapi.rs to extract the spec, and by main.rs to serve.
-pub fn get_auth_openapi_router() -> OpenApiRouter<Arc<AuthRuntimeConfig>> {
+pub fn get_auth_openapi_router() -> OpenApiRouter<Arc<ArcSwap<AuthRuntimeConfig>>> {
     OpenApiRouter::new().routes(routes!(login_handler))
 }
 
-pub fn get_auth_route(auth: Arc<AuthRuntimeConfig>) -> Router {
+pub fn get_auth_route(auth: Arc<ArcSwap<AuthRuntimeConfig>>) -> Router {
     let (router, _) = get_auth_openapi_router().split_for_parts();
     router.with_state(auth)
 }
@@ -181,11 +183,12 @@ pub fn get_auth_route(auth: Arc<AuthRuntimeConfig>) -> Router {
     )
 )]
 async fn login_handler(
-    State(auth): State<Arc<AuthRuntimeConfig>>,
+    State(auth): State<Arc<ArcSwap<AuthRuntimeConfig>>>,
     JsonBody(LoginInfo { username, password }): JsonBody<LoginInfo>,
 ) -> LandscapeApiResult<LoginResult> {
+    let auth_config = auth.load();
     let mut result = LoginResult { success: false, token: "".to_string() };
-    if username == auth.admin_user && password == auth.admin_pass {
+    if username == auth_config.admin_user && password == auth_config.admin_pass {
         result.success = true;
         result.token = create_jwt(&username, DEFAULT_EXPIRE_TIME)?;
     } else {

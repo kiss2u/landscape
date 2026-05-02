@@ -31,6 +31,7 @@ pub fn get_sys_config_paths() -> OpenApiRouter<LandscapeApp> {
             super::gateway_config::get_gateway_config,
             super::gateway_config::update_gateway_config
         ))
+        .routes(routes!(super::auth_config::update_auth_config))
 }
 
 #[utoipa::path(

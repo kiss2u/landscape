@@ -6,6 +6,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use arc_swap::ArcSwap;
+
 use axum::{
     handler::HandlerWithoutStateExt, http::StatusCode, response::IntoResponse, routing::get, Router,
 };
@@ -49,7 +51,6 @@ use landscape::{
     },
     wifi::WifiServiceManagerService,
 };
-use landscape_common::dhcp::v4_server::config::DHCPv4ServiceConfig;
 use landscape_common::route::lan::RouteLanServiceConfig;
 use landscape_common::{
     args::{DbAction, LandscapeAction, LAND_ARGS, LAND_HOME_PATH},
@@ -60,6 +61,7 @@ use landscape_common::{
     service::controller::ControllerService,
     VERSION,
 };
+use landscape_common::{config::AuthRuntimeConfig, dhcp::v4_server::config::DHCPv4ServiceConfig};
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::repository::Repository;
 use tokio::runtime::Builder as RuntimeBuilder;
@@ -102,6 +104,7 @@ const UPLOAD_GEO_FILE_SIZE_LIMIT: usize = 100 * 1024 * 1024;
 #[derive(Clone)]
 pub struct LandscapeApp {
     pub home_path: PathBuf,
+    pub auth: Arc<ArcSwap<AuthRuntimeConfig>>,
     pub dns_service: LandscapeDnsService,
     pub ddns_service: DdnsService,
     pub dns_provider_profile_service: DnsProviderProfileService,
@@ -539,8 +542,10 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
     );
 
     startup_phase!("metric_service.start_service", metric_service.start_service().await);
+    let auth_share = Arc::new(ArcSwap::from_pointee(config.auth.clone()));
     let landscape_app_status = LandscapeApp {
         home_path: home_path.clone(),
+        auth: auth_share.clone(),
         dns_service,
         ddns_service,
         dns_provider_profile_service,
@@ -602,7 +607,6 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
 
     let serve_dir = ServeDir::new(&config.web.web_root).not_found_service(service);
 
-    let auth_share = Arc::new(config.auth.clone());
     auth::output_sys_token(&config.auth).await;
     // Build OpenApiRouter for each domain, then split into plain Router + discard local spec
     let (interfaces_router, _) = openapi::build_interfaces_openapi_router().split_for_parts();

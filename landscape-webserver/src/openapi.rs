@@ -112,6 +112,7 @@ impl Modify for SecurityAddon {
         landscape_common::geo::GeoIpConfig,
         // Auth types
         landscape_common::auth::LoginResult,
+        landscape_common::auth::ChangePasswordRequest,
         // Schemas referenced by IntoParams but not auto-registered
         landscape_common::metric::connect::ConnectSortKey,
         landscape_common::metric::connect::SortOrder,
