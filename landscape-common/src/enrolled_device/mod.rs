@@ -4,6 +4,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
+use crate::dhcp::v4_server::config::CustomDhcpOption;
 use crate::net::MacAddr;
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
@@ -58,6 +59,17 @@ pub struct EnrolledDevice {
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub tag: Vec<String>,
+
+    /// Per-device custom DHCP options (override global DHCP server custom_options)
+    /// 注意：此字段的修改需要重启 DHCP 服务才能生效。
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub dhcp_custom_options: Vec<CustomDhcpOption>,
+    /// Per-device DHCP option filter blocklist (option codes to not send to this device)
+    /// 注意：此字段的修改需要重启 DHCP 服务才能生效。
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub dhcp_filter_options: Vec<u8>,
 }
 
 impl LandscapeDBStore<Uuid> for EnrolledDevice {

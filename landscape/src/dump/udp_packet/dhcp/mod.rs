@@ -56,6 +56,9 @@ pub struct DhcpEthFrame {
 pub struct DhcpOptionFrame {
     pub message_type: DhcpOptionMessageType,
     pub options: Vec<DhcpOptions>,
+    /// 自定义原始 option (code, raw_data)，绕过 DhcpOptions enum
+    #[serde(default)]
+    pub custom_raw_options: Vec<(u8, Vec<u8>)>,
     pub end: Vec<u8>,
 }
 
@@ -85,7 +88,12 @@ impl DhcpOptionFrame {
         };
 
         // 返回填充好的 DhcpOptionFrame，其中 options 已经不包含 MessageType
-        Some(DhcpOptionFrame { message_type, options, end })
+        Some(DhcpOptionFrame {
+            message_type,
+            options,
+            custom_raw_options: vec![],
+            end,
+        })
     }
 
     pub fn convert_to_payload(&self) -> Vec<u8> {
@@ -93,6 +101,16 @@ impl DhcpOptionFrame {
         for op in self.options.iter() {
             let u8_data = op.decode_option();
             options.extend(u8_data);
+        }
+        // Encode custom raw options (code, length, data)
+        for (code, data) in &self.custom_raw_options {
+            if data.is_empty() || data.len() > u8::MAX as usize {
+                tracing::error!("skip invalid custom DHCP option {} length {}", code, data.len());
+                continue;
+            }
+            options.push(*code);
+            options.push(data.len() as u8);
+            options.extend_from_slice(data);
         }
         let pad_len = options.len() % 8;
         if pad_len != 0 {
@@ -122,6 +140,22 @@ impl DhcpOptionFrame {
         } else {
             None
         }
+    }
+
+    /// Filter standard options by blocklist, keeping server-managed ones unconditionally.
+    /// Then merge custom_raw_options, excluding any that appear in the blocklist.
+    pub fn apply_custom_and_filter(
+        &mut self,
+        custom_opts: Vec<(u8, Vec<u8>)>,
+        filter_set: &std::collections::HashSet<u8>,
+    ) {
+        self.options.retain(|opt| {
+            let idx = opt.get_index();
+            !filter_set.contains(&idx)
+                || landscape_common::dhcp::v4_server::config::is_server_managed(idx)
+        });
+        self.custom_raw_options =
+            custom_opts.into_iter().filter(|(code, _)| !filter_set.contains(code)).collect();
     }
 
     pub fn update_or_create_option(&mut self, new_option: DhcpOptions) {
@@ -245,6 +279,7 @@ pub fn offer_options() -> DhcpOptionFrame {
     return DhcpOptionFrame {
         message_type: options::DhcpOptionMessageType::Offer,
         options,
+        custom_raw_options: vec![],
         end: vec![255],
     };
 }
@@ -275,6 +310,7 @@ pub fn ack_options() -> DhcpOptionFrame {
     return DhcpOptionFrame {
         message_type: options::DhcpOptionMessageType::Ack,
         options,
+        custom_raw_options: vec![],
         end: vec![255],
     };
 }
@@ -300,6 +336,7 @@ pub fn discover_options(ciaddr: Option<Ipv4Addr>, hostname: String) -> DhcpOptio
     return DhcpOptionFrame {
         message_type: options::DhcpOptionMessageType::Discover,
         options,
+        custom_raw_options: vec![],
         end: vec![255],
     };
 }

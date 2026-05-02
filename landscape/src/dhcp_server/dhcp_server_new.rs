@@ -1,6 +1,6 @@
 use std::time::Instant;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
@@ -11,8 +11,9 @@ use crate::dump::udp_packet::dhcp::{
 };
 
 use cidr::Ipv4Inet;
-use landscape_common::dhcp::v4_server::config::DHCPv4ServerConfig;
+use landscape_common::dhcp::v4_server::config::{CustomDhcpOption, DHCPv4ServerConfig};
 use landscape_common::dhcp::v4_server::status::{DHCPv4OfferInfo, DHCPv4OfferInfoItem};
+use landscape_common::enrolled_device::EnrolledDevice;
 use landscape_common::net::MacAddr;
 use landscape_common::service::{ServiceStatus, WatchService};
 use landscape_common::utils::time::get_f64_timestamp;
@@ -31,6 +32,7 @@ const IP_EXPIRE_INTERVAL: u64 = 60 * 10;
 pub async fn dhcp_v4_server(
     iface_name: String,
     config: DHCPv4ServerConfig,
+    enrolled_devices: Vec<EnrolledDevice>,
     service_status: WatchService,
     assigned_ips: Arc<RwLock<DHCPv4OfferInfo>>,
 ) {
@@ -108,7 +110,7 @@ pub async fn dhcp_v4_server(
     let mut dhcp_server_service_status = service_status.subscribe();
     let timeout_timer = tokio::time::sleep(tokio::time::Duration::from_secs(IP_EXPIRE_INTERVAL));
     tokio::pin!(timeout_timer);
-    let mut dhcp_server = DHCPv4Server::init(config);
+    let mut dhcp_server = DHCPv4Server::init_with_enrolled(config, enrolled_devices);
 
     // Publish the freshly initialized lease/static-binding view immediately so
     // UI state reflects the new DHCP instance instead of any stale pre-restart cache.
@@ -263,6 +265,12 @@ struct DHCPv4ServerOfferedCache {
     is_static: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+struct PerMacDhcpOptions {
+    custom_options: Vec<CustomDhcpOption>,
+    filter_options: Vec<u8>,
+}
+
 impl DHCPv4ServerOfferedCache {
     fn get_expire_time(&self) -> u64 {
         self.relative_offer_time + self.valid_time as u64
@@ -293,12 +301,25 @@ pub struct DHCPv4Server {
     /// 持有的 OPTIONS
     options_map: HashMap<u8, DhcpOptions>,
 
+    /// 全局自定义 DHCP option
+    global_custom_options: Vec<(u8, Vec<u8>)>,
+    /// Enrolled device 中的 per-MAC option 设置，优先级高于公共 DHCP config
+    enrolled_per_mac_options: HashMap<MacAddr, PerMacDhcpOptions>,
+
     pub address_lease_time: u32,
 }
 
 impl DHCPv4Server {
     ///
+    #[cfg(test)]
     fn init(config: DHCPv4ServerConfig) -> Self {
+        Self::init_with_enrolled(config, vec![])
+    }
+
+    fn init_with_enrolled(
+        config: DHCPv4ServerConfig,
+        enrolled_devices: Vec<EnrolledDevice>,
+    ) -> Self {
         if config.ip_range_end == Some(Ipv4Addr::UNSPECIFIED) {
             tracing::warn!("ip_range_end is 0.0.0.0, treated as unset (using subnet last_address)");
         }
@@ -365,6 +386,61 @@ impl DHCPv4Server {
             );
         }
 
+        let mut enrolled_per_mac_options = HashMap::new();
+        for device in enrolled_devices {
+            if let Some(ipv4) = device.ipv4 {
+                if let Some(old_ip) = static_binding_ip_by_mac.insert(device.mac, ipv4) {
+                    allocated_host.remove(&old_ip);
+                    static_binding_mac_by_ip.remove(&old_ip);
+                }
+                if let Some(old_mac) = static_binding_mac_by_ip.insert(ipv4, device.mac) {
+                    if old_mac != device.mac {
+                        static_binding_ip_by_mac.remove(&old_mac);
+                        offered_ip.remove(&old_mac);
+                    }
+                }
+
+                allocated_host.insert(ipv4, true);
+                offered_ip.insert(
+                    device.mac,
+                    DHCPv4ServerOfferedCache {
+                        hostname: None,
+                        ip: ipv4,
+                        relative_offer_time: 0,
+                        valid_time: 86400,
+                        is_static: true,
+                    },
+                );
+            }
+
+            if !device.dhcp_custom_options.is_empty() || !device.dhcp_filter_options.is_empty() {
+                enrolled_per_mac_options.insert(
+                    device.mac,
+                    PerMacDhcpOptions {
+                        custom_options: device.dhcp_custom_options,
+                        filter_options: device.dhcp_filter_options,
+                    },
+                );
+            }
+        }
+
+        // Parse global custom options
+        let global_custom_options: Vec<(u8, Vec<u8>)> = config
+            .custom_options
+            .iter()
+            .filter_map(|opt| match opt.to_raw() {
+                Ok(raw) => Some(raw),
+                Err(e) => {
+                    tracing::error!(
+                        "global custom option code {}: {} — option skipped",
+                        opt.code(),
+                        e
+                    );
+                    None
+                }
+            })
+            .collect();
+
         let address_lease_time =
             config.address_lease_time.unwrap_or(LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME);
 
@@ -379,6 +455,8 @@ impl DHCPv4Server {
             static_binding_ip_by_mac,
             static_binding_mac_by_ip,
             options_map,
+            global_custom_options,
+            enrolled_per_mac_options,
             address_lease_time,
         }
     }
@@ -386,6 +464,55 @@ impl DHCPv4Server {
     fn add_decline_ip(&mut self, ip: Ipv4Addr) {
         if !self.allocated_host.contains_key(&ip) {
             self.allocated_host.insert(ip, false);
+        }
+    }
+
+    /// Resolve the final set of custom options for a specific MAC address.
+    /// Returns (custom_options, filter_set).
+    ///
+    /// - Starts with global_custom_options as baseline
+    /// - Enrolled device per-MAC custom_options override global by code
+    /// - Filter options are applied after all custom option sources are merged
+    pub fn resolve_options_for_mac(&self, mac: &MacAddr) -> (Vec<(u8, Vec<u8>)>, HashSet<u8>) {
+        let mut merged: HashMap<u8, Vec<u8>> =
+            self.global_custom_options.iter().map(|(code, data)| (*code, data.clone())).collect();
+        let mut filter_set = HashSet::new();
+
+        if let Some(per_mac) = self.enrolled_per_mac_options.get(mac) {
+            Self::merge_custom_options(
+                mac,
+                "enrolled_device",
+                &per_mac.custom_options,
+                &mut merged,
+            );
+            filter_set.extend(per_mac.filter_options.iter().copied());
+        }
+
+        let custom_options: Vec<(u8, Vec<u8>)> = merged.into_iter().collect();
+
+        (custom_options, filter_set)
+    }
+
+    fn merge_custom_options(
+        mac: &MacAddr,
+        source: &str,
+        custom_options: &[CustomDhcpOption],
+        merged: &mut HashMap<u8, Vec<u8>>,
+    ) {
+        for opt in custom_options {
+            match opt.to_raw() {
+                Ok((code, data)) => {
+                    merged.insert(code, data);
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "{source}[{:?}]: skipping custom option code {}: {}",
+                        mac,
+                        opt.code(),
+                        e
+                    );
+                }
+            }
         }
     }
 
@@ -478,7 +605,7 @@ impl DHCPv4Server {
         let ip_u32 = u32::from(ip);
         let start = u32::from(self.ip_range_start.address());
         let end = start + self.range_capacity;
-        ip_u32 >= start && ip_u32 <= end
+        ip_u32 >= start && ip_u32 < end
     }
 
     fn conflicts_with_static_binding(&self, mac_addr: &MacAddr, ip_addr: Ipv4Addr) -> bool {
@@ -623,8 +750,15 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
         crate::dump::udp_packet::dhcp::get_default_request_list()
     };
 
+    // Resolve custom options and filter set for this client
+    let (custom_opts, filter_set) = server.resolve_options_for_mac(&frame.chaddr);
+
     if let DhcpOptions::ParameterRequestList(info_list) = request_params {
         for each_index in info_list {
+            // Skip if this option code is filtered out for this client
+            if filter_set.contains(&each_index) {
+                continue;
+            }
             if let Some(opt) = server.options_map.get(&each_index) {
                 options.push(opt.clone());
             } else {
@@ -638,11 +772,14 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
     let mut options = DhcpOptionFrame {
         message_type: DhcpOptionMessageType::Offer,
         options,
+        custom_raw_options: vec![],
         end: vec![255],
     };
 
     options.update_or_create_option(DhcpOptions::AddressLeaseTime(server.address_lease_time));
     options.update_or_create_option(DhcpOptions::ServerIdentifier(server.server_ip));
+
+    options.apply_custom_and_filter(custom_opts, &filter_set);
 
     let hostname = frame.options.get_hostname();
     if let Some(client_addr) = server.offer_ip(&frame.chaddr, hostname) {
@@ -677,8 +814,16 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
     } else {
         crate::dump::udp_packet::dhcp::get_default_request_list()
     };
+
+    // Resolve custom options and filter set for this client
+    let (custom_opts, filter_set) = server.resolve_options_for_mac(&frame.chaddr);
+
     if let DhcpOptions::ParameterRequestList(info_list) = request_params {
         for each_index in info_list {
+            // Skip if this option code is filtered out for this client
+            if filter_set.contains(&each_index) {
+                continue;
+            }
             if let Some(opt) = server.options_map.get(&each_index) {
                 options.push(opt.clone());
             }
@@ -708,10 +853,17 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
             (DhcpOptionMessageType::Nak, Ipv4Addr::UNSPECIFIED)
         };
 
-    let mut options = DhcpOptionFrame { message_type, options, end: vec![255] };
+    let mut options = DhcpOptionFrame {
+        message_type,
+        options,
+        custom_raw_options: vec![],
+        end: vec![255],
+    };
 
     options.update_or_create_option(DhcpOptions::AddressLeaseTime(server.address_lease_time));
     options.update_or_create_option(DhcpOptions::ServerIdentifier(server.server_ip));
+
+    options.apply_custom_and_filter(custom_opts, &filter_set);
 
     let offer = DhcpEthFrame {
         op: 2,
@@ -740,7 +892,8 @@ mod tests {
 
     use cidr::Ipv4Inet;
     use landscape_common::{
-        dhcp::v4_server::config::{DHCPv4ServerConfig, MacBindingRecord},
+        dhcp::v4_server::config::{CustomDhcpOption, DHCPv4ServerConfig, MacBindingRecord},
+        enrolled_device::EnrolledDevice,
         net::MacAddr,
     };
 
@@ -828,5 +981,117 @@ mod tests {
         let mut dhcp_server = DHCPv4Server::init(config);
 
         assert!(!dhcp_server.ack_request_without_hostname(&other, static_ip));
+    }
+
+    #[test]
+    fn resolve_options_returns_global_when_no_per_mac() {
+        let mut config = DHCPv4ServerConfig::default();
+        config.custom_options = vec![
+            CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()),
+            CustomDhcpOption::BootfileName("ipxe.kpxe".to_string()),
+        ];
+        let server = DHCPv4Server::init(config);
+        let mac = MacAddr::from_str("00:00:00:00:00:01").unwrap();
+
+        let (opts, filter) = server.resolve_options_for_mac(&mac);
+        assert_eq!(opts.len(), 2);
+        assert!(filter.is_empty());
+
+        let opts_map: std::collections::HashMap<u8, Vec<u8>> = opts.into_iter().collect();
+        assert_eq!(opts_map.get(&66).unwrap(), b"192.168.1.1");
+        assert_eq!(opts_map.get(&67).unwrap(), b"ipxe.kpxe");
+    }
+
+    #[test]
+    fn resolve_options_enrolled_overrides_global_by_code() {
+        let mut config = DHCPv4ServerConfig::default();
+        config.custom_options = vec![
+            CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()),
+            CustomDhcpOption::BootfileName("ipxe.kpxe".to_string()),
+        ];
+        let mac = MacAddr::from_str("AA:BB:CC:DD:EE:FF").unwrap();
+        let enrolled = EnrolledDevice {
+            mac,
+            name: "device".to_string(),
+            ipv4: Some(Ipv4Addr::new(192, 168, 5, 50)),
+            dhcp_custom_options: vec![CustomDhcpOption::BootfileName("undionly.kpxe".to_string())],
+            ..serde_json::from_value(serde_json::json!({
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "name": "device"
+            }))
+            .unwrap()
+        };
+
+        let server = DHCPv4Server::init_with_enrolled(config, vec![enrolled]);
+
+        let (opts, _) = server.resolve_options_for_mac(&mac);
+        let opts_map: std::collections::HashMap<u8, Vec<u8>> = opts.into_iter().collect();
+        // 66 from global
+        assert_eq!(opts_map.get(&66).unwrap(), b"192.168.1.1");
+        // 67 overridden by enrolled device
+        assert_eq!(opts_map.get(&67).unwrap(), b"undionly.kpxe");
+    }
+
+    #[test]
+    fn resolve_options_filter_set_applied() {
+        let mac = MacAddr::from_str("AA:BB:CC:DD:EE:FF").unwrap();
+        let enrolled = EnrolledDevice {
+            mac,
+            name: "device".to_string(),
+            ipv4: Some(Ipv4Addr::new(192, 168, 5, 50)),
+            dhcp_filter_options: vec![15, 28],
+            ..serde_json::from_value(serde_json::json!({
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "name": "device"
+            }))
+            .unwrap()
+        };
+
+        let server =
+            DHCPv4Server::init_with_enrolled(DHCPv4ServerConfig::default(), vec![enrolled]);
+
+        let (_, filter) = server.resolve_options_for_mac(&mac);
+        assert!(filter.contains(&15));
+        assert!(filter.contains(&28));
+        assert!(!filter.contains(&1)); // SubnetMask not filtered
+    }
+
+    #[test]
+    fn resolve_options_enrolled_overrides_dhcp_config_common_options() {
+        let mut config = DHCPv4ServerConfig::default();
+        config.custom_options = vec![
+            CustomDhcpOption::TFTPServerName("global-tftp".to_string()),
+            CustomDhcpOption::BootfileName("config.kpxe".to_string()),
+        ];
+        let mac = MacAddr::from_str("AA:BB:CC:DD:EE:FF").unwrap();
+        config.mac_binding_records.push(MacBindingRecord {
+            mac,
+            ip: Ipv4Addr::new(192, 168, 5, 50),
+            expire_time: 86400,
+        });
+        let enrolled = EnrolledDevice {
+            mac,
+            name: "device".to_string(),
+            ipv4: Some(Ipv4Addr::new(192, 168, 5, 51)),
+            dhcp_custom_options: vec![CustomDhcpOption::BootfileName("enrolled.kpxe".to_string())],
+            dhcp_filter_options: vec![28],
+            ..serde_json::from_value(serde_json::json!({
+                "mac": "AA:BB:CC:DD:EE:FF",
+                "name": "device"
+            }))
+            .unwrap()
+        };
+
+        let server = DHCPv4Server::init_with_enrolled(config, vec![enrolled]);
+
+        let (opts, filter) = server.resolve_options_for_mac(&mac);
+        let opts_map: std::collections::HashMap<u8, Vec<u8>> = opts.into_iter().collect();
+        assert_eq!(opts_map.get(&66).unwrap(), b"global-tftp");
+        assert_eq!(opts_map.get(&67).unwrap(), b"enrolled.kpxe");
+        assert!(filter.contains(&28));
+        assert_eq!(
+            server.static_binding_ip_by_mac.get(&mac).copied(),
+            Some(Ipv4Addr::new(192, 168, 5, 51))
+        );
     }
 }

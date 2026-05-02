@@ -32,6 +32,17 @@ impl EnrolledDeviceService {
     }
 
     pub async fn push(&self, data: EnrolledDevice) -> Result<(), String> {
+        // Validate custom DHCP options
+        landscape_common::dhcp::v4_server::config::validate_custom_options(
+            &data.dhcp_custom_options,
+        )
+        .map_err(|e| e.to_string())?;
+        // Validate filter option codes
+        landscape_common::dhcp::v4_server::config::validate_filter_options(
+            &data.dhcp_filter_options,
+        )
+        .map_err(|e| e.to_string())?;
+
         // Validate IPv4 is within the specified interface's DHCP range
         if let (Some(iface), Some(ipv4)) = (&data.iface_name, &data.ipv4) {
             let ip_u32 = u32::from(*ipv4);

@@ -1,9 +1,11 @@
+use std::collections::HashSet;
 use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
 use crate::net::MacAddr;
+use crate::net_proto::udp::dhcp::{DhcpV4Option, Encodable};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
 use crate::utils::time::get_f64_timestamp;
@@ -14,6 +16,326 @@ use crate::{
     LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK, LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME,
 };
 
+// ─── Option code classification ─────────────────────────────────────────────
+
+/// DHCP option codes that cannot be used as custom options (protocol reserved).
+const PROTOCOL_RESERVED_OPTION_CODES: &[u8] = &[
+    0,   // Pad
+    255, // End
+];
+
+/// DHCP option codes managed by the server (injected automatically).
+/// - Cannot be overridden via custom_options
+/// - Must NOT be filtered out from responses (would break DHCP functionality)
+const SERVER_MANAGED_OPTION_CODES: &[u8] = &[
+    1,  // Subnet Mask
+    3,  // Router
+    6,  // Domain Name Server
+    51, // Address Lease Time
+    53, // Message Type
+    54, // Server Identifier
+];
+
+const MAX_CUSTOM_OPTION_DATA_LEN: usize = u8::MAX as usize;
+
+/// Check if an option code is reserved and cannot be used as a custom option.
+pub fn is_reserved_option_code(code: u8) -> bool {
+    PROTOCOL_RESERVED_OPTION_CODES.contains(&code) || SERVER_MANAGED_OPTION_CODES.contains(&code)
+}
+
+/// Check if an option code is server-managed and must not be filtered out.
+pub fn is_server_managed(code: u8) -> bool {
+    SERVER_MANAGED_OPTION_CODES.contains(&code)
+}
+
+/// Human-readable name for common DHCP option codes (best-effort lookup).
+fn option_code_name(code: u8) -> &'static str {
+    match code {
+        0 => "Pad",
+        1 => "Subnet Mask",
+        3 => "Router",
+        6 => "Domain Name Server",
+        12 => "Host Name",
+        15 => "Domain Name",
+        28 => "Broadcast Address",
+        43 => "Vendor Extensions",
+        51 => "Address Lease Time",
+        53 => "Message Type",
+        54 => "Server Identifier",
+        66 => "TFTP Server Name",
+        67 => "Bootfile Name",
+        82 => "Relay Agent Information",
+        255 => "End",
+        _ => "unknown",
+    }
+}
+
+// ─── RelayAgentInfo wrapper ──────────────────────────────────────────────────
+
+/// Newtype wrapper for [`dhcproto::v4::relay::RelayAgentInformation`].
+/// Required because the upstream type does not implement `utoipa::ToSchema`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(value_type = Object))]
+pub struct RelayAgentInfo(pub dhcproto::v4::relay::RelayAgentInformation);
+
+// ─── CustomDhcpOption ───────────────────────────────────────────────────────
+
+/// Supported custom DHCP option types.
+///
+/// This enum is the **whitelist** of options that can be configured via API.
+/// Each variant maps 1:1 to a frontend UI component.
+///
+/// JSON format (serde externally tagged):
+/// ```json
+/// {"TFTPServerName": "192.168.1.1"}
+/// {"BootfileName": "ipxe.kpxe"}
+/// {"VendorExtensions": "ff0001"}
+/// {"RelayAgentInformation": {"AgentCircuitId": "010203"}}
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum CustomDhcpOption {
+    /// Option 66 — TFTP server name (iPXE, string)
+    TFTPServerName(String),
+    /// Option 67 — Boot file name (iPXE, string)
+    BootfileName(String),
+    /// Option 43 — Vendor-specific extensions (binary, hex string)
+    VendorExtensions(
+        #[serde(serialize_with = "serialize_hex", deserialize_with = "deserialize_hex")] Vec<u8>,
+    ),
+    /// Option 82 — Relay Agent Information (structured sub-options)
+    RelayAgentInformation(RelayAgentInfo),
+}
+
+impl CustomDhcpOption {
+    /// DHCP option code for this custom option.
+    pub fn code(&self) -> u8 {
+        match self {
+            CustomDhcpOption::TFTPServerName(_) => 66,
+            CustomDhcpOption::BootfileName(_) => 67,
+            CustomDhcpOption::VendorExtensions(_) => 43,
+            CustomDhcpOption::RelayAgentInformation(RelayAgentInfo(_)) => 82,
+        }
+    }
+
+    /// Convert to dhcproto [`DhcpV4Option`].
+    pub fn to_dhcp_option(&self) -> DhcpV4Option {
+        match self {
+            CustomDhcpOption::TFTPServerName(s) => {
+                DhcpV4Option::TFTPServerName(s.as_bytes().to_vec())
+            }
+            CustomDhcpOption::BootfileName(s) => DhcpV4Option::BootfileName(s.as_bytes().to_vec()),
+            CustomDhcpOption::VendorExtensions(bytes) => {
+                DhcpV4Option::VendorExtensions(bytes.clone())
+            }
+            CustomDhcpOption::RelayAgentInformation(RelayAgentInfo(info)) => {
+                DhcpV4Option::RelayAgentInformation(info.clone())
+            }
+        }
+    }
+
+    /// Encode to `(code, raw_data_bytes)`.
+    ///
+    /// Returns an error if the underlying dhcproto encoding fails
+    /// (e.g. malformed RelayAgentInformation sub-options).
+    pub fn to_raw(&self) -> Result<(u8, Vec<u8>), String> {
+        let opt = self.to_dhcp_option();
+        let mut buf = Vec::new();
+        let mut encoder = dhcproto::Encoder::new(&mut buf);
+        opt.encode(&mut encoder)
+            .map_err(|e| format!("DHCP option code {} encode failed: {}", self.code(), e))?;
+        if buf.len() < 2 {
+            return Err(format!("DHCP option code {} encoded no data", self.code()));
+        }
+
+        let encoded_code = buf[0];
+        if encoded_code != self.code() {
+            return Err(format!(
+                "DHCP option code {} encoded as unexpected code {}",
+                self.code(),
+                encoded_code
+            ));
+        }
+
+        // dhcproto encodes a single option as [code, len, data...]. It splits
+        // payloads over 255 bytes into repeated options, which this server's
+        // raw-option path does not support.
+        let data_len = buf[1] as usize;
+        if data_len == 0 {
+            return Err(format!("DHCP option code {} data must not be empty", self.code()));
+        }
+        if data_len != buf.len() - 2 {
+            return Err(format!(
+                "DHCP option code {} data too long or malformed ({} encoded bytes, max {})",
+                self.code(),
+                buf.len() - 2,
+                MAX_CUSTOM_OPTION_DATA_LEN
+            ));
+        }
+
+        Ok((encoded_code, buf[2..].to_vec()))
+    }
+
+    /// Validate this custom option's data constraints.
+    ///
+    /// - String options (TFTP/Bootfile) must be non-empty ASCII and <= 255 bytes.
+    /// - Binary options (VendorExtensions) must be non-empty and <= 255 bytes.
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            CustomDhcpOption::TFTPServerName(s) => {
+                if s.is_empty() {
+                    return Err("TFTPServerName must not be empty".into());
+                }
+                if !s.is_ascii() {
+                    return Err("TFTPServerName must contain only ASCII characters".into());
+                }
+                if s.len() > MAX_CUSTOM_OPTION_DATA_LEN {
+                    return Err(format!(
+                        "TFTPServerName too long ({} bytes, max {})",
+                        s.len(),
+                        MAX_CUSTOM_OPTION_DATA_LEN
+                    ));
+                }
+            }
+            CustomDhcpOption::BootfileName(s) => {
+                if s.is_empty() {
+                    return Err("BootfileName must not be empty".into());
+                }
+                if !s.is_ascii() {
+                    return Err("BootfileName must contain only ASCII characters".into());
+                }
+                if s.len() > MAX_CUSTOM_OPTION_DATA_LEN {
+                    return Err(format!(
+                        "BootfileName too long ({} bytes, max {})",
+                        s.len(),
+                        MAX_CUSTOM_OPTION_DATA_LEN
+                    ));
+                }
+            }
+            CustomDhcpOption::VendorExtensions(bytes) => {
+                if bytes.is_empty() {
+                    return Err("VendorExtensions must not be empty".into());
+                }
+                if bytes.len() > MAX_CUSTOM_OPTION_DATA_LEN {
+                    return Err(format!(
+                        "VendorExtensions too long ({} bytes, max {})",
+                        bytes.len(),
+                        MAX_CUSTOM_OPTION_DATA_LEN
+                    ));
+                }
+            }
+            CustomDhcpOption::RelayAgentInformation(_) => {
+                // Eagerly verify the data encodes cleanly so callers of
+                // `to_raw()` never hit an unexpected encode failure at
+                // DHCP server startup time.
+                self.to_raw().map_err(|e| format!("RelayAgentInformation encode failed: {}", e))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+// ─── hex serde helpers (for VendorExtensions) ───────────────────────────────
+
+fn serialize_hex<S: serde::Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&hex_encode(bytes))
+}
+
+fn deserialize_hex<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+    let s = String::deserialize(deserializer)?;
+    hex_decode(&s).map_err(serde::de::Error::custom)
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
+    let hex = hex.trim();
+    if hex.is_empty() {
+        return Ok(vec![]);
+    }
+    if hex.len() % 2 != 0 {
+        return Err(format!("hex string must have even length, got {}", hex.len()));
+    }
+    let mut bytes = Vec::with_capacity(hex.len() / 2);
+    for chunk in hex.as_bytes().chunks(2) {
+        let hi = from_hex_digit(chunk[0])
+            .ok_or_else(|| format!("invalid hex char: {}", chunk[0] as char))?;
+        let lo = from_hex_digit(chunk[1])
+            .ok_or_else(|| format!("invalid hex char: {}", chunk[1] as char))?;
+        bytes.push((hi << 4) | lo);
+    }
+    Ok(bytes)
+}
+
+fn from_hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+// ─── Validation ─────────────────────────────────────────────────────────────
+
+/// Validate a list of custom options: no duplicates, and reserved codes are
+/// impossible because `CustomDhcpOption` is an enum (whitelist by construction).
+pub fn validate_custom_options(opts: &[CustomDhcpOption]) -> Result<(), ServiceConfigError> {
+    let mut seen = HashSet::new();
+    for opt in opts {
+        opt.validate().map_err(|e| ServiceConfigError::InvalidConfig {
+            reason: format!("custom option code {}: {}", opt.code(), e),
+        })?;
+        if !seen.insert(opt.code()) {
+            return Err(ServiceConfigError::InvalidConfig {
+                reason: format!("duplicate custom option code {}", opt.code()),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Validate a list of filter option codes.
+///
+/// - Server-managed codes cannot be filtered.
+/// - No duplicate codes allowed.
+pub fn validate_filter_options(filters: &[u8]) -> Result<(), ServiceConfigError> {
+    let mut seen = HashSet::new();
+    for &code in filters {
+        if PROTOCOL_RESERVED_OPTION_CODES.contains(&code) {
+            return Err(ServiceConfigError::InvalidConfig {
+                reason: format!(
+                    "filter_options: code {} is protocol reserved ({}) and cannot be used",
+                    code,
+                    option_code_name(code),
+                ),
+            });
+        }
+        if is_server_managed(code) {
+            return Err(ServiceConfigError::InvalidConfig {
+                reason: format!(
+                    "filter_options: code {} ({}) is server-managed and cannot be filtered out \
+                     (would break DHCP functionality)",
+                    code,
+                    option_code_name(code),
+                ),
+            });
+        }
+        if !seen.insert(code) {
+            return Err(ServiceConfigError::InvalidConfig {
+                reason: format!("duplicate filter option code {}", code),
+            });
+        }
+    }
+    Ok(())
+}
+
+// ─── Config structs ─────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DHCPv4ServiceConfig {
@@ -22,7 +344,7 @@ pub struct DHCPv4ServiceConfig {
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub config: DHCPv4ServerConfig,
-    /// 最近一次编译时间
+    /// 最近一次更新时间
     #[serde(default = "get_f64_timestamp")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub update_at: f64,
@@ -73,9 +395,6 @@ impl crate::iface::config::ZoneAwareConfig for DHCPv4ServiceConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DHCPv4ServerConfig {
-    /// dhcp options
-    // #[serde(default)]
-    // options: Vec<DhcpOptions>,
     /// range start
     #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub ip_range_start: Ipv4Addr,
@@ -98,6 +417,13 @@ pub struct DHCPv4ServerConfig {
     #[cfg_attr(feature = "openapi", schema(required = true))]
     /// Static MAC --> IP address binding
     pub mac_binding_records: Vec<MacBindingRecord>,
+
+    /// 自定义 DHCP option，会无条件注入到所有 DHCP 响应中。
+    /// 适用于 iPXE (option 66/67) 等需要 server 主动下发的场景。
+    /// 注意：此字段的修改需要重启 DHCP 服务才能生效。
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false))]
+    pub custom_options: Vec<CustomDhcpOption>,
 }
 
 impl DHCPv4ServerConfig {
@@ -114,13 +440,11 @@ impl DHCPv4ServerConfig {
         let network = server_u32 & mask_bits;
         let broadcast = network | !mask_bits;
 
-        // usable host: in subnet, not network address, not broadcast
         let is_usable_host = |ip: Ipv4Addr| -> bool {
             let ip_u32 = u32::from(ip);
             ip_u32 & mask_bits == network && ip_u32 != network && ip_u32 != broadcast
         };
 
-        // server_ip must be a usable host in the subnet
         if !is_usable_host(self.server_ip_addr) {
             return Err(ServiceConfigError::InvalidConfig {
                 reason: format!(
@@ -130,7 +454,6 @@ impl DHCPv4ServerConfig {
             });
         }
 
-        // ip_range_start must be a usable host and not equal to server_ip
         if !is_usable_host(self.ip_range_start) {
             return Err(ServiceConfigError::InvalidConfig {
                 reason: format!(
@@ -148,9 +471,6 @@ impl DHCPv4ServerConfig {
             });
         }
 
-        // ip_range_end is exclusive (not included), so broadcast is a valid
-        // boundary — it means the last assigned address is broadcast-1.
-        // We only reject: out-of-subnet, network address, and < start.
         if let Some(end) = self.ip_range_end {
             let end_u32 = u32::from(end);
             if end_u32 & mask_bits != network || end_u32 == network {
@@ -171,7 +491,6 @@ impl DHCPv4ServerConfig {
             }
         }
 
-        // address_lease_time (if set) must be > 0
         if let Some(lease) = self.address_lease_time {
             if lease == 0 {
                 return Err(ServiceConfigError::InvalidConfig {
@@ -180,7 +499,6 @@ impl DHCPv4ServerConfig {
             }
         }
 
-        // mac_binding_records: each IP must be in subnet and not equal to server_ip
         for (i, record) in self.mac_binding_records.iter().enumerate() {
             if !is_usable_host(record.ip) {
                 return Err(ServiceConfigError::InvalidConfig {
@@ -200,6 +518,8 @@ impl DHCPv4ServerConfig {
             }
         }
 
+        validate_custom_options(&self.custom_options)?;
+
         Ok(())
     }
 
@@ -207,10 +527,9 @@ impl DHCPv4ServerConfig {
     pub fn get_ip_range(&self) -> (Ipv4Addr, Ipv4Addr) {
         let start = self.ip_range_start;
         let end = self.ip_range_end.unwrap_or_else(|| {
-            // 如果没有指定结束地址，根据网络掩码计算
             let network = u32::from(start) & (0xFFFFFFFFu32 << (32 - self.network_mask));
             let broadcast = network | (0xFFFFFFFFu32 >> self.network_mask);
-            Ipv4Addr::from(broadcast - 1) // 广播地址前一个
+            Ipv4Addr::from(broadcast - 1)
         });
         (start, end)
     }
@@ -225,7 +544,6 @@ impl DHCPv4ServerConfig {
         let start2_u32 = u32::from(start2);
         let end2_u32 = u32::from(end2);
 
-        // 检查是否有重叠：A的开始 <= B的结束 && B的开始 <= A的结束
         start1_u32 <= end2_u32 && start2_u32 <= end1_u32
     }
 }
@@ -239,6 +557,7 @@ impl Default for DHCPv4ServerConfig {
             network_mask: LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK,
             address_lease_time: Some(LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME),
             mac_binding_records: vec![],
+            custom_options: vec![],
         }
     }
 }
@@ -258,4 +577,154 @@ pub struct MacBindingRecord {
 const fn default_binding_record() -> u32 {
     // 24 小时
     86400
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── CustomDhcpOption serde ────────────────────────────────────
+
+    #[test]
+    fn serde_tftp_server_name() {
+        let json = r#"{"TFTPServerName":"192.168.1.1"}"#;
+        let opt: CustomDhcpOption = serde_json::from_str(json).unwrap();
+        assert_eq!(opt.code(), 66);
+        assert_eq!(opt.to_raw().unwrap().1, b"192.168.1.1");
+        assert_eq!(serde_json::to_string(&opt).unwrap(), json);
+    }
+
+    #[test]
+    fn serde_vendor_extensions_hex() {
+        let json = r#"{"VendorExtensions":"ff0001"}"#;
+        let opt: CustomDhcpOption = serde_json::from_str(json).unwrap();
+        assert_eq!(opt.code(), 43);
+        assert_eq!(opt.to_raw().unwrap().1, vec![0xff, 0x00, 0x01]);
+        assert_eq!(serde_json::to_string(&opt).unwrap(), json);
+    }
+
+    #[test]
+    fn serde_relay_agent_information() {
+        let json = r#"{"RelayAgentInformation":{}}"#;
+        let opt: CustomDhcpOption = serde_json::from_str(json).unwrap();
+        assert_eq!(opt.code(), 82);
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn serde_unsupported_key_rejected() {
+        let json = r#"{"Hostname":"test"}"#;
+        let result: Result<CustomDhcpOption, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn serde_mac_binding_record_defaults() {
+        let json = r#"{
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "ip": "192.168.1.50"
+        }"#;
+        let record: MacBindingRecord = serde_json::from_str(json).unwrap();
+        assert_eq!(record.expire_time, 86400);
+    }
+
+    // ── Validation ────────────────────────────────────────────────
+
+    #[test]
+    fn duplicate_custom_option_codes_rejected() {
+        let opts = vec![
+            CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()),
+            CustomDhcpOption::TFTPServerName("192.168.1.2".to_string()),
+        ];
+        assert!(validate_custom_options(&opts).is_err());
+    }
+
+    #[test]
+    fn different_codes_accepted() {
+        let opts = vec![
+            CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()),
+            CustomDhcpOption::BootfileName("ipxe.kpxe".to_string()),
+            CustomDhcpOption::VendorExtensions(vec![0xff]),
+        ];
+        assert!(validate_custom_options(&opts).is_ok());
+    }
+
+    #[test]
+    fn config_validate_accepts_valid_custom_options() {
+        let mut config = DHCPv4ServerConfig::default();
+        config.custom_options.push(CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()));
+        config.custom_options.push(CustomDhcpOption::BootfileName("ipxe.kpxe".to_string()));
+        config.custom_options.push(CustomDhcpOption::VendorExtensions(vec![0xff, 0x00, 0x01]));
+        assert!(config.validate().is_ok());
+    }
+
+    // ── custom option data validation ──────────────────────────────
+
+    #[test]
+    fn validate_tftp_server_name_rejects_non_ascii() {
+        let opt = CustomDhcpOption::TFTPServerName("中文服务器".to_string());
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn validate_bootfile_name_rejects_non_ascii() {
+        let opt = CustomDhcpOption::BootfileName("文件名.kpxe".to_string());
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn validate_vendor_extensions_rejects_over_255_bytes() {
+        let opt = CustomDhcpOption::VendorExtensions(vec![0xff; 256]);
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn validate_string_options_rejects_over_255_bytes() {
+        let long = "a".repeat(256);
+        let opt = CustomDhcpOption::TFTPServerName(long);
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn validate_custom_options_rejects_empty_data() {
+        assert!(CustomDhcpOption::TFTPServerName("".to_string()).validate().is_err());
+        assert!(CustomDhcpOption::BootfileName("".to_string()).validate().is_err());
+        assert!(CustomDhcpOption::VendorExtensions(vec![]).validate().is_err());
+    }
+
+    #[test]
+    fn validate_custom_options_propagates_data_errors() {
+        let opts = vec![CustomDhcpOption::TFTPServerName("中文".to_string())];
+        assert!(validate_custom_options(&opts).is_err());
+    }
+
+    // ── filter validation ─────────────────────────────────────────
+
+    #[test]
+    fn validate_filter_options_rejects_duplicates() {
+        assert!(validate_filter_options(&[15, 28, 15]).is_err());
+    }
+
+    #[test]
+    fn validate_filter_options_accepts_valid_codes() {
+        assert!(validate_filter_options(&[15, 28]).is_ok());
+    }
+
+    // ── full config serde roundtrip ───────────────────────────────
+
+    #[test]
+    fn config_json_roundtrip_with_custom_options() {
+        let mut config = DHCPv4ServerConfig::default();
+        config
+            .custom_options
+            .push(CustomDhcpOption::TFTPServerName("tftp.example.com".to_string()));
+        config.custom_options.push(CustomDhcpOption::BootfileName("boot/pxelinux.0".to_string()));
+
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        let parsed: DHCPv4ServerConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.custom_options.len(), 2);
+        assert_eq!(parsed.custom_options[0].to_raw().unwrap().1, b"tftp.example.com");
+        assert_eq!(parsed.custom_options[1].to_raw().unwrap().1, b"boot/pxelinux.0");
+    }
 }

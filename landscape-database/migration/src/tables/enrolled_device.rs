@@ -15,4 +15,6 @@ pub enum EnrolledDevice {
     Ipv4Int,
     Ipv6,
     Tag,
+    DhcpCustomOptions,
+    DhcpFilterOptions,
 }

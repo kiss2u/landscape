@@ -87,7 +87,7 @@ impl DHCPv4ServerStarter {
 impl ServiceStarterTrait for DHCPv4ServerStarter {
     type Config = DHCPv4ServiceConfig;
 
-    async fn start(&self, mut config: DHCPv4ServiceConfig) -> WatchService {
+    async fn start(&self, config: DHCPv4ServiceConfig) -> WatchService {
         let service_status = WatchService::new();
 
         if !config.enable {
@@ -106,9 +106,6 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
             };
             self.route_service.insert_ipv4_lan_route(&config.iface_name, info).await;
 
-            // 获取全局及本接口的 IP-MAC 绑定信息, 并同步到当前 DHCP 服务的静态绑定中
-            use landscape_common::dhcp::v4_server::config::MacBindingRecord;
-
             let bindings = self
                 .db_provider
                 .enrolled_device_store()
@@ -119,19 +116,6 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                 )
                 .await
                 .unwrap_or_default();
-
-            // 清理原有的静态绑定信息（已迁移到全局设备管理），以全局设备管理库为准
-            config.config.mac_binding_records.clear();
-
-            for binding in bindings {
-                if let Some(ipv4) = binding.ipv4 {
-                    config.config.mac_binding_records.push(MacBindingRecord {
-                        mac: binding.mac,
-                        ip: ipv4,
-                        expire_time: 86400,
-                    });
-                }
-            }
 
             let store_key = config.get_store_key();
             let assigned_ips = {
@@ -151,6 +135,7 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
                 crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
                     config.iface_name,
                     config.config,
+                    bindings,
                     status,
                     assigned_ips,
                 )

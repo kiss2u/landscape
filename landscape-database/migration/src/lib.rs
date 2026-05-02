@@ -41,6 +41,8 @@ mod m20260405_160000_dns_provider_profiles;
 mod m20260405_170000_ddns;
 mod m20260408_120000_lan_ipv6_v2;
 mod m20260419_085215_flow_target_weights;
+mod m20260502_073125_dhcp_v4_custom_options;
+mod m20260502_080437_enrolled_device_dhcp_options;
 mod tables;
 
 pub struct Migrator;
@@ -90,6 +92,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260405_170000_ddns::Migration),
             Box::new(m20260408_120000_lan_ipv6_v2::Migration),
             Box::new(m20260419_085215_flow_target_weights::Migration),
+            Box::new(m20260502_073125_dhcp_v4_custom_options::Migration),
+            Box::new(m20260502_080437_enrolled_device_dhcp_options::Migration),
         ]
     }
 }

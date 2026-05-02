@@ -14,5 +14,6 @@ pub enum DHCPv4ServerConfigs {
     NetworkEnd,
     AddressLeaseTime,
     MacBindingRecords,
+    CustomOptions,
     UpdateAt,
 }

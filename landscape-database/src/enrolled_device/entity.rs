@@ -25,6 +25,8 @@ pub struct Model {
     pub ipv4_int: Option<u32>,
     pub ipv6: Option<String>,
     pub tag: DBJson,
+    pub dhcp_custom_options: DBJson,
+    pub dhcp_filter_options: DBJson,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -46,6 +48,10 @@ impl From<Model> for EnrolledDevice {
             ipv4: entity.ipv4.map(|ip| ip.parse().unwrap()),
             ipv6: entity.ipv6.map(|ip| ip.parse().unwrap()),
             tag: serde_json::from_value(entity.tag).unwrap_or(vec![]),
+            dhcp_custom_options: serde_json::from_value(entity.dhcp_custom_options)
+                .unwrap_or_default(),
+            dhcp_filter_options: serde_json::from_value(entity.dhcp_filter_options)
+                .unwrap_or_default(),
         }
     }
 }
@@ -75,4 +81,10 @@ pub(crate) fn update(data: EnrolledDevice, active: &mut ActiveModel) {
     active.ipv4_int = Set(data.ipv4.map(|ip| u32::from(ip)));
     active.ipv6 = Set(data.ipv6.map(|ip| ip.to_string()));
     active.tag = Set(serde_json::to_value(&data.tag).unwrap_or(serde_json::Value::Array(vec![])));
+    active.dhcp_custom_options =
+        Set(serde_json::to_value(&data.dhcp_custom_options)
+            .unwrap_or(serde_json::Value::Array(vec![])));
+    active.dhcp_filter_options =
+        Set(serde_json::to_value(&data.dhcp_filter_options)
+            .unwrap_or(serde_json::Value::Array(vec![])));
 }

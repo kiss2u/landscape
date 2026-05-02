@@ -28,6 +28,7 @@ pub struct Model {
     pub address_lease_time: Option<u32>,
 
     pub mac_binding_records: DBJson,
+    pub custom_options: DBJson,
     pub update_at: DBTimestamp,
 }
 
@@ -46,6 +47,7 @@ impl From<Model> for DHCPv4ServiceConfig {
             network_mask: entity.network_mask,
             address_lease_time: entity.address_lease_time,
             mac_binding_records: serde_json::from_value(entity.mac_binding_records).unwrap(),
+            custom_options: serde_json::from_value(entity.custom_options).unwrap_or_default(),
         };
         DHCPv4ServiceConfig {
             iface_name: entity.iface_name,
@@ -85,6 +87,8 @@ impl UpdateActiveModel<ActiveModel> for DHCPv4ServiceConfig {
         active.address_lease_time = Set(self.config.address_lease_time);
         active.mac_binding_records = Set(serde_json::to_value(&self.config.mac_binding_records)
             .unwrap_or(serde_json::Value::Array(vec![])));
+        active.custom_options = Set(serde_json::to_value(&self.config.custom_options)
+            .unwrap_or(serde_json::Value::Array(vec![])));
         active.update_at = Set(self.update_at);
     }
 }
@@ -105,6 +109,8 @@ pub(crate) fn update(config: DHCPv4ServiceConfig, active: &mut ActiveModel) {
     active.network_end = Set((ip_u32 & mask_u32) | !mask_u32);
     active.address_lease_time = Set(config.config.address_lease_time);
     active.mac_binding_records = Set(serde_json::to_value(&config.config.mac_binding_records)
+        .unwrap_or(serde_json::Value::Array(vec![])));
+    active.custom_options = Set(serde_json::to_value(&config.config.custom_options)
         .unwrap_or(serde_json::Value::Array(vec![])));
     active.update_at = Set(config.update_at);
 }
