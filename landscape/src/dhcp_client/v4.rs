@@ -38,6 +38,8 @@ pub enum DhcpState {
         xid: u32,
         /// 初始的 IPV4 地址
         ciaddr: Option<Ipv4Addr>,
+        /// 当前 Discover 轮次中的发送次数，前2次用广播标志，后2次用单播标志
+        send_count: u8,
     },
     /// 发送线程停止发送 进入等待 changed 的状态
     // Offer {
@@ -121,7 +123,11 @@ fn get_new_ipv4_xid() -> u32 {
 
 impl DhcpState {
     pub fn init_status(renew_ip: Option<Ipv4Addr>) -> DhcpState {
-        DhcpState::Discovering { ciaddr: renew_ip, xid: get_new_ipv4_xid() }
+        DhcpState::Discovering {
+            ciaddr: renew_ip,
+            xid: get_new_ipv4_xid(),
+            send_count: 0,
+        }
     }
 
     pub fn get_xid(&self) -> u32 {
@@ -302,8 +308,10 @@ async fn send_current_status_packet(
     hostname: &str,
 ) -> bool {
     let send_res = match current_status {
-        DhcpState::Discovering { ciaddr, xid } => {
-            let msg = gen_discover(*xid, mac_addr, *ciaddr, hostname.to_string());
+        DhcpState::Discovering { ciaddr, xid, send_count } => {
+            *send_count += 1;
+            let use_broadcast = *send_count <= 2;
+            let msg = gen_discover(*xid, mac_addr, *ciaddr, hostname.to_string(), use_broadcast);
             io.send(msg, Ipv4Addr::BROADCAST).await
         }
         DhcpState::Requesting { xid, send_times, ciaddr, yiaddr, options, .. } => {
@@ -702,19 +710,18 @@ fn gen_discover(
     mac_addr: MacAddr,
     ciaddr: Option<Ipv4Addr>,
     hostname: String,
+    use_broadcast: bool,
 ) -> DhcpV4Message {
     let mut msg = DhcpV4Message::default();
     msg.set_opcode(DhcpV4OpCode::BootRequest);
     msg.set_xid(xid);
     let mut flags = DhcpV4Flags::default();
-    if ciaddr.is_none() {
+    if use_broadcast || ciaddr.is_none() {
         flags = flags.set_broadcast();
     }
     msg.set_flags(flags);
     msg.set_ciaddr(ciaddr.unwrap_or(Ipv4Addr::UNSPECIFIED));
-    let mut chaddr = [0u8; 16];
-    chaddr[..6].copy_from_slice(&mac_addr.octets());
-    msg.set_chaddr(&chaddr);
+    msg.set_chaddr(&mac_addr.octets());
 
     msg.opts_mut().insert(DhcpOption::MessageType(MessageType::Discover));
     if let Some(ip) = ciaddr {
@@ -748,9 +755,7 @@ fn gen_request(
     msg.set_opcode(DhcpV4OpCode::BootRequest);
     msg.set_xid(xid);
 
-    let mut chaddr = [0u8; 16];
-    chaddr[..6].copy_from_slice(&mac_addr.octets());
-    msg.set_chaddr(&chaddr);
+    msg.set_chaddr(&mac_addr.octets());
 
     msg.set_ciaddr(ciaddr);
 
