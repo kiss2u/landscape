@@ -793,7 +793,7 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
             flags: frame.flags,
             ciaddr: Ipv4Addr::new(0, 0, 0, 0),
             yiaddr: client_addr,
-            siaddr: Ipv4Addr::new(0, 0, 0, 0),
+            siaddr: server.server_ip,
             giaddr: Ipv4Addr::new(0, 0, 0, 0),
             chaddr: frame.chaddr,
             sname: [0; 64].to_vec(),
@@ -846,11 +846,11 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
         return None;
     };
 
-    let (message_type, client_addr) =
+    let (message_type, client_addr, ciaddr) =
         if server.ack_request(&frame.chaddr, client_ip, frame.options.get_hostname()) {
-            (DhcpOptionMessageType::Ack, client_ip)
+            (DhcpOptionMessageType::Ack, client_ip, frame.ciaddr)
         } else {
-            (DhcpOptionMessageType::Nak, Ipv4Addr::UNSPECIFIED)
+            (DhcpOptionMessageType::Nak, Ipv4Addr::UNSPECIFIED, Ipv4Addr::UNSPECIFIED)
         };
 
     let is_nak = matches!(message_type, DhcpOptionMessageType::Nak);
@@ -877,9 +877,9 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
         xid: frame.xid,
         secs: frame.secs,
         flags: frame.flags,
-        ciaddr: Ipv4Addr::new(0, 0, 0, 0),
+        ciaddr,
         yiaddr: client_addr,
-        siaddr: Ipv4Addr::new(0, 0, 0, 0),
+        siaddr: server.server_ip,
         giaddr: Ipv4Addr::new(0, 0, 0, 0),
         chaddr: frame.chaddr,
         sname: [0; 64].to_vec(),
