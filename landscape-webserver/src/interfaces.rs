@@ -1,5 +1,6 @@
 use axum::extract::{Path, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
+use landscape_common::database::LandscapeStore;
 use landscape_common::iface::{IfaceTopology, IfacesInfo};
 use landscape_common::service::controller::ControllerService;
 use landscape_common::{
@@ -21,6 +22,7 @@ pub fn get_iface_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_ifaces_old))
         .routes(routes!(get_ifaces_new))
         .routes(routes!(get_wan_ifaces))
+        .routes(routes!(get_wan_candidates))
         .routes(routes!(manage_ifaces))
         .routes(routes!(create_bridge))
         .routes(routes!(delete_bridge))
@@ -70,6 +72,33 @@ async fn get_wan_ifaces(
 ) -> LandscapeApiResult<Vec<NetworkIfaceConfig>> {
     let result = state.iface_config_service.get_all_wan_iface_config().await;
     LandscapeApiResp::success(result)
+}
+
+#[utoipa::path(
+    get,
+    path = "/wan_candidates",
+    tag = "Interfaces",
+    operation_id = "get_wan_candidates",
+    responses((status = 200, body = CommonApiResp<Vec<String>>))
+)]
+async fn get_wan_candidates(State(state): State<LandscapeApp>) -> LandscapeApiResult<Vec<String>> {
+    let mut names: Vec<String> = state
+        .iface_config_service
+        .get_all_wan_iface_config()
+        .await
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+
+    let pppd_configs = state.pppd_service.get_repository().list().await.unwrap_or_default();
+
+    for cfg in pppd_configs {
+        if !names.iter().any(|n| n == &cfg.iface_name) {
+            names.push(cfg.iface_name);
+        }
+    }
+
+    LandscapeApiResp::success(names)
 }
 
 #[utoipa::path(

@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { get_wan_ifaces } from "@/api/iface";
+import { get_wan_candidates } from "@/api/iface";
 import {
   delete_ddns_job,
   get_ddns_job_status,
@@ -163,20 +163,20 @@ function resetForm(item?: DdnsJob) {
 async function refresh() {
   loading.value = true;
   try {
-    const [jobs, runtimeStatuses, profiles, wanIfaces] = await Promise.all([
+    const [jobs, runtimeStatuses, profiles, wanCandidates] = await Promise.all([
       get_ddns_jobs(),
       get_ddns_job_status(),
       get_dns_provider_profiles(),
-      get_wan_ifaces(),
+      get_wan_candidates(),
     ]);
     items.value = jobs;
     runtimeMap.value = new Map(
       runtimeStatuses.map((item) => [item.job_id, item]),
     );
     providerProfiles.value = profiles;
-    ifaceOptions.value = wanIfaces.map((item: any) => ({
-      label: item.name,
-      value: item.name,
+    ifaceOptions.value = wanCandidates.map((name: string) => ({
+      label: name,
+      value: name,
     }));
   } finally {
     loading.value = false;

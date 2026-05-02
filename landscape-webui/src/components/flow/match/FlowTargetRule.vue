@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { get_docker_container_summarys } from "@/api/docker";
-import { get_wan_ifaces } from "@/api/iface";
-import { get_all_iface_pppd_config } from "@/api/service_pppd";
+import { get_wan_candidates } from "@/api/iface";
 import type {
   FlowTarget,
   WeightedFlowTarget,
@@ -15,31 +14,21 @@ const target_rules = defineModel<WeightedFlowTarget[]>("target_rules", {
   required: true,
 });
 
-const iface_wans = ref<any[]>([]);
+const iface_wans = ref<string[]>([]);
 const docker_containers = ref<any[]>([]);
-const pppd_services = ref<any[]>([]);
 
 onMounted(async () => {
   await refresh_wan_ifaces();
 });
 
 async function refresh_wan_ifaces() {
-  iface_wans.value = await get_wan_ifaces();
+  iface_wans.value = await get_wan_candidates();
   docker_containers.value = await get_docker_container_summarys();
-  pppd_services.value = await get_all_iface_pppd_config();
 }
 
-const iface_wan_options = computed(() => {
-  let iface = iface_wans.value.map((e) => ({
-    label: e.name,
-    value: e.name,
-  }));
-  let pppd_iface = pppd_services.value.map((e) => ({
-    label: e.iface_name,
-    value: e.iface_name,
-  }));
-  return [...iface, ...pppd_iface];
-});
+const iface_wan_options = computed(() =>
+  iface_wans.value.map((name) => ({ label: name, value: name })),
+);
 
 const docker_options = computed(() =>
   docker_containers.value.map((e) => {
