@@ -123,9 +123,6 @@ pub const LANDSCAPE_HOSTAPD_TMP_DIR: &str = "hostapd_tmp";
 /// GEO_CACHE Path
 pub const LANDSCAPE_GEO_CACHE_TMP_DIR: &str = "geo_tmp";
 
-pub const GEO_SITE_FILE_NAME: &str = "geosite.dat";
-pub const GEO_IP_FILE_NAME: &str = "geoip.dat";
-
 /// Landscape default lan bridge name
 pub const LANDSCAPE_DEFAULT_LAN_NAME: &str = "br_lan";
 

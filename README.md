@@ -24,7 +24,7 @@ Landscape is an eBPF-based Linux router platform that provides network service m
 
 ## Core Features
 * eBPF-based traffic steering with no impact on direct-path performance, using source matches `(SIP-CIDR, MAC)` and destination matches `(DIP, domain, Geo rules)`
-* Per-flow DNS configuration and caching to avoid DNS pollution and leakage
+* Per-flow DNS configuration and caching to avoid DNS cache conflicts and data leakage
 * Traffic can be redirected into Docker containers, where TProxy-capable programs can be used to extend functionality
 * Geo database management with support for DAT and TXT formats
 * Stricter NAT4 by default, while allowing specific IPs or domains to use NAT1 for scenarios such as overlay networking, more: [NAT4? No, stricter than NAT4](https://landscape.whileaway.dev/en/feature/nat/nat.html)

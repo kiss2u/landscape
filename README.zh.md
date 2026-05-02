@@ -24,7 +24,7 @@ Landscape 是一个以 eBPF 为基础的 Linux 路由平台，提供网络服务
 
 ## 核心特性
 * eBPF 分流，直连流量性能不受影响，使用 (SIP-CIDR、MAC), 分流对象: (DIP、域名、Geo 匹配规则)
-* 每个流 Flow 独立 dns 配置以及缓存（避免 dns 污染、泄露）
+* 每个流 Flow 独立 DNS 配置以及缓存（避免 DNS 缓存冲突和数据泄露）
 * 流量导入 Docker 容器，可在容器中运行支持 TProxy 的程序进行扩展
 * 地理关系库管理， 支持 DAT/TXT 格式
 * 默认 更严格的 NAT4, 但可让指定 IP/域名 使用 NAT1, 方便进行组网等操作, 详情见文档: [NAT4? 不, 比 NAT4 更严格](https://landscape.whileaway.dev/feature/nat/nat.html) 
