@@ -23,7 +23,7 @@ const { t } = useI18n();
 const rule = ref<GeoSiteSourceConfig>();
 const rule_json = ref<string>("");
 
-const sourceType = ref<"url" | "direct">("url");
+const sourceType = ref<"url" | "direct" | "adguard_home">("url");
 
 async function enter() {
   if (props.id !== null) {
@@ -40,12 +40,19 @@ async function enter() {
   rule_json.value = JSON.stringify(rule.value);
 }
 
-function switchSourceType(t: "url" | "direct") {
+function switchSourceType(t: "url" | "direct" | "adguard_home") {
   if (!rule.value) return;
   if (t === "url") {
     rule.value.source = { t: "url", url: "", next_update_at: 0, geo_keys: [] };
-  } else {
+  } else if (t === "direct") {
     rule.value.source = { t: "direct", data: [] };
+  } else {
+    rule.value.source = {
+      t: "adguard_home",
+      url: "",
+      next_update_at: 0,
+      key: "ADGUARD",
+    };
   }
 }
 
@@ -164,6 +171,9 @@ const matchTypeOptions = [
             <n-radio value="direct">{{
               t("geo_editor.common.source_direct_mode")
             }}</n-radio>
+            <n-radio value="adguard_home">{{
+              t("geo_editor.common.source_adguard_home_mode")
+            }}</n-radio>
           </n-radio-group>
         </n-form-item-gi>
 
@@ -248,6 +258,32 @@ const matchTypeOptions = [
                 {{ t("geo_editor.common.add_key_group") }}
               </n-button>
             </n-flex>
+          </n-form-item-gi>
+        </template>
+
+        <!-- AdGuard Home mode -->
+        <template v-if="rule.source.t === 'adguard_home'">
+          <n-form-item-gi :label="t('geo_editor.common.source_url')" :span="5">
+            <n-input
+              v-model:value="rule.source.url"
+              clearable
+              placeholder="https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"
+            />
+          </n-form-item-gi>
+          <n-form-item-gi :span="5">
+            <n-alert type="warning" show-icon>
+              {{ t("geo_editor.geo_site.adguard_limit_notice") }}
+            </n-alert>
+          </n-form-item-gi>
+          <n-form-item-gi
+            :label="t('geo_editor.geo_site.adguard_key')"
+            :span="5"
+          >
+            <n-input
+              v-model:value="rule.source.key"
+              clearable
+              placeholder="ADGUARD"
+            />
           </n-form-item-gi>
         </template>
       </n-grid>

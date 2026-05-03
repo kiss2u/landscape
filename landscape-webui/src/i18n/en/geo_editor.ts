@@ -4,6 +4,7 @@ export default {
     source_url: "Download URL",
     source_url_mode: "Download from URL",
     source_direct_mode: "Define Directly",
+    source_adguard_home_mode: "AdGuard Home",
     source_format: "File Format",
     txt_key: "TXT Key",
     txt_key_placeholder: "Defaults to DEFAULT",
@@ -27,6 +28,9 @@ export default {
     domain_list: "Domain List",
     domain_placeholder: "Domain",
     add_domain: "Add Domain",
+    adguard_key: "Cache Key (defaults to ADGUARD)",
+    adguard_limit_notice:
+      "AdGuard rules are converted to DNS domain matches. Path, exception, rewrite, and request-context rules cannot be fully applied and may be skipped.",
   },
   drawer: {
     config_source: "Geo Configuration Source",

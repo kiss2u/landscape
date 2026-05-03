@@ -49,13 +49,29 @@ const onGeoUpload = async (formData: FormData) => {
         <n-descriptions-item :label="t('geo_editor.item_card.source_type')">
           <n-tag
             :bordered="false"
-            :type="geo_site.source.t === 'url' ? 'info' : 'success'"
+            :type="
+              geo_site.source.t === 'url'
+                ? 'info'
+                : geo_site.source.t === 'adguard_home'
+                  ? 'warning'
+                  : 'success'
+            "
             size="small"
           >
-            {{ geo_site.source.t === "url" ? "URL" : "Direct" }}
+            {{
+              geo_site.source.t === "url"
+                ? "URL"
+                : geo_site.source.t === "adguard_home"
+                  ? "AdGuard"
+                  : "Direct"
+            }}
           </n-tag>
         </n-descriptions-item>
-        <template v-if="geo_site.source.t === 'url'">
+        <template
+          v-if="
+            geo_site.source.t === 'url' || geo_site.source.t === 'adguard_home'
+          "
+        >
           <n-descriptions-item label="URL">
             <n-ellipsis style="max-width: 200px">
               {{

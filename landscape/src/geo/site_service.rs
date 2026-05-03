@@ -23,8 +23,11 @@ use std::{
 };
 
 use landscape_common::{
-    args::LAND_HOME_PATH, event::dns::DnsEvent, geo::GeoSiteSourceConfig,
-    store::storev4::StoreFileManager, LANDSCAPE_GEO_CACHE_TMP_DIR,
+    args::LAND_HOME_PATH,
+    event::dns::DnsEvent,
+    geo::{normalize_adguard_key, GeoSiteSourceConfig},
+    store::storev4::StoreFileManager,
+    LANDSCAPE_GEO_CACHE_TMP_DIR,
 };
 use landscape_database::{
     geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,
@@ -435,6 +438,81 @@ impl GeoSiteService {
                     let after_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
                     let changed_keys = Self::diff_key_hashes(&before_hashes, &after_hashes);
                     self.notify_geo_changes(changed_keys).await;
+                }
+                GeoSiteSource::AdguardHome { url, next_update_at, key } => {
+                    if !force && *next_update_at >= now {
+                        continue;
+                    }
+
+                    let url = url.clone();
+                    let key = normalize_adguard_key(key);
+                    tracing::debug!("download adguard rules: {}", url);
+                    let time = Instant::now();
+                    let before_hashes = self.snapshot_key_hashes_for_name(&config.name).await;
+
+                    match client.get(&url).send().await {
+                        Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                            Ok(bytes) => {
+                                let domains = landscape_protobuf::parse_adguard_rules(&bytes);
+
+                                let cache_key =
+                                    GeoFileCacheKey { name: config.name.clone(), key: key.clone() };
+
+                                let mut file_cache_lock = self.file_cache.lock().await;
+                                let exist_keys = file_cache_lock
+                                    .keys()
+                                    .into_iter()
+                                    .filter(|k| k.name == config.name)
+                                    .collect::<HashSet<GeoFileCacheKey>>();
+
+                                let info = GeoDomainConfig {
+                                    name: config.name.clone(),
+                                    key,
+                                    values: domains,
+                                };
+                                file_cache_lock.set(info);
+
+                                for old_key in exist_keys {
+                                    if old_key != cache_key {
+                                        file_cache_lock.del(&old_key);
+                                    }
+                                }
+                                drop(file_cache_lock);
+
+                                // Update next_update_at
+                                if let GeoSiteSource::AdguardHome { next_update_at, key, .. } =
+                                    &mut config.source
+                                {
+                                    *next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
+                                    *key = normalize_adguard_key(key);
+                                }
+                                let _ = self.store.set(config.clone()).await;
+
+                                tracing::debug!(
+                                    "handle adguard rules done: {}, time: {}ms",
+                                    url,
+                                    time.elapsed().as_millis()
+                                );
+
+                                let after_hashes =
+                                    self.snapshot_key_hashes_for_name(&config.name).await;
+                                let changed_keys =
+                                    Self::diff_key_hashes(&before_hashes, &after_hashes);
+                                self.notify_geo_changes(changed_keys).await;
+                            }
+                            Err(e) => tracing::error!("read {} response error: {}", url, e),
+                        },
+                        Ok(resp) => {
+                            tracing::error!(
+                                "download {} error, HTTP status: {}",
+                                url,
+                                resp.status()
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!("request {} error: {}", url, e);
+                        }
+                    }
                 }
             }
         }

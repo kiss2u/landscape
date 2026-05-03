@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use landscape_macro::LdApiError;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::config::ConfigId;
@@ -82,8 +82,39 @@ pub struct GeoSiteSourceConfig {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum GeoSiteSource {
-    Url { url: String, next_update_at: f64, geo_keys: Vec<String> },
-    Direct { data: Vec<GeoSiteDirectItem> },
+    Url {
+        url: String,
+        next_update_at: f64,
+        geo_keys: Vec<String>,
+    },
+    Direct {
+        data: Vec<GeoSiteDirectItem>,
+    },
+    AdguardHome {
+        url: String,
+        next_update_at: f64,
+        /// Cache key name for parsed domains (default: "ADGUARD")
+        #[serde(default = "default_adguard_key", deserialize_with = "deserialize_adguard_key")]
+        key: String,
+    },
+}
+
+pub const DEFAULT_ADGUARD_KEY: &str = "ADGUARD";
+
+fn default_adguard_key() -> String {
+    DEFAULT_ADGUARD_KEY.to_string()
+}
+
+pub fn normalize_adguard_key(key: &str) -> String {
+    let key = key.trim();
+    if key.is_empty() { DEFAULT_ADGUARD_KEY } else { key }.to_ascii_uppercase()
+}
+
+fn deserialize_adguard_key<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(|key| normalize_adguard_key(&key))
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

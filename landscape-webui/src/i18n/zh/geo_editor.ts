@@ -4,6 +4,7 @@ export default {
     source_url: "下载 URL",
     source_url_mode: "URL 下载",
     source_direct_mode: "直接定义",
+    source_adguard_home_mode: "AdGuard Home",
     source_format: "文件格式",
     txt_key: "TXT Key",
     txt_key_placeholder: "留空则使用 DEFAULT",
@@ -26,6 +27,9 @@ export default {
     domain_list: "域名列表",
     domain_placeholder: "域名",
     add_domain: "添加域名",
+    adguard_key: "缓存 Key（留空默认 ADGUARD）",
+    adguard_limit_notice:
+      "AdGuard 规则会转换为 DNS 域名匹配，路径、例外、重写和请求上下文相关规则无法 100% 应用，可能会被跳过。",
   },
   drawer: {
     config_source: "Geo 配置来源",

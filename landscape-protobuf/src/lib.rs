@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
 };
@@ -192,6 +192,183 @@ fn parse_txt_cidr_line(line: &str) -> Option<IpConfig> {
     Some(IpConfig { ip, prefix })
 }
 
+/// Modifiers that make a rule context-dependent (cannot be expressed at DNS layer).
+/// If any of these are present, the entire rule is skipped.
+fn has_context_dependent_modifier(modifiers: &str) -> bool {
+    modifiers.split(',').any(|m| {
+        let m = m.trim().trim_start_matches('$').trim_start_matches('~').to_ascii_lowercase();
+        m == "third-party"
+            || m == "3p"
+            || m.starts_with("domain=")
+            || m.starts_with("denyallow=")
+            || m.starts_with("to=")
+            || m.starts_with("client=")
+            || m.starts_with("dnstype=")
+    })
+}
+
+/// Extract domain from a hosts-format line: `0.0.0.0 domain` / `127.0.0.1 domain` / `:: domain`
+fn parse_hosts_line(line: &str) -> Option<&str> {
+    let line = line.trim();
+    // Match: IP-whitespace-domain
+    let (ip_part, rest) = line.split_once(|c: char| c.is_ascii_whitespace())?;
+    let rest = rest.trim_start();
+    let domain = rest.split(|c: char| c.is_ascii_whitespace()).next()?;
+
+    // Validate IP-like prefix
+    if ip_part == "0.0.0.0" || ip_part == "127.0.0.1" || ip_part == "::" {
+        if !domain.is_empty() && domain.contains('.') && !domain.starts_with('.') {
+            return Some(domain);
+        }
+    }
+    None
+}
+
+/// Extract domain from `||domain^...` rules.
+/// Returns (domain, optional_modifiers_string).
+fn parse_adguard_domain_rule(line: &str) -> Option<(&str, Option<&str>)> {
+    // Must start with ||
+    let line = line.strip_prefix("||")?;
+
+    // Find the end of the domain: domain ends at `^` or `$` or end-of-string
+    let domain_end = line.find(|c: char| c == '^' || c == '$').unwrap_or(line.len());
+    let domain = &line[..domain_end];
+
+    if domain.is_empty() || !domain.contains('.') || domain.contains('/') {
+        return None;
+    }
+
+    // Check for modifiers after '$'
+    let modifiers = if domain_end < line.len() && line.as_bytes()[domain_end] == b'^' {
+        let after_caret = &line[domain_end + 1..];
+        after_caret.strip_prefix('$')
+    } else if domain_end < line.len() && line.as_bytes()[domain_end] == b'$' {
+        Some(&line[domain_end + 1..])
+    } else {
+        None
+    };
+
+    Some((domain, modifiers))
+}
+
+/// Extract domain from `|https://domain|` rules (exact/full match).
+fn parse_adguard_full_rule(line: &str) -> Option<&str> {
+    // Pattern: |https://domain| or |http://domain|
+    let line = line.strip_prefix('|')?;
+    let line = line.strip_prefix("https://").or_else(|| line.strip_prefix("http://"))?;
+    let domain = line.strip_suffix('|')?;
+
+    // DNS rules cannot preserve URL path/query/fragment/port semantics.
+    if domain.contains('/') || domain.contains('?') || domain.contains('#') || domain.contains(':')
+    {
+        return None;
+    }
+
+    if !domain.is_empty() && domain.contains('.') {
+        return Some(domain);
+    }
+    None
+}
+
+/// Parse AdGuard Home format rules into GeoSiteFileConfig domain list.
+///
+/// Conversion rules:
+/// - `||domain^` → Domain match (subdomain-aware)
+/// - `||domain^$important|$document` → Domain match (non-context modifiers ignored)
+/// - `||domain^$third-party|$domain=...|$to=...` → skipped (context-dependent)
+/// - `0.0.0.0 domain` / `127.0.0.1 domain` / `:: domain` → Full exact match
+/// - `|https://domain|` → Full exact match
+/// - `@@...` (exception rules) → skipped
+/// - Rules with paths → skipped
+/// - Cosmetic/regex rules → skipped
+/// - Comments (`!`/`#`) and rules shorter than 4 chars → skipped
+pub fn parse_adguard_rules(contents: &[u8]) -> Vec<GeoSiteFileConfig> {
+    let text = String::from_utf8_lossy(contents);
+    let mut result = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in text.lines() {
+        let line = line.trim();
+
+        // Skip empty lines and comments
+        if line.is_empty() || line.starts_with('!') || line.starts_with('#') {
+            continue;
+        }
+
+        // AdGuard itself ignores rules shorter than 4 characters
+        if line.len() < 4 {
+            continue;
+        }
+
+        // Skip cosmetic rules: ##, #@#, #?#
+        if line.contains("##") || line.contains("#@#") || line.contains("#?#") {
+            continue;
+        }
+
+        // Skip regex rules
+        if line.starts_with('/') && line.ends_with('/') && line.len() > 2 {
+            continue;
+        }
+
+        // Skip exception rules
+        if line.starts_with("@@") {
+            continue;
+        }
+
+        // Try hosts format first: 0.0.0.0 domain / 127.0.0.1 domain / :: domain
+        if let Some(domain) = parse_hosts_line(line) {
+            let domain = domain.to_ascii_lowercase();
+            if !seen.insert((DomainMatchType::Full, domain.clone())) {
+                continue;
+            }
+            result.push(GeoSiteFileConfig {
+                match_type: DomainMatchType::Full,
+                value: domain,
+                attributes: HashSet::new(),
+            });
+            continue;
+        }
+
+        // Try ||domain^... format
+        if let Some((domain, modifiers)) = parse_adguard_domain_rule(line) {
+            // Skip if any context-dependent modifiers are present
+            if let Some(mods) = modifiers {
+                if has_context_dependent_modifier(mods) {
+                    continue;
+                }
+            }
+            let domain = domain.to_ascii_lowercase();
+            if !seen.insert((DomainMatchType::Domain, domain.clone())) {
+                continue;
+            }
+            result.push(GeoSiteFileConfig {
+                match_type: DomainMatchType::Domain,
+                value: domain,
+                attributes: HashSet::new(),
+            });
+            continue;
+        }
+
+        // Try |https://domain| format (full exact match)
+        if let Some(domain) = parse_adguard_full_rule(line) {
+            let domain = domain.to_ascii_lowercase();
+            if !seen.insert((DomainMatchType::Full, domain.clone())) {
+                continue;
+            }
+            result.push(GeoSiteFileConfig {
+                match_type: DomainMatchType::Full,
+                value: domain,
+                attributes: HashSet::new(),
+            });
+            continue;
+        }
+
+        // All other formats silently skipped
+    }
+
+    result
+}
+
 #[cfg(test)]
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -201,6 +378,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use jemalloc_ctl::{epoch, stats};
+    use landscape_common::dns::rule::DomainMatchType;
 
     use crate::{
         protos::geo::{GeoIPListOwned, GeoSiteListOwned},
@@ -309,5 +487,189 @@ mod tests {
     fn parse_txt_geo_ips_uses_default_key() {
         let result = read_geo_ips_from_bytes_txt(b"1.1.1.0/24\n", Some("   ")).unwrap();
         assert!(result.entries.contains_key("DEFAULT"));
+    }
+
+    #[test]
+    fn parse_adguard_basic_domain_rules() {
+        let input = b"||ads.example.com^
+||tracker.com^
+||doubleclick.net^
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].match_type, DomainMatchType::Domain);
+        assert_eq!(result[0].value, "ads.example.com");
+        assert_eq!(result[1].match_type, DomainMatchType::Domain);
+        assert_eq!(result[1].value, "tracker.com");
+        assert_eq!(result[2].match_type, DomainMatchType::Domain);
+        assert_eq!(result[2].value, "doubleclick.net");
+    }
+
+    #[test]
+    fn parse_adguard_skips_comments_and_short_rules() {
+        let input = b"! This is a comment
+# Another comment
+a
+||valid.com^
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].value, "valid.com");
+    }
+
+    #[test]
+    fn parse_adguard_skips_exception_rules() {
+        let input = b"||ads.example.com^
+@@||whitelist.com^
+||tracker.com^
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].value, "ads.example.com");
+        assert_eq!(result[1].value, "tracker.com");
+    }
+
+    #[test]
+    fn parse_adguard_skips_context_dependent_modifiers() {
+        let input = b"||tracker.com^$third-party
+||analytics.com^$domain=site.com
+||ads.com^$3p
+||evil.com^$denyallow=good.com
+||beacon.com^$to=example.com
+||not-third-party.com^$~third-party
+||not-domain.com^$~domain=site.com
+||safe.com^$important
+||ok.com^$document
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].value, "safe.com");
+        assert_eq!(result[1].value, "ok.com");
+    }
+
+    #[test]
+    fn parse_adguard_hosts_format_to_full_match() {
+        let input = b"0.0.0.0 blocked.com
+127.0.0.1 malware.com
+:: ipv6-tracker.com
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 3);
+        for item in &result {
+            assert_eq!(item.match_type, DomainMatchType::Full);
+        }
+        assert_eq!(result[0].value, "blocked.com");
+        assert_eq!(result[1].value, "malware.com");
+        assert_eq!(result[2].value, "ipv6-tracker.com");
+    }
+
+    #[test]
+    fn parse_adguard_full_url_rule() {
+        let input = b"|https://exact.example.com|
+|http://another.example.com|
+|https://example.com/path|
+|https://example.com?query=1|
+|https://example.com:8443|
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].match_type, DomainMatchType::Full);
+        assert_eq!(result[0].value, "exact.example.com");
+        assert_eq!(result[1].match_type, DomainMatchType::Full);
+        assert_eq!(result[1].value, "another.example.com");
+    }
+
+    #[test]
+    fn parse_adguard_skips_rules_with_path() {
+        let input = b"||example.com/ads/banner^
+||example.com^
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].value, "example.com");
+    }
+
+    #[test]
+    fn parse_adguard_skips_cosmetic_and_regex_rules() {
+        let input = b"example.com##.ad-banner
+example.com#@#.whitelisted
+/example\\.com\\/ads\\/
+||real-domain.com^
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].value, "real-domain.com");
+    }
+
+    #[test]
+    fn parse_adguard_case_normalization() {
+        let input = b"||Example.COM^
+0.0.0.0 BLOCKED.COM
+|https://Exact.EXAMPLE.Com|
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 3);
+        for item in &result {
+            assert_eq!(item.value, item.value.to_lowercase());
+        }
+    }
+
+    #[test]
+    fn parse_adguard_deduplicates_same_match_type_and_domain() {
+        let input = b"||example.com^
+||Example.COM^
+0.0.0.0 exact.example.com
+|https://exact.example.com|
+";
+        let result = crate::parse_adguard_rules(input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].match_type, DomainMatchType::Domain);
+        assert_eq!(result[0].value, "example.com");
+        assert_eq!(result[1].match_type, DomainMatchType::Full);
+        assert_eq!(result[1].value, "exact.example.com");
+    }
+
+    #[test]
+    fn parse_adguard_complex_real_world_ruleset() {
+        let input = b"! Title: AdGuard DNS filter
+! Homepage: https://github.com/AdguardTeam
+# License: https://github.com/AdguardTeam/AdguardSDNSFilter/blob/master/LICENSE
+
+||ad.doubleclick.net^
+||pagead2.googlesyndication.com^$third-party
+||adservice.google.com^
+@@||googleadservices.com^$document
+0.0.0.0 telemetry.example.org
+||malware.example.com^$important
+/example\\.com\\/popup/\\
+example.com##.ad-container
+||cdn.example.com/banners^
+|https://tracking.pixel.io|
+||safe-analytics.net^$domain=trusted.com
+||simple-tracker.io^
+! End of filter
+";
+        let result = crate::parse_adguard_rules(input);
+        let domains: Vec<&str> = result.iter().map(|d| d.value.as_str()).collect();
+
+        // Should include:
+        assert!(domains.contains(&"ad.doubleclick.net"));
+        assert!(domains.contains(&"adservice.google.com"));
+        assert!(domains.contains(&"malware.example.com"));
+        assert!(domains.contains(&"simple-tracker.io"));
+
+        // telemetry.example.org is hosts format → Full match
+        let telemetry = result.iter().find(|d| d.value == "telemetry.example.org").unwrap();
+        assert_eq!(telemetry.match_type, DomainMatchType::Full);
+
+        // tracking.pixel.io is |https://...| format → Full match
+        let pixel = result.iter().find(|d| d.value == "tracking.pixel.io").unwrap();
+        assert_eq!(pixel.match_type, DomainMatchType::Full);
+
+        // Should NOT include:
+        assert!(!domains.contains(&"pagead2.googlesyndication.com")); // $third-party
+        assert!(!domains.contains(&"googleadservices.com")); // @@ exception
+        assert!(!domains.contains(&"cdn.example.com")); // has path
+        assert!(!domains.contains(&"safe-analytics.net")); // $domain=
     }
 }
