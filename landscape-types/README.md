@@ -2,6 +2,8 @@
 
 TypeScript API client and type definitions for [Landscape Router](https://github.com/ThisSeanZhang/landscape), auto-generated from OpenAPI spec via [orval](https://orval.dev/).
 
+> **Generated code** — `openapi.json` and `src/api/` are auto-generated and gitignored. To regenerate locally, run `./gen_ts_bindings.sh` from the repository root.
+
 ## Install
 
 ```bash
