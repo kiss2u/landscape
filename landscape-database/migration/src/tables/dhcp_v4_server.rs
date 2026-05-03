@@ -13,6 +13,8 @@ pub enum DHCPv4ServerConfigs {
     NetworkStart,
     NetworkEnd,
     AddressLeaseTime,
+    /// **Deprecated (>= 0.19.0):** Column retained for schema compatibility only.
+    /// MAC–IP bindings are now managed via `enrolled_devices` table.
     MacBindingRecords,
     CustomOptions,
     UpdateAt,

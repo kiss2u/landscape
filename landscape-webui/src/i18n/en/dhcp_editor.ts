@@ -14,7 +14,6 @@ export default {
   duplicate_option_check:
     "Duplicate option types found. Please fix before saving",
   invalid_option_check: "Invalid DHCP option value. Please fix before saving",
-  static_binding: "Static MAC Binding (deprecated)",
   assigned: {
     hostname: "Hostname",
     mac_addr: "MAC Address",

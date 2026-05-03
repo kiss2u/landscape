@@ -44,6 +44,7 @@ fn build_ipv6_packet() -> Vec<u8> {
     packet
 }
 
+#[allow(dead_code)]
 fn pppoe_encap_header(session_id: u16, payload_len: u16, is_ipv6: bool) -> [u8; 22] {
     let mut buf = [0u8; 22];
     buf[0..6].copy_from_slice(&[0x02, 0x11, 0x22, 0x33, 0x44, 0x55]);
@@ -67,6 +68,7 @@ fn pppoe_encap_header(session_id: u16, payload_len: u16, is_ipv6: bool) -> [u8; 
     buf
 }
 
+#[allow(dead_code)]
 fn build_pppoe_ipv4_packet() -> Vec<u8> {
     let ip_pkt = build_ipv4_packet();
     let ip_payload = &ip_pkt[14..];
@@ -77,6 +79,7 @@ fn build_pppoe_ipv4_packet() -> Vec<u8> {
     full_pkt
 }
 
+#[allow(dead_code)]
 fn build_pppoe_ipv6_packet() -> Vec<u8> {
     let ip_pkt = build_ipv6_packet();
     let ip_payload = &ip_pkt[14..];

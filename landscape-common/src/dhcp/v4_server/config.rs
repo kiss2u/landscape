@@ -4,7 +4,6 @@ use std::net::Ipv4Addr;
 use serde::{Deserialize, Serialize};
 
 use crate::database::repository::LandscapeDBStore;
-use crate::net::MacAddr;
 use crate::net_proto::udp::dhcp::{DhcpV4Option, Encodable};
 use crate::service::ServiceConfigError;
 use crate::store::storev2::LandscapeStore;
@@ -399,11 +398,6 @@ pub struct DHCPv4ServerConfig {
     #[cfg_attr(feature = "openapi", schema(required = true, nullable = true))]
     pub address_lease_time: Option<u32>,
 
-    #[serde(default)]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    /// Static MAC --> IP address binding
-    pub mac_binding_records: Vec<MacBindingRecord>,
-
     /// 自定义 DHCP option，会无条件注入到所有 DHCP 响应中。
     /// 适用于 iPXE (option 66/67) 等需要 server 主动下发的场景。
     /// 注意：此字段的修改需要重启 DHCP 服务才能生效。
@@ -485,25 +479,6 @@ impl DHCPv4ServerConfig {
             }
         }
 
-        for (i, record) in self.mac_binding_records.iter().enumerate() {
-            if !is_usable_host(record.ip) {
-                return Err(ServiceConfigError::InvalidConfig {
-                    reason: format!(
-                        "mac_binding_records[{}] ip ({}) is not in the /{} subnet",
-                        i, record.ip, self.network_mask
-                    ),
-                });
-            }
-            if record.ip == self.server_ip_addr {
-                return Err(ServiceConfigError::InvalidConfig {
-                    reason: format!(
-                        "mac_binding_records[{}] ip ({}) must not equal server_ip_addr",
-                        i, record.ip
-                    ),
-                });
-            }
-        }
-
         validate_custom_options(&self.custom_options)?;
 
         Ok(())
@@ -542,27 +517,9 @@ impl Default for DHCPv4ServerConfig {
             server_ip_addr: LANDSCAPE_DEFAULE_LAN_DHCP_SERVER_IP,
             network_mask: LANDSCAPE_DEFAULT_LAN_DHCP_SERVER_NETMASK,
             address_lease_time: Some(LANDSCAPE_DHCP_DEFAULT_ADDRESS_LEASE_TIME),
-            mac_binding_records: vec![],
             custom_options: vec![],
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct MacBindingRecord {
-    #[cfg_attr(feature = "openapi", schema(value_type = String))]
-    pub mac: MacAddr,
-    #[cfg_attr(feature = "openapi", schema(value_type = String))]
-    pub ip: Ipv4Addr,
-    #[serde(default = "default_binding_record")]
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub expire_time: u32,
-}
-
-const fn default_binding_record() -> u32 {
-    // 24 小时
-    86400
 }
 
 #[cfg(test)]
@@ -602,16 +559,6 @@ mod tests {
         let json = r#"{"Hostname":"test"}"#;
         let result: Result<CustomDhcpOption, _> = serde_json::from_str(json);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn serde_mac_binding_record_defaults() {
-        let json = r#"{
-            "mac": "AA:BB:CC:DD:EE:FF",
-            "ip": "192.168.1.50"
-        }"#;
-        let record: MacBindingRecord = serde_json::from_str(json).unwrap();
-        assert_eq!(record.expire_time, 86400);
     }
 
     // ── Validation ────────────────────────────────────────────────

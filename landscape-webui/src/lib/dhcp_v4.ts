@@ -21,12 +21,6 @@ export class DHCPv4ServiceConfig {
   }
 }
 
-export interface MacBindingRecord {
-  mac: string;
-  ip: string;
-  expire_time: number;
-}
-
 export class DHCPv4ServerConfig {
   custom_options: CustomDhcpOption[];
   address_lease_time?: number;
@@ -34,7 +28,6 @@ export class DHCPv4ServerConfig {
   network_mask: number;
   ip_range_start: string;
   ip_range_end: string | undefined;
-  mac_binding_records: MacBindingRecord[];
 
   constructor(obj?: {
     custom_options?: CustomDhcpOption[];
@@ -43,7 +36,6 @@ export class DHCPv4ServerConfig {
     network_mask?: number;
     ip_range_start?: string;
     ip_range_end?: string;
-    mac_binding_records?: MacBindingRecord[];
   }) {
     this.custom_options = obj?.custom_options ?? [];
     this.address_lease_time = obj?.address_lease_time;
@@ -55,7 +47,6 @@ export class DHCPv4ServerConfig {
     // console.log(end);
     this.ip_range_start = obj?.ip_range_start ?? start;
     this.ip_range_end = obj?.ip_range_end ?? end;
-    this.mac_binding_records = obj?.mac_binding_records ?? [];
   }
 }
 

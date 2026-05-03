@@ -370,21 +370,6 @@ impl DHCPv4Server {
         let mut offered_ip = HashMap::new();
         let mut static_binding_ip_by_mac = HashMap::new();
         let mut static_binding_mac_by_ip = HashMap::new();
-        for each in config.mac_binding_records {
-            allocated_host.insert(each.ip, true);
-            static_binding_ip_by_mac.insert(each.mac, each.ip);
-            static_binding_mac_by_ip.insert(each.ip, each.mac);
-            offered_ip.insert(
-                each.mac,
-                DHCPv4ServerOfferedCache {
-                    hostname: None,
-                    ip: each.ip,
-                    relative_offer_time: 0,
-                    valid_time: each.expire_time,
-                    is_static: true,
-                },
-            );
-        }
 
         let mut enrolled_per_mac_options = HashMap::new();
         for device in enrolled_devices {
@@ -896,7 +881,7 @@ mod tests {
 
     use cidr::Ipv4Inet;
     use landscape_common::{
-        dhcp::v4_server::config::{CustomDhcpOption, DHCPv4ServerConfig, MacBindingRecord},
+        dhcp::v4_server::config::{CustomDhcpOption, DHCPv4ServerConfig},
         enrolled_device::EnrolledDevice,
         net::MacAddr,
     };
@@ -954,17 +939,23 @@ mod tests {
 
     #[test]
     fn static_binding_rejects_old_ip_for_same_mac() {
-        let mut config = DHCPv4ServerConfig::default();
+        let config = DHCPv4ServerConfig::default();
         let mac = MacAddr::from_str("00:00:00:00:00:01").unwrap();
         let static_ip = Ipv4Addr::new(192, 168, 5, 10);
         let old_ip = Ipv4Addr::new(192, 168, 5, 20);
-        config.mac_binding_records.push(MacBindingRecord {
-            mac,
-            ip: static_ip,
-            expire_time: 86400,
-        });
 
-        let mut dhcp_server = DHCPv4Server::init(config);
+        let enrolled = EnrolledDevice {
+            mac,
+            name: "test".to_string(),
+            ipv4: Some(static_ip),
+            ..serde_json::from_value(serde_json::json!({
+                "mac": "00:00:00:00:00:01",
+                "name": "test"
+            }))
+            .unwrap()
+        };
+
+        let mut dhcp_server = DHCPv4Server::init_with_enrolled(config, vec![enrolled]);
 
         assert!(!dhcp_server.ack_request_without_hostname(&mac, old_ip));
         assert!(dhcp_server.ack_request_without_hostname(&mac, static_ip));
@@ -972,17 +963,23 @@ mod tests {
 
     #[test]
     fn static_binding_rejects_other_mac_requesting_reserved_ip() {
-        let mut config = DHCPv4ServerConfig::default();
+        let config = DHCPv4ServerConfig::default();
         let owner = MacAddr::from_str("00:00:00:00:00:01").unwrap();
         let other = MacAddr::from_str("00:00:00:00:00:02").unwrap();
         let static_ip = Ipv4Addr::new(192, 168, 5, 10);
-        config.mac_binding_records.push(MacBindingRecord {
-            mac: owner,
-            ip: static_ip,
-            expire_time: 86400,
-        });
 
-        let mut dhcp_server = DHCPv4Server::init(config);
+        let enrolled = EnrolledDevice {
+            mac: owner,
+            name: "owner".to_string(),
+            ipv4: Some(static_ip),
+            ..serde_json::from_value(serde_json::json!({
+                "mac": "00:00:00:00:00:01",
+                "name": "owner"
+            }))
+            .unwrap()
+        };
+
+        let mut dhcp_server = DHCPv4Server::init_with_enrolled(config, vec![enrolled]);
 
         assert!(!dhcp_server.ack_request_without_hostname(&other, static_ip));
     }
@@ -1068,11 +1065,6 @@ mod tests {
             CustomDhcpOption::BootfileName("config.kpxe".to_string()),
         ];
         let mac = MacAddr::from_str("AA:BB:CC:DD:EE:FF").unwrap();
-        config.mac_binding_records.push(MacBindingRecord {
-            mac,
-            ip: Ipv4Addr::new(192, 168, 5, 50),
-            expire_time: 86400,
-        });
         let enrolled = EnrolledDevice {
             mac,
             name: "device".to_string(),

@@ -13,7 +13,6 @@ export default {
   custom_options: "自定义 DHCP Options",
   duplicate_option_check: "存在重复的 Option 类型，请修改后再保存",
   invalid_option_check: "存在无效的 DHCP Option 值，请修改后再保存",
-  static_binding: "静态 MAC 绑定 (已废弃)",
   assigned: {
     hostname: "主机名",
     mac_addr: "Mac 地址",
