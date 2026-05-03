@@ -36,11 +36,9 @@ struct route_context_v6 {
 #define IP_MULTICAST_BASE_NBO bpf_ntohl(0xE0000000)
 
 static __always_inline bool should_not_forward(__be32 daddr) {
-    if (unlikely(daddr == 0xffffffff || daddr == 0)) 
-        return true;
+    if (unlikely(daddr == 0xffffffff || daddr == 0)) return true;
 
-    if ((daddr & IP_MULTICAST_MASK_NBO) == IP_MULTICAST_BASE_NBO) 
-        return true;
+    if ((daddr & IP_MULTICAST_MASK_NBO) == IP_MULTICAST_BASE_NBO) return true;
 
     return false;
 }

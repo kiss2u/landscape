@@ -12,7 +12,6 @@ static __always_inline bool inet_addr_equal(const union u_inet_addr *a,
     return a->ip == b->ip;
 }
 
-
 /// @brief  解析的 ip 数据包载体
 struct ip_packet_info {
     u8 icmp_type;

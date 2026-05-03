@@ -14,7 +14,7 @@ struct mac_value_v4 {
     __be16 proto;
 };
 
-struct  {
+struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __type(key, struct mac_key_v4);
     __type(value, struct mac_value_v4);
@@ -32,12 +32,11 @@ struct mac_value_v6 {
     __be16 proto;
 };
 
-struct  {
+struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __type(key, struct mac_key_v6);
     __type(value, struct mac_value_v6);
     __uint(max_entries, 4096);
 } ip_mac_v6 SEC(".maps");
-
 
 #endif /* __LD_IP_NEIGH_H__ */

@@ -321,8 +321,8 @@ static __always_inline int search_ipv6_hash_mapping_egress(struct __sk_buff *skb
             bpf_printk("l4_csum_replace high 32bit err: %d", _ret);                                \
             return TC_ACT_SHOT;                                                                    \
         }                                                                                          \
-        _ret = bpf_l4_csum_replace(skb_ptr, csum_offset, (old_val) & 0xFFFFFFFF,                   \
-                                   (new_val) & 0xFFFFFFFF, flags | 4);                             \
+        _ret = bpf_l4_csum_replace(skb_ptr, csum_offset, (old_val)&0xFFFFFFFF,                     \
+                                   (new_val)&0xFFFFFFFF, flags | 4);                               \
         if (_ret) {                                                                                \
             bpf_printk("l4_csum_replace low 32bit err: %d", _ret);                                 \
             return TC_ACT_SHOT;                                                                    \

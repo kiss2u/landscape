@@ -68,7 +68,8 @@ int test_route_v6_pick_wan_by_flow_id_default(struct __sk_buff *skb) {
         .slot = (((u32)context.saddr.all[0]) ^ ((u32)context.saddr.all[1]) ^
                  (((u32)context.daddr.all[0]) << 1) ^ (((u32)context.daddr.all[1]) << 2) ^
                  ((u32)context.daddr.all[2]) ^ (((u32)context.daddr.all[3]) << 1) ^
-                 (((u32)context.l4_protocol) << 24)) & 0xF,
+                 (((u32)context.l4_protocol) << 24)) &
+                0xF,
     };
     struct route_target_info_v6 *target_info = bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
     if (target_info == NULL) {
@@ -92,7 +93,8 @@ int test_route_v6_pick_wan_by_flow_id_non_default(struct __sk_buff *skb) {
         .slot = (((u32)context.saddr.all[0]) ^ ((u32)context.saddr.all[1]) ^
                  (((u32)context.daddr.all[0]) << 1) ^ (((u32)context.daddr.all[1]) << 2) ^
                  ((u32)context.daddr.all[2]) ^ (((u32)context.daddr.all[3]) << 1) ^
-                 (((u32)context.l4_protocol) << 24)) & 0xF,
+                 (((u32)context.l4_protocol) << 24)) &
+                0xF,
     };
     struct route_target_info_v6 *target_info = bpf_map_lookup_elem(&rt6_target_slot_map, &slot_key);
     if (target_info == NULL) {
@@ -118,8 +120,7 @@ int test_route_cached_docker_redirect_v6(struct __sk_buff *skb) {
     struct rt_cache_value_v6 target = {0};
     target.mark_value = 0x0305;
 
-    int ret = bpf_skb_vlan_push(skb, ETH_P_8021Q,
-                                route_flow_mark_vlan_id(target.mark_value));
+    int ret = bpf_skb_vlan_push(skb, ETH_P_8021Q, route_flow_mark_vlan_id(target.mark_value));
     if (ret) {
         return ret;
     }

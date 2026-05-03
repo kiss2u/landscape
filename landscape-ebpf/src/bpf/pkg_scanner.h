@@ -124,9 +124,7 @@ static inline __always_inline void cb_to_packet_offset_info(struct __sk_buff *sk
     }
 
     // l3_offset_when_scan
-    {
-        info->l3_offset_when_scan = calc_adjusted_offset(l3_scan_from_cb, delta);
-    }
+    { info->l3_offset_when_scan = calc_adjusted_offset(l3_scan_from_cb, delta); }
 
     // icmp_error_l3_offset
     {
