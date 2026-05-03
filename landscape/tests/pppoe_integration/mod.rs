@@ -1,4 +1,5 @@
 mod cmd;
+mod ebpf_tests;
 mod env;
 mod runner;
 mod scripted_server;

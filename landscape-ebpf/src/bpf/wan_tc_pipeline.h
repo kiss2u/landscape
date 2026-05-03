@@ -7,8 +7,8 @@
 
 #include "landscape.h"
 
-#define INGRESS_STAGE_MSS 0
-#define INGRESS_STAGE_PPPOE 1
+#define INGRESS_STAGE_PPPOE 0
+#define INGRESS_STAGE_MSS 1
 #define INGRESS_STAGE_FIREWALL 2
 #define INGRESS_STAGE_NAT 3
 #define INGRESS_STAGE_WAN_ROUTE 4
@@ -38,19 +38,19 @@ struct {
 static __always_inline int wan_tc_pipeline_tailcall_ingress_from(struct __sk_buff *skb, u32 stage) {
     switch (stage) {
     default:
+        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_PPPOE);
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_MSS);
-        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_PPPOE);
-        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_FIREWALL);
-        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_NAT);
-        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_WAN_ROUTE);
-        return TC_ACT_UNSPEC;
-    case INGRESS_STAGE_MSS:
-        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_PPPOE);
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_FIREWALL);
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_NAT);
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_WAN_ROUTE);
         return TC_ACT_UNSPEC;
     case INGRESS_STAGE_PPPOE:
+        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_MSS);
+        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_FIREWALL);
+        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_NAT);
+        bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_WAN_ROUTE);
+        return TC_ACT_UNSPEC;
+    case INGRESS_STAGE_MSS:
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_FIREWALL);
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_NAT);
         bpf_tail_call(skb, &ingress_stage_progs, INGRESS_STAGE_WAN_ROUTE);

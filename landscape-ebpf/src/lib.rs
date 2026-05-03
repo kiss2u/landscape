@@ -143,9 +143,6 @@ pub(crate) struct LandscapeMapPath {
     pub ip_mac_v6: PathBuf,
 }
 
-// pppoe -> Fire wall -> nat -> route
-const PPPOE_INGRESS_PRIORITY: u32 = 3;
-// const MARK_INGRESS_PRIORITY: u32 = 5;
 const WAN_ROUTE_INGRESS_PRIORITY: u32 = 7;
 
 // Fire wall -> nat -> pppoe

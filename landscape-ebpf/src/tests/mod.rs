@@ -14,6 +14,7 @@ mod check;
 mod firewall;
 mod mss;
 mod nat;
+mod pppoe;
 mod route;
 mod scanner;
 mod time;
