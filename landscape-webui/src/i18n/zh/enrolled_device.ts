@@ -50,5 +50,9 @@ export default {
   lease_ip_mismatch: "当前 IP 与设备配置不一致",
   configured_ip: "配置 IP",
   observed_ip: "当前 IP",
+  advanced_settings: "高级设置",
+  dhcp_custom_options: "DHCP 自定义 Options",
+  dhcp_filter_options: "DHCP Option 过滤",
+  filter_options_placeholder: "选择要过滤的 option...",
   go_to_manage: "前往管理",
 };

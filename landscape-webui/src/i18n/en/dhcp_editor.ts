@@ -8,6 +8,13 @@ export default {
     save_success: "Saved successfully",
     save_failed: "Save failed",
   },
+  lease_time: "Lease Time (seconds)",
+  lease_time_tip: "Client must renew IP within this time. Default 86400 (24h)",
+  custom_options: "Custom DHCP Options",
+  duplicate_option_check:
+    "Duplicate option types found. Please fix before saving",
+  invalid_option_check: "Invalid DHCP option value. Please fix before saving",
+  static_binding: "Static MAC Binding (deprecated)",
   assigned: {
     hostname: "Hostname",
     mac_addr: "MAC Address",

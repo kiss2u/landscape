@@ -2,6 +2,7 @@
 import { computed, h, ref } from "vue";
 import { NButton, useMessage, useNotification } from "naive-ui";
 import NewIpEdit from "../NewIpEdit.vue";
+import CustomDhcpOptionEditor from "./options/CustomDhcpOptionEditor.vue";
 import { ZoneType } from "@/lib/service_ipconfig";
 import { DHCPv4ServiceConfig, get_dhcp_range } from "@/lib/dhcp_v4";
 import { formatMacAddress } from "@/lib/util";
@@ -26,6 +27,7 @@ const show_model = defineModel<boolean>("show", { required: true });
 const emit = defineEmits(["refresh"]);
 
 const commit_loading = ref(false);
+const optionEditorRef = ref<InstanceType<typeof CustomDhcpOptionEditor>>();
 const iface_info = defineProps<{
   iface_name: string;
   zone: IfaceZoneType;
@@ -51,6 +53,14 @@ async function on_modal_enter() {
 }
 
 async function save_config() {
+  if (optionEditorRef.value?.hasDuplicate) {
+    message.error(t("dhcp_editor.duplicate_option_check"));
+    return;
+  }
+  if (optionEditorRef.value?.hasInvalid) {
+    message.error(t("dhcp_editor.invalid_option_check"));
+    return;
+  }
   commit_loading.value = true;
   try {
     await update_dhcp_v4_config(service_config.value);
@@ -133,59 +143,77 @@ const network_mask = computed({
     @after-enter="on_modal_enter"
   >
     <n-card
-      style="width: 600px"
+      style="width: 800px; max-height: 80vh"
       :title="t('dhcp_editor.service.title')"
       :bordered="false"
       size="small"
       role="dialog"
       aria-modal="true"
     >
-      <n-flex style="flex: 1">
-        <n-alert style="flex: 1" type="warning">
-          {{ t("dhcp_editor.service.warning") }}
-        </n-alert>
-        <n-form :model="service_config">
-          <n-form-item :label="t('common.enable_question')">
-            <n-switch v-model:value="service_config.enable">
-              <template #checked>
-                {{ t("common.enable") }}
-              </template>
-              <template #unchecked>
-                {{ t("common.disable") }}
-              </template>
-            </n-switch>
-          </n-form-item>
+      <div class="dhcp-service-body">
+        <n-flex style="flex: 1">
+          <n-form :model="service_config">
+            <n-form-item :label="t('common.enable_question')">
+              <n-switch v-model:value="service_config.enable">
+                <template #checked>
+                  {{ t("common.enable") }}
+                </template>
+                <template #unchecked>
+                  {{ t("common.disable") }}
+                </template>
+              </n-switch>
+            </n-form-item>
 
-          <n-grid :cols="5">
-            <n-form-item-gi
-              :label="t('dhcp_editor.service.server_ip')"
-              :span="5"
-            >
-              <NewIpEdit
-                v-model:ip="server_ip_addr"
-                v-model:mask="network_mask"
-                :mask_max="30"
-              ></NewIpEdit>
-            </n-form-item-gi>
-            <n-form-item-gi
-              :label="t('dhcp_editor.service.range_start')"
-              :span="5"
-            >
-              <NewIpEdit
-                v-model:ip="service_config.config.ip_range_start"
-              ></NewIpEdit>
-            </n-form-item-gi>
-            <n-form-item-gi
-              :label="t('dhcp_editor.service.range_end')"
-              :span="5"
-            >
-              <NewIpEdit
-                v-model:ip="service_config.config.ip_range_end"
-              ></NewIpEdit>
-            </n-form-item-gi>
-          </n-grid>
-        </n-form>
-      </n-flex>
+            <n-alert style="flex: 1" type="warning">
+              {{ t("dhcp_editor.service.warning") }}
+            </n-alert>
+
+            <n-flex :size="16" align="flex-start" class="dhcp-service-columns">
+              <div style="flex: 1; min-width: 0">
+                <n-form-item :label="t('dhcp_editor.service.server_ip')">
+                  <NewIpEdit
+                    v-model:ip="server_ip_addr"
+                    v-model:mask="network_mask"
+                    :mask_max="30"
+                  ></NewIpEdit>
+                </n-form-item>
+                <n-form-item :label="t('dhcp_editor.service.range_start')">
+                  <NewIpEdit
+                    v-model:ip="service_config.config.ip_range_start"
+                  ></NewIpEdit>
+                </n-form-item>
+                <n-form-item :label="t('dhcp_editor.service.range_end')">
+                  <NewIpEdit
+                    v-model:ip="service_config.config.ip_range_end"
+                  ></NewIpEdit>
+                </n-form-item>
+                <n-form-item :label="t('dhcp_editor.lease_time')">
+                  <n-input-number
+                    v-model:value="service_config.config.address_lease_time"
+                    :min="60"
+                    :placeholder="'86400'"
+                    style="width: 100%"
+                  />
+                  <template #feedback>
+                    {{ t("dhcp_editor.lease_time_tip") }}
+                  </template>
+                </n-form-item>
+              </div>
+
+              <div style="flex: 1; min-width: 0">
+                <n-form-item :label="t('dhcp_editor.custom_options')">
+                  <div class="custom-options-scroll">
+                    <CustomDhcpOptionEditor
+                      ref="optionEditorRef"
+                      v-model="service_config.config.custom_options"
+                    />
+                  </div>
+                </n-form-item>
+              </div>
+            </n-flex>
+          </n-form>
+        </n-flex>
+      </div>
 
       <template #footer>
         <n-flex justify="space-between" align="center">
@@ -205,3 +233,22 @@ const network_mask = computed({
     </n-card>
   </n-modal>
 </template>
+
+<style scoped>
+.custom-options-scroll {
+  max-height: calc(80vh - 220px);
+  min-height: 120px;
+  overflow-y: auto;
+  padding-right: 6px;
+  width: 100%;
+}
+
+.dhcp-service-body {
+  max-height: calc(80vh - 100px);
+  overflow: hidden;
+}
+
+.dhcp-service-columns {
+  margin-top: 16px;
+}
+</style>

@@ -1,5 +1,6 @@
 import type { DHCPv4OfferInfo } from "@/api/service_dhcp_v4";
 import { IPv4, IPv4CidrRange } from "ip-num";
+import type { CustomDhcpOption } from "@/components/dhcp_v4/options/types";
 
 export class DHCPv4ServiceConfig {
   iface_name: string;
@@ -27,7 +28,8 @@ export interface MacBindingRecord {
 }
 
 export class DHCPv4ServerConfig {
-  options: any[];
+  custom_options: CustomDhcpOption[];
+  address_lease_time?: number;
   server_ip_addr: string;
   network_mask: number;
   ip_range_start: string;
@@ -35,14 +37,16 @@ export class DHCPv4ServerConfig {
   mac_binding_records: MacBindingRecord[];
 
   constructor(obj?: {
-    options?: any[];
+    custom_options?: CustomDhcpOption[];
+    address_lease_time?: number;
     server_ip_addr?: string;
     network_mask?: number;
     ip_range_start?: string;
     ip_range_end?: string;
     mac_binding_records?: MacBindingRecord[];
   }) {
-    this.options = obj?.options ?? [];
+    this.custom_options = obj?.custom_options ?? [];
+    this.address_lease_time = obj?.address_lease_time;
     this.server_ip_addr = obj?.server_ip_addr ?? "192.168.5.1";
     this.network_mask = obj?.network_mask ?? 24;
     const [start, end] = get_dhcp_range(

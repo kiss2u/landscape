@@ -12,6 +12,9 @@ import {
 import { get_all_dhcp_v4_status } from "@/api/service_dhcp_v4";
 import { useI18n } from "vue-i18n";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
+import CustomDhcpOptionEditor from "@/components/dhcp_v4/options/CustomDhcpOptionEditor.vue";
+import DHCPFilterOptionsEditor from "@/components/dhcp_v4/options/DHCPFilterOptionsEditor.vue";
+import type { CustomDhcpOption } from "@/components/dhcp_v4/options/types";
 
 const enrolledDeviceStore = useEnrolledDeviceStore();
 
@@ -33,13 +36,21 @@ const emit = defineEmits(["refresh"]);
 const show = defineModel<boolean>("show", { required: true });
 
 const origin_rule_json = ref<string>("");
-const rule = ref<EnrolledDevice>({
+const rule = ref<
+  EnrolledDevice & {
+    dhcp_custom_options?: CustomDhcpOption[];
+    dhcp_filter_options?: number[];
+  }
+>({
   name: "",
   mac: "",
   tag: [],
+  dhcp_custom_options: [],
+  dhcp_filter_options: [],
 });
 
 const commit_spin = ref(false);
+const optionEditorRef = ref<InstanceType<typeof CustomDhcpOptionEditor>>();
 const ifaceOptions = ref<{ label: string; value: string }[]>([]);
 const ipv4RangeStatus = ref<"success" | "error" | undefined>(undefined);
 const ipv4RangeFeedback = ref("");
@@ -60,15 +71,28 @@ function normalizeOptionalString(value?: string) {
   return trimmed ? trimmed : undefined;
 }
 
-function buildPayload(): EnrolledDevice {
-  return {
-    ...rule.value,
-    iface_name: normalizeOptionalString(rule.value.iface_name),
-    fake_name: normalizeOptionalString(rule.value.fake_name),
-    remark: normalizeOptionalString(rule.value.remark),
-    ipv4: normalizeOptionalString(rule.value.ipv4),
-    ipv6: normalizeOptionalString(rule.value.ipv6),
+function normalizePayload(value: typeof rule.value): EnrolledDevice {
+  const payload = {
+    ...value,
+    iface_name: normalizeOptionalString(value.iface_name),
+    fake_name: normalizeOptionalString(value.fake_name),
+    remark: normalizeOptionalString(value.remark),
+    ipv4: normalizeOptionalString(value.ipv4),
+    ipv6: normalizeOptionalString(value.ipv6),
   };
+
+  if (payload.dhcp_custom_options?.length === 0) {
+    delete payload.dhcp_custom_options;
+  }
+  if (payload.dhcp_filter_options?.length === 0) {
+    delete payload.dhcp_filter_options;
+  }
+
+  return payload;
+}
+
+function buildPayload(): EnrolledDevice {
+  return normalizePayload(rule.value);
 }
 
 const hasBasicValidity = computed(() => {
@@ -86,7 +110,9 @@ const hasValidIpv4Range = computed(() => {
 });
 
 const isModified = computed(() => {
-  return JSON.stringify(rule.value) !== origin_rule_json.value;
+  return (
+    JSON.stringify(normalizePayload(rule.value)) !== origin_rule_json.value
+  );
 });
 
 const canSave = computed(() => {
@@ -143,6 +169,8 @@ function exit() {
     name: "",
     mac: "",
     tag: [],
+    dhcp_custom_options: [],
+    dhcp_filter_options: [],
   };
   resetIpv4RangeValidation();
   formRef.value?.restoreValidation?.();
@@ -179,6 +207,8 @@ async function enter() {
         name: props.initialValues?.name ?? "",
         mac: props.initialValues?.mac ?? "",
         tag: [],
+        dhcp_custom_options: [],
+        dhcp_filter_options: [],
         remark: "",
         fake_name: "",
         ipv4: props.initialValues?.ipv4 ?? undefined,
@@ -202,7 +232,7 @@ async function enter() {
 
   if (token !== enterToken.value || !show.value) return;
 
-  origin_rule_json.value = JSON.stringify(rule.value);
+  origin_rule_json.value = JSON.stringify(normalizePayload(rule.value));
   void syncIpv4RangeValidation();
 }
 
@@ -271,6 +301,14 @@ const rules = {
 };
 
 async function saveRule() {
+  if (optionEditorRef.value?.hasDuplicate) {
+    message.error(t("dhcp_editor.duplicate_option_check"));
+    return;
+  }
+  if (optionEditorRef.value?.hasInvalid) {
+    message.error(t("dhcp_editor.invalid_option_check"));
+    return;
+  }
   await formRef.value?.validate();
 
   try {
@@ -398,6 +436,26 @@ async function saveRule() {
             type="textarea"
             :placeholder="t('enrolled_device.remark_placeholder')"
           />
+        </n-form-item-gi>
+
+        <n-form-item-gi :span="2" :show-label="false">
+          <n-collapse>
+            <n-collapse-item
+              :title="t('enrolled_device.advanced_settings')"
+              name="advanced-settings"
+            >
+              <n-form-item :label="t('enrolled_device.dhcp_custom_options')">
+                <CustomDhcpOptionEditor
+                  ref="optionEditorRef"
+                  v-model="rule.dhcp_custom_options!"
+                />
+              </n-form-item>
+
+              <n-form-item :label="t('enrolled_device.dhcp_filter_options')">
+                <DHCPFilterOptionsEditor v-model="rule.dhcp_filter_options!" />
+              </n-form-item>
+            </n-collapse-item>
+          </n-collapse>
         </n-form-item-gi>
       </n-grid>
     </n-form>

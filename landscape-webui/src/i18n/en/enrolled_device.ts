@@ -50,5 +50,9 @@ export default {
   lease_ip_mismatch: "Current IP does not match configured device IP",
   configured_ip: "Configured IP",
   observed_ip: "Current IP",
+  advanced_settings: "Advanced Settings",
+  dhcp_custom_options: "DHCP Custom Options",
+  dhcp_filter_options: "DHCP Filter Options",
+  filter_options_placeholder: "Select options to filter...",
   go_to_manage: "Go to manage",
 };
