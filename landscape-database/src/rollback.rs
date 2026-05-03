@@ -52,8 +52,16 @@ pub const RELEASE_BOUNDARIES: &[ReleaseBoundary] = &[
         terminal_migration: "m20260302_060012_cert_management",
     },
     ReleaseBoundary {
-        version: "0.17.1",
+        version: "0.17.6",
         terminal_migration: "m20260314_120000_dns_redirect_answer_mode",
+    },
+    ReleaseBoundary {
+        version: "0.18.3",
+        terminal_migration: "m20260408_120000_lan_ipv6_v2",
+    },
+    ReleaseBoundary {
+        version: "0.19.0",
+        terminal_migration: "m20260502_080437_enrolled_device_dhcp_options",
     },
 ];
 
@@ -333,14 +341,20 @@ fn print_targets(current_state: &CurrentSchemaState, targets: &[RollbackTarget])
     }
     println!();
     println!("Available rollback targets:");
+    println!(
+        "Each target keeps the listed migration applied and rolls back newer migrations only."
+    );
 
     for (index, target) in targets.iter().enumerate() {
         let step_label = if target.steps == 1 { "step" } else { "steps" };
+        let migration_label = if target.steps == 1 { "migration" } else { "migrations" };
         println!(
-            "[{}] {} -> {} ({} {})",
+            "[{}] {} (keep {}, rollback {} newer {} / {} {})",
             index + 1,
             target.display_label,
             target.terminal_migration,
+            target.steps,
+            migration_label,
             target.steps,
             step_label
         );
@@ -354,9 +368,9 @@ fn print_plan_preview(plan: &RollbackPlan) {
     println!("  Current head:    {}", plan.current_head);
     println!("  Target:          {}", plan.target_label);
     println!("  Target version:  {}", plan.target_version);
-    println!("  Target head:     {}", plan.target_head);
+    println!("  Target head:     {} (will remain applied)", plan.target_head);
     println!("  Steps:           {}", plan.steps);
-    println!("  Migrations to rollback:");
+    println!("  Migrations to rollback (newer than target head):");
     for migration in &plan.rollback_migrations {
         println!("    - {}", migration);
     }
@@ -413,10 +427,10 @@ mod tests {
         let targets =
             build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES).unwrap();
 
-        assert_eq!(targets.first().unwrap().version, "0.17.1");
-        assert_eq!(targets.first().unwrap().display_label, "current release boundary 0.17.1");
-        assert_eq!(targets.get(1).unwrap().display_label, "previous release 0.16.3");
-        assert_eq!(targets.first().unwrap().steps, 1);
+        assert_eq!(targets.first().unwrap().version, "0.18.3");
+        assert_eq!(targets.first().unwrap().display_label, "previous release 0.18.3");
+        assert_eq!(targets.get(1).unwrap().display_label, "older release 0.17.6");
+        assert_eq!(targets.first().unwrap().steps, 3);
     }
 
     #[test]
@@ -428,12 +442,55 @@ mod tests {
         let target = build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES)
             .unwrap()
             .into_iter()
-            .find(|target| target.version == "0.17.1")
+            .find(|target| target.version == "0.18.3")
             .unwrap();
 
         let plan = build_rollback_plan(&current_state, &target, &all_migrations).unwrap();
+        assert_eq!(plan.steps, 3);
+        assert_eq!(
+            plan.rollback_migrations,
+            vec![
+                "m20260502_080437_enrolled_device_dhcp_options".to_string(),
+                "m20260502_073125_dhcp_v4_custom_options".to_string(),
+                "m20260419_085215_flow_target_weights".to_string(),
+            ]
+        );
+        assert!(!plan.rollback_migrations.contains(&target.terminal_migration.to_string()));
+    }
+
+    #[test]
+    fn rollback_targets_exclude_current_boundary() {
+        let all_migrations = migration_names();
+        let current_head = "m20260408_120000_lan_ipv6_v2";
+        let current_state =
+            resolve_current_state(current_head, &all_migrations, RELEASE_BOUNDARIES).unwrap();
+        let targets =
+            build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES).unwrap();
+
+        assert_eq!(current_state.release_label, "0.18.3");
+        assert!(targets.iter().all(|target| target.version != "0.18.3"));
+        assert_eq!(targets.first().unwrap().version, "0.17.6");
+    }
+
+    #[test]
+    fn rollback_to_boundary_keeps_target_migration_applied() {
+        let all_migrations = migration_names();
+        let current_head = "m20260419_085215_flow_target_weights";
+        let current_state =
+            resolve_current_state(current_head, &all_migrations, RELEASE_BOUNDARIES).unwrap();
+        let target = build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES)
+            .unwrap()
+            .into_iter()
+            .find(|target| target.version == "0.18.3")
+            .unwrap();
+
+        let plan = build_rollback_plan(&current_state, &target, &all_migrations).unwrap();
+        assert_eq!(plan.target_head, "m20260408_120000_lan_ipv6_v2");
         assert_eq!(plan.steps, 1);
-        assert_eq!(plan.rollback_migrations, vec![current_head]);
+        assert_eq!(
+            plan.rollback_migrations,
+            vec!["m20260419_085215_flow_target_weights".to_string()]
+        );
     }
 
     #[tokio::test]
@@ -448,7 +505,7 @@ mod tests {
         let target = build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES)
             .unwrap()
             .into_iter()
-            .find(|target| target.version == "0.17.1")
+            .find(|target| target.version == "0.18.3")
             .unwrap();
         let plan = build_rollback_plan(&current_state, &target, &all_migrations).unwrap();
 
