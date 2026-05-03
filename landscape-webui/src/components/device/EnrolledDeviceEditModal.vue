@@ -14,7 +14,6 @@ import { useI18n } from "vue-i18n";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
 import CustomDhcpOptionEditor from "@/components/dhcp_v4/options/CustomDhcpOptionEditor.vue";
 import DHCPFilterOptionsEditor from "@/components/dhcp_v4/options/DHCPFilterOptionsEditor.vue";
-import type { CustomDhcpOption } from "@/components/dhcp_v4/options/types";
 
 const enrolledDeviceStore = useEnrolledDeviceStore();
 
@@ -36,12 +35,7 @@ const emit = defineEmits(["refresh"]);
 const show = defineModel<boolean>("show", { required: true });
 
 const origin_rule_json = ref<string>("");
-const rule = ref<
-  EnrolledDevice & {
-    dhcp_custom_options?: CustomDhcpOption[];
-    dhcp_filter_options?: number[];
-  }
->({
+const rule = ref<EnrolledDevice>({
   name: "",
   mac: "",
   tag: [],

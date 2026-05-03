@@ -1,14 +1,7 @@
-/** Tagged union matching the Rust CustomDhcpOption serde format. */
-export type CustomDhcpOption =
-  | { TFTPServerName: string }
-  | { BootfileName: string }
-  | { VendorExtensions: string }
-  | { RelayAgentInformation: RelayAgentInfo };
-
-export interface RelayAgentInfo {
-  /** Sub-options encoded as RelayAgentInformation */
-  [key: string]: unknown;
-}
+export type {
+  CustomDhcpOption,
+  RelayAgentInfo,
+} from "@landscape-router/types/api/schemas";
 
 export const DHCP_OPTION_LABELS: Record<number, string> = {
   12: "Host Name (12)",

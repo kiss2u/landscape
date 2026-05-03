@@ -1,6 +1,6 @@
 import type { DHCPv4OfferInfo } from "@/api/service_dhcp_v4";
 import { IPv4, IPv4CidrRange } from "ip-num";
-import type { CustomDhcpOption } from "@/components/dhcp_v4/options/types";
+import type { CustomDhcpOption } from "@landscape-router/types/api/schemas";
 
 export class DHCPv4ServiceConfig {
   iface_name: string;

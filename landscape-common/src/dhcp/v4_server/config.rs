@@ -102,9 +102,7 @@ pub enum CustomDhcpOption {
     /// Option 67 — Boot file name (iPXE, string)
     BootfileName(String),
     /// Option 43 — Vendor-specific extensions (binary, hex string)
-    VendorExtensions(
-        #[serde(serialize_with = "serialize_hex", deserialize_with = "deserialize_hex")] Vec<u8>,
-    ),
+    VendorExtensions(String),
     /// Option 82 — Relay Agent Information (structured sub-options)
     RelayAgentInformation(RelayAgentInfo),
 }
@@ -127,8 +125,8 @@ impl CustomDhcpOption {
                 DhcpV4Option::TFTPServerName(s.as_bytes().to_vec())
             }
             CustomDhcpOption::BootfileName(s) => DhcpV4Option::BootfileName(s.as_bytes().to_vec()),
-            CustomDhcpOption::VendorExtensions(bytes) => {
-                DhcpV4Option::VendorExtensions(bytes.clone())
+            CustomDhcpOption::VendorExtensions(hex) => {
+                DhcpV4Option::VendorExtensions(hex_decode(hex).expect("validated hex string"))
             }
             CustomDhcpOption::RelayAgentInformation(RelayAgentInfo(info)) => {
                 DhcpV4Option::RelayAgentInformation(info.clone())
@@ -214,10 +212,11 @@ impl CustomDhcpOption {
                     ));
                 }
             }
-            CustomDhcpOption::VendorExtensions(bytes) => {
-                if bytes.is_empty() {
+            CustomDhcpOption::VendorExtensions(hex) => {
+                if hex.is_empty() {
                     return Err("VendorExtensions must not be empty".into());
                 }
+                let bytes = hex_decode(hex).map_err(|e| format!("VendorExtensions: {}", e))?;
                 if bytes.len() > MAX_CUSTOM_OPTION_DATA_LEN {
                     return Err(format!(
                         "VendorExtensions too long ({} bytes, max {})",
@@ -237,20 +236,7 @@ impl CustomDhcpOption {
     }
 }
 
-// ─── hex serde helpers (for VendorExtensions) ───────────────────────────────
-
-fn serialize_hex<S: serde::Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(&hex_encode(bytes))
-}
-
-fn deserialize_hex<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
-    let s = String::deserialize(deserializer)?;
-    hex_decode(&s).map_err(serde::de::Error::custom)
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
+// ─── hex helper (for VendorExtensions) ───────────────────────────────────────
 
 fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
     let hex = hex.trim();
@@ -644,7 +630,7 @@ mod tests {
         let opts = vec![
             CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()),
             CustomDhcpOption::BootfileName("ipxe.kpxe".to_string()),
-            CustomDhcpOption::VendorExtensions(vec![0xff]),
+            CustomDhcpOption::VendorExtensions("ff".to_string()),
         ];
         assert!(validate_custom_options(&opts).is_ok());
     }
@@ -654,7 +640,7 @@ mod tests {
         let mut config = DHCPv4ServerConfig::default();
         config.custom_options.push(CustomDhcpOption::TFTPServerName("192.168.1.1".to_string()));
         config.custom_options.push(CustomDhcpOption::BootfileName("ipxe.kpxe".to_string()));
-        config.custom_options.push(CustomDhcpOption::VendorExtensions(vec![0xff, 0x00, 0x01]));
+        config.custom_options.push(CustomDhcpOption::VendorExtensions("ff0001".to_string()));
         assert!(config.validate().is_ok());
     }
 
@@ -674,7 +660,7 @@ mod tests {
 
     #[test]
     fn validate_vendor_extensions_rejects_over_255_bytes() {
-        let opt = CustomDhcpOption::VendorExtensions(vec![0xff; 256]);
+        let opt = CustomDhcpOption::VendorExtensions("ff".repeat(256));
         assert!(opt.validate().is_err());
     }
 
@@ -689,7 +675,7 @@ mod tests {
     fn validate_custom_options_rejects_empty_data() {
         assert!(CustomDhcpOption::TFTPServerName("".to_string()).validate().is_err());
         assert!(CustomDhcpOption::BootfileName("".to_string()).validate().is_err());
-        assert!(CustomDhcpOption::VendorExtensions(vec![]).validate().is_err());
+        assert!(CustomDhcpOption::VendorExtensions("".to_string()).validate().is_err());
     }
 
     #[test]
