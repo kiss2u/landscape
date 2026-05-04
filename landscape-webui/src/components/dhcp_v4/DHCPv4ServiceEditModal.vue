@@ -2,6 +2,7 @@
 import { computed, h, ref } from "vue";
 import { NButton, useMessage, useNotification } from "naive-ui";
 import { isIPv4 } from "is-ip";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import IpEdit from "../IpEdit.vue";
 import CustomDhcpOptionEditor from "./options/CustomDhcpOptionEditor.vue";
 import IfaceDisableGuardModal from "@/components/iface/IfaceDisableGuardModal.vue";
@@ -186,104 +187,87 @@ const network_mask = computed({
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_config.enable"
+    :title="t('dhcp_editor.service.title')"
+    width="800px"
+    max-height="80vh"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 800px; max-height: 80vh"
-      :title="t('dhcp_editor.service.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div class="dhcp-service-body">
-        <n-flex class="dhcp-service-form-wrap">
-          <n-form class="dhcp-service-form" :model="service_config">
-            <n-form-item :label="t('common.enable_question')">
-              <n-switch v-model:value="service_config.enable">
-                <template #checked>
-                  {{ t("common.enable") }}
-                </template>
-                <template #unchecked>
-                  {{ t("common.disable") }}
-                </template>
-              </n-switch>
-            </n-form-item>
+    <div class="dhcp-service-body">
+      <n-flex class="dhcp-service-form-wrap">
+        <n-form class="dhcp-service-form" :model="service_config">
+          <n-alert style="flex: 1" type="warning">
+            {{ t("dhcp_editor.service.warning") }}
+          </n-alert>
 
-            <n-alert style="flex: 1" type="warning">
-              {{ t("dhcp_editor.service.warning") }}
-            </n-alert>
+          <n-flex :size="16" align="flex-start" class="dhcp-service-columns">
+            <div style="flex: 1; min-width: 0">
+              <n-form-item :label="t('dhcp_editor.service.server_ip')">
+                <IpEdit
+                  v-model:ip="server_ip_addr"
+                  v-model:mask="network_mask"
+                  :mask_max="30"
+                  :ip_version="4"
+                ></IpEdit>
+              </n-form-item>
+              <n-form-item :label="t('dhcp_editor.service.range_start')">
+                <IpEdit
+                  v-model:ip="service_config.config.ip_range_start"
+                  :ip_version="4"
+                ></IpEdit>
+              </n-form-item>
+              <n-form-item :label="t('dhcp_editor.service.range_end')">
+                <IpEdit
+                  v-model:ip="service_config.config.ip_range_end"
+                  :ip_version="4"
+                ></IpEdit>
+              </n-form-item>
+              <n-form-item :label="t('dhcp_editor.lease_time')">
+                <n-input-number
+                  v-model:value="service_config.config.address_lease_time"
+                  :min="60"
+                  :placeholder="'86400'"
+                  style="width: 100%"
+                />
+                <template #feedback>
+                  {{ t("dhcp_editor.lease_time_tip") }}
+                </template>
+              </n-form-item>
+            </div>
 
-            <n-flex :size="16" align="flex-start" class="dhcp-service-columns">
-              <div style="flex: 1; min-width: 0">
-                <n-form-item :label="t('dhcp_editor.service.server_ip')">
-                  <IpEdit
-                    v-model:ip="server_ip_addr"
-                    v-model:mask="network_mask"
-                    :mask_max="30"
-                    :ip_version="4"
-                  ></IpEdit>
-                </n-form-item>
-                <n-form-item :label="t('dhcp_editor.service.range_start')">
-                  <IpEdit
-                    v-model:ip="service_config.config.ip_range_start"
-                    :ip_version="4"
-                  ></IpEdit>
-                </n-form-item>
-                <n-form-item :label="t('dhcp_editor.service.range_end')">
-                  <IpEdit
-                    v-model:ip="service_config.config.ip_range_end"
-                    :ip_version="4"
-                  ></IpEdit>
-                </n-form-item>
-                <n-form-item :label="t('dhcp_editor.lease_time')">
-                  <n-input-number
-                    v-model:value="service_config.config.address_lease_time"
-                    :min="60"
-                    :placeholder="'86400'"
-                    style="width: 100%"
+            <div style="flex: 1; min-width: 0">
+              <n-form-item :label="t('dhcp_editor.custom_options')">
+                <div class="custom-options-scroll">
+                  <CustomDhcpOptionEditor
+                    ref="optionEditorRef"
+                    v-model="service_config.config.custom_options"
                   />
-                  <template #feedback>
-                    {{ t("dhcp_editor.lease_time_tip") }}
-                  </template>
-                </n-form-item>
-              </div>
+                </div>
+              </n-form-item>
+            </div>
+          </n-flex>
+        </n-form>
+      </n-flex>
+    </div>
 
-              <div style="flex: 1; min-width: 0">
-                <n-form-item :label="t('dhcp_editor.custom_options')">
-                  <div class="custom-options-scroll">
-                    <CustomDhcpOptionEditor
-                      ref="optionEditorRef"
-                      v-model="service_config.config.custom_options"
-                    />
-                  </div>
-                </n-form-item>
-              </div>
-            </n-flex>
-          </n-form>
-        </n-flex>
-      </div>
-
-      <template #footer>
-        <n-flex justify="space-between" align="center">
-          <n-button round @click="show_model = false">
-            {{ t("common.cancel") }}
-          </n-button>
-          <n-button
-            :loading="commit_loading"
-            round
-            type="primary"
-            @click="save_config"
-          >
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="space-between" align="center">
+        <n-button round @click="show_model = false">
+          {{ t("common.cancel") }}
+        </n-button>
+        <n-button
+          :loading="commit_loading"
+          round
+          type="primary"
+          @click="save_config"
+        >
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 
   <IfaceDisableGuardModal
     ref="disable_guard_modal"

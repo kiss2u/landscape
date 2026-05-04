@@ -6,6 +6,7 @@ import type {
 } from "@landscape-router/types/api/schemas";
 
 import { computed, ref } from "vue";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import {
   get_static_nat_mapping,
   push_static_nat_mapping,
@@ -47,6 +48,17 @@ const deviceOptions = computed(() =>
 const commit_spin = ref(false);
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
+});
+
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 
 function legacyTargetFromRule(value: StaticNatMappingConfig): StaticNatTarget {
@@ -335,14 +347,13 @@ const mappingPortsRule = {
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 600px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('nat.mapping.edit_title')"
+    :switch-disabled="!rule"
+    width="600px"
     @after-enter="enter"
-    :bordered="false"
   >
     <n-flex vertical>
       <!-- {{ isModified }} -->
@@ -358,15 +369,6 @@ const mappingPortsRule = {
           <!-- <n-form-item-gi label="Priority" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi> -->
-          <n-form-item-gi :label="t('nat.mapping.enabled')" :span="2">
-            <n-switch v-model:value="rule.enable">
-              <template #checked> {{ t("common.enable") }} </template>
-              <template #unchecked>
-                {{ t("common.disable") }}
-              </template>
-            </n-switch>
-          </n-form-item-gi>
-
           <n-form-item-gi :label="t('nat.mapping.allowed_protocols')" :span="2">
             <n-flex justify="space-between" style="flex: 1">
               <n-flex>
@@ -587,5 +589,5 @@ const mappingPortsRule = {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

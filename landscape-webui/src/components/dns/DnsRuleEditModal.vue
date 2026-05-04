@@ -14,6 +14,7 @@ import { useMessage } from "naive-ui";
 import { ChangeCatalog } from "@vicons/carbon";
 import { computed, onMounted } from "vue";
 import { ref } from "vue";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import FlowMarkEdit from "@/components/flow/FlowMarkEdit.vue";
 import type { RuleSource } from "@landscape-router/types/api/schemas";
 import {
@@ -43,6 +44,17 @@ const rule = ref<any>(new DnsRule());
 const commit_spin = ref(false);
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
+});
+
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 
 async function enter() {
@@ -177,14 +189,12 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 600px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('dns_editor.rule_edit.title')"
+    width="600px"
     @after-enter="enter"
-    :bordered="false"
   >
     <!-- {{ isModified }} -->
     <n-form style="flex: 1" ref="formRef" :model="rule" :cols="5">
@@ -192,20 +202,7 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
         <n-form-item-gi :label="t('dns_editor.rule_edit.priority')" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi>
-        <n-form-item-gi :label="t('common.enable')" :offset="1" :span="1">
-          <n-switch v-model:value="rule.enable">
-            <template #checked>
-              {{ t("common.enable") }}
-            </template>
-            <template #unchecked>
-              {{ t("common.disable") }}
-            </template>
-          </n-switch>
-        </n-form-item-gi>
 
-        <n-form-item-gi :span="2" :label="t('dns_editor.rule_edit.remark')">
-          <n-input v-model:value="rule.name" type="text" />
-        </n-form-item-gi>
         <n-form-item-gi
           :offset="1"
           :span="2"
@@ -220,6 +217,9 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
               :label="opt.label"
             />
           </n-radio-group>
+        </n-form-item-gi>
+        <n-form-item-gi :span="5" :label="t('dns_editor.rule_edit.remark')">
+          <n-input v-model:value="rule.name" type="text" />
         </n-form-item-gi>
 
         <n-form-item-gi
@@ -391,5 +391,5 @@ function add_by_quick_btn(match_type: DomainMatchTypeEnum | undefined) {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import {
   get_iface_mss_clamp_config,
@@ -45,47 +46,32 @@ async function save_config() {
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_config.enable"
+    :title="t('misc.mss_clamp.title')"
+    width="600px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 600px"
-      :title="t('misc.mss_clamp.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-form :model="service_config">
-        <n-grid :cols="5">
-          <n-form-item-gi :label="t('common.enable_question')" :span="1">
-            <n-switch v-model:value="service_config.enable">
-              <template #checked> {{ t("common.enable") }} </template>
-              <template #unchecked> {{ t("common.disable") }} </template>
-            </n-switch>
-          </n-form-item-gi>
-          <n-form-item-gi :label="t('misc.mss_clamp.clamp_value')" :span="4">
-            <n-input-number
-              v-model:value="service_config.clamp_size"
-              :show-button="false"
-              style="flex: 1"
-              min="0"
-              max="65535"
-              placeholder=""
-            />
-          </n-form-item-gi>
-        </n-grid>
-      </n-form>
+    <n-form :model="service_config">
+      <n-form-item :label="t('misc.mss_clamp.clamp_value')">
+        <n-input-number
+          v-model:value="service_config.clamp_size"
+          :show-button="false"
+          style="flex: 1"
+          min="0"
+          max="65535"
+          placeholder=""
+        />
+      </n-form-item>
+    </n-form>
 
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

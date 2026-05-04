@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 import type { RouteWanServiceConfig } from "@landscape-router/types/api/schemas";
 import { useRouteWanConfigStore } from "@/stores/status_route_wan";
@@ -21,6 +22,17 @@ const iface_info = defineProps<{
 }>();
 
 const service_config = ref<RouteWanServiceConfig | null>(null);
+
+const service_enabled = computed({
+  get() {
+    return service_config.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (service_config.value) {
+      service_config.value.enable = value;
+    }
+  },
+});
 
 async function on_modal_enter() {
   try {
@@ -47,35 +59,20 @@ async function save_config() {
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_enabled"
+    :title="t('misc.route_wan.title')"
+    :switch-disabled="service_config === null"
+    width="600px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 600px"
-      :title="t('misc.route_wan.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-form v-if="service_config !== null" :model="service_config">
-        <n-form-item :label="t('common.enable_question')">
-          <n-switch v-model:value="service_config.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
-        </n-form-item>
-      </n-form>
-
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

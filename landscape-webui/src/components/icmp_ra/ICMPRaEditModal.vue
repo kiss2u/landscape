@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { FormInst, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { ZoneType } from "@/lib/service_ipconfig";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { useIPv6PDStore } from "@/stores/status_ipv6pd";
 import {
   get_lan_ipv6_config,
@@ -37,6 +38,17 @@ const iface_info = defineProps<{
 }>();
 
 const service_config = ref<LanIPv6ServiceConfigV2>();
+
+const service_enabled = computed({
+  get() {
+    return service_config.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (service_config.value) {
+      service_config.value.enable = value;
+    }
+  },
+});
 
 function default_config(): LanIPv6ServiceConfigV2 {
   return {
@@ -216,264 +228,245 @@ function replace_group_sources(
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_enabled"
+    :title="t('lan_ipv6.title')"
+    :switch-disabled="!service_config"
+    width="1200px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 1200px"
-      :title="t('lan_ipv6.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-      closable
-      @close="show_model = false"
+    <n-form
+      v-if="service_config"
+      ref="formRef"
+      :model="service_config"
+      :rules="formRules"
     >
-      <n-form
-        v-if="service_config"
-        ref="formRef"
-        :model="service_config"
-        :rules="formRules"
+      <!-- Mode selector -->
+      <n-card
+        style="width: 100%; margin-bottom: 12px"
+        size="small"
+        :bordered="false"
       >
-        <!-- Mode selector -->
-        <n-card
-          style="width: 100%; margin-bottom: 12px"
-          size="small"
-          :bordered="false"
-        >
-          <n-flex align="center" :gap="16">
-            <n-form-item :label="t('lan_ipv6.enable')" style="margin-bottom: 0">
-              <n-switch v-model:value="service_config.enable">
-                <template #checked> {{ t("lan_ipv6.enabled") }} </template>
-                <template #unchecked> {{ t("lan_ipv6.disabled") }} </template>
-              </n-switch>
-            </n-form-item>
-            <n-form-item
-              :label="t('lan_ipv6.mode')"
-              style="margin-bottom: 0; flex: 1"
+        <n-flex align="center" :gap="16">
+          <n-form-item
+            :label="t('lan_ipv6.mode')"
+            style="margin-bottom: 0; flex: 1"
+          >
+            <n-radio-group
+              :value="service_config.config.mode"
+              @update:value="on_mode_change"
+              name="ipv6-mode"
             >
-              <n-radio-group
-                :value="service_config.config.mode"
-                @update:value="on_mode_change"
-                name="ipv6-mode"
-              >
-                <n-radio-button
-                  value="slaac"
-                  :label="t('lan_ipv6.mode_slaac')"
-                />
-                <n-radio-button
-                  value="stateful"
-                  :label="t('lan_ipv6.mode_stateful')"
-                />
-                <n-radio-button
-                  value="slaac_dhcpv6"
-                  :label="t('lan_ipv6.mode_slaac_dhcpv6')"
-                />
-              </n-radio-group>
-            </n-form-item>
+              <n-radio-button value="slaac" :label="t('lan_ipv6.mode_slaac')" />
+              <n-radio-button
+                value="stateful"
+                :label="t('lan_ipv6.mode_stateful')"
+              />
+              <n-radio-button
+                value="slaac_dhcpv6"
+                :label="t('lan_ipv6.mode_slaac_dhcpv6')"
+              />
+            </n-radio-group>
+          </n-form-item>
+        </n-flex>
+
+        <n-alert
+          v-if="service_config.config.mode === 'slaac'"
+          type="info"
+          :bordered="false"
+          style="margin-top: 8px"
+        >
+          {{ t("lan_ipv6.mode_slaac_desc") }}
+        </n-alert>
+        <n-alert
+          v-else-if="service_config.config.mode === 'stateful'"
+          type="info"
+          :bordered="false"
+          style="margin-top: 8px"
+        >
+          {{ t("lan_ipv6.mode_stateful_desc") }}
+        </n-alert>
+        <n-alert
+          v-else-if="service_config.config.mode === 'slaac_dhcpv6'"
+          type="info"
+          :bordered="false"
+          style="margin-top: 8px"
+        >
+          {{ t("lan_ipv6.mode_slaac_dhcpv6_desc") }}
+        </n-alert>
+      </n-card>
+
+      <n-card
+        style="width: 100%; margin-bottom: 12px"
+        size="small"
+        :title="t('lan_ipv6.prefix_overview')"
+        :bordered="false"
+      >
+        <template #header-extra>
+          <n-flex :size="8">
+            <n-button size="tiny" @click="show_static_source_add = true">
+              {{ t("lan_ipv6.add_static_prefix") }}
+            </n-button>
+            <n-button
+              size="tiny"
+              type="primary"
+              @click="show_pd_source_add = true"
+            >
+              {{ t("lan_ipv6.add_pd_prefix") }}
+            </n-button>
           </n-flex>
+          <PrefixGroupEditorModal
+            @commit="add_group_sources"
+            v-model:show="show_static_source_add"
+            :allowed-service-kinds="allowed_service_kinds_for_type('static')"
+            source-type="static"
+            :parent-label="t('lan_ipv6.add_static_prefix')"
+            :group="undefined"
+            :current-iface-name="service_config.iface_name"
+            :current-groups="all_groups"
+            :current-mode="service_config.config.mode"
+          />
+          <PrefixGroupEditorModal
+            @commit="add_group_sources"
+            v-model:show="show_pd_source_add"
+            :allowed-service-kinds="allowed_service_kinds_for_type('pd')"
+            source-type="pd"
+            :parent-label="t('lan_ipv6.add_pd_prefix')"
+            :group="undefined"
+            :current-iface-name="service_config.iface_name"
+            :current-groups="all_groups"
+            :current-mode="service_config.config.mode"
+          />
+        </template>
 
-          <n-alert
-            v-if="service_config.config.mode === 'slaac'"
-            type="info"
-            :bordered="false"
-            style="margin-top: 8px"
-          >
-            {{ t("lan_ipv6.mode_slaac_desc") }}
-          </n-alert>
-          <n-alert
-            v-else-if="service_config.config.mode === 'stateful'"
-            type="info"
-            :bordered="false"
-            style="margin-top: 8px"
-          >
-            {{ t("lan_ipv6.mode_stateful_desc") }}
-          </n-alert>
-          <n-alert
-            v-else-if="service_config.config.mode === 'slaac_dhcpv6'"
-            type="info"
-            :bordered="false"
-            style="margin-top: 8px"
-          >
-            {{ t("lan_ipv6.mode_slaac_dhcpv6_desc") }}
-          </n-alert>
-        </n-card>
+        <n-flex v-if="all_groups.length > 0" vertical>
+          <PrefixGroupCard
+            v-for="group in all_groups"
+            :key="group.group_id"
+            :group="group"
+            :allowed-service-kinds="
+              allowed_service_kinds_for_type(sourceTypeFromParent(group.parent))
+            "
+            :iface-name="service_config.iface_name"
+            :current-groups="all_groups"
+            :current-mode="service_config.config.mode"
+            @commit-group="replace_group_sources"
+          />
+        </n-flex>
 
+        <n-empty v-else :description="t('lan_ipv6.no_prefix')" />
+      </n-card>
+
+      <!-- Bottom config area -->
+      <n-flex :gap="12" align="stretch">
+        <!-- RA config -->
         <n-card
-          style="width: 100%; margin-bottom: 12px"
+          style="flex: 1; min-width: 0"
           size="small"
-          :title="t('lan_ipv6.prefix_overview')"
+          :title="t('lan_ipv6.ra_config')"
           :bordered="false"
         >
-          <template #header-extra>
-            <n-flex :size="8">
-              <n-button size="tiny" @click="show_static_source_add = true">
-                {{ t("lan_ipv6.add_static_prefix") }}
-              </n-button>
-              <n-button
-                size="tiny"
-                type="primary"
-                @click="show_pd_source_add = true"
-              >
-                {{ t("lan_ipv6.add_pd_prefix") }}
-              </n-button>
-            </n-flex>
-            <PrefixGroupEditorModal
-              @commit="add_group_sources"
-              v-model:show="show_static_source_add"
-              :allowed-service-kinds="allowed_service_kinds_for_type('static')"
-              source-type="static"
-              :parent-label="t('lan_ipv6.add_static_prefix')"
-              :group="undefined"
-              :current-iface-name="service_config.iface_name"
-              :current-groups="all_groups"
-              :current-mode="service_config.config.mode"
-            />
-            <PrefixGroupEditorModal
-              @commit="add_group_sources"
-              v-model:show="show_pd_source_add"
-              :allowed-service-kinds="allowed_service_kinds_for_type('pd')"
-              source-type="pd"
-              :parent-label="t('lan_ipv6.add_pd_prefix')"
-              :group="undefined"
-              :current-iface-name="service_config.iface_name"
-              :current-groups="all_groups"
-              :current-mode="service_config.config.mode"
-            />
-          </template>
+          <n-grid :x-gap="12" :y-gap="8" cols="2" item-responsive>
+            <n-form-item-gi span="2">
+              <template #label>
+                <Notice>
+                  {{ t("lan_ipv6.ad_interval") }}
+                  <template #msg>
+                    {{ t("lan_ipv6.ad_interval_desc") }}
+                  </template>
+                </Notice>
+              </template>
+              <n-input-number
+                style="flex: 1"
+                v-model:value="service_config.config.ad_interval"
+                clearable
+              />
+            </n-form-item-gi>
 
-          <n-flex v-if="all_groups.length > 0" vertical>
-            <PrefixGroupCard
-              v-for="group in all_groups"
-              :key="group.group_id"
-              :group="group"
-              :allowed-service-kinds="
-                allowed_service_kinds_for_type(
-                  sourceTypeFromParent(group.parent),
-                )
-              "
-              :iface-name="service_config.iface_name"
-              :current-groups="all_groups"
-              :current-mode="service_config.config.mode"
-              @commit-group="replace_group_sources"
-            />
-          </n-flex>
-
-          <n-empty v-else :description="t('lan_ipv6.no_prefix')" />
-        </n-card>
-
-        <!-- Bottom config area -->
-        <n-flex :gap="12" align="stretch">
-          <!-- RA config -->
-          <n-card
-            style="flex: 1; min-width: 0"
-            size="small"
-            :title="t('lan_ipv6.ra_config')"
-            :bordered="false"
-          >
-            <n-grid :x-gap="12" :y-gap="8" cols="2" item-responsive>
+            <!-- M/O flags: show read-only for stateful/slaac_dhcpv6, editable for slaac -->
+            <template v-if="service_config.config.mode === 'slaac'">
               <n-form-item-gi span="2">
                 <template #label>
                   <Notice>
-                    {{ t("lan_ipv6.ad_interval") }}
+                    {{ t("lan_ipv6.m_flag") }}
                     <template #msg>
-                      {{ t("lan_ipv6.ad_interval_desc") }}
+                      {{ t("lan_ipv6.m_flag_desc") }}
                     </template>
                   </Notice>
                 </template>
-                <n-input-number
-                  style="flex: 1"
-                  v-model:value="service_config.config.ad_interval"
-                  clearable
+                <n-switch
+                  v-model:value="
+                    service_config.config.ra_flag.managed_address_config
+                  "
                 />
               </n-form-item-gi>
-
-              <!-- M/O flags: show read-only for stateful/slaac_dhcpv6, editable for slaac -->
-              <template v-if="service_config.config.mode === 'slaac'">
-                <n-form-item-gi span="2">
-                  <template #label>
-                    <Notice>
-                      {{ t("lan_ipv6.m_flag") }}
-                      <template #msg>
-                        {{ t("lan_ipv6.m_flag_desc") }}
-                      </template>
-                    </Notice>
-                  </template>
-                  <n-switch
-                    v-model:value="
-                      service_config.config.ra_flag.managed_address_config
-                    "
-                  />
-                </n-form-item-gi>
-                <n-form-item-gi span="2">
-                  <template #label>
-                    <Notice>
-                      {{ t("lan_ipv6.o_flag") }}
-                      <template #msg>
-                        {{ t("lan_ipv6.o_flag_desc") }}
-                      </template>
-                    </Notice>
-                  </template>
-                  <n-switch
-                    v-model:value="service_config.config.ra_flag.other_config"
-                  />
-                </n-form-item-gi>
-              </template>
-              <template v-else>
-                <n-form-item-gi span="2">
-                  <template #label>
-                    <Notice>
-                      {{ t("lan_ipv6.ra_flags_auto") }}
-                      <template #msg>
-                        {{ t("lan_ipv6.ra_flags_auto_desc") }}
-                      </template>
-                    </Notice>
-                  </template>
-                  <n-tag :bordered="false" type="info"> M=1, O=1 </n-tag>
-                </n-form-item-gi>
-              </template>
-
-              <n-form-item-gi span="2" :label="t('lan_ipv6.route_priority')">
-                <n-radio-group
-                  v-model:value="service_config.config.ra_flag.prf"
-                  name="ra_flag"
-                >
-                  <n-radio-button
-                    :value="3"
-                    :label="t('lan_ipv6.priority_low')"
-                  />
-                  <n-radio-button
-                    :value="0"
-                    :label="t('lan_ipv6.priority_medium')"
-                  />
-                  <n-radio-button
-                    :value="1"
-                    :label="t('lan_ipv6.priority_high')"
-                  />
-                </n-radio-group>
+              <n-form-item-gi span="2">
+                <template #label>
+                  <Notice>
+                    {{ t("lan_ipv6.o_flag") }}
+                    <template #msg>
+                      {{ t("lan_ipv6.o_flag_desc") }}
+                    </template>
+                  </Notice>
+                </template>
+                <n-switch
+                  v-model:value="service_config.config.ra_flag.other_config"
+                />
               </n-form-item-gi>
-            </n-grid>
-          </n-card>
+            </template>
+            <template v-else>
+              <n-form-item-gi span="2">
+                <template #label>
+                  <Notice>
+                    {{ t("lan_ipv6.ra_flags_auto") }}
+                    <template #msg>
+                      {{ t("lan_ipv6.ra_flags_auto_desc") }}
+                    </template>
+                  </Notice>
+                </template>
+                <n-tag :bordered="false" type="info"> M=1, O=1 </n-tag>
+              </n-form-item-gi>
+            </template>
 
-          <!-- DHCPv6 Server Config (only for stateful and slaac_dhcpv6) -->
-          <DHCPv6ServerCard
-            v-if="
-              service_config.config.mode === 'stateful' ||
-              service_config.config.mode === 'slaac_dhcpv6'
-            "
-            v-model:service-config="service_config"
-          />
-        </n-flex>
-      </n-form>
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("lan_ipv6.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+            <n-form-item-gi span="2" :label="t('lan_ipv6.route_priority')">
+              <n-radio-group
+                v-model:value="service_config.config.ra_flag.prf"
+                name="ra_flag"
+              >
+                <n-radio-button
+                  :value="3"
+                  :label="t('lan_ipv6.priority_low')"
+                />
+                <n-radio-button
+                  :value="0"
+                  :label="t('lan_ipv6.priority_medium')"
+                />
+                <n-radio-button
+                  :value="1"
+                  :label="t('lan_ipv6.priority_high')"
+                />
+              </n-radio-group>
+            </n-form-item-gi>
+          </n-grid>
+        </n-card>
+
+        <!-- DHCPv6 Server Config (only for stateful and slaac_dhcpv6) -->
+        <DHCPv6ServerCard
+          v-if="
+            service_config.config.mode === 'stateful' ||
+            service_config.config.mode === 'slaac_dhcpv6'
+          "
+          v-model:service-config="service_config"
+        />
+      </n-flex>
+    </n-form>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("lan_ipv6.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

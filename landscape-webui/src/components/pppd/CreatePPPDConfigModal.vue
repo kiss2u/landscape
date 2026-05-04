@@ -4,6 +4,7 @@ import { update_iface_pppd_config } from "@/api/service_pppd";
 import { PPPDServiceConfig } from "@/lib/pppd";
 import { computed, ref } from "vue";
 import type { SelectOption } from "naive-ui";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
@@ -90,11 +91,11 @@ async function confirm_config() {
 }
 </script>
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    preset="card"
-    style="width: 600px"
+    v-model:enabled="value.enable"
     :title="t('pppd_editor.title')"
+    width="600px"
     @after-enter="init_conf_value"
   >
     <!-- <template #header-extra> 噢! </template> -->
@@ -102,13 +103,6 @@ async function confirm_config() {
 
     <n-form style="flex: 1" ref="formRef" :model="value" :cols="4">
       <n-grid :cols="5">
-        <n-form-item-gi :label="t('common.enable_question')" :span="1">
-          <n-switch v-model:value="value.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
-        </n-form-item-gi>
-
         <n-form-item-gi :span="2" :label="t('pppd_editor.default_route')">
           <n-switch v-model:value="value.pppd_config.default_route">
             <template #checked> {{ t("common.enable") }} </template>
@@ -174,5 +168,5 @@ async function confirm_config() {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

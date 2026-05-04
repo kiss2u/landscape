@@ -25,6 +25,7 @@ import {
   useMessage,
   type DataTableColumns,
 } from "naive-ui";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
 
@@ -56,6 +57,15 @@ const form = ref<DdnsJob>({
   zone_name: "",
   provider_profile_id: "",
   records: [],
+});
+
+const formEnabled = computed({
+  get() {
+    return form.value.enable ?? true;
+  },
+  set(value: boolean) {
+    form.value.enable = value;
+  },
 });
 
 const familyOptions = [
@@ -694,11 +704,11 @@ onMounted(async () => {
       </n-drawer-content>
     </n-drawer>
 
-    <n-modal
+    <ConfigModal
       v-model:show="showModal"
-      preset="card"
-      style="width: 680px"
+      v-model:enabled="formEnabled"
       :title="t('cert.ddns_jobs')"
+      width="680px"
     >
       <n-form
         ref="formRef"
@@ -770,20 +780,22 @@ onMounted(async () => {
         </n-form-item>
         <n-form-item :label="t('cert.ttl')">
           <n-flex vertical style="width: 100%" :size="8">
-            <n-switch v-model:value="useProfileDefaultTtl">
-              <template #checked>{{ t("cert.follow_profile_ttl") }}</template>
-              <template #unchecked>{{ t("cert.custom_ttl") }}</template>
-            </n-switch>
-            <n-input-number
-              :value="
-                useProfileDefaultTtl ? selectedProviderDefaultTtl : form.ttl
-              "
-              :disabled="useProfileDefaultTtl"
-              :min="1"
-              :precision="0"
-              style="width: 100%"
-              @update:value="form.ttl = $event ?? undefined"
-            />
+            <n-flex :wrap="false" align="center" style="width: 100%" :size="8">
+              <n-switch v-model:value="useProfileDefaultTtl">
+                <template #checked>{{ t("cert.follow_profile_ttl") }}</template>
+                <template #unchecked>{{ t("cert.custom_ttl") }}</template>
+              </n-switch>
+              <n-input-number
+                :value="
+                  useProfileDefaultTtl ? selectedProviderDefaultTtl : form.ttl
+                "
+                :disabled="useProfileDefaultTtl"
+                :min="1"
+                :precision="0"
+                style="flex: 1"
+                @update:value="form.ttl = $event ?? undefined"
+              />
+            </n-flex>
             <div class="ddns-form-hint">
               {{
                 useProfileDefaultTtl
@@ -792,9 +804,6 @@ onMounted(async () => {
               }}
             </div>
           </n-flex>
-        </n-form-item>
-        <n-form-item :label="t('common.enable')">
-          <n-switch v-model:value="form.enable" />
         </n-form-item>
       </n-form>
 
@@ -812,7 +821,7 @@ onMounted(async () => {
           }}</n-button>
         </n-flex>
       </template>
-    </n-modal>
+    </ConfigModal>
   </n-flex>
 </template>
 

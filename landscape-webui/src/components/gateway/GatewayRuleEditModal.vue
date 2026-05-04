@@ -11,6 +11,7 @@ import type {
   ProxyRequestHeader,
 } from "@landscape-router/types/api/schemas";
 import { computed, ref } from "vue";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { get_gateway_rule, push_gateway_rule } from "@/api/gateway";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useI18n } from "vue-i18n";
@@ -41,6 +42,16 @@ const isLegacyRule = computed(
 );
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
+});
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value && !isLegacyRule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 const domainItems = computed(() => rule.value?.domains ?? []);
 
@@ -393,14 +404,13 @@ async function saveRule() {
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 1100px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('gateway.edit_title')"
+    :switch-disabled="!rule || isLegacyRule"
+    width="1100px"
     @after-enter="enter"
-    :bordered="false"
   >
     <div v-if="rule" class="editor-shell">
       <n-scrollbar class="editor-scrollbar" :x-scrollable="false">
@@ -417,15 +427,6 @@ async function saveRule() {
               <n-card class="editor-panel" embedded :bordered="false">
                 <n-form label-placement="top">
                   <n-grid :cols="1" :x-gap="12">
-                    <n-form-item-gi :label="t('gateway.enabled')">
-                      <n-switch v-model:value="rule.enable">
-                        <template #checked> {{ t("common.enable") }} </template>
-                        <template #unchecked>
-                          {{ t("common.disable") }}
-                        </template>
-                      </n-switch>
-                    </n-form-item-gi>
-
                     <n-form-item-gi :label="t('gateway.name')">
                       <n-input v-model:value="rule.name" />
                     </n-form-item-gi>
@@ -819,7 +820,7 @@ async function saveRule() {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 
   <n-modal
     v-model:show="showPathGroupModal"

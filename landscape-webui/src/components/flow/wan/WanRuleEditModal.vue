@@ -4,6 +4,7 @@ import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { ChangeCatalog } from "@vicons/carbon";
 
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import FlowMarkEdit from "@/components/flow/FlowMarkEdit.vue";
 import IpEdit from "@/components/IpEdit.vue";
 import type {
@@ -57,6 +58,17 @@ const rule = ref<WanIpRuleConfig>();
 const commit_spin = ref(false);
 const isModified = computed(() => {
   return origin_rule_json.value !== JSON.stringify(rule.value);
+});
+
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 
 function onCreate(): WanIPRuleSource {
@@ -134,30 +146,19 @@ async function append_import_rules() {
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 700px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('flow.wan_rule_edit.title')"
+    :switch-disabled="!rule"
+    width="700px"
     @after-enter="enter"
-    :bordered="false"
   >
     <!-- {{ isModified }} -->
     <n-form v-if="rule" style="flex: 1" ref="formRef" :model="rule" :cols="5">
       <n-grid :cols="5">
         <n-form-item-gi :label="t('flow.wan_rule_edit.priority')" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
-        </n-form-item-gi>
-        <n-form-item-gi
-          :label="t('flow.wan_rule_edit.enabled')"
-          :offset="1"
-          :span="1"
-        >
-          <n-switch v-model:value="rule.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
         </n-form-item-gi>
         <!-- <n-form-item-gi label="覆盖 DNS 配置" :span="1">
           <n-switch v-model:value="rule.override_dns">
@@ -258,5 +259,5 @@ async function append_import_rules() {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

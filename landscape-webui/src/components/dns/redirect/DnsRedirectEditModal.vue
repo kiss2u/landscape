@@ -4,6 +4,7 @@ import { useMessage } from "naive-ui";
 import { isIP } from "is-ip";
 import { computed, onMounted } from "vue";
 import { ref } from "vue";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import {
   copy_context_to_clipboard,
   read_context_from_clipboard,
@@ -33,6 +34,17 @@ const rule = ref<DNSRedirectRule>();
 const commit_spin = ref(false);
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
+});
+
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 
 const answerModeOptions = computed(() => [
@@ -155,14 +167,13 @@ async function append_import_rules() {
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 600px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('dns_editor.redirect_edit.title')"
+    :switch-disabled="!rule"
+    width="600px"
     @after-enter="enter"
-    :bordered="false"
   >
     <!-- {{ isModified }} -->
     <n-form
@@ -177,17 +188,6 @@ async function append_import_rules() {
         <!-- <n-form-item-gi label="优先级" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi> -->
-        <n-form-item-gi :label="t('common.enable')" :span="1">
-          <n-switch v-model:value="rule.enable">
-            <template #checked>
-              {{ t("common.enable") }}
-            </template>
-            <template #unchecked>
-              {{ t("common.disable") }}
-            </template>
-          </n-switch>
-        </n-form-item-gi>
-
         <n-form-item-gi :span="2" :label="t('dns_editor.redirect_edit.remark')">
           <n-input v-model:value="rule.remark" />
         </n-form-item-gi>
@@ -313,5 +313,5 @@ async function append_import_rules() {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

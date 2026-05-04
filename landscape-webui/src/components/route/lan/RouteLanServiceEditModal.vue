@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import type {
   RouteLanServiceConfig,
   StaticRouteConfig,
@@ -22,6 +23,17 @@ const iface_info = defineProps<{
 }>();
 
 const service_config = ref<RouteLanServiceConfig | null>(null);
+
+const service_enabled = computed({
+  get() {
+    return service_config.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (service_config.value) {
+      service_config.value.enable = value;
+    }
+  },
+});
 
 async function on_modal_enter() {
   try {
@@ -57,69 +69,56 @@ function onCreate(): StaticRouteConfig {
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_enabled"
+    :title="t('misc.route_lan.title')"
+    :switch-disabled="service_config === null"
+    width="600px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 600px"
-      :title="t('misc.route_lan.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-form v-if="service_config !== null" :model="service_config">
-        <n-form-item :label="t('common.enable_question')">
-          <n-switch v-model:value="service_config.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
-        </n-form-item>
+    <n-form v-if="service_config !== null" :model="service_config">
+      <n-form-item :label="t('misc.route_lan.static_route_limit')">
+        <n-dynamic-input
+          item-style="padding-right: 15px"
+          :max="1"
+          v-model:value="service_config.static_routes"
+          :on-create="onCreate"
+        >
+          <template #create-button-default>
+            {{ t("misc.route_lan.add_subnet") }}
+          </template>
+          <template #default="{ value, index }">
+            <n-input-group>
+              <n-input
+                :placeholder="t('misc.route_lan.next_hop')"
+                v-model:value="value.next_hop"
+                type="text"
+              />
+              <n-input
+                :placeholder="t('misc.route_lan.subnet_range')"
+                v-model:value="value.subnet"
+                type="text"
+              />
+              <n-input-group-label>/</n-input-group-label>
+              <n-input-number
+                :style="{ width: '200px' }"
+                placeholder=""
+                v-model:value="value.sub_prefix"
+                type="text"
+              />
+            </n-input-group>
+          </template>
+        </n-dynamic-input>
+      </n-form-item>
+    </n-form>
 
-        <n-form-item :label="t('misc.route_lan.static_route_limit')">
-          <n-dynamic-input
-            item-style="padding-right: 15px"
-            :max="1"
-            v-model:value="service_config.static_routes"
-            :on-create="onCreate"
-          >
-            <template #create-button-default>
-              {{ t("misc.route_lan.add_subnet") }}
-            </template>
-            <template #default="{ value, index }">
-              <n-input-group>
-                <n-input
-                  :placeholder="t('misc.route_lan.next_hop')"
-                  v-model:value="value.next_hop"
-                  type="text"
-                />
-                <n-input
-                  :placeholder="t('misc.route_lan.subnet_range')"
-                  v-model:value="value.subnet"
-                  type="text"
-                />
-                <n-input-group-label>/</n-input-group-label>
-                <n-input-number
-                  :style="{ width: '200px' }"
-                  placeholder=""
-                  v-model:value="value.sub_prefix"
-                  type="text"
-                />
-              </n-input-group>
-            </template>
-          </n-dynamic-input>
-        </n-form-item>
-      </n-form>
-
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

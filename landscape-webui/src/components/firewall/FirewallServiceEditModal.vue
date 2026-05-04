@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { FirewallServiceConfig } from "@/lib/firewall";
 import { useFirewallConfigStore } from "@/stores/status_firewall";
 import {
@@ -47,39 +48,19 @@ async function save_config() {
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_config.enable"
+    :title="t('firewall.service_edit.title')"
+    width="600px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 600px"
-      :title="t('firewall.service_edit.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-form :model="service_config">
-        <n-form-item :label="t('common.enable_question')">
-          <n-switch v-model:value="service_config.enable">
-            <template #checked>
-              {{ t("common.enable") }}
-            </template>
-            <template #unchecked>
-              {{ t("common.disable") }}
-            </template>
-          </n-switch>
-        </n-form-item>
-      </n-form>
-
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

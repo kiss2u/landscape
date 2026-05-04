@@ -2,6 +2,7 @@
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import Range from "@/components/PortRange.vue";
 import { NatServiceConfig } from "@/lib/nat";
 import {
@@ -48,47 +49,32 @@ async function save_config() {
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="nat_service_config.enable"
+    :title="t('nat.service_edit.title')"
+    width="600px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 600px"
-      :title="t('nat.service_edit.title')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <n-form :model="nat_service_config">
-        <n-form-item :label="t('common.enable_question')">
-          <n-switch v-model:value="nat_service_config.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
-        </n-form-item>
-        <n-form-item :label="t('nat.service_edit.tcp_port_range')">
-          <Range v-model:range="nat_service_config.nat_config.tcp_range">
-          </Range>
-        </n-form-item>
-        <n-form-item :label="t('nat.service_edit.udp_port_range')">
-          <Range v-model:range="nat_service_config.nat_config.udp_range">
-          </Range>
-        </n-form-item>
-        <n-form-item :label="t('nat.service_edit.icmp_id_range')">
-          <Range v-model:range="nat_service_config.nat_config.icmp_in_range">
-          </Range>
-        </n-form-item>
-      </n-form>
+    <n-form :model="nat_service_config">
+      <n-form-item :label="t('nat.service_edit.tcp_port_range')">
+        <Range v-model:range="nat_service_config.nat_config.tcp_range"> </Range>
+      </n-form-item>
+      <n-form-item :label="t('nat.service_edit.udp_port_range')">
+        <Range v-model:range="nat_service_config.nat_config.udp_range"> </Range>
+      </n-form-item>
+      <n-form-item :label="t('nat.service_edit.icmp_id_range')">
+        <Range v-model:range="nat_service_config.nat_config.icmp_in_range">
+        </Range>
+      </n-form-item>
+    </n-form>
 
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

@@ -7,6 +7,7 @@ import { useMessage } from "naive-ui";
 import { computed } from "vue";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import FlowMatchRule from "./match/FlowMatchRule.vue";
 import { flow_config_default } from "@/lib/default_value";
 import type {
@@ -36,6 +37,17 @@ const rule = ref<FlowConfig>();
 const commit_spin = ref(false);
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== rule_json.value;
+});
+
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 
 async function enter() {
@@ -124,15 +136,14 @@ function normalizeFlowTargets(
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 600px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('flow.edit.title')"
+    :switch-disabled="!rule"
+    width="600px"
     @after-enter="enter"
     @after-leave="exit"
-    :bordered="false"
   >
     <!-- {{ rule }} -->
     <n-form v-if="rule" style="flex: 1" ref="formRef" :model="rule" :cols="5">
@@ -145,13 +156,6 @@ function normalizeFlowTargets(
             clearable
           />
         </n-form-item-gi>
-        <n-form-item-gi :label="t('flow.edit.enabled')" :offset="1" :span="1">
-          <n-switch v-model:value="rule.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
-        </n-form-item-gi>
-
         <n-form-item-gi :span="5" :label="t('flow.edit.remark')">
           <n-input
             :type="frontEndStore.presentation_mode ? 'password' : 'text'"
@@ -200,5 +204,5 @@ function normalizeFlowTargets(
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

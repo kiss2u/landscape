@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import { ZoneType, IfaceIpMode } from "@/lib/service_ipconfig";
 import { IPV6PDConfig, IPV6PDServiceConfig } from "@/lib/ipv6pd";
 import {
@@ -65,44 +66,31 @@ async function save_config() {
 </script>
 
 <template>
-  <n-modal
-    :auto-focus="false"
+  <ConfigModal
     v-model:show="show_model"
+    v-model:enabled="service_config.enable"
+    :title="t('lan_ipv6.ipv6_pd_config')"
+    width="600px"
     @after-enter="on_modal_enter"
   >
-    <n-card
-      style="width: 600px"
-      :title="t('lan_ipv6.ipv6_pd_config')"
-      :bordered="false"
-      size="small"
-      role="dialog"
-      aria-modal="true"
-    >
-      <!-- {{ service_config }} -->
-      <n-form :model="service_config">
-        <n-form-item :label="t('common.enable_question')">
-          <n-switch v-model:value="service_config.enable">
-            <template #checked> {{ t("common.enable") }} </template>
-            <template #unchecked> {{ t("common.disable") }} </template>
-          </n-switch>
-        </n-form-item>
-        <n-form-item :label="t('lan_ipv6.mac_hint')">
-          <n-input
-            :value="service_config.config.mac"
-            @update:value="
-              (v: string) => (service_config.config.mac = formatMacAddress(v))
-            "
-          ></n-input>
-        </n-form-item>
-      </n-form>
+    <!-- {{ service_config }} -->
+    <n-form :model="service_config">
+      <n-form-item :label="t('lan_ipv6.mac_hint')">
+        <n-input
+          :value="service_config.config.mac"
+          @update:value="
+            (v: string) => (service_config.config.mac = formatMacAddress(v))
+          "
+        ></n-input>
+      </n-form-item>
+    </n-form>
 
-      <template #footer>
-        <n-flex justify="end">
-          <n-button round type="primary" @click="save_config">
-            {{ t("common.update") }}
-          </n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
+    <template #footer>
+      <n-flex justify="end">
+        <n-button round type="primary" @click="save_config">
+          {{ t("common.update") }}
+        </n-button>
+      </n-flex>
+    </template>
+  </ConfigModal>
 </template>

@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useMessage } from "naive-ui";
 import { ChangeCatalog, WarningAlt } from "@vicons/carbon";
 
+import ConfigModal from "@/components/common/ConfigModal.vue";
 import IpEdit from "@/components/IpEdit.vue";
 import GeoIpKeySelect from "@/components/geo/ip/GeoIpKeySelect.vue";
 
@@ -33,6 +34,17 @@ const commit_spin = ref(false);
 
 const isModified = computed(() => {
   return origin_json.value !== JSON.stringify(config.value);
+});
+
+const config_enabled = computed({
+  get() {
+    return config.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (config.value) {
+      config.value.enable = value;
+    }
+  },
 });
 
 async function enter() {
@@ -113,28 +125,15 @@ async function saveConfig() {
 </script>
 
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 700px"
-    class="custom-card"
-    preset="card"
+    v-model:enabled="config_enabled"
     :title="t('firewall.blacklist_edit.title')"
+    :switch-disabled="!config"
+    width="700px"
     @after-enter="enter"
-    :bordered="false"
   >
     <n-form v-if="config" style="flex: 1" :model="config">
-      <n-grid :cols="5">
-        <n-form-item-gi :label="t('common.enable_question')" :span="2">
-          <n-switch v-model:value="config.enable">
-            <template #checked>
-              {{ t("common.enable") }}
-            </template>
-            <template #unchecked>
-              {{ t("common.disable") }}
-            </template>
-          </n-switch>
-        </n-form-item-gi>
-      </n-grid>
       <n-form-item :label="t('firewall.blacklist_edit.remark')">
         <n-input v-model:value="config.remark" type="text" />
       </n-form-item>
@@ -188,5 +187,5 @@ async function saveConfig() {
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>

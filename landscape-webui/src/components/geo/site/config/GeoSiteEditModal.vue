@@ -9,6 +9,7 @@ import type {
 import { FormInst, FormRules } from "naive-ui";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import ConfigModal from "@/components/common/ConfigModal.vue";
 
 const emit = defineEmits(["refresh"]);
 
@@ -58,6 +59,17 @@ function switchSourceType(t: "url" | "direct" | "adguard_home") {
 
 const isModified = computed(() => {
   return JSON.stringify(rule.value) !== rule_json.value;
+});
+
+const rule_enabled = computed({
+  get() {
+    return rule.value?.enable ?? false;
+  },
+  set(value: boolean) {
+    if (rule.value) {
+      rule.value.enable = value;
+    }
+  },
 });
 
 async function saveRule() {
@@ -128,13 +140,12 @@ const matchTypeOptions = [
 ];
 </script>
 <template>
-  <n-modal
+  <ConfigModal
     v-model:show="show"
-    style="width: 600px"
-    preset="card"
+    v-model:enabled="rule_enabled"
     :title="t('geo_editor.geo_site.title')"
-    size="small"
-    :bordered="false"
+    :switch-disabled="!rule"
+    width="600px"
     @after-enter="enter"
   >
     <n-form
@@ -146,21 +157,7 @@ const matchTypeOptions = [
       :cols="5"
     >
       <n-grid :cols="5">
-        <n-form-item-gi
-          :label="t('common.enable_question')"
-          :offset="0"
-          :span="1"
-        >
-          <n-switch v-model:value="rule.enable">
-            <template #checked>
-              {{ t("common.enable") }}
-            </template>
-            <template #unchecked>
-              {{ t("common.disable") }}
-            </template>
-          </n-switch>
-        </n-form-item-gi>
-        <n-form-item-gi :label="t('geo_editor.common.source_type')" :span="4">
+        <n-form-item-gi :label="t('geo_editor.common.source_type')" :span="5">
           <n-radio-group
             v-model:value="sourceType"
             @update:value="switchSourceType"
@@ -300,5 +297,5 @@ const matchTypeOptions = [
         </n-button>
       </n-flex>
     </template>
-  </n-modal>
+  </ConfigModal>
 </template>
