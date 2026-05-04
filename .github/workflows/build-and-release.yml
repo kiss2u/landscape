@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
@@ -84,13 +84,13 @@ jobs:
 
       - name: Upload OpenAPI spec
         if: matrix.settings.architecture == 'aarch64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openapi-spec
           path: landscape-types/openapi.json
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: landscape-webserver-${{ matrix.settings.target }}
           path: output/*
@@ -137,7 +137,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
@@ -230,7 +230,7 @@ jobs:
             cp target/${{ matrix.settings.target }}/release/redirect_pkg_handler output/redirect_pkg_handler-${{ matrix.settings.architecture }}
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: landscape-webserver-${{ matrix.settings.target }}
           path: output/*
@@ -254,7 +254,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup sccache
         run: |
@@ -287,7 +287,7 @@ jobs:
           cp target/release/redirect_pkg_handler output/redirect_pkg_handler-${{ matrix.settings.architecture }}-musl
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: landscape-webserver-${{ matrix.settings.target }}
           path: output/*
@@ -298,10 +298,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download OpenAPI spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: openapi-spec
           path: landscape-types
@@ -341,7 +341,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Upload frontend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: landscape-frontend-none-all
           path: output/static.zip
@@ -353,10 +353,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: landscape-*
           path: output

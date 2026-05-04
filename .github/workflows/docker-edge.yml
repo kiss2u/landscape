@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Rust Release Build
         run: |
@@ -57,7 +57,7 @@ jobs:
           cp -r $BUILD_DIR/* $TMP_DIR/
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-${{ matrix.arch }}
           path: ${{ env.TMP_DIR }}
@@ -83,10 +83,10 @@ jobs:
 
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-${{ matrix.arch }}
           path: ${{ env.TMP_DIR }}
