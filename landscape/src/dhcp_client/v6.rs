@@ -15,11 +15,12 @@ use tokio::{net::UdpSocket, time::Instant};
 
 use crate::{
     dump::udp_packet::dhcp_v6::get_solicit_options,
-    ipv6::prefix::{allocate_subnet, del_iface_ip, set_iface_ip},
+    ipv6::prefix::{del_iface_ip, set_iface_ip},
     route::IpRouteService,
 };
 
 use landscape_common::{
+    ipv6::checked_allocate_subnet,
     ipv6_pd::IAPrefixMap,
     service::{ServiceStatus, WatchService},
     utils::time::get_f64_timestamp,
@@ -806,7 +807,7 @@ fn derive_wan_pd_addr(
     shared_wan_iid: u64,
 ) -> Option<Ipv6Addr> {
     let wan_prefix = match ia_prefix.prefix_len {
-        0..=63 => allocate_subnet(ia_prefix.prefix_ip, ia_prefix.prefix_len, 64, 0).0,
+        0..=63 => checked_allocate_subnet(ia_prefix.prefix_ip, ia_prefix.prefix_len, 64, 0)?.0,
         64 => ia_prefix.prefix_ip,
         _ => return None,
     };

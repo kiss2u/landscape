@@ -131,6 +131,7 @@ async fn handle_lan_ipv6(
     validate_cross_interface_v2_with_prefix_infos(&config, &other_configs, Some(&prefix_infos))?;
 
     state.lan_ipv6_service.handle_service_config(config).await?;
+    state.static_nat_mapping_config_service.refresh_runtime_rules().await;
     LandscapeApiResp::success(())
 }
 
@@ -145,9 +146,9 @@ async fn delete_and_stop_lan_ipv6(
     State(state): State<LandscapeApp>,
     Path(iface_name): Path<String>,
 ) -> LandscapeApiResult<Option<WatchService>> {
-    LandscapeApiResp::success(
-        state.lan_ipv6_service.delete_and_stop_iface_service(iface_name).await,
-    )
+    let result = state.lan_ipv6_service.delete_and_stop_iface_service(iface_name).await;
+    state.static_nat_mapping_config_service.refresh_runtime_rules().await;
+    LandscapeApiResp::success(result)
 }
 
 #[utoipa::path(

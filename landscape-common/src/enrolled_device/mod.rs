@@ -52,6 +52,8 @@ pub struct EnrolledDevice {
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false, value_type = String))]
     pub ipv4: Option<Ipv4Addr>,
     /// Static IPv6 assignment (Optional)
+    /// For static LAN prefixes, store the full IPv6 address.
+    /// For PD-based IA_NA, store only the host suffix; runtime combines it with the current /64 prefix.
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false, nullable = false, value_type = String))]
     pub ipv6: Option<Ipv6Addr>,

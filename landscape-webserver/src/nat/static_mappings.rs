@@ -7,6 +7,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use landscape_common::iface::nat::StaticNatError;
+use landscape_common::service::ServiceConfigError;
 
 use crate::api::JsonBody;
 use crate::LandscapeApp;
@@ -67,6 +68,11 @@ async fn add_many_static_nat_mappings(
 ) -> LandscapeApiResult<()> {
     for m in &static_nat_mappings {
         m.validate()?;
+        state
+            .static_nat_mapping_config_service
+            .validate_runtime_target(m)
+            .await
+            .map_err(|error| ServiceConfigError::InvalidConfig { reason: error.to_string() })?;
     }
     state.static_nat_mapping_config_service.checked_set_list(static_nat_mappings).await?;
     LandscapeApiResp::success(())
@@ -84,6 +90,11 @@ async fn add_static_nat_mappings(
     JsonBody(static_nat_mapping): JsonBody<StaticNatMappingConfig>,
 ) -> LandscapeApiResult<StaticNatMappingConfig> {
     static_nat_mapping.validate()?;
+    state
+        .static_nat_mapping_config_service
+        .validate_runtime_target(&static_nat_mapping)
+        .await
+        .map_err(|error| ServiceConfigError::InvalidConfig { reason: error.to_string() })?;
     let result = state.static_nat_mapping_config_service.checked_set(static_nat_mapping).await?;
     LandscapeApiResp::success(result)
 }

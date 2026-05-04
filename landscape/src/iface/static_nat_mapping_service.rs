@@ -1,10 +1,8 @@
-use std::{
-    collections::{HashMap, HashSet},
-    net::{Ipv4Addr, Ipv6Addr},
-};
+use std::net::{Ipv4Addr, Ipv6Addr};
 
+use landscape_common::error::LdError;
 use landscape_common::{
-    iface::nat::{StaticMapPair, StaticNatMappingConfig, StaticNatMappingItem},
+    iface::nat::{StaticMapPair, StaticNatMappingConfig, StaticNatTarget},
     service::controller::ConfigController,
     utils::time::get_f64_timestamp,
     LANDSCAPE_DEFAULE_DHCP_V4_CLIENT_PORT, LANDSCAPE_DEFAULE_DHCP_V6_CLIENT_PORT,
@@ -22,18 +20,13 @@ pub struct StaticNatMappingService {
 
 impl StaticNatMappingService {
     pub async fn new(store: LandscapeDBServiceProvider) -> Self {
-        let store = store.static_nat_mapping_store();
-        let static_nat_config_service = Self { store };
+        let static_nat_config_service = Self { store: store.static_nat_mapping_store() };
 
-        let mut rules = static_nat_config_service.list().await;
-
-        if rules.is_empty() {
+        if static_nat_config_service.list().await.is_empty() {
             static_nat_config_service.set_list(default_static_mapping_rule()).await;
-            rules = static_nat_config_service.list().await;
         }
 
-        update_mapping_rules(rules, vec![]);
-
+        static_nat_config_service.refresh_runtime_rules().await;
         static_nat_config_service
     }
 }
@@ -52,50 +45,42 @@ impl ConfigController for StaticNatMappingService {
 
     async fn after_update_config(
         &self,
-        new_rules: Vec<Self::Config>,
-        old_rules: Vec<Self::Config>,
+        _new_rules: Vec<Self::Config>,
+        _old_rules: Vec<Self::Config>,
     ) {
-        update_mapping_rules(new_rules, old_rules);
+        self.refresh_runtime_rules().await;
     }
 }
 
-pub fn update_mapping_rules(
-    rules: Vec<StaticNatMappingConfig>,
-    old_rules: Vec<StaticNatMappingConfig>,
-) {
-    let new_rules: HashSet<StaticNatMappingItem> =
-        rules.into_iter().filter(|e| e.enable).flat_map(|e| e.convert_to_item()).collect();
-    let old_rules: HashSet<StaticNatMappingItem> =
-        old_rules.into_iter().filter(|e| e.enable).flat_map(|e| e.convert_to_item()).collect();
+impl StaticNatMappingService {
+    pub async fn refresh_runtime_rules(&self) {
+        let runtime_configs = match self.store.list_runtime_configs().await {
+            Ok(runtime_configs) => runtime_configs,
+            Err(error) => {
+                tracing::error!("failed to load static NAT runtime configs: {error:?}");
+                return;
+            }
+        };
 
-    tracing::debug!("rules: {:?}", new_rules);
-    tracing::debug!("old_rules: {:?}", old_rules);
+        if let Err(error) =
+            landscape_ebpf::map_setting::nat::reconcile_static_nat4_map(&runtime_configs)
+        {
+            tracing::error!("failed to reconcile static NAT v4 map: {error:?}");
+        }
 
-    // 需要删除的
-    let to_delete: HashSet<_> = old_rules.difference(&new_rules).cloned().collect();
-
-    // 需要添加的
-    let to_add: HashSet<_> = new_rules.difference(&old_rules).cloned().collect();
-
-    tracing::debug!("delete static mapping items: {:?}", to_delete);
-    tracing::debug!("add static mapping items: {:?}", to_add);
-
-    landscape_ebpf::map_setting::nat::del_static_nat_mapping(to_delete.into_iter());
-    landscape_ebpf::map_setting::nat::add_static_nat_mapping(to_add.into_iter());
-}
-
-pub fn mapping_rule_into_hash(
-    mappings: Vec<StaticNatMappingConfig>,
-) -> HashMap<Uuid, StaticNatMappingConfig> {
-    let mut result = HashMap::new();
-
-    for mapping in mappings {
-        if mapping.enable {
-            result.insert(mapping.id, mapping);
+        if let Err(error) =
+            landscape_ebpf::map_setting::nat::reconcile_static_nat6_map(&runtime_configs)
+        {
+            tracing::error!("failed to reconcile static NAT v6 map: {error:?}");
         }
     }
 
-    result
+    pub async fn validate_runtime_target(
+        &self,
+        config: &StaticNatMappingConfig,
+    ) -> Result<(), LdError> {
+        self.store.validate_runtime_target(config).await
+    }
 }
 
 pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
@@ -103,8 +88,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
     // DHCPv4 Clinet
     result.push(StaticNatMappingConfig {
         wan_iface_name: None,
-        lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
-        lan_ipv6: None,
+        lan_target: Some(StaticNatTarget::address(Some(Ipv4Addr::UNSPECIFIED), None)),
         ipv4_l4_protocol: vec![17],
         ipv6_l4_protocol: vec![],
         id: Uuid::new_v4(),
@@ -119,8 +103,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
     // DHCPv6 Clinet
     result.push(StaticNatMappingConfig {
         wan_iface_name: None,
-        lan_ipv4: None,
-        lan_ipv6: Some(Ipv6Addr::UNSPECIFIED),
+        lan_target: Some(StaticNatTarget::address(None, Some(Ipv6Addr::UNSPECIFIED))),
         ipv4_l4_protocol: vec![],
         ipv6_l4_protocol: vec![17],
         id: Uuid::new_v4(),
@@ -136,8 +119,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
     {
         result.push(StaticNatMappingConfig {
             wan_iface_name: None,
-            lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
-            lan_ipv6: None,
+            lan_target: Some(StaticNatTarget::address(Some(Ipv4Addr::UNSPECIFIED), None)),
             ipv4_l4_protocol: vec![6, 17],
             ipv6_l4_protocol: vec![],
             id: Uuid::new_v4(),
@@ -149,8 +131,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
 
         result.push(StaticNatMappingConfig {
             wan_iface_name: None,
-            lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
-            lan_ipv6: None,
+            lan_target: Some(StaticNatTarget::address(Some(Ipv4Addr::UNSPECIFIED), None)),
             ipv4_l4_protocol: vec![6],
             ipv6_l4_protocol: vec![],
             id: Uuid::new_v4(),
@@ -162,8 +143,7 @@ pub fn default_static_mapping_rule() -> Vec<StaticNatMappingConfig> {
 
         result.push(StaticNatMappingConfig {
             wan_iface_name: None,
-            lan_ipv4: Some(Ipv4Addr::UNSPECIFIED),
-            lan_ipv6: None,
+            lan_target: Some(StaticNatTarget::address(Some(Ipv4Addr::UNSPECIFIED), None)),
             ipv4_l4_protocol: vec![6],
             ipv6_l4_protocol: vec![],
             id: Uuid::new_v4(),

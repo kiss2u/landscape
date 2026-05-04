@@ -13,6 +13,14 @@ export default {
     target_ipv4: "LAN Target IPv4",
     target_ipv6: "LAN Target IPv6",
     select_device_placeholder: "Select an enrolled device",
+    target_type: "Target Type",
+    target_type_address: "Address",
+    target_type_local: "Local",
+    target_type_device: "Device",
+    target_local: "Local Target",
+    target_local_hint:
+      "Map ports to this router. IPv4/IPv6 are controlled by the selected protocols above.",
+    target_device: "Target Device",
     target_ipv4_hint:
       "If opening router's own port, set 0.0.0.0 or leave empty for no mapping",
     target_ipv6_hint:
@@ -21,6 +29,9 @@ export default {
     validation_ipv4: "Please enter a valid IPv4 address",
     validation_ipv6: "Please enter a valid IPv6 address",
     select_protocol_required: "Please select at least one protocol",
+    select_device_required: "Please select an enrolled device",
+    device_ipv6_required:
+      "The selected device must have an IPv6 address when IPv6 protocols are enabled",
     required: "Required",
     range: "Range 1-65535",
     invalid_port_value: "Invalid port value found",

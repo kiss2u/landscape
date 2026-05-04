@@ -5,12 +5,11 @@ use landscape_common::{
     service::controller::{ConfigController, FlowConfigController},
 };
 use landscape_database::{
-    flow_rule::repository::FlowConfigRepository, provider::LandscapeDBServiceProvider,
+    flow_rule::repository::{find_duplicate_resolved_modes, FlowConfigRepository},
+    provider::LandscapeDBServiceProvider,
 };
 use tokio::sync::mpsc;
 use uuid::Uuid;
-
-use crate::flow::update_flow_matchs;
 
 #[derive(Clone)]
 pub struct FlowRuleService {
@@ -21,14 +20,33 @@ pub struct FlowRuleService {
 
 impl FlowRuleService {
     pub async fn new(
-        store: LandscapeDBServiceProvider,
+        store_provider: LandscapeDBServiceProvider,
         dns_events_tx: mpsc::Sender<DnsEvent>,
         route_events_tx: mpsc::Sender<RouteEvent>,
     ) -> Self {
-        let store = store.flow_rule_store();
+        let store = store_provider.flow_rule_store();
         let result = Self { store, dns_events_tx, route_events_tx };
-        result.after_update_config(result.list().await, vec![]).await;
+        result.refresh_flow_matches().await;
         result
+    }
+
+    pub async fn refresh_flow_matches(&self) {
+        let runtime_configs = match self.store.list_runtime_configs().await {
+            Ok(runtime_configs) => runtime_configs,
+            Err(error) => {
+                tracing::error!("failed to load flow runtime configs: {error:?}");
+                return;
+            }
+        };
+
+        if let Err(error) =
+            landscape_ebpf::map_setting::flow::reconcile_flow_match_map(&runtime_configs)
+        {
+            tracing::error!("failed to reconcile flow match map: {error:?}");
+            return;
+        }
+
+        let _ = self.dns_events_tx.send(DnsEvent::FlowUpdated).await;
     }
 }
 
@@ -39,6 +57,37 @@ impl FlowRuleService {
         mode: &FlowEntryMatchMode,
     ) -> Result<Option<FlowConfig>, LdError> {
         self.store.find_conflict_by_entry_mode(exclude_id, mode).await
+    }
+
+    pub async fn find_resolved_conflict_by_entry_mode(
+        &self,
+        exclude_id: uuid::Uuid,
+        mode: &FlowEntryMatchMode,
+    ) -> Result<Option<FlowConfig>, LdError> {
+        self.store.find_resolved_conflict_by_entry_mode(exclude_id, mode).await
+    }
+
+    pub async fn find_resolved_conflict_for_modes(
+        &self,
+        exclude_id: uuid::Uuid,
+        modes: &[FlowEntryMatchMode],
+    ) -> Result<Option<(FlowEntryMatchMode, FlowConfig)>, LdError> {
+        self.store.find_resolved_conflict_for_modes(exclude_id, modes).await
+    }
+
+    pub async fn find_duplicate_resolved_mode(
+        &self,
+        modes: &[FlowEntryMatchMode],
+    ) -> Result<Option<FlowEntryMatchMode>, LdError> {
+        let resolved_modes = self.store.resolve_modes(modes).await?;
+        Ok(find_duplicate_resolved_modes(&resolved_modes))
+    }
+
+    pub async fn validate_modes_resolvable(
+        &self,
+        modes: &[FlowEntryMatchMode],
+    ) -> Result<(), LdError> {
+        self.store.validate_modes_resolvable(modes).await
     }
 }
 
@@ -60,22 +109,23 @@ impl ConfigController for FlowRuleService {
             .send(RouteEvent::FlowRuleUpdate { flow_id: Some(config.flow_id) })
             .await;
     }
+
     async fn delete_one_config(&self, config: Self::Config) {
         let _ = self
             .route_events_tx
             .send(RouteEvent::FlowRuleUpdate { flow_id: Some(config.flow_id) })
             .await;
     }
+
     async fn update_many_config(&self, _configs: Vec<Self::Config>) {
         let _ = self.route_events_tx.send(RouteEvent::FlowRuleUpdate { flow_id: None }).await;
     }
 
     async fn after_update_config(
         &self,
-        new_configs: Vec<Self::Config>,
-        old_configs: Vec<Self::Config>,
+        _new_configs: Vec<Self::Config>,
+        _old_configs: Vec<Self::Config>,
     ) {
-        update_flow_matchs(new_configs, old_configs).await;
-        let _ = self.dns_events_tx.send(DnsEvent::FlowUpdated).await;
+        self.refresh_flow_matches().await;
     }
 }

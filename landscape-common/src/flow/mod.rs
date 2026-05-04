@@ -4,7 +4,9 @@ use landscape_macro::LdApiError;
 use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigId;
+use crate::service::ServiceConfigError;
 use crate::{flow::mark::FlowMark, net::MacAddr};
+use uuid::Uuid;
 
 pub mod config;
 pub mod mark;
@@ -62,6 +64,54 @@ pub enum FlowEntryMatchMode {
         #[cfg_attr(feature = "openapi", schema(required = true))]
         prefix_len: u8,
     },
+    Device {
+        device_id: Uuid,
+    },
+}
+
+impl FlowEntryMatchMode {
+    pub fn validate(&self) -> Result<(), ServiceConfigError> {
+        if let FlowEntryMatchMode::Ip { ip, prefix_len } = self {
+            let max_prefix_len = match ip {
+                IpAddr::V4(_) => 32,
+                IpAddr::V6(_) => 128,
+            };
+
+            if *prefix_len > max_prefix_len {
+                return Err(ServiceConfigError::InvalidConfig {
+                    reason: format!(
+                        "flow entry rule prefix_len ({prefix_len}) must be <= {max_prefix_len} for {ip}",
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ResolvedFlowEntryRule {
+    pub qos: Option<u32>,
+    pub mode: ResolvedFlowEntryMatchMode,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ResolvedFlowEntryMatchMode {
+    Mac { mac_addr: MacAddr },
+    Ip { ip: IpAddr, prefix_len: u8 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeFlowConfig {
+    pub flow_id: u32,
+    pub flow_match_rules: Vec<ResolvedFlowEntryRule>,
+}
+
+impl FlowEntryRule {
+    pub fn validate(&self) -> Result<(), ServiceConfigError> {
+        self.mode.validate()
+    }
 }
 
 impl fmt::Display for FlowEntryMatchMode {
@@ -69,19 +119,8 @@ impl fmt::Display for FlowEntryMatchMode {
         match self {
             FlowEntryMatchMode::Mac { mac_addr } => write!(f, "MAC {}", mac_addr),
             FlowEntryMatchMode::Ip { ip, prefix_len } => write!(f, "IP {}/{}", ip, prefix_len),
+            FlowEntryMatchMode::Device { device_id } => write!(f, "Device {}", device_id),
         }
-    }
-}
-
-/// 用于 Flow ebpf 匹配记录操作
-pub struct FlowEbpfMatchPair {
-    pub entry_rule: FlowEntryRule,
-    pub flow_id: u32,
-}
-
-impl FlowEbpfMatchPair {
-    pub fn new(entry_rule: FlowEntryRule, flow_id: u32) -> Self {
-        Self { entry_rule, flow_id }
     }
 }
 
@@ -128,4 +167,39 @@ pub struct FlowMarkInfo {
 pub struct DnsRuntimeMarkInfo {
     pub mark: FlowMark,
     pub priority: u16,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FlowEntryMatchMode;
+
+    #[test]
+    fn rejects_ipv4_prefixes_longer_than_32() {
+        let result =
+            FlowEntryMatchMode::Ip { ip: "192.0.2.1".parse().unwrap(), prefix_len: 33 }.validate();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_ipv6_prefixes_longer_than_128() {
+        let result = FlowEntryMatchMode::Ip {
+            ip: "2001:db8::1".parse().unwrap(),
+            prefix_len: 129,
+        }
+        .validate();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn accepts_ipv6_host_prefix() {
+        let result = FlowEntryMatchMode::Ip {
+            ip: "2001:db8::1".parse().unwrap(),
+            prefix_len: 128,
+        }
+        .validate();
+
+        assert!(result.is_ok());
+    }
 }

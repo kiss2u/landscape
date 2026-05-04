@@ -4,6 +4,7 @@ import type { FlowEntryRule } from "@landscape-router/types/api/schemas";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
 import { ChangeCatalog } from "@vicons/carbon";
+import { is_ipv4, is_ipv6 } from "@/lib/common";
 import { formatMacAddress } from "@/lib/util";
 import { useI18n } from "vue-i18n";
 
@@ -14,40 +15,61 @@ const match_rules = defineModel<FlowEntryRule[]>("match_rules", {
   required: true,
 });
 
-type InputMode = "select" | "mac" | "ip";
+type InputMode = "device" | "mac" | "ip";
 const inputModes = reactive(new Map<number, InputMode>());
 
 function getInputMode(index: number): InputMode {
   return (
     inputModes.get(index) ??
-    (match_rules.value[index]?.mode.t === "ip" ? "ip" : "select")
+    (match_rules.value[index]?.mode.t === "ip"
+      ? "ip"
+      : match_rules.value[index]?.mode.t === "device"
+        ? "device"
+        : "mac")
   );
 }
 
 const deviceOptions = computed(() =>
   enrolledDeviceStore.bindings.map((d) => ({
     label: d.name,
-    value: d.mac,
+    value: d.id!,
   })),
 );
 
 function onCreate(): FlowEntryRule {
   const index = match_rules.value.length;
-  inputModes.set(index, "select");
+  inputModes.set(index, "device");
   return {
     qos: null,
     mode: {
-      t: "mac",
-      mac_addr: "",
+      t: "device",
+      device_id: "",
     },
   };
+}
+
+function getDefaultPrefixLen(ip: string): number {
+  if (is_ipv6(ip) || ip.includes(":")) {
+    return 128;
+  }
+  if (is_ipv4(ip)) {
+    return 32;
+  }
+  return 32;
 }
 
 function change_mode(value: FlowEntryRule, index: number) {
   const current = getInputMode(index);
   const temp_rule = match_rules.value[index];
-  if (current === "select") {
+  if (current === "device") {
     inputModes.set(index, "mac");
+    match_rules.value[index] = {
+      qos: temp_rule.qos,
+      mode: {
+        t: "mac",
+        mac_addr: "",
+      },
+    };
   } else if (current === "mac") {
     inputModes.set(index, "ip");
     match_rules.value[index] = {
@@ -59,12 +81,12 @@ function change_mode(value: FlowEntryRule, index: number) {
       },
     };
   } else {
-    inputModes.set(index, "select");
+    inputModes.set(index, "device");
     match_rules.value[index] = {
       qos: temp_rule.qos,
       mode: {
-        t: "mac",
-        mac_addr: "",
+        t: "device",
+        device_id: "",
       },
     };
   }
@@ -85,10 +107,16 @@ function change_mode(value: FlowEntryRule, index: number) {
         </n-button>
 
         <n-select
-          v-if="getInputMode(index) === 'select'"
+          v-if="getInputMode(index) === 'device'"
           :options="deviceOptions"
-          :value="value.mode.mac_addr || null"
-          @update:value="(v: string) => (value.mode.mac_addr = v)"
+          :value="
+            value.mode.t === 'device' ? value.mode.device_id || null : null
+          "
+          @update:value="
+            (v: string) => {
+              value.mode = { t: 'device', device_id: v };
+            }
+          "
           :placeholder="t('flow.match_rule.select_device_placeholder')"
           clearable
           filterable
@@ -97,21 +125,50 @@ function change_mode(value: FlowEntryRule, index: number) {
         <n-input
           v-else-if="getInputMode(index) === 'mac'"
           :type="frontEndStore.presentation_mode ? 'password' : 'text'"
-          :value="value.mode.mac_addr"
+          :value="value.mode.t === 'mac' ? value.mode.mac_addr : ''"
           @update:value="
-            (v: string) => (value.mode.mac_addr = formatMacAddress(v))
+            (v: string) => {
+              value.mode = { t: 'mac', mac_addr: formatMacAddress(v) };
+            }
           "
           :placeholder="t('flow.match_rule.mac_placeholder')"
         />
         <n-input-group v-else>
           <n-input
             :type="frontEndStore.presentation_mode ? 'password' : 'text'"
-            v-model:value="value.mode.ip"
+            :value="value.mode.t === 'ip' ? value.mode.ip : ''"
+            @update:value="
+              (v: string) => {
+                const prefixLen =
+                  value.mode.t === 'ip'
+                    ? value.mode.ip === '' ||
+                      value.mode.prefix_len ===
+                        getDefaultPrefixLen(value.mode.ip)
+                      ? getDefaultPrefixLen(v)
+                      : value.mode.prefix_len
+                    : getDefaultPrefixLen(v);
+                value.mode = { t: 'ip', ip: v, prefix_len: prefixLen };
+              }
+            "
             :placeholder="t('flow.match_rule.ip_placeholder')"
           />
           <n-input-group-label>/</n-input-group-label>
           <n-input-number
-            v-model:value="value.mode.prefix_len"
+            :value="
+              value.mode.t === 'ip'
+                ? value.mode.prefix_len
+                : getDefaultPrefixLen('')
+            "
+            @update:value="
+              (v: number | null) => {
+                const ip = value.mode.t === 'ip' ? value.mode.ip : '';
+                value.mode = {
+                  t: 'ip',
+                  ip,
+                  prefix_len: v ?? getDefaultPrefixLen(ip),
+                };
+              }
+            "
             :style="{ width: '60px' }"
             :placeholder="t('flow.match_rule.prefix_placeholder')"
             :show-button="false"

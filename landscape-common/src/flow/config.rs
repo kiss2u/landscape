@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use crate::database::repository::LandscapeDBStore;
 use crate::flow::{FlowEntryRule, WeightedFlowTarget};
+use crate::service::ServiceConfigError;
 use crate::utils::id::gen_database_uuid;
 use crate::utils::time::get_f64_timestamp;
 
@@ -39,6 +40,16 @@ impl LandscapeDBStore<Uuid> for FlowConfig {
     }
     fn set_update_at(&mut self, ts: f64) {
         self.update_at = ts;
+    }
+}
+
+impl FlowConfig {
+    pub fn validate(&self) -> Result<(), ServiceConfigError> {
+        for rule in &self.flow_match_rules {
+            rule.validate()?;
+        }
+
+        Ok(())
     }
 }
 

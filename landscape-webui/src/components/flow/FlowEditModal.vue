@@ -61,8 +61,10 @@ function findDuplicateEntryRules(rules: FlowEntryRule[]): string | null {
     let key: string;
     if (rule.mode.t === "mac") {
       key = `mac:${rule.mode.mac_addr.toLowerCase()}`;
-    } else {
+    } else if (rule.mode.t === "ip") {
       key = `ip:${rule.mode.ip}/${rule.mode.prefix_len}`;
+    } else {
+      key = `device:${rule.mode.device_id}`;
     }
     if (seen.has(key)) {
       return key;

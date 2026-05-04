@@ -202,12 +202,23 @@ export const useEnrolledDeviceStore = defineStore("enrolled_device", () => {
     return lookupBinding(key);
   }
 
+  function GET_DISPLAY_NAME_BY_ID(id: string | undefined | null): string {
+    const isPrivacyMode = frontEndStore.presentation_mode;
+    if (!id) return "";
+
+    const binding = bindings.value.find((device) => device.id === id);
+    if (!binding) return isPrivacyMode ? mask_string(id) : id;
+    if (isPrivacyMode) return binding.fake_name || mask_string(binding.name);
+    return binding.name;
+  }
+
   return {
     bindings,
     loading,
     UPDATE_INFO,
     GET_BINDING,
     GET_DISPLAY_NAME,
+    GET_DISPLAY_NAME_BY_ID,
     GET_NAME_WITH_FALLBACK,
     GET_BINDING_ID,
   };

@@ -103,6 +103,8 @@ impl DHCPv6Server {
         // Check static binding by MAC
         if let Some(mac) = &mac {
             if let Some(suffix_addr) = self.static_bindings.get(mac) {
+                // DHCPv6 IA_NA uses only the low 64 bits from a static IPv6 binding.
+                // The runtime address is rebuilt from the current prefix plus this suffix.
                 let suffix = u128::from(*suffix_addr) as u64;
                 self.na_allocated_suffixes.insert(suffix, true);
                 self.na_offered.insert(

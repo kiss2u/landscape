@@ -1,4 +1,6 @@
 use arc_swap::ArcSwap;
+pub use landscape_common::ipv6::allocate_subnet;
+use landscape_common::ipv6::checked_allocate_subnet;
 use landscape_common::ipv6::lan::{
     LanIPv6SourceConfig, LanPrefixGroupConfig, NaPrefixConfig, PdPrefixRangeConfig,
     PrefixGroupServiceKind, PrefixParentSource, RaPrefixConfig, SourceServiceKind,
@@ -57,6 +59,14 @@ pub struct PrefixSetupResult {
     pub cleanup_ips: Vec<(Ipv6Addr, u8, String)>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DynamicPrefixState {
+    route_key: LanIPv6RouteKey,
+    sub_prefix: Ipv6Addr,
+    sub_prefix_len: u8,
+    sub_router: Ipv6Addr,
+}
+
 fn can_delegate_group(
     kind: PrefixGroupServiceKind,
     filter_kinds: &[PrefixGroupServiceKind],
@@ -77,8 +87,17 @@ async fn add_static_runtime_info(
     valid_lifetime: u32,
 ) {
     let sub_prefix_len = 64u8;
-    let (sub_prefix, sub_router) =
-        allocate_subnet(base_prefix, parent_prefix_len, sub_prefix_len, pool_index as u128);
+    let Some((sub_prefix, sub_router)) =
+        checked_allocate_subnet(base_prefix, parent_prefix_len, sub_prefix_len, pool_index as u128)
+    else {
+        tracing::error!(
+            pool_index = pool_index,
+            base_prefix = %base_prefix,
+            parent_prefix_len = parent_prefix_len,
+            "add_static_runtime_info: invalid subnet allocation"
+        );
+        return;
+    };
     set_iface_ip(sub_router, sub_prefix_len, iface_name, None, None);
     cleanup_ips.push((sub_router, sub_prefix_len, iface_name.to_string()));
     let mut li = lan_info.clone();
@@ -135,24 +154,30 @@ async fn add_dynamic_runtime_info(
     let lan_info_clone = lan_info.clone();
     let route_service_clone = route_service.clone();
     let depend_iface_owned = depend_iface.to_string();
-
     let mut expire_time = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
+    let mut applied_state: Option<DynamicPrefixState> = None;
     let ia_prefix = ia_config_watch.borrow().clone();
     if let Some(ia_prefix) = ia_prefix {
         if source_prefix_matches_max_len(ia_prefix.prefix_len, planned_parent_prefix_len)
             && can_delegate_from_pd(ia_prefix.prefix_len, pd_config.sub_prefix_len)
         {
-            pd_prefix_info.store(Arc::new(Some(
-                update_current_info(
-                    &iface_name_owned,
-                    ia_prefix,
-                    &pd_config,
-                    expire_time.as_mut(),
-                    &lan_info_clone,
-                    &route_service_clone,
-                )
-                .await,
-            )));
+            let (new_info, new_state) = update_current_info(
+                &iface_name_owned,
+                ia_prefix,
+                &pd_config,
+                expire_time.as_mut(),
+                &lan_info_clone,
+                &route_service_clone,
+            )
+            .await;
+            applied_state = replace_dynamic_prefix_state(
+                &route_service_clone,
+                &iface_name_owned,
+                applied_state,
+                new_state,
+            )
+            .await;
+            pd_prefix_info.store(Arc::new(new_info));
         }
     }
 
@@ -164,10 +189,10 @@ async fn add_dynamic_runtime_info(
 
         loop {
             tokio::select! {
-                change_result = ia_config_watch.changed() => {
-                    if change_result.is_err() {
-                        break;
-                    }
+            change_result = ia_config_watch.changed() => {
+                if change_result.is_err() {
+                    break;
+                }
                     let ia_prefix = ia_config_watch.borrow().clone();
                     if let Some(ia_prefix) = ia_prefix {
                         if source_prefix_matches_max_len(
@@ -176,30 +201,61 @@ async fn add_dynamic_runtime_info(
                         )
                             && can_delegate_from_pd(ia_prefix.prefix_len, pd_config.sub_prefix_len)
                         {
-                            pd_prefix_info.store(Arc::new(Some(update_current_info(
+                            let (new_info, new_state) = update_current_info(
                                 &iface_name_owned,
                                 ia_prefix,
                                 &pd_config,
                                 expire_time.as_mut(),
                                 &lan_info_clone,
                                 &route_service_clone,
-                            ).await)));
+                            )
+                            .await;
+                            applied_state = replace_dynamic_prefix_state(
+                                &route_service_clone,
+                                &iface_name_owned,
+                                applied_state,
+                                new_state,
+                            )
+                            .await;
+                            pd_prefix_info.store(Arc::new(new_info));
                         } else {
+                            applied_state = replace_dynamic_prefix_state(
+                                &route_service_clone,
+                                &iface_name_owned,
+                                applied_state,
+                                None,
+                            )
+                            .await;
                             pd_prefix_info.store(Arc::new(None));
                         }
                     } else {
+                        applied_state = replace_dynamic_prefix_state(
+                            &route_service_clone,
+                            &iface_name_owned,
+                            applied_state,
+                            None,
+                        )
+                        .await;
                         pd_prefix_info.store(Arc::new(None));
                     }
                     let _ = change_tx_clone.send(());
                 },
                 _ = &mut both_done => break,
                 _ = expire_time.as_mut() => {
+                    applied_state = replace_dynamic_prefix_state(
+                        &route_service_clone,
+                        &iface_name_owned,
+                        applied_state,
+                        None,
+                    )
+                    .await;
                     pd_prefix_info.store(Arc::new(None));
                     let _ = change_tx_clone.send(());
                     expire_time.as_mut().set(tokio::time::sleep(Duration::from_secs(u64::MAX)));
                 }
             }
         }
+        clear_dynamic_prefix_state(&route_service_clone, applied_state).await;
         tracing::info!("iface: {} prefix listen is down", depend_iface_owned);
     });
 }
@@ -211,8 +267,21 @@ async fn add_static_pd_range(
     pd: &PdPrefixRangeConfig,
 ) {
     for pool_index in pd.start_index..=pd.end_index {
-        let (sub_block, _) =
-            allocate_subnet(base_prefix, parent_prefix_len, pd.pool_len, pool_index as u128);
+        let Some((sub_block, _)) = checked_allocate_subnet(
+            base_prefix,
+            parent_prefix_len,
+            pd.pool_len,
+            pool_index as u128,
+        ) else {
+            tracing::error!(
+                pool_index = pool_index,
+                base_prefix = %base_prefix,
+                parent_prefix_len = parent_prefix_len,
+                pool_len = pd.pool_len,
+                "add_static_pd_range: invalid subnet allocation"
+            );
+            continue;
+        };
         runtime
             .pd_delegation_static
             .push(PdDelegationParent { prefix: sub_block, prefix_len: pd.pool_len });
@@ -243,12 +312,21 @@ async fn add_dynamic_pd_range(
             if source_prefix_matches_max_len(ia_prefix.prefix_len, planned_parent_prefix_len)
                 && can_delegate_from_pd(ia_prefix.prefix_len, pool_len)
             {
-                let (sub_block, _) = allocate_subnet(
+                let Some((sub_block, _)) = checked_allocate_subnet(
                     ia_prefix.prefix_ip,
                     ia_prefix.prefix_len,
                     pool_len,
                     lan_slot_to_subnet_index(pool_index, pool_len),
-                );
+                ) else {
+                    tracing::error!(
+                        pool_index = pool_index,
+                        pool_len = pool_len,
+                        prefix = %ia_prefix.prefix_ip,
+                        prefix_len = ia_prefix.prefix_len,
+                        "add_dynamic_pd_range: invalid subnet allocation at init"
+                    );
+                    continue;
+                };
                 pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
                     prefix: sub_block,
                     prefix_len: pool_len,
@@ -274,12 +352,21 @@ async fn add_dynamic_pd_range(
                             )
                                 && can_delegate_from_pd(ia_prefix.prefix_len, pool_len)
                             {
-                                let (sub_block, _) = allocate_subnet(
+                                let Some((sub_block, _)) = checked_allocate_subnet(
                                     ia_prefix.prefix_ip,
                                     ia_prefix.prefix_len,
                                     pool_len,
                                     lan_slot_to_subnet_index(pool_index, pool_len),
-                                );
+                                ) else {
+                                    tracing::error!(
+                                        pool_index = pool_index,
+                                        pool_len = pool_len,
+                                        prefix = %ia_prefix.prefix_ip,
+                                        prefix_len = ia_prefix.prefix_len,
+                                        "add_dynamic_pd_range: invalid subnet allocation in loop"
+                                    );
+                                    continue;
+                                };
                                 pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
                                     prefix: sub_block,
                                     prefix_len: pool_len,
@@ -558,8 +645,21 @@ pub async fn setup_prefix_sources(
                 pool_index,
                 pool_len,
             } => {
-                let (sub_block, _) =
-                    allocate_subnet(*base_prefix, *base_prefix_len, *pool_len, *pool_index as u128);
+                let Some((sub_block, _)) = checked_allocate_subnet(
+                    *base_prefix,
+                    *base_prefix_len,
+                    *pool_len,
+                    *pool_index as u128,
+                ) else {
+                    tracing::error!(
+                        pool_index = *pool_index,
+                        base_prefix = %base_prefix,
+                        base_prefix_len = *base_prefix_len,
+                        pool_len = *pool_len,
+                        "setup_prefix_sources PdStatic: invalid subnet allocation"
+                    );
+                    continue;
+                };
                 runtime
                     .pd_delegation_static
                     .push(PdDelegationParent { prefix: sub_block, prefix_len: *pool_len });
@@ -590,12 +690,21 @@ pub async fn setup_prefix_sources(
                     if source_prefix_matches_max_len(ia_prefix.prefix_len, max_source_prefix_len)
                         && can_delegate_from_pd(ia_prefix.prefix_len, pool_len)
                     {
-                        let (sub_block, _) = allocate_subnet(
+                        let Some((sub_block, _)) = checked_allocate_subnet(
                             ia_prefix.prefix_ip,
                             ia_prefix.prefix_len,
                             pool_len,
                             lan_slot_to_subnet_index(pool_index, pool_len),
-                        );
+                        ) else {
+                            tracing::error!(
+                                pool_index = pool_index,
+                                pool_len = pool_len,
+                                prefix = %ia_prefix.prefix_ip,
+                                prefix_len = ia_prefix.prefix_len,
+                                "setup_prefix_sources PdPd: invalid subnet allocation at init"
+                            );
+                            continue;
+                        };
                         pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
                             prefix: sub_block,
                             prefix_len: pool_len,
@@ -623,12 +732,21 @@ pub async fn setup_prefix_sources(
                                     )
                                         && can_delegate_from_pd(ia_prefix.prefix_len, pool_len)
                                     {
-                                        let (sub_block, _) = allocate_subnet(
+                                        let Some((sub_block, _)) = checked_allocate_subnet(
                                             ia_prefix.prefix_ip,
                                             ia_prefix.prefix_len,
                                             pool_len,
                                             lan_slot_to_subnet_index(pool_index, pool_len),
-                                        );
+                                        ) else {
+                                            tracing::error!(
+                                                pool_index = pool_index,
+                                                pool_len = pool_len,
+                                                prefix = %ia_prefix.prefix_ip,
+                                                prefix_len = ia_prefix.prefix_len,
+                                                "setup_prefix_sources PdPd: invalid subnet allocation in loop"
+                                            );
+                                            continue;
+                                        };
                                         pd_prefix_info.store(Arc::new(Some(PdDelegationParent {
                                             prefix: sub_block,
                                             prefix_len: pool_len,
@@ -659,10 +777,21 @@ pub async fn setup_prefix_sources(
 
         if let Some((base_prefix, pool_index, pref_lt, valid_lt)) = base_prefix_opt {
             // Static source handling
-            let rt_prefix_len = 56;
+            let rt_prefix_len = 60;
             let sub_prefix_len = 64u8;
-            let (sub_prefix, sub_router) =
-                allocate_subnet(base_prefix, rt_prefix_len, sub_prefix_len, pool_index as u128);
+            let Some((sub_prefix, sub_router)) = checked_allocate_subnet(
+                base_prefix,
+                rt_prefix_len,
+                sub_prefix_len,
+                pool_index as u128,
+            ) else {
+                tracing::error!(
+                    pool_index = pool_index,
+                    base_prefix = %base_prefix,
+                    "setup_prefix_sources: invalid static subnet allocation"
+                );
+                continue;
+            };
             set_iface_ip(sub_router, sub_prefix_len, iface_name, None, None);
             cleanup_ips.push((sub_router, sub_prefix_len, iface_name.to_string()));
             let mut li = lan_info.clone();
@@ -698,23 +827,29 @@ pub async fn setup_prefix_sources(
             let iface_name_owned = iface_name.to_string();
             let lan_info_clone = lan_info.clone();
             let route_service_clone = route_service.clone();
-
             let mut expire_time = Box::pin(tokio::time::sleep(Duration::from_secs(0)));
+            let mut applied_state: Option<DynamicPrefixState> = None;
             // Check once immediately
             let ia_prefix = ia_config_watch.borrow().clone();
             if let Some(ia_prefix) = ia_prefix {
                 if can_delegate_from_pd(ia_prefix.prefix_len, pd_config.sub_prefix_len) {
-                    pd_prefix_info.store(Arc::new(Some(
-                        update_current_info(
-                            &iface_name_owned,
-                            ia_prefix,
-                            &pd_config,
-                            expire_time.as_mut(),
-                            &lan_info_clone,
-                            &route_service_clone,
-                        )
-                        .await,
-                    )));
+                    let (new_info, new_state) = update_current_info(
+                        &iface_name_owned,
+                        ia_prefix,
+                        &pd_config,
+                        expire_time.as_mut(),
+                        &lan_info_clone,
+                        &route_service_clone,
+                    )
+                    .await;
+                    applied_state = replace_dynamic_prefix_state(
+                        &route_service_clone,
+                        &iface_name_owned,
+                        applied_state,
+                        new_state,
+                    )
+                    .await;
+                    pd_prefix_info.store(Arc::new(new_info));
                 }
             }
 
@@ -736,18 +871,41 @@ pub async fn setup_prefix_sources(
                             let ia_prefix = ia_config_watch.borrow().clone();
                             if let Some(ia_prefix) = ia_prefix {
                                 if can_delegate_from_pd(ia_prefix.prefix_len, pd_config.sub_prefix_len) {
-                                    pd_prefix_info.store(Arc::new(Some(update_current_info(
+                                    let (new_info, new_state) = update_current_info(
                                         &iface_name_owned,
                                         ia_prefix,
                                         &pd_config,
                                         expire_time.as_mut(),
                                         &lan_info_clone,
                                         &route_service_clone,
-                                    ).await)));
+                                    )
+                                    .await;
+                                    applied_state = replace_dynamic_prefix_state(
+                                        &route_service_clone,
+                                        &iface_name_owned,
+                                        applied_state,
+                                        new_state,
+                                    )
+                                    .await;
+                                    pd_prefix_info.store(Arc::new(new_info));
                                 } else {
+                                    applied_state = replace_dynamic_prefix_state(
+                                        &route_service_clone,
+                                        &iface_name_owned,
+                                        applied_state,
+                                        None,
+                                    )
+                                    .await;
                                     pd_prefix_info.store(Arc::new(None));
                                 }
                             } else {
+                                applied_state = replace_dynamic_prefix_state(
+                                    &route_service_clone,
+                                    &iface_name_owned,
+                                    applied_state,
+                                    None,
+                                )
+                                .await;
                                 pd_prefix_info.store(Arc::new(None));
                             }
                             let _ = change_tx_clone.send(());
@@ -756,6 +914,13 @@ pub async fn setup_prefix_sources(
                             break;
                         }
                         _ = expire_time.as_mut() => {
+                            applied_state = replace_dynamic_prefix_state(
+                                &route_service_clone,
+                                &iface_name_owned,
+                                applied_state,
+                                None,
+                            )
+                            .await;
                             pd_prefix_info.store(Arc::new(None));
                             let _ = change_tx_clone.send(());
                             tracing::debug!("expire_time active");
@@ -764,6 +929,7 @@ pub async fn setup_prefix_sources(
                     }
                 }
 
+                clear_dynamic_prefix_state(&route_service_clone, applied_state).await;
                 tracing::info!("iface: {} prefix listen is down", pd_config.depend_iface);
             });
         }
@@ -807,14 +973,16 @@ async fn update_current_info(
     mut expire_time: Pin<&mut tokio::time::Sleep>,
     lan_info: &LanRouteInfo,
     route_service: &IpRouteService,
-) -> ICMPv6ConfigInfo {
-    expire_time.set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
-    let (sub_prefix, sub_router) = allocate_subnet(
+) -> (Option<ICMPv6ConfigInfo>, Option<DynamicPrefixState>) {
+    let Some((sub_prefix, sub_router)) = checked_allocate_subnet(
         ia_prefix.prefix_ip,
         ia_prefix.prefix_len,
         pd_config.sub_prefix_len,
         lan_slot_to_subnet_index(pd_config.lan_slot, pd_config.sub_prefix_len),
-    );
+    ) else {
+        return (None, None);
+    };
+    expire_time.set(tokio::time::sleep(Duration::from_secs(ia_prefix.valid_lifetime as u64)));
 
     let mut lan_info = lan_info.clone();
     lan_info.iface_ip = IpAddr::V6(sub_router);
@@ -834,41 +1002,66 @@ async fn update_current_info(
         Some(ia_prefix.preferred_lifetime),
     );
 
-    ICMPv6ConfigInfo {
-        rt_prefix: ia_prefix.prefix_ip,
-        rt_prefix_len: ia_prefix.prefix_len,
-        sub_prefix,
-        sub_prefix_len: pd_config.sub_prefix_len,
-        sub_router,
-        ra_preferred_lifetime: pd_config.preferred_lifetime,
-        ra_valid_lifetime: pd_config.valid_lifetime,
+    (
+        Some(ICMPv6ConfigInfo {
+            rt_prefix: ia_prefix.prefix_ip,
+            rt_prefix_len: ia_prefix.prefix_len,
+            sub_prefix,
+            sub_prefix_len: pd_config.sub_prefix_len,
+            sub_router,
+            ra_preferred_lifetime: pd_config.preferred_lifetime,
+            ra_valid_lifetime: pd_config.valid_lifetime,
+        }),
+        Some(DynamicPrefixState {
+            route_key: LanIPv6RouteKey {
+                iface_name: iface_name.to_string(),
+                subnet_index: pd_config.lan_slot,
+            },
+            sub_prefix,
+            sub_prefix_len: pd_config.sub_prefix_len,
+            sub_router,
+        }),
+    )
+}
+
+async fn replace_dynamic_prefix_state(
+    route_service: &IpRouteService,
+    iface_name: &str,
+    current_state: Option<DynamicPrefixState>,
+    next_state: Option<DynamicPrefixState>,
+) -> Option<DynamicPrefixState> {
+    if current_state.as_ref() == next_state.as_ref() {
+        return current_state;
     }
+
+    if let Some(state) = current_state {
+        clear_dynamic_prefix_runtime(iface_name, &state);
+        if next_state.is_none() {
+            route_service.remove_ipv6_lan_route_by_key(&state.route_key).await;
+        }
+    }
+
+    next_state
+}
+
+async fn clear_dynamic_prefix_state(
+    route_service: &IpRouteService,
+    state: Option<DynamicPrefixState>,
+) {
+    let Some(state) = state else {
+        return;
+    };
+
+    clear_dynamic_prefix_runtime(&state.route_key.iface_name, &state);
+    route_service.remove_ipv6_lan_route_by_key(&state.route_key).await;
+}
+
+fn clear_dynamic_prefix_runtime(iface_name: &str, state: &DynamicPrefixState) {
+    del_iface_ip(state.sub_router, state.sub_prefix_len, iface_name);
+    del_route(state.sub_prefix, state.sub_prefix_len, iface_name);
 }
 
 /// Compute subnet network address and router address from a prefix and subnet index
-pub fn allocate_subnet(
-    pd_ip: Ipv6Addr,
-    pd_prefix_len: u8,
-    sub_prefix_len: u8,
-    subnet_index: u128,
-) -> (Ipv6Addr, Ipv6Addr) {
-    assert!(sub_prefix_len >= pd_prefix_len, "子网前缀长度必须大于等于原始前缀长度");
-
-    let max_subnets = 1u128 << (sub_prefix_len - pd_prefix_len);
-    assert!(subnet_index < max_subnets, "subnet_index 超出可用子网范围");
-
-    let prefix_u128 = u128::from(pd_ip);
-    let parent_mask = (!0u128) << (128 - pd_prefix_len);
-    let parent_network = prefix_u128 & parent_mask;
-    let sub_mask = (!0u128) << (128 - sub_prefix_len);
-    let base_network = parent_network & sub_mask;
-    let subnet_size = 1u128 << (128 - sub_prefix_len);
-    let subnet_network = base_network + (subnet_index * subnet_size);
-    let router_address = subnet_network + 1;
-
-    (Ipv6Addr::from(subnet_network), Ipv6Addr::from(router_address))
-}
-
 pub fn add_route(ip: Ipv6Addr, prefix: u8, iface_name: &str, valid_lifetime: Option<u32>) {
     let mut args = vec![
         "-6".to_string(),

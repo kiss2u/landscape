@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
@@ -13,6 +14,72 @@ use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
     AsRawLibbpf, MapCore, MapFlags, OpenMapMut,
 };
+
+use crate::bpf_error::LdEbpfResult;
+
+pub type RawEbpfMapEntries = HashMap<Vec<u8>, Vec<u8>>;
+
+pub(crate) struct RawEbpfMapDiff {
+    pub delete_keys: Vec<Vec<u8>>,
+    pub upsert_entries: Vec<(Vec<u8>, Vec<u8>)>,
+}
+
+impl RawEbpfMapDiff {
+    pub fn is_empty(&self) -> bool {
+        self.delete_keys.is_empty() && self.upsert_entries.is_empty()
+    }
+}
+
+pub(crate) fn snapshot_raw_map<M: MapCore>(map: &M) -> LdEbpfResult<RawEbpfMapEntries> {
+    let mut result = RawEbpfMapEntries::new();
+    for key in map.keys() {
+        if let Some(value) = map.lookup(&key, MapFlags::ANY)? {
+            result.insert(key, value);
+        }
+    }
+    Ok(result)
+}
+
+pub(crate) fn diff_raw_map(
+    current: &RawEbpfMapEntries,
+    desired: &RawEbpfMapEntries,
+) -> RawEbpfMapDiff {
+    let delete_keys = current.keys().filter(|key| !desired.contains_key(*key)).cloned().collect();
+
+    let upsert_entries = desired
+        .iter()
+        .filter(|(key, value)| current.get(*key) != Some(*value))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+
+    RawEbpfMapDiff { delete_keys, upsert_entries }
+}
+
+pub(crate) fn apply_raw_map_diff<M: MapCore>(map: &M, diff: RawEbpfMapDiff) -> LdEbpfResult<()> {
+    if !diff.delete_keys.is_empty() {
+        let key_count = diff.delete_keys.len() as u32;
+        let mut keys = Vec::with_capacity(diff.delete_keys.iter().map(Vec::len).sum());
+        for key in diff.delete_keys {
+            keys.extend_from_slice(&key);
+        }
+        map.delete_batch(&keys, key_count, MapFlags::ANY, MapFlags::ANY)?;
+    }
+
+    if !diff.upsert_entries.is_empty() {
+        let entry_count = diff.upsert_entries.len() as u32;
+        let key_len: usize = diff.upsert_entries.iter().map(|(key, _)| key.len()).sum();
+        let value_len: usize = diff.upsert_entries.iter().map(|(_, value)| value.len()).sum();
+        let mut keys = Vec::with_capacity(key_len);
+        let mut values = Vec::with_capacity(value_len);
+        for (key, value) in diff.upsert_entries {
+            keys.extend_from_slice(&key);
+            values.extend_from_slice(&value);
+        }
+        map.update_batch(&keys, &values, entry_count, MapFlags::ANY, MapFlags::ANY)?;
+    }
+
+    Ok(())
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PinnedMapReuseStatus {

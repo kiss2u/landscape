@@ -281,6 +281,13 @@ impl DHCPv4ServerManagerService {
         Ok(())
     }
 
+    pub async fn refresh_iface_service(&self, iface_name: String) {
+        let Some(service_config) = self.get_config_by_name(iface_name).await else {
+            return;
+        };
+        let _ = self.get_service().update_service(service_config).await;
+    }
+
     pub async fn cleanup_lingering_iface_addr_if_present(&self, config: &DHCPv4ServiceConfig) {
         let cleanup = IfaceIpv4Cleanup::from_dhcp_v4_config(config);
         let iface_name = &config.iface_name;

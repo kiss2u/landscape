@@ -97,6 +97,8 @@ async fn add_flow_rule(
     State(state): State<LandscapeApp>,
     JsonBody(flow_rule): JsonBody<FlowConfig>,
 ) -> LandscapeApiResult<FlowConfig> {
+    flow_rule.validate()?;
+
     if has_only_zero_weight_targets(&flow_rule) {
         Err(FlowRuleError::InvalidTargetWeight)?;
     }
@@ -115,15 +117,26 @@ async fn add_flow_rule(
         }
     }
 
-    // Check for overlap with other flows' entry rules via DB query
-    for rule in &flow_rule.flow_match_rules {
-        if let Some(conflict) =
-            state.flow_rule_service.find_conflict_by_entry_mode(flow_rule.id, &rule.mode).await?
+    {
+        let modes: Vec<_> = flow_rule.flow_match_rules.iter().map(|r| r.mode.clone()).collect();
+        state.flow_rule_service.validate_modes_resolvable(&modes).await?;
+        if let Some(duplicate_mode) =
+            state.flow_rule_service.find_duplicate_resolved_mode(&modes).await?
+        {
+            Err(FlowRuleError::DuplicateEntryRule(duplicate_mode.to_string()))?;
+        }
+    }
+
+    // Check for overlap with other flows' entry rules — load configs + devices once
+    {
+        let modes: Vec<_> = flow_rule.flow_match_rules.iter().map(|r| r.mode.clone()).collect();
+        if let Some((conflict_mode, conflict_config)) =
+            state.flow_rule_service.find_resolved_conflict_for_modes(flow_rule.id, &modes).await?
         {
             Err(FlowRuleError::ConflictEntryRule {
-                rule: rule.mode.to_string(),
-                flow_remark: conflict.remark,
-                flow_id: conflict.flow_id,
+                rule: conflict_mode.to_string(),
+                flow_remark: conflict_config.remark,
+                flow_id: conflict_config.flow_id,
             })?;
         }
     }

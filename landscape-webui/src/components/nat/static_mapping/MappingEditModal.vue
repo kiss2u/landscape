@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { useMessage } from "naive-ui";
-import type { StaticNatMappingConfig } from "@landscape-router/types/api/schemas";
+import type {
+  StaticNatMappingConfig,
+  StaticNatTarget,
+} from "@landscape-router/types/api/schemas";
 
 import { computed, ref } from "vue";
 import {
@@ -8,7 +11,6 @@ import {
   push_static_nat_mapping,
 } from "@/api/static_nat_mapping";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
-import { ChangeCatalog } from "@vicons/carbon";
 import { useI18n } from "vue-i18n";
 
 type Props = {
@@ -31,15 +33,15 @@ const rule = ref<StaticNatMappingConfig>();
 const portInputRefs = ref<any[]>([]); // Array to store input refs
 
 const enrolledDeviceStore = useEnrolledDeviceStore();
-const ipv4SelectMode = ref(true);
+type TargetMode = "address" | "local" | "device";
+const targetMode = ref<TargetMode>("device");
+const selectedDeviceId = ref<string | null>(null);
 
-const deviceIpv4Options = computed(() =>
-  enrolledDeviceStore.bindings
-    .filter((d) => d.ipv4)
-    .map((d) => ({
-      label: `${d.name} (${d.ipv4})`,
-      value: d.ipv4!,
-    })),
+const deviceOptions = computed(() =>
+  enrolledDeviceStore.bindings.map((d) => ({
+    label: `${d.name} (${d.mac})`,
+    value: d.id!,
+  })),
 );
 
 const commit_spin = ref(false);
@@ -47,24 +49,62 @@ const isModified = computed(() => {
   return JSON.stringify(rule.value) !== origin_rule_json.value;
 });
 
-const rules = {
-  lan_ipv4: [
-    {
-      pattern:
-        /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/,
-      message: t("nat.mapping.validation_ipv4"),
-      trigger: ["blur", "input"],
-    },
-  ],
-  lan_ipv6: [
-    {
-      pattern:
-        /^(([0-9a-fA-F]{1,4}:){7}([0-9a-fA-F]{1,4}|:)|(([0-9a-fA-F]{1,4}:){1,7}:)|(([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4})|(([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2})|(([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3})|(([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4})|(([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5})|([0-9a-fA-F]{1,4}:)((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/,
-      message: t("nat.mapping.validation_ipv6"),
-      trigger: ["blur", "input"],
-    },
-  ],
-};
+function legacyTargetFromRule(value: StaticNatMappingConfig): StaticNatTarget {
+  return value.lan_target ?? { t: "address" };
+}
+
+function syncTargetFormFromRule() {
+  if (!rule.value) return;
+  const target = rule.value.lan_target ?? legacyTargetFromRule(rule.value);
+  targetMode.value = target.t;
+  selectedDeviceId.value = target.t === "device" ? target.device_id : null;
+}
+
+function syncRuleTarget() {
+  if (!rule.value) return;
+  if (targetMode.value === "local") {
+    rule.value.lan_target = { t: "local" };
+    return;
+  }
+  if (targetMode.value === "device") {
+    rule.value.lan_target = selectedDeviceId.value
+      ? { t: "device", device_id: selectedDeviceId.value }
+      : { t: "device", device_id: "" };
+    return;
+  }
+
+  rule.value.lan_target = {
+    t: "address",
+    ipv4:
+      rule.value.lan_target?.t === "address"
+        ? rule.value.lan_target.ipv4 || undefined
+        : undefined,
+    ipv6:
+      rule.value.lan_target?.t === "address"
+        ? rule.value.lan_target.ipv6 || undefined
+        : undefined,
+  };
+}
+
+const addressTarget = computed<StaticNatTarget & { t: "address" }>(() => {
+  if (!rule.value?.lan_target || rule.value.lan_target.t !== "address") {
+    return { t: "address" };
+  }
+  return rule.value.lan_target;
+});
+
+const selectedDevice = computed(() =>
+  enrolledDeviceStore.bindings.find(
+    (device) => device.id === selectedDeviceId.value,
+  ),
+);
+
+const ipv4Pattern =
+  /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/;
+const ipv6Pattern =
+  /^(([0-9a-fA-F]{1,4}:){7}([0-9a-fA-F]{1,4}|:)|(([0-9a-fA-F]{1,4}:){1,7}:)|(([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4})|(([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2})|(([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3})|(([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4})|(([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5})|([0-9a-fA-F]{1,4}:)((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+
+const rules = {};
 
 async function enter() {
   if (props.rule_id) {
@@ -74,13 +114,16 @@ async function enter() {
       enable: true,
       mapping_pair_ports: [{ wan_port: 0, lan_port: 0 }],
       wan_iface_name: null,
-      lan_ipv4: null,
-      lan_ipv6: null,
+      lan_target: { t: "device", device_id: "" },
       remark: "",
       ipv4_l4_protocol: [6],
       ipv6_l4_protocol: [],
     };
   }
+  if (!rule.value.lan_target) {
+    rule.value.lan_target = legacyTargetFromRule(rule.value);
+  }
+  syncTargetFormFromRule();
   origin_rule_json.value = JSON.stringify(rule.value);
 
   // Handle auto-focus on specific port index
@@ -128,6 +171,23 @@ async function saveRule() {
       // Validate form
       await formRef.value?.validate();
 
+      if (rule.value.lan_target?.t === "address") {
+        if (
+          rule.value.lan_target.ipv4 &&
+          !ipv4Pattern.test(rule.value.lan_target.ipv4)
+        ) {
+          message.error(t("nat.mapping.validation_ipv4"));
+          return;
+        }
+        if (
+          rule.value.lan_target.ipv6 &&
+          !ipv6Pattern.test(rule.value.lan_target.ipv6)
+        ) {
+          message.error(t("nat.mapping.validation_ipv6"));
+          return;
+        }
+      }
+
       if (
         rule.value.ipv4_l4_protocol.length === 0 &&
         rule.value.ipv6_l4_protocol.length === 0
@@ -136,9 +196,22 @@ async function saveRule() {
         return;
       }
 
+      if (targetMode.value === "device" && !selectedDeviceId.value) {
+        message.error(t("nat.mapping.select_device_required"));
+        return;
+      }
+
+      if (
+        targetMode.value === "device" &&
+        rule.value.ipv6_l4_protocol.length > 0 &&
+        !selectedDevice.value?.ipv6
+      ) {
+        message.error(t("nat.mapping.device_ipv6_required"));
+        return;
+      }
+
       commit_spin.value = true;
-      if (rule.value.lan_ipv4 === "") rule.value.lan_ipv4 = null;
-      if (rule.value.lan_ipv6 === "") rule.value.lan_ipv6 = null;
+      syncRuleTarget();
       await push_static_nat_mapping(rule.value);
       console.log("submit success");
       show.value = false;
@@ -400,46 +473,99 @@ const mappingPortsRule = {
             </n-flex>
           </n-form-item-gi>
 
-          <n-form-item-gi
-            :span="2"
-            path="lan_ipv4"
-            :label="t('nat.mapping.target_ipv4')"
-          >
-            <n-flex :wrap="false" style="flex: 1">
-              <n-button @click="ipv4SelectMode = !ipv4SelectMode">
-                <n-icon><ChangeCatalog /></n-icon>
-              </n-button>
-              <n-select
-                v-if="ipv4SelectMode"
-                :options="deviceIpv4Options"
-                :value="rule.lan_ipv4 || null"
-                @update:value="
-                  (v: string) => {
-                    if (rule) rule.lan_ipv4 = v;
-                  }
-                "
-                :placeholder="t('nat.mapping.select_device_placeholder')"
-                clearable
-                filterable
-                style="flex: 1"
-              />
-              <n-input
-                v-else
-                :placeholder="t('nat.mapping.target_ipv4_hint')"
-                v-model:value="rule.lan_ipv4"
-              />
-            </n-flex>
+          <n-form-item-gi :span="2" :label="t('nat.mapping.target_type')">
+            <n-radio-group
+              v-model:value="targetMode"
+              @update:value="syncRuleTarget"
+            >
+              <n-radio-button value="device">
+                {{ t("nat.mapping.target_type_device") }}
+              </n-radio-button>
+              <n-radio-button value="local">
+                {{ t("nat.mapping.target_type_local") }}
+              </n-radio-button>
+              <n-radio-button value="address">
+                {{ t("nat.mapping.target_type_address") }}
+              </n-radio-button>
+            </n-radio-group>
           </n-form-item-gi>
 
           <n-form-item-gi
+            v-if="targetMode === 'address'"
             :span="2"
-            path="lan_ipv6"
+            :label="t('nat.mapping.target_ipv4')"
+          >
+            <n-input
+              :placeholder="t('nat.mapping.target_ipv4_hint')"
+              :value="addressTarget.ipv4 || null"
+              @update:value="
+                (v: string | null) => {
+                  if (rule) {
+                    rule.lan_target = {
+                      t: 'address',
+                      ipv4: v || undefined,
+                      ipv6: addressTarget.ipv6 || undefined,
+                    };
+                    syncRuleTarget();
+                  }
+                }
+              "
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            v-if="targetMode === 'address'"
+            :span="2"
             :label="t('nat.mapping.target_ipv6')"
           >
             <n-input
               :placeholder="t('nat.mapping.target_ipv6_hint')"
-              v-model:value="rule.lan_ipv6"
+              :value="addressTarget.ipv6 || null"
+              @update:value="
+                (v: string | null) => {
+                  if (rule) {
+                    rule.lan_target = {
+                      t: 'address',
+                      ipv4: addressTarget.ipv4 || undefined,
+                      ipv6: v || undefined,
+                    };
+                    syncRuleTarget();
+                  }
+                }
+              "
             />
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            v-if="targetMode === 'local'"
+            :span="2"
+            :label="t('nat.mapping.target_local')"
+          >
+            <n-alert type="info" :show-icon="false" style="width: 100%">
+              {{ t("nat.mapping.target_local_hint") }}
+            </n-alert>
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            v-if="targetMode === 'device'"
+            :span="2"
+            :label="t('nat.mapping.target_device')"
+          >
+            <n-flex vertical style="width: 100%">
+              <n-select
+                v-model:value="selectedDeviceId"
+                :options="deviceOptions"
+                :placeholder="t('nat.mapping.select_device_placeholder')"
+                clearable
+                filterable
+                @update:value="syncRuleTarget"
+              />
+              <n-text v-if="selectedDevice" depth="3">
+                {{ selectedDevice.iface_name || "-" }} /
+                {{ selectedDevice.ipv4 || "-" }} /
+                {{ selectedDevice.ipv6 || "-" }}
+              </n-text>
+            </n-flex>
           </n-form-item-gi>
 
           <n-form-item-gi :span="2" :label="t('nat.mapping.remark')">

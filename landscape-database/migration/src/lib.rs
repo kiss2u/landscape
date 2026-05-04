@@ -43,6 +43,7 @@ mod m20260408_120000_lan_ipv6_v2;
 mod m20260419_085215_flow_target_weights;
 mod m20260502_073125_dhcp_v4_custom_options;
 mod m20260502_080437_enrolled_device_dhcp_options;
+mod m20260503_213507_static_nat_lan_target;
 mod tables;
 
 pub struct Migrator;
@@ -94,6 +95,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260419_085215_flow_target_weights::Migration),
             Box::new(m20260502_073125_dhcp_v4_custom_options::Migration),
             Box::new(m20260502_080437_enrolled_device_dhcp_options::Migration),
+            Box::new(m20260503_213507_static_nat_lan_target::Migration),
         ]
     }
 }

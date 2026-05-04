@@ -12,6 +12,14 @@ export default {
     target_ipv4: "内网目标 IPv4",
     target_ipv6: "内网目标 IPv6",
     select_device_placeholder: "选择已登记设备",
+    target_type: "目标类型",
+    target_type_address: "手动地址",
+    target_type_local: "本机",
+    target_type_device: "设备",
+    target_local: "本机目标",
+    target_local_hint:
+      "将端口映射到路由器本机，具体 IPv4/IPv6 由上方协议选择决定。",
+    target_device: "目标设备",
     target_ipv4_hint:
       "如果开放的是路由的端口，那么就设置为 0.0.0.0 不映射留空即可",
     target_ipv6_hint: "如果开放的是路由的端口，那么就设置为 :: 不映射留空即可",
@@ -19,6 +27,8 @@ export default {
     validation_ipv4: "请输入合法的 IPv4 地址",
     validation_ipv6: "请输入合法的 IPv6 地址",
     select_protocol_required: "请至少选择一个协议",
+    select_device_required: "请选择已登记设备",
+    device_ipv6_required: "启用 IPv6 协议时，所选设备必须存在 IPv6 地址",
     required: "不能为空",
     range: "范围 1-65535",
     invalid_port_value: "存在无效的端口值",

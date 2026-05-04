@@ -542,6 +542,13 @@ impl LanIPv6ManagerService {
         Self { service, store, server_starter }
     }
 
+    pub async fn refresh_iface_service(&self, iface_name: String) {
+        let Some(service_config) = self.get_config_by_name(iface_name).await else {
+            return;
+        };
+        let _ = self.get_service().update_service(service_config).await;
+    }
+
     pub async fn get_assigned_ips_by_iface_name(&self, iface_name: String) -> Option<IPv6NAInfo> {
         let info = {
             let read_lock = self.server_starter.iface_lease_map.read().await;

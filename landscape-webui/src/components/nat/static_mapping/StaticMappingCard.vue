@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { delete_static_nat_mapping } from "@/api/static_nat_mapping";
 import type { StaticNatMappingConfig } from "@landscape-router/types/api/schemas";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { ArrowRight, Edit, TrashCan } from "@vicons/carbon";
 import { useFrontEndStore } from "@/stores/front_end_config";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
@@ -14,6 +14,41 @@ const prefStore = usePreferenceStore();
 const frontEndStore = useFrontEndStore();
 const { t } = useI18n();
 const rule = defineModel<StaticNatMappingConfig>("rule", { required: true });
+
+const target = computed(
+  () =>
+    rule.value.lan_target ?? {
+      t: "address" as const,
+    },
+);
+
+const hasIpv4Target = computed(() => {
+  if (target.value.t === "address") return !!target.value.ipv4;
+  return true;
+});
+
+const hasIpv6Target = computed(() => {
+  if (target.value.t === "address") return !!target.value.ipv6;
+  return true;
+});
+
+function formatTargetIpv4(): string {
+  if (target.value.t === "local") return t("nat.mapping.target_type_local");
+  if (target.value.t === "device") {
+    return enrolledDeviceStore.GET_DISPLAY_NAME_BY_ID(target.value.device_id);
+  }
+  return target.value.ipv4
+    ? enrolledDeviceStore.GET_NAME_WITH_FALLBACK(target.value.ipv4)
+    : "";
+}
+
+function formatTargetIpv6(): string {
+  if (target.value.t === "local") return t("nat.mapping.target_type_local");
+  if (target.value.t === "device") {
+    return enrolledDeviceStore.GET_DISPLAY_NAME_BY_ID(target.value.device_id);
+  }
+  return formatIPv6(target.value.ipv6 ?? null);
+}
 
 const show_edit_modal = ref(false);
 const edit_focus_index = ref<number | undefined>(undefined);
@@ -100,14 +135,12 @@ function formatIPv6(ip: string | null): string {
       <n-grid :cols="2" :x-gap="12" style="margin-bottom: 4px">
         <!-- IPv4 Stat -->
         <n-gi>
-          <div class="stat-box" :class="{ 'is-inactive': !rule.lan_ipv4 }">
+          <div class="stat-box" :class="{ 'is-inactive': !hasIpv4Target }">
             <div class="stat-label">{{ t("common.ipv4_target") }}</div>
             <div class="stat-value-row">
-              <template v-if="rule.lan_ipv4">
+              <template v-if="hasIpv4Target">
                 <div class="stat-value">
-                  {{
-                    enrolledDeviceStore.GET_NAME_WITH_FALLBACK(rule.lan_ipv4)
-                  }}
+                  {{ formatTargetIpv4() }}
                 </div>
                 <div class="stat-tags">
                   <n-tag
@@ -130,13 +163,16 @@ function formatIPv6(ip: string | null): string {
 
         <!-- IPv6 Stat -->
         <n-gi>
-          <div class="stat-box" :class="{ 'is-inactive': !rule.lan_ipv6 }">
+          <div class="stat-box" :class="{ 'is-inactive': !hasIpv6Target }">
             <div class="stat-label">{{ t("common.ipv6_target") }}</div>
             <div class="stat-value-row">
-              <template v-if="rule.lan_ipv6">
+              <template v-if="hasIpv6Target">
                 <!-- Using shortened IPv6 display -->
-                <div class="stat-value text-ellipsis" :title="rule.lan_ipv6">
-                  {{ formatIPv6(rule.lan_ipv6) }}
+                <div
+                  class="stat-value text-ellipsis"
+                  :title="formatTargetIpv6()"
+                >
+                  {{ formatTargetIpv6() }}
                 </div>
                 <div class="stat-tags">
                   <n-tag
@@ -336,28 +372,6 @@ function formatIPv6(ip: string | null): string {
   font-weight: 600;
   font-family: v-mono, SFMono-Regular, Menlo, monospace;
   user-select: text; /* Allow selection */
-}
-
-/* Hover effect on ports only if not clicking card? 
-   Actually, clicking a port box might not do anything specific, 
-   but hovering is nice visual feedback. */
-.port-box:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  border-color: var(--n-primary-color);
-  z-index: 1;
-}
-
-.wan-port {
-  color: var(--n-warning-color);
-  font-weight: 600;
-  font-family: v-mono, SFMono-Regular, Menlo, monospace;
-}
-
-.lan-port {
-  color: var(--n-info-color);
-  font-weight: 600;
-  font-family: v-mono, SFMono-Regular, Menlo, monospace;
 }
 
 .arrow-icon {
