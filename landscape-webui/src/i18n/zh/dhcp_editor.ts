@@ -11,6 +11,7 @@ export default {
   lease_time: "租约时间 (秒)",
   lease_time_tip: "客户端获得 IP 后在此时间内需要续约，默认 86400 (24 小时)",
   custom_options: "自定义 DHCP Options",
+  invalid_ipv4_check: "请输入有效的 IPv4 地址和掩码后再保存",
   duplicate_option_check: "存在重复的 Option 类型，请修改后再保存",
   invalid_option_check: "存在无效的 DHCP Option 值，请修改后再保存",
   assigned: {

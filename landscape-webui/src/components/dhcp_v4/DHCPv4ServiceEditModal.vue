@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, h, ref } from "vue";
 import { NButton, useMessage, useNotification } from "naive-ui";
-import NewIpEdit from "../NewIpEdit.vue";
+import { isIPv4 } from "is-ip";
+import IpEdit from "../IpEdit.vue";
 import CustomDhcpOptionEditor from "./options/CustomDhcpOptionEditor.vue";
-import { ZoneType } from "@/lib/service_ipconfig";
 import { DHCPv4ServiceConfig, get_dhcp_range } from "@/lib/dhcp_v4";
-import { formatMacAddress } from "@/lib/util";
 import { useDHCPv4ConfigStore } from "@/stores/status_dhcp_v4";
 import {
   get_iface_dhcp_v4_config,
@@ -53,6 +52,11 @@ async function on_modal_enter() {
 }
 
 async function save_config() {
+  if (!is_valid_dhcp_ipv4_config()) {
+    message.error(t("dhcp_editor.invalid_ipv4_check"));
+    return;
+  }
+
   if (optionEditorRef.value?.hasDuplicate) {
     message.error(t("dhcp_editor.duplicate_option_check"));
     return;
@@ -107,17 +111,43 @@ async function save_config() {
   }
 }
 
+function sync_dhcp_range() {
+  const config = service_config.value.config;
+  if (
+    !isIPv4(config.server_ip_addr) ||
+    !is_valid_network_mask(config.network_mask)
+  ) {
+    return;
+  }
+
+  const [start, end] = get_dhcp_range(
+    `${config.server_ip_addr}/${config.network_mask}`,
+  );
+  config.ip_range_start = start;
+  config.ip_range_end = end;
+}
+
+function is_valid_network_mask(mask: unknown) {
+  return Number.isInteger(mask) && Number(mask) >= 0 && Number(mask) <= 30;
+}
+
+function is_valid_dhcp_ipv4_config() {
+  const config = service_config.value.config;
+  return (
+    isIPv4(config.server_ip_addr) &&
+    isIPv4(config.ip_range_start) &&
+    isIPv4(config.ip_range_end ?? "") &&
+    is_valid_network_mask(config.network_mask)
+  );
+}
+
 const server_ip_addr = computed({
   get() {
     return service_config.value.config.server_ip_addr;
   },
   set(new_value) {
     service_config.value.config.server_ip_addr = new_value;
-    const [start, end] = get_dhcp_range(
-      `${service_config.value.config.server_ip_addr}/${service_config.value.config.network_mask}`,
-    );
-    service_config.value.config.ip_range_start = start;
-    service_config.value.config.ip_range_end = end;
+    sync_dhcp_range();
   },
 });
 
@@ -127,11 +157,7 @@ const network_mask = computed({
   },
   set(new_value) {
     service_config.value.config.network_mask = new_value;
-    const [start, end] = get_dhcp_range(
-      `${service_config.value.config.server_ip_addr}/${service_config.value.config.network_mask}`,
-    );
-    service_config.value.config.ip_range_start = start;
-    service_config.value.config.ip_range_end = end;
+    sync_dhcp_range();
   },
 });
 </script>
@@ -151,8 +177,8 @@ const network_mask = computed({
       aria-modal="true"
     >
       <div class="dhcp-service-body">
-        <n-flex style="flex: 1">
-          <n-form :model="service_config">
+        <n-flex class="dhcp-service-form-wrap">
+          <n-form class="dhcp-service-form" :model="service_config">
             <n-form-item :label="t('common.enable_question')">
               <n-switch v-model:value="service_config.enable">
                 <template #checked>
@@ -171,21 +197,24 @@ const network_mask = computed({
             <n-flex :size="16" align="flex-start" class="dhcp-service-columns">
               <div style="flex: 1; min-width: 0">
                 <n-form-item :label="t('dhcp_editor.service.server_ip')">
-                  <NewIpEdit
+                  <IpEdit
                     v-model:ip="server_ip_addr"
                     v-model:mask="network_mask"
                     :mask_max="30"
-                  ></NewIpEdit>
+                    :ip_version="4"
+                  ></IpEdit>
                 </n-form-item>
                 <n-form-item :label="t('dhcp_editor.service.range_start')">
-                  <NewIpEdit
+                  <IpEdit
                     v-model:ip="service_config.config.ip_range_start"
-                  ></NewIpEdit>
+                    :ip_version="4"
+                  ></IpEdit>
                 </n-form-item>
                 <n-form-item :label="t('dhcp_editor.service.range_end')">
-                  <NewIpEdit
+                  <IpEdit
                     v-model:ip="service_config.config.ip_range_end"
-                  ></NewIpEdit>
+                    :ip_version="4"
+                  ></IpEdit>
                 </n-form-item>
                 <n-form-item :label="t('dhcp_editor.lease_time')">
                   <n-input-number
@@ -248,7 +277,13 @@ const network_mask = computed({
   overflow: hidden;
 }
 
+.dhcp-service-form-wrap,
+.dhcp-service-form {
+  width: 100%;
+}
+
 .dhcp-service-columns {
   margin-top: 16px;
+  width: 100%;
 }
 </style>
