@@ -45,8 +45,8 @@ pub struct LanTcPipelineHandle {
 }
 
 struct LanTcPipelineInner {
-    _backing: OwnedOpenObject,
     skel: LanTcPipelineSkel<'static>,
+    _backing: OwnedOpenObject,
     ingress_hook: Mutex<Option<TcHookProxy>>,
     egress_hook: Mutex<Option<TcHookProxy>>,
     ifindex: u32,
