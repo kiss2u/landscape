@@ -4,6 +4,7 @@ import { NButton, useMessage, useNotification } from "naive-ui";
 import { isIPv4 } from "is-ip";
 import IpEdit from "../IpEdit.vue";
 import CustomDhcpOptionEditor from "./options/CustomDhcpOptionEditor.vue";
+import IfaceDisableGuardModal from "@/components/iface/IfaceDisableGuardModal.vue";
 import { DHCPv4ServiceConfig, get_dhcp_range } from "@/lib/dhcp_v4";
 import { useDHCPv4ConfigStore } from "@/stores/status_dhcp_v4";
 import {
@@ -27,10 +28,14 @@ const emit = defineEmits(["refresh"]);
 
 const commit_loading = ref(false);
 const optionEditorRef = ref<InstanceType<typeof CustomDhcpOptionEditor>>();
+const disable_guard_modal = ref<InstanceType<
+  typeof IfaceDisableGuardModal
+> | null>(null);
 const iface_info = defineProps<{
   iface_name: string;
   zone: IfaceZoneType;
 }>();
+const origin_service_enable = ref(false);
 
 const service_config = ref<DHCPv4ServiceConfig>(
   new DHCPv4ServiceConfig({
@@ -44,10 +49,12 @@ async function on_modal_enter() {
     console.log(config);
     // iface_service_type.value = config.t;
     service_config.value = config;
+    origin_service_enable.value = config.enable;
   } catch (e) {
     service_config.value = new DHCPv4ServiceConfig({
       iface_name: iface_info.iface_name,
     });
+    origin_service_enable.value = false;
   }
 }
 
@@ -65,11 +72,23 @@ async function save_config() {
     message.error(t("dhcp_editor.invalid_option_check"));
     return;
   }
+
+  const action = persist_config;
+  if (should_check_dhcp_disable() && disable_guard_modal.value) {
+    await disable_guard_modal.value.check_and_execute(action);
+    return;
+  }
+
+  await action();
+}
+
+async function persist_config() {
   commit_loading.value = true;
   try {
     await update_dhcp_v4_config(service_config.value);
     await dhcpv4ConfigStore.UPDATE_INFO();
     show_model.value = false;
+    origin_service_enable.value = service_config.value.enable;
 
     // Check enrolled device binding validity after successful save.
     const invalidBindings = await check_iface_enrolled_devices_validity(
@@ -109,6 +128,10 @@ async function save_config() {
   } finally {
     commit_loading.value = false;
   }
+}
+
+function should_check_dhcp_disable() {
+  return origin_service_enable.value && !service_config.value.enable;
 }
 
 function sync_dhcp_range() {
@@ -261,6 +284,12 @@ const network_mask = computed({
       </template>
     </n-card>
   </n-modal>
+
+  <IfaceDisableGuardModal
+    ref="disable_guard_modal"
+    :iface_name="iface_name"
+    @refresh="emit('refresh')"
+  />
 </template>
 
 <style scoped>
