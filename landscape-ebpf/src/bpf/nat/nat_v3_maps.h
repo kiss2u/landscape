@@ -16,7 +16,7 @@ struct nat4_port_queue_value_v3 {
     u16 last_generation;
 };
 
-struct nat_timer_value_v4_v3 {
+struct nat4_timer_value_v3 {
     u64 server_status;
     u64 client_status;
     u64 status;
@@ -39,14 +39,14 @@ struct nat_timer_value_v4_v3 {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_mapping_key_v4);
-    __type(value, struct nat_mapping_value_v4_v3);
+    __type(value, struct nat4_mapping_value_v3);
     __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
 } nat4_dyn_map SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_timer_key_v4);
-    __type(value, struct nat_timer_value_v4_v3);
+    __type(value, struct nat4_timer_value_v3);
     __uint(max_entries, NAT4_V3_TIMER_SIZE);
     __uint(map_flags, BPF_F_NO_PREALLOC);
 } nat4_mapping_timer_v3 SEC(".maps");

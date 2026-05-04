@@ -35,9 +35,6 @@ static MAP_PATHS: Lazy<LandscapeMapPath> = Lazy::new(|| {
         nat6_static_mappings: PathBuf::from(format!("{}/nat_static_mapping", ebpf_map_path)),
         nat4_st_map: PathBuf::from(format!("{}/nat4_st_map", ebpf_map_path)),
 
-        nat4_mappings: PathBuf::from(format!("{}/nat4_mappings", ebpf_map_path)),
-        nat4_mapping_timer: PathBuf::from(format!("{}/nat4_mapping_timer", ebpf_map_path)),
-
         firewall_ipv4_block: PathBuf::from(format!("{}/firewall_block_ip4_map", ebpf_map_path)),
         firewall_ipv6_block: PathBuf::from(format!("{}/firewall_block_ip6_map", ebpf_map_path)),
         firewall_allow_rules_map: PathBuf::from(format!(
@@ -99,8 +96,6 @@ pub(crate) struct LandscapeMapPath {
     // NAT
     pub nat6_static_mappings: PathBuf,
     pub nat4_st_map: PathBuf,
-    pub nat4_mappings: PathBuf,
-    pub nat4_mapping_timer: PathBuf,
 
     // 防火墙黑名单
     pub firewall_ipv4_block: PathBuf,

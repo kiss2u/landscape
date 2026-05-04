@@ -60,8 +60,8 @@ int nat_v4_egress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "nat_v4_egress_v3 <<<"
     struct packet_offset_info pkg_offset = {0};
     struct inet4_pair ip_pair = {0};
-    struct nat_mapping_value_v4_v3 *nat_egress_value = NULL;
-    struct nat_mapping_value_v4_v3 *nat_ingress_value = NULL;
+    struct nat4_mapping_value_v3 *nat_egress_value = NULL;
+    struct nat4_mapping_value_v3 *nat_ingress_value = NULL;
     struct nat4_port_queue_value_v3 alloc_item = {0};
     bool created = false;
     int ret = 0;
@@ -130,7 +130,7 @@ int nat_v4_egress(struct __sk_buff *skb) {
         server_nat_pair.src_port = nat_port;
     }
 
-    struct nat_timer_value_v4_v3 *ct_value = NULL;
+    struct nat4_timer_value_v3 *ct_value = NULL;
     ret = nat4_v3_lookup_or_new_ct(skb, nat_l4_protocol, allow_create_mapping, &server_nat_pair,
                                    &ip_pair.src_addr, ip_pair.src_port, NAT_MAPPING_EGRESS,
                                    nat_ingress_value, &ct_value);
@@ -169,7 +169,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
 #define BPF_LOG_TOPIC "nat_v4_ingress_v3 >>>"
     struct packet_offset_info pkg_offset = {0};
     struct inet4_pair ip_pair = {0};
-    struct nat_mapping_value_v4_v3 *nat_ingress_value = NULL;
+    struct nat4_mapping_value_v3 *nat_ingress_value = NULL;
     int ret = 0;
 
     ret = scan_nat_packet(skb, current_l3_offset, &pkg_offset);
@@ -230,7 +230,7 @@ int nat_v4_ingress(struct __sk_buff *skb) {
                                   nat4_v3_ref_get(ingress_state_ref) > 0 && !is_icmpx_error &&
                                   pkt_allow_initiating_ct(pkg_offset.pkt_type));
 
-    struct nat_timer_value_v4_v3 *ct_value = NULL;
+    struct nat4_timer_value_v3 *ct_value = NULL;
     ret = nat4_v3_lookup_or_new_ct(skb, nat_l4_protocol, do_new_ct, &server_nat_pair, &lan_ip,
                                    lan_port, NAT_MAPPING_INGRESS, nat_ingress_value, &ct_value);
     if (ret == TIMER_NOT_FOUND || ret == TIMER_ERROR) {

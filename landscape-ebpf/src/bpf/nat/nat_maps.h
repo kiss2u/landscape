@@ -35,20 +35,7 @@ struct static_nat_mapping_value_v6 {
     u64 active_time;
 };
 
-struct nat_mapping_value_v4 {
-    __be32 addr;
-    // TODO： 触发这个关系的 ip 或者端口
-    // 单独一张检查表， 使用这个 ip 获取是否需要检查
-    __be32 trigger_addr;
-    __be16 port;
-    __be16 trigger_port;
-    u8 is_static;
-    u8 is_allow_reuse;
-    u8 _pad[2];
-    u64 active_time;
-};
-
-struct nat_mapping_value_v4_v3 {
+struct nat4_mapping_value_v3 {
     u64 state_ref;
     __be32 addr;
     __be32 trigger_addr;
@@ -71,27 +58,10 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct nat_mapping_key_v4);
-    __type(value, struct nat_mapping_value_v4_v3);
+    __type(value, struct nat4_mapping_value_v3);
     __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } nat4_st_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct nat_mapping_key_v4);
-    __type(value, struct nat_mapping_value_v4);
-    __uint(max_entries, NAT_MAPPING_CACHE_SIZE);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
-} nat4_mappings SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct nat_timer_key_v4);
-    __type(value, struct nat_timer_value_v4);
-    __uint(max_entries, NAT_MAPPING_TIMER_SIZE);
-    __uint(map_flags, BPF_F_NO_PREALLOC);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
-} nat4_mapping_timer SEC(".maps");
 
 #define NAT_CONN_ACTIVE 1
 #define NAT_CONN_DELETE 2

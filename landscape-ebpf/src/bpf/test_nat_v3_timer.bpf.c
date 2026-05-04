@@ -53,7 +53,7 @@ int nat_v4_timer_step_test(struct __sk_buff *skb) {
     __builtin_memset(result, 0, sizeof(*result));
     result->queue_push_ret = -2;
 
-    struct nat_timer_value_v4_v3 *value = bpf_map_lookup_elem(&nat4_mapping_timer_v3, &input->key);
+    struct nat4_timer_value_v3 *value = bpf_map_lookup_elem(&nat4_mapping_timer_v3, &input->key);
     if (!value) {
         return TC_ACT_OK;
     }
@@ -92,8 +92,7 @@ int nat_v4_timer_step_test(struct __sk_buff *skb) {
     result->ingress_mapping_exists = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key) ? 1 : 0;
     result->egress_mapping_exists = bpf_map_lookup_elem(&nat4_dyn_map, &egress_key) ? 1 : 0;
 
-    struct nat_mapping_value_v4_v3 *ingress_value =
-        bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
+    struct nat4_mapping_value_v3 *ingress_value = bpf_map_lookup_elem(&nat4_dyn_map, &ingress_key);
     result->state_exists = ingress_value ? 1 : 0;
     if (ingress_value) {
         result->state_ref = ingress_value->state_ref;

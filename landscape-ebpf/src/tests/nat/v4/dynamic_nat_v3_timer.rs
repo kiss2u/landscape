@@ -97,8 +97,8 @@ fn egress_key() -> types::nat_mapping_key_v4 {
     }
 }
 
-fn mapping_pair() -> (types::nat_mapping_value_v4_v3, types::nat_mapping_value_v4_v3) {
-    let egress = types::nat_mapping_value_v4_v3 {
+fn mapping_pair() -> (types::nat4_mapping_value_v3, types::nat4_mapping_value_v3) {
+    let egress = types::nat4_mapping_value_v3 {
         state_ref: 0,
         addr: WAN_IP.to_bits().to_be(),
         trigger_addr: REMOTE_IP.to_bits().to_be(),
@@ -108,7 +108,7 @@ fn mapping_pair() -> (types::nat_mapping_value_v4_v3, types::nat_mapping_value_v
         is_static: 0,
         is_allow_reuse: 1,
     };
-    let ingress = types::nat_mapping_value_v4_v3 {
+    let ingress = types::nat4_mapping_value_v3 {
         state_ref: state_ref(STATE_ACTIVE, 1),
         addr: LAN_HOST.to_bits().to_be(),
         trigger_addr: REMOTE_IP.to_bits().to_be(),
@@ -124,10 +124,10 @@ fn mapping_pair() -> (types::nat_mapping_value_v4_v3, types::nat_mapping_value_v
 fn lookup_mapping<T: MapCore>(
     map: &T,
     key: &types::nat_mapping_key_v4,
-) -> Option<types::nat_mapping_value_v4_v3> {
+) -> Option<types::nat4_mapping_value_v3> {
     map.lookup(as_bytes(key), MapFlags::ANY)
         .unwrap()
-        .map(|bytes| read_unaligned::<types::nat_mapping_value_v4_v3>(&bytes))
+        .map(|bytes| read_unaligned::<types::nat4_mapping_value_v3>(&bytes))
 }
 
 fn put_mapping_pair<T: MapCore>(map: &T) {
@@ -168,7 +168,7 @@ fn put_timer_with_key<T: MapCore>(
     client_status: u64,
     server_status: u64,
 ) {
-    let mut value = types::nat_timer_value_v4_v3::default();
+    let mut value = types::nat4_timer_value_v3::default();
     value.server_status = server_status;
     value.client_status = client_status;
     value.status = status;

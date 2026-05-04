@@ -108,17 +108,6 @@ pub fn init_nat(ifindex: i32, has_mac: bool, config: NatConfig) -> LdEbpfResult<
         "nat_v3 prepare nat4_st_map failed"
     )?;
     crate::bpf_ctx!(
-        pin_and_reuse_map(&mut landscape_open.maps.nat4_mappings, &MAP_PATHS.nat4_mappings),
-        "nat_v3 prepare nat4_mappings failed"
-    )?;
-    crate::bpf_ctx!(
-        pin_and_reuse_map(
-            &mut landscape_open.maps.nat4_mapping_timer,
-            &MAP_PATHS.nat4_mapping_timer
-        ),
-        "nat_v3 prepare nat4_mapping_timer failed"
-    )?;
-    crate::bpf_ctx!(
         pin_and_reuse_map(
             &mut landscape_open.maps.nat_conn_metric_events,
             &MAP_PATHS.nat_conn_metric_events

@@ -216,11 +216,6 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
         &paths.nat6_static_mappings,
     );
     reuse_pinned_map_or_recreate(&mut landscape_open.maps.nat4_st_map, &paths.nat4_st_map);
-    reuse_pinned_map_or_recreate(
-        &mut landscape_open.maps.nat4_mapping_timer,
-        &paths.nat4_mapping_timer,
-    );
-    reuse_pinned_map_or_recreate(&mut landscape_open.maps.nat4_mappings, &paths.nat4_mappings);
 
     // firewall
     reuse_pinned_map_or_recreate(
@@ -287,11 +282,7 @@ pub(crate) fn init_path(paths: &LandscapeMapPath) {
 ///
 /// Must be called after all services have stopped.
 pub fn cleanup_pinned_maps() {
-    let maps_to_unpin = [
-        // nat4_mapping_timer contains bpf_timer entries whose callbacks hold
-        // refcounts on nat_v4 programs, preventing kernel cleanup.
-        &MAP_PATHS.nat4_mapping_timer,
-    ];
+    let maps_to_unpin: [&std::path::Path; 0] = [];
     for path in maps_to_unpin {
         match std::fs::remove_file(path) {
             Ok(()) => tracing::info!("Unpinned map: {}", path.display()),

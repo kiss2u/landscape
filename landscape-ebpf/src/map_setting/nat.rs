@@ -6,7 +6,7 @@ use libbpf_rs::{MapCore, MapFlags};
 use crate::bpf_error::LdEbpfResult;
 use crate::{
     map_setting::share_map::types::{
-        nat_mapping_value_v4_v3, static_nat_mapping_key_v6, static_nat_mapping_value_v6,
+        nat4_mapping_value_v3, static_nat_mapping_key_v6, static_nat_mapping_value_v6,
     },
     LANDSCAPE_IPV6_TYPE, MAP_PATHS, NAT_MAPPING_EGRESS, NAT_MAPPING_INGRESS,
 };
@@ -129,8 +129,8 @@ fn insert_static_nat4_item_entries(
         from_addr: static_mapping.lan_ip.to_bits().to_be(),
     };
 
-    let mut ingress_mapping_value = nat_mapping_value_v4_v3::default();
-    let mut egress_mapping_value = nat_mapping_value_v4_v3::default();
+    let mut ingress_mapping_value = nat4_mapping_value_v3::default();
+    let mut egress_mapping_value = nat4_mapping_value_v3::default();
 
     ingress_mapping_value.port = static_mapping.lan_port.to_be();
     ingress_mapping_value.addr = static_mapping.lan_ip.to_bits().to_be();

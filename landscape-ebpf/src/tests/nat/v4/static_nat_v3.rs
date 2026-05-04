@@ -75,7 +75,7 @@ fn add_ct_entry<T: MapCore>(
             dst_port: nat_port.to_be(),
         },
     };
-    let mut value = types::nat_timer_value_v4_v3::default();
+    let mut value = types::nat4_timer_value_v3::default();
     value.server_status = 1;
     value.client_status = 1;
     value.gress = gress;

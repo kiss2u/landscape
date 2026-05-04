@@ -111,9 +111,8 @@ fn put_v3_state<T: MapCore>(
         .lookup(unsafe { plain::as_bytes(&ingress_key) }, MapFlags::ANY)
         .expect("lookup v3 ingress entry")
         .expect("missing v3 ingress entry");
-    let mut value = unsafe {
-        std::ptr::read_unaligned(bytes.as_ptr().cast::<types::nat_mapping_value_v4_v3>())
-    };
+    let mut value =
+        unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<types::nat4_mapping_value_v3>()) };
     value.generation = GENERATION;
     value.state_ref = state_ref;
 
@@ -162,7 +161,7 @@ fn add_v3_ct<T: MapCore>(
         },
     };
 
-    let mut value = types::nat_timer_value_v4_v3::default();
+    let mut value = types::nat4_timer_value_v3::default();
     value.client_addr = types::inet4_addr { addr: client_addr.to_bits().to_be() };
     value.client_port = client_port.to_be();
     value.client_status = 1;
@@ -214,7 +213,7 @@ fn add_dynamic_mapping_pair<T: MapCore>(
         from_port: lan_port.to_be(),
         from_addr: lan_addr.to_bits().to_be(),
     };
-    let egress_val = types::nat_mapping_value_v4_v3 {
+    let egress_val = types::nat4_mapping_value_v3 {
         state_ref: 0,
         addr: nat_addr.to_bits().to_be(),
         trigger_addr: remote_addr.to_bits().to_be(),
@@ -231,7 +230,7 @@ fn add_dynamic_mapping_pair<T: MapCore>(
         from_port: nat_port.to_be(),
         from_addr: nat_addr.to_bits().to_be(),
     };
-    let ingress_val = types::nat_mapping_value_v4_v3 {
+    let ingress_val = types::nat4_mapping_value_v3 {
         state_ref: ((1u64) << 56) | 1,
         addr: lan_addr.to_bits().to_be(),
         trigger_addr: remote_addr.to_bits().to_be(),
@@ -307,7 +306,7 @@ fn read_v3_ingress_mapping<T: MapCore>(
     l4proto: u8,
     nat_addr: Ipv4Addr,
     nat_port: u16,
-) -> types::nat_mapping_value_v4_v3 {
+) -> types::nat4_mapping_value_v3 {
     let ingress_key = NatMappingKeyV4 {
         gress: NAT_MAPPING_INGRESS,
         l4proto,
@@ -318,7 +317,7 @@ fn read_v3_ingress_mapping<T: MapCore>(
         .lookup(unsafe { plain::as_bytes(&ingress_key) }, MapFlags::ANY)
         .expect("lookup v3 ingress mapping")
         .expect("ingress mapping should exist");
-    unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<types::nat_mapping_value_v4_v3>()) }
+    unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<types::nat4_mapping_value_v3>()) }
 }
 
 fn reset_dynamic_nat_v3_runtime_for_test<M1, M2, M3, M4, M5>(
@@ -921,7 +920,7 @@ mod tests {
             .expect("lookup v3 ct");
         let timer_bytes = timer_bytes.expect("ingress reuse should create ct");
         let timer = unsafe {
-            std::ptr::read_unaligned(timer_bytes.as_ptr().cast::<types::nat_timer_value_v4_v3>())
+            std::ptr::read_unaligned(timer_bytes.as_ptr().cast::<types::nat4_timer_value_v3>())
         };
         assert_eq!(timer.generation_snapshot, GENERATION);
         assert_eq!(timer.client_port, LAN_PORT.to_be());
@@ -1296,7 +1295,7 @@ mod tests {
             .expect("lookup static v3 ct");
         let timer_bytes = timer_bytes.expect("static egress should create ct");
         let timer = unsafe {
-            std::ptr::read_unaligned(timer_bytes.as_ptr().cast::<types::nat_timer_value_v4_v3>())
+            std::ptr::read_unaligned(timer_bytes.as_ptr().cast::<types::nat4_timer_value_v3>())
         };
         assert_eq!(timer.client_port, 80u16.to_be());
     }

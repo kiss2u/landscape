@@ -77,28 +77,6 @@ struct nat_timer_key_v4 {
 };
 
 //
-struct nat_timer_value_v4 {
-    u64 server_status;
-    u64 client_status;
-    u64 status;
-    struct bpf_timer timer;
-    // Ac
-    struct inet4_addr client_addr;
-    // Pc
-    u16 client_port;
-    u8 gress;
-    u8 flow_id;
-
-    u64 create_time;
-    u64 ingress_bytes;
-    u64 ingress_packets;
-    u64 egress_bytes;
-    u64 egress_packets;
-    u32 cpu_id;
-    u32 ifindex;
-};
-
-//
 struct nat_timer_key_v6 {
     u8 client_suffix[8];
     u16 client_port;
