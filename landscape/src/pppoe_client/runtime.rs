@@ -137,12 +137,12 @@ pub async fn create_pppoe_client(
                     break;
                 }
 
-                if !pkt_manager.lcp_status.termination.0 {
-                    pkt_manager.lcp_status.termination = (true, TagValue::Nak(()));
-                    pkt_manager.send_packet(&tx).await;
-                }
-
                 if matches!(*service_status_rx.borrow(), ServiceStatus::Stopping) {
+                    if !pkt_manager.lcp_status.termination.0 {
+                        pkt_manager.lcp_status.termination = (true, TagValue::Nak(()));
+                        pkt_manager.send_packet(&tx).await;
+                    }
+
                     tracing::info!("stopping native PPPoE client on iface={}", config.iface_name);
                     break;
                 }

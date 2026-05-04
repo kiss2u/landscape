@@ -350,6 +350,7 @@ impl PPPoEClientManager {
             tracing::warn!("peer rejected IPv6CP protocol negotiation");
             self.lcp_status.ip6cp_server_id = TagValue::Reject;
             self.lcp_status.ip6cp_client_id = TagValue::Reject;
+            return;
         } else if proto == 0x8021 {
             tracing::error!("peer rejected IPCP protocol negotiation");
             self.lcp_status.client_config = TagValue::Reject;
@@ -871,5 +872,28 @@ mod tests {
         manager.lcp_status.ip6cp_server_id = super::TagValue::Ack(vec![8, 7, 6, 5, 4, 3, 2, 1]);
 
         assert!(manager.can_enable_ebpf_prog());
+    }
+
+    #[test]
+    fn ipv6cp_protocol_reject_does_not_increment_error_count() {
+        let mut manager = PPPoEClientManager::new(
+            MacAddr::new(0x02, 0x11, 0x22, 0x33, 0x44, 0x55),
+            1492,
+            "user".to_string(),
+            "pass".to_string(),
+        );
+        let lcp = landscape_common::net_proto::ppp::PointToPoint {
+            protocol: 0xc021,
+            code: 8,
+            id: 1,
+            length: 6,
+            payload: vec![0x80, 0x57],
+        };
+
+        manager.handle_lcp_proto_reject(&lcp);
+
+        assert_eq!(manager.error_count, 0);
+        assert!(matches!(manager.lcp_status.ip6cp_client_id, super::TagValue::Reject));
+        assert!(matches!(manager.lcp_status.ip6cp_server_id, super::TagValue::Reject));
     }
 }
