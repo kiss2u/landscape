@@ -26,7 +26,7 @@ pub(crate) mod matcher;
 pub(crate) mod planner;
 pub(crate) mod rule;
 
-pub use crate::listener::EffectiveDohListenerConfig;
+pub use crate::listener::{DohTimeouts, EffectiveDohListenerConfig};
 pub use landscape_common::dns::{CacheRuntimeConfig, DohRuntimeConfig};
 
 pub(crate) type MetricSenderState = Arc<ArcSwapOption<mpsc::Sender<DnsMetricMessage>>>;

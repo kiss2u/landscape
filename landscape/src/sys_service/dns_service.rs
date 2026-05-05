@@ -13,14 +13,13 @@ use landscape_common::{
 };
 use landscape_dns::{
     prepare_system_dns,
-    server::{EffectiveDohListenerConfig, LandscapeDnsServer, LocalDnsAnswerProvider},
+    server::{DohTimeouts, EffectiveDohListenerConfig, LandscapeDnsServer, LocalDnsAnswerProvider},
     CheckChainDnsResult, CheckDnsReq,
 };
 use rustls::server::ResolvesServerCert;
 use std::{
     net::{Ipv6Addr, SocketAddr, SocketAddrV6},
     sync::Arc,
-    time::Duration,
 };
 use tokio::sync::mpsc;
 
@@ -67,7 +66,7 @@ impl LandscapeDnsService {
                 0,
                 0,
             )),
-            handshake_timeout: Duration::from_secs(5),
+            timeouts: DohTimeouts::default(),
             server_cert_resolver: Arc::new(cert_service.api_tls_resolver())
                 as Arc<dyn ResolvesServerCert>,
             dns_hostname: None,
