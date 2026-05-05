@@ -50,6 +50,7 @@ tower-http = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+tempfile = { workspace = true }
 
 bollard = { workspace = true }
 

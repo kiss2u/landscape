@@ -33,6 +33,7 @@ use crate::route::wan::RouteWanServiceConfig;
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 pub struct InitConfig {
+    pub version: String,
     pub config: LandscapeConfig,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ifaces: Vec<NetworkIfaceConfig>,
@@ -99,6 +100,26 @@ pub struct InitConfig {
 #[cfg(test)]
 mod tests {
     use super::InitConfig;
+    use crate::VERSION;
+
+    #[test]
+    fn deserialize_init_config_version() {
+        let config: InitConfig = toml::from_str(&format!(
+            r#"
+                version = "{VERSION}"
+            "#
+        ))
+        .unwrap();
+
+        assert_eq!(config.version, VERSION);
+    }
+
+    #[test]
+    fn deserialize_legacy_init_config_defaults_empty_version() {
+        let config: InitConfig = toml::from_str("").unwrap();
+
+        assert_eq!(config.version, "");
+    }
 
     #[test]
     fn deserialize_v2_lan_ipv6s_without_conversion() {

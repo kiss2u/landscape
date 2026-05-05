@@ -14,6 +14,7 @@ import type {
 } from "@landscape-router/types/api/schemas";
 import {
   exportInitConfig,
+  importInitConfig,
   getUiConfigFast,
   getUiConfig,
   updateUiConfig,
@@ -36,16 +37,15 @@ interface UpdateDnsConfigRequest {
 
 export async function get_init_config(): Promise<void> {
   try {
-    const jsonStr = await exportInitConfig();
-
-    const filename = "landscape_init.toml";
-
-    const blob = new Blob([jsonStr], { type: "application/octet-stream" });
+    const init_config = await exportInitConfig();
+    const blob = new Blob([init_config.content], {
+      type: "text/plain;charset=utf-8",
+    });
     const url = window.URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = init_config.filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -54,6 +54,10 @@ export async function get_init_config(): Promise<void> {
   } catch (error) {
     console.error("下载配置失败", error);
   }
+}
+
+export async function import_init_config(file: File, upload_only: boolean) {
+  return await importInitConfig({ file }, { upload_only });
 }
 
 export async function get_ui_config(): Promise<LandscapeUIConfig> {

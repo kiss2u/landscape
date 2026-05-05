@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 use landscape_common::api_response::LandscapeApiResp as CommonLandscapeApiResp;
 use landscape_common::cert::CertError;
+use landscape_common::config::InitConfigError;
 use landscape_common::dhcp::DhcpError;
 use landscape_common::dns::check::DnsCheckError;
 use landscape_common::dns::redirect::DnsRedirectError;
@@ -63,6 +64,8 @@ pub enum LandscapeApiError {
     Docker(#[from] DockerError),
     #[error(transparent)]
     Gateway(#[from] GatewayError),
+    #[error(transparent)]
+    InitConfig(#[from] InitConfigError),
     #[error("gateway is not supported on this target architecture")]
     GatewayUnsupportedTarget,
 
@@ -96,6 +99,7 @@ impl LandscapeApiError {
             Self::Auth(e) => e.error_id(),
             Self::Docker(e) => e.error_id(),
             Self::Gateway(e) => e.error_id(),
+            Self::InitConfig(e) => e.error_id(),
             Self::GatewayUnsupportedTarget => "gateway.unsupported_target",
             Self::Internal(e) => match e {
                 LdError::ConfigConflict => "config.conflict",
@@ -126,6 +130,7 @@ impl LandscapeApiError {
             Self::Auth(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::Docker(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::Gateway(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
+            Self::InitConfig(e) => StatusCode::from_u16(e.http_status_code()).unwrap(),
             Self::GatewayUnsupportedTarget => StatusCode::NOT_IMPLEMENTED,
             Self::Internal(e) => match e {
                 LdError::ConfigConflict => StatusCode::CONFLICT,
@@ -156,6 +161,7 @@ impl LandscapeApiError {
             Self::Auth(e) => e.error_args(),
             Self::Docker(e) => e.error_args(),
             Self::Gateway(e) => e.error_args(),
+            Self::InitConfig(e) => e.error_args(),
             Self::GatewayUnsupportedTarget
             | Self::Internal(_)
             | Self::JsonError(_)

@@ -1,11 +1,13 @@
 use std::time::Duration;
 
-use crate::repository::Repository;
 use landscape_common::{
     config::{InitConfig, StoreRuntimeConfig},
-    error::LdResult,
+    error::{LdError, LdResult},
 };
-use sea_orm::{Database, DatabaseConnection};
+use sea_orm::{
+    ActiveModelTrait, Database, DatabaseConnection, DatabaseTransaction, EntityTrait,
+    TransactionTrait,
+};
 
 use migration::{Migrator, MigratorTrait};
 
@@ -74,6 +76,20 @@ impl LandscapeDBServiceProvider {
         Migrator::up(&database, None).await.unwrap();
         Self { database }
     }
+
+    pub async fn validate_init_config_can_import(config: InitConfig) -> LdResult<()> {
+        Self::mem_test_db().await.truncate_and_fit_from(Some(config)).await
+    }
+}
+
+macro_rules! truncate_tables_reverse {
+    ($txn:expr,) => {};
+    ($txn:expr, $store_name:ident : ($repo_type:ty, $init_field:ident), $($rest:tt)*) => {{
+        truncate_tables_reverse!($txn, $($rest)*);
+        <<$repo_type as crate::repository::Repository>::Entity as EntityTrait>::delete_many()
+            .exec($txn)
+            .await?;
+    }};
 }
 
 macro_rules! define_store {
@@ -86,16 +102,62 @@ macro_rules! define_store {
                 }
             )*
 
-            pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) {
-                if let Some(cfg) = config {
-                    $(
-                        let store = self.$store_name();
-                        store.truncate_table().await.unwrap();
-                        for each_config in cfg.$init_field {
-                            store.set_model(each_config).await.unwrap();
-                        }
-                    )*
+            async fn import_init_config_in_transaction(
+                txn: &DatabaseTransaction,
+                cfg: InitConfig,
+            ) -> LdResult<()> {
+                truncate_tables_reverse!(
+                    txn,
+                    $( $store_name : ($repo_type, $init_field), )*
+                );
+
+                $(
+                    for each_config in cfg.$init_field {
+                        let active_model: <$repo_type as crate::repository::Repository>::ActiveModel =
+                            each_config.into();
+                        active_model.insert(txn).await?;
+                    }
+                )*
+
+                Ok(())
+            }
+
+            pub async fn truncate_and_fit_from_before_commit<F>(
+                &self,
+                config: InitConfig,
+                before_commit: F,
+            ) -> LdResult<()>
+            where
+                F: FnOnce() -> LdResult<()>,
+            {
+                let txn = self.database.begin().await?;
+                let result = async {
+                    Self::import_init_config_in_transaction(&txn, config).await?;
+                    before_commit()?;
+                    Ok::<(), LdError>(())
                 }
+                .await;
+
+                match result {
+                    Ok(()) => {
+                        txn.commit().await?;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        if let Err(rollback_err) = txn.rollback().await {
+                            tracing::warn!("failed to rollback init config import transaction: {rollback_err}");
+                        }
+                        Err(e)
+                    }
+                }
+            }
+
+            pub async fn truncate_and_fit_from(&self, config: Option<InitConfig>) -> LdResult<()> {
+                if let Some(cfg) = config {
+                    self.truncate_and_fit_from_before_commit(cfg, || Ok(())).await?;
+                }
+
+                Ok(())
             }
         }
     }
@@ -136,7 +198,10 @@ define_store!(
 
 #[cfg(test)]
 mod tests {
-    use landscape_common::config::StoreRuntimeConfig;
+    use landscape_common::config::{InitConfig, StoreRuntimeConfig};
+    use landscape_common::database::LandscapeStore;
+    use landscape_common::error::LdError;
+    use landscape_common::iface::config::{IfaceZoneType, NetworkIfaceConfig};
 
     use crate::provider::LandscapeDBServiceProvider;
 
@@ -148,5 +213,85 @@ mod tests {
             database_path: "sqlite://../db.sqlite?mode=rwc".to_string(),
         };
         let _provider = LandscapeDBServiceProvider::new(&config).await;
+    }
+
+    #[tokio::test]
+    pub async fn truncate_and_fit_from_none_returns_ok() {
+        let provider = LandscapeDBServiceProvider::mem_test_db().await;
+
+        provider.truncate_and_fit_from(None).await.unwrap();
+    }
+
+    #[tokio::test]
+    pub async fn truncate_and_fit_from_returns_error_on_insert_failure() {
+        let provider = LandscapeDBServiceProvider::mem_test_db().await;
+        let duplicate =
+            NetworkIfaceConfig::crate_bridge("dup0".to_string(), Some(IfaceZoneType::Lan));
+        let init_config = InitConfig {
+            ifaces: vec![duplicate.clone(), duplicate],
+            ..Default::default()
+        };
+
+        let result = provider.truncate_and_fit_from(Some(init_config)).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    pub async fn truncate_and_fit_from_imports_valid_config() {
+        let provider = LandscapeDBServiceProvider::mem_test_db().await;
+        let iface =
+            NetworkIfaceConfig::crate_bridge("br-test".to_string(), Some(IfaceZoneType::Lan));
+        let init_config = InitConfig { ifaces: vec![iface], ..Default::default() };
+
+        provider.truncate_and_fit_from(Some(init_config)).await.unwrap();
+
+        let imported = provider.iface_store().list().await.unwrap();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].name, "br-test");
+    }
+
+    #[tokio::test]
+    pub async fn truncate_and_fit_from_rolls_back_when_before_commit_fails() {
+        let provider = LandscapeDBServiceProvider::mem_test_db().await;
+        let original =
+            NetworkIfaceConfig::crate_bridge("br-original".to_string(), Some(IfaceZoneType::Lan));
+        provider
+            .truncate_and_fit_from(Some(InitConfig {
+                ifaces: vec![original],
+                ..Default::default()
+            }))
+            .await
+            .unwrap();
+
+        let replacement = NetworkIfaceConfig::crate_bridge(
+            "br-replacement".to_string(),
+            Some(IfaceZoneType::Lan),
+        );
+        let result = provider
+            .truncate_and_fit_from_before_commit(
+                InitConfig { ifaces: vec![replacement], ..Default::default() },
+                || Err(LdError::ConfigError("config write failed".to_string())),
+            )
+            .await;
+
+        assert!(result.is_err());
+        let imported = provider.iface_store().list().await.unwrap();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].name, "br-original");
+    }
+
+    #[tokio::test]
+    pub async fn validate_init_config_can_import_returns_error_on_invalid_config() {
+        let duplicate =
+            NetworkIfaceConfig::crate_bridge("dup0".to_string(), Some(IfaceZoneType::Lan));
+        let init_config = InitConfig {
+            ifaces: vec![duplicate.clone(), duplicate],
+            ..Default::default()
+        };
+
+        let result = LandscapeDBServiceProvider::validate_init_config_can_import(init_config).await;
+
+        assert!(result.is_err());
     }
 }

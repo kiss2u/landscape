@@ -84,6 +84,11 @@ export default {
     "SNI passthrough rules do not support request header injection or client IP forwarding",
   "gateway.invalid_header_name": "Invalid request header name '{name}'",
   "gateway.invalid_header_value": "Invalid request header value for '{name}'",
+  "init_config.file_not_found": "Init file not found in upload",
+  "init_config.file_read_error": "Failed to read init file",
+  "init_config.invalid": "Invalid init file: {reason}",
+  "init_config.version_mismatch":
+    "Init file version mismatch. File version: {file_version}, current version: {current_version}",
   "config.conflict":
     "Configuration has been modified. Please refresh and try again",
   "internal.error": "Internal server error",

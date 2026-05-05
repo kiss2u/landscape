@@ -427,10 +427,10 @@ mod tests {
         let targets =
             build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES).unwrap();
 
-        assert_eq!(targets.first().unwrap().version, "0.18.3");
-        assert_eq!(targets.first().unwrap().display_label, "previous release 0.18.3");
-        assert_eq!(targets.get(1).unwrap().display_label, "older release 0.17.6");
-        assert_eq!(targets.first().unwrap().steps, 3);
+        assert_eq!(targets.first().unwrap().version, "0.19.0");
+        assert_eq!(targets.first().unwrap().display_label, "current release boundary 0.19.0");
+        assert_eq!(targets.get(1).unwrap().display_label, "previous release 0.18.3");
+        assert_eq!(targets.first().unwrap().steps, 2);
     }
 
     #[test]
@@ -442,17 +442,16 @@ mod tests {
         let target = build_rollback_targets(&current_state, &all_migrations, RELEASE_BOUNDARIES)
             .unwrap()
             .into_iter()
-            .find(|target| target.version == "0.18.3")
+            .find(|target| target.version == "0.19.0")
             .unwrap();
 
         let plan = build_rollback_plan(&current_state, &target, &all_migrations).unwrap();
-        assert_eq!(plan.steps, 3);
+        assert_eq!(plan.steps, 2);
         assert_eq!(
             plan.rollback_migrations,
             vec![
-                "m20260502_080437_enrolled_device_dhcp_options".to_string(),
-                "m20260502_073125_dhcp_v4_custom_options".to_string(),
-                "m20260419_085215_flow_target_weights".to_string(),
+                "m20260504_000000_flow_device_match".to_string(),
+                "m20260503_213507_static_nat_lan_target".to_string(),
             ]
         );
         assert!(!plan.rollback_migrations.contains(&target.terminal_migration.to_string()));

@@ -1,9 +1,9 @@
 use std::{fs::OpenOptions, io::Write, path::Path};
 
 use landscape_common::{
-    config::{InitConfig, LandscapeConfig},
+    config::{InitConfig, InitConfigError, LandscapeConfig},
     error::{LdError, LdResult},
-    INIT_FILE_NAME, INIT_LOCK_FILE_NAME, LAND_CONFIG,
+    INIT_FILE_NAME, INIT_LOCK_FILE_NAME, LAND_CONFIG, VERSION,
 };
 
 pub mod log;
@@ -30,20 +30,20 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
 
     if !lock_path.exists() {
         tracing::info!("init lock file not exist, do init");
-        let mut file =
-            OpenOptions::new().write(true).truncate(true).create(true).open(&lock_path)?;
-        file.write_all(INIT_LOCK_FILE_CONTENT.as_bytes())?;
-
-        drop(file);
         let config_path = home_path.as_ref().join(INIT_FILE_NAME);
         let config = if config_path.exists() && config_path.is_file() {
-            let config_raw = std::fs::read_to_string(config_path).unwrap();
-            let init_config: InitConfig = toml::from_str(&config_raw).unwrap();
-            write_config_toml(home_path, init_config.config.clone())?;
+            let config_raw = std::fs::read_to_string(&config_path).map_err(|e| {
+                LdError::Boot(format!("failed to read init config {}: {e}", config_path.display()))
+            })?;
+            let init_config: InitConfig = toml::from_str(&config_raw).map_err(|e| {
+                LdError::Boot(format!("failed to parse init config {}: {e}", config_path.display()))
+            })?;
+            check_init_config_version(&init_config)?;
             init_config
         } else {
             InitConfig::default()
         };
+
         return Ok(Some(config));
     }
 
@@ -55,9 +55,126 @@ pub fn boot_check<P: AsRef<Path>>(home_path: P) -> LdResult<Option<InitConfig>> 
     Err(LdError::Boot("check boot lock file faile: is not a file".to_string()))
 }
 
-fn write_config_toml<P: AsRef<Path>>(home_path: P, config: LandscapeConfig) -> LdResult<()> {
-    let config_path = home_path.as_ref().join(LAND_CONFIG);
-    let mut file = OpenOptions::new().write(true).truncate(true).create(true).open(&config_path)?;
-    file.write_all(toml::to_string_pretty(&config).unwrap().as_bytes())?;
+pub fn check_init_config_version(init_config: &InitConfig) -> LdResult<()> {
+    validate_init_config_version(init_config).map_err(|e| LdError::Boot(e.to_string()))
+}
+
+pub fn write_init_lock<P: AsRef<Path>>(home_path: P) -> LdResult<()> {
+    let lock_path = home_path.as_ref().join(INIT_LOCK_FILE_NAME);
+    let mut file = OpenOptions::new().write(true).truncate(true).create(true).open(&lock_path)?;
+    file.write_all(INIT_LOCK_FILE_CONTENT.as_bytes())?;
     Ok(())
+}
+
+/// Init config backups are intentionally version-locked.
+/// Files exported by the current release are only supported by the same release.
+/// Older backups are rejected instead of being migrated implicitly.
+pub fn validate_init_config_version(init_config: &InitConfig) -> Result<(), InitConfigError> {
+    if init_config.version != VERSION {
+        return Err(InitConfigError::VersionMismatch {
+            file_version: init_config.version.clone(),
+            current_version: VERSION.to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+pub fn write_config_toml<P: AsRef<Path>>(home_path: P, config: LandscapeConfig) -> LdResult<()> {
+    let config_path = home_path.as_ref().join(LAND_CONFIG);
+    let temp_path = home_path.as_ref().join(format!(
+        ".{LAND_CONFIG}.tmp.{}.{}",
+        std::process::id(),
+        landscape_common::utils::time::get_f64_timestamp()
+    ));
+    let write_result = (|| -> LdResult<()> {
+        let mut file =
+            OpenOptions::new().write(true).truncate(true).create_new(true).open(&temp_path)?;
+        file.write_all(toml::to_string_pretty(&config).unwrap().as_bytes())?;
+        file.sync_all()?;
+        std::fs::rename(&temp_path, &config_path)?;
+        Ok(())
+    })();
+
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    write_result?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use landscape_common::{INIT_FILE_NAME, INIT_LOCK_FILE_NAME, LAND_CONFIG, VERSION};
+
+    use crate::boot::{boot_check, write_config_toml, write_init_lock};
+
+    #[test]
+    fn boot_check_reads_init_config_without_writing_files_when_version_matches() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let init_path = temp_dir.path().join(INIT_FILE_NAME);
+        std::fs::write(&init_path, format!("version = \"{VERSION}\"\n")).unwrap();
+
+        let result = boot_check(temp_dir.path()).unwrap();
+
+        assert!(result.is_some());
+        assert!(!temp_dir.path().join(LAND_CONFIG).exists());
+        assert!(!temp_dir.path().join(INIT_LOCK_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn boot_check_rejects_mismatched_init_version_without_lock() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let init_path = temp_dir.path().join(INIT_FILE_NAME);
+        std::fs::write(&init_path, "version = \"0.0.0\"\n").unwrap();
+
+        let result = boot_check(temp_dir.path());
+
+        assert!(result.is_err());
+        assert!(!temp_dir.path().join(LAND_CONFIG).exists());
+        assert!(!temp_dir.path().join(INIT_LOCK_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn boot_check_rejects_invalid_init_config_without_panic() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let init_path = temp_dir.path().join(INIT_FILE_NAME);
+        std::fs::write(&init_path, "version = [\n").unwrap();
+
+        let result = boot_check(temp_dir.path());
+
+        assert!(result.is_err());
+        assert!(!temp_dir.path().join(LAND_CONFIG).exists());
+        assert!(!temp_dir.path().join(INIT_LOCK_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn boot_check_default_init_without_lock() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let result = boot_check(temp_dir.path()).unwrap();
+
+        assert!(result.is_some());
+        assert!(!temp_dir.path().join(LAND_CONFIG).exists());
+        assert!(!temp_dir.path().join(INIT_LOCK_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn write_init_lock_creates_lock_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        write_init_lock(temp_dir.path()).unwrap();
+
+        assert!(temp_dir.path().join(INIT_LOCK_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn write_config_toml_writes_config_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        write_config_toml(temp_dir.path(), Default::default()).unwrap();
+
+        assert!(temp_dir.path().join(LAND_CONFIG).exists());
+    }
 }

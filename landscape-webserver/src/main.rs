@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -16,7 +16,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use colored::Colorize;
 
 use landscape::{
-    boot::{boot_check, log::init_logger},
+    boot::{boot_check, log::init_logger, write_config_toml, write_init_lock},
     cert::build_tls_server_config_with_shared_resolver,
     cert::{account_service::CertAccountService, order_service::CertService},
     dhcp_server::dhcp_v4_service::DHCPv4ServerManagerService,
@@ -62,7 +62,10 @@ use landscape_common::{
     service::controller::ControllerService,
     VERSION,
 };
-use landscape_common::{config::AuthRuntimeConfig, dhcp::v4_server::config::DHCPv4ServiceConfig};
+use landscape_common::{
+    config::{AuthRuntimeConfig, InitConfig},
+    dhcp::v4_server::config::DHCPv4ServiceConfig,
+};
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::repository::Repository;
 use tokio::runtime::Builder as RuntimeBuilder;
@@ -304,7 +307,11 @@ fn log_startup_phase(phase: &str, phase_start: Instant, startup_start: Instant) 
     );
 }
 
-async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
+async fn prepare_startup_init(
+    home_path: &Path,
+    config: &RuntimeConfig,
+    init_config_to_import: Option<InitConfig>,
+) -> LdResult<LandscapeDBServiceProvider> {
     let startup_start = Instant::now();
 
     macro_rules! startup_phase {
@@ -316,7 +323,10 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         }};
     }
 
-    let need_init_config = startup_phase!("boot_check", boot_check(&home_path)?);
+    let init_file_config_to_persist = init_config_to_import
+        .as_ref()
+        .filter(|init_config| !init_config.version.is_empty())
+        .map(|init_config| init_config.config.clone());
 
     let crypto_provider = rustls::crypto::ring::default_provider();
     crypto_provider.install_default().unwrap();
@@ -326,10 +336,40 @@ async fn run(home_path: PathBuf, config: RuntimeConfig) -> LdResult<()> {
         LandscapeDBServiceProvider::new(&config.store).await
     );
 
-    startup_phase!(
-        "db_store_provider.truncate_and_fit_from",
-        db_store_provider.truncate_and_fit_from(need_init_config).await
-    );
+    if let Some(init_config) = init_config_to_import {
+        startup_phase!("db_store_provider.truncate_and_fit_from", {
+            LandscapeDBServiceProvider::validate_init_config_can_import(init_config.clone())
+                .await?;
+            db_store_provider
+                .truncate_and_fit_from_before_commit(init_config, || {
+                    if let Some(config) = init_file_config_to_persist {
+                        write_config_toml(home_path, config)?;
+                    }
+                    Ok(())
+                })
+                .await?
+        });
+        startup_phase!("write_init_lock", write_init_lock(home_path)?);
+    }
+
+    Ok(db_store_provider)
+}
+
+async fn run_system(
+    home_path: PathBuf,
+    config: RuntimeConfig,
+    db_store_provider: LandscapeDBServiceProvider,
+) -> LdResult<()> {
+    let startup_start = Instant::now();
+
+    macro_rules! startup_phase {
+        ($name:literal, $expr:expr) => {{
+            let phase_start = Instant::now();
+            let value = $expr;
+            log_startup_phase($name, phase_start, startup_start);
+            value
+        }};
+    }
 
     // 初始化 App
 
@@ -811,7 +851,15 @@ async fn async_main() -> LdResult<()> {
     let init_exists = home_path.join(landscape_common::INIT_FILE_NAME).exists();
     let db_exists = home_path.join(landscape_common::LANDSCAPE_DB_SQLITE_NAME).exists();
 
-    let config = RuntimeConfig::new((*LAND_ARGS).clone());
+    let args = (*LAND_ARGS).clone();
+    let init_config_to_import = if args.action.is_none() { boot_check(&home_path)? } else { None };
+    let config = RuntimeConfig::new_with_file_config(
+        args.clone(),
+        init_config_to_import
+            .as_ref()
+            .filter(|_| init_exists)
+            .map(|init_config| init_config.config.clone()),
+    );
 
     if let Err(e) = init_logger(config.log.clone()) {
         panic!("init log error: {e:?}");
@@ -819,6 +867,7 @@ async fn async_main() -> LdResult<()> {
 
     landscape_common::utils::time::start_time_sync_service(config.time.clone());
 
+    let mut init_config_to_import = init_config_to_import;
     if config.auto {
         if lock_exists || init_exists || db_exists {
             let mut reasons = vec![];
@@ -838,12 +887,12 @@ async fn async_main() -> LdResult<()> {
             tracing::info!("Auto init skipped: {}.", reasons.join(", "));
         } else {
             do_auto_init(&home_path, &config).await?;
+            init_config_to_import = None;
         }
     }
 
     banner(&config);
 
-    let args = &LAND_ARGS;
     if let Some(action) = &args.action {
         match action {
             LandscapeAction::Db { action, rollback, times } => match action {
@@ -870,13 +919,13 @@ async fn async_main() -> LdResult<()> {
             },
         }
     } else {
-        run(home_path, config).await
+        let db_store_provider =
+            prepare_startup_init(&home_path, &config, init_config_to_import).await?;
+        run_system(home_path, config, db_store_provider).await
     }
 }
 
 async fn do_auto_init(home_path: &PathBuf, config: &RuntimeConfig) -> LdResult<()> {
-    use std::io::Write;
-
     let mut interface_map = HashMap::new();
     let devs = landscape::get_all_devices().await;
     tracing::info!("Discovered {} total interfaces.", devs.len());
@@ -897,9 +946,7 @@ async fn do_auto_init(home_path: &PathBuf, config: &RuntimeConfig) -> LdResult<(
     }
 
     // 创建 lock 文件 避免重复进行初始化
-    let lock_path = home_path.join(landscape_common::INIT_LOCK_FILE_NAME);
-    let mut file = std::fs::File::create(lock_path)?;
-    file.write_all(landscape::boot::INIT_LOCK_FILE_CONTENT.as_bytes())?;
+    write_init_lock(home_path)?;
 
     // 初始化 br_lan 的服务
     let dhcp_store = db_store_provider.dhcp_v4_server_store();

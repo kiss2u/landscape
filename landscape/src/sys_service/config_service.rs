@@ -31,6 +31,7 @@ impl LandscapeConfigService {
     pub async fn export_init_config(&self) -> InitConfig {
         let config = self.config.load();
         InitConfig {
+            version: landscape_common::VERSION.to_string(),
             config: config.file_config.clone(),
             ifaces: self.store.iface_store().list().await.unwrap(),
             ipconfigs: self.store.iface_ip_service_store().list().await.unwrap(),

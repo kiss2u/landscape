@@ -80,6 +80,11 @@ export default {
     "SNI 透传规则不支持请求头注入或客户端 IP 透传",
   "gateway.invalid_header_name": "请求头名称 '{name}' 无效",
   "gateway.invalid_header_value": "请求头 '{name}' 的值无效",
+  "init_config.file_not_found": "上传中未找到 Init 文件",
+  "init_config.file_read_error": "Init 文件读取失败",
+  "init_config.invalid": "Init 文件格式无效: {reason}",
+  "init_config.version_mismatch":
+    "Init 文件版本不匹配，文件版本: {file_version}，当前版本: {current_version}",
   "config.conflict": "配置已被他人修改，请刷新后重试",
   "internal.error": "服务器内部错误",
   "request.invalid_json": "请求数据格式错误",
