@@ -17,6 +17,7 @@ use landscape_ebpf::tproxy::landscape_tproxy::*;
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::TC_INGRESS;
+use tracing_subscriber::filter::LevelFilter;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ValueEnum, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -42,6 +43,9 @@ pub struct CmdParams {
 
     #[arg(long = "sock_path", env = "LAND_SOCK_PATH")]
     sock_path: Option<PathBuf>,
+
+    #[arg(long = "log-level", default_value_t = LevelFilter::INFO, env = "LAND_REDIRECT_LOG_LEVEL")]
+    log_level: LevelFilter,
 }
 
 // fn bump_memlock_rlimit() {
@@ -56,11 +60,12 @@ pub struct CmdParams {
 /// cargo build --package landscape-ebpf --bin redirect_pkg_handler
 #[tokio::main]
 async fn main() {
-    landscape_common::init_tracing!();
+    let params = CmdParams::parse();
+
+    init_tracing(params.log_level);
     landscape_ebpf::setting_libbpf_log();
 
     // bump_memlock_rlimit();
-    let params = CmdParams::parse();
 
     let container_id = match get_container_id() {
         Some(id) => id,
@@ -130,6 +135,21 @@ async fn main() {
 
     drop(tproxy_ingress_hook);
     // drop(tproxy_egress_hook);
+}
+
+fn init_tracing(log_level: LevelFilter) {
+    static TRACING_INIT: std::sync::Once = std::sync::Once::new();
+    static TRACING_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
+        std::sync::OnceLock::new();
+
+    TRACING_INIT.call_once(|| {
+        let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
+        let _ = TRACING_GUARD.set(guard);
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(log_level)
+            .with_writer(non_blocking)
+            .try_init();
+    });
 }
 
 fn get_first_non_loopback_with_peer() -> Result<(String, i32, i32), io::Error> {
