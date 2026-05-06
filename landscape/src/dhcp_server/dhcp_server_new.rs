@@ -31,6 +31,8 @@ const IP_EXPIRE_INTERVAL: u64 = 60 * 10;
 #[instrument(skip(config, service_status, assigned_ips))]
 pub async fn dhcp_v4_server(
     iface_name: String,
+    iface_ifindex: u32,
+    iface_mac: Option<MacAddr>,
     config: DHCPv4ServerConfig,
     enrolled_devices: Vec<EnrolledDevice>,
     service_status: WatchService,
@@ -122,7 +124,13 @@ pub async fn dhcp_v4_server(
             message = message_rx.recv() => {
                 match message {
                     Some(message) => {
-                        let need_update_data = handle_dhcp_message(&mut dhcp_server, &send_socket, message).await;
+                        let need_update_data = handle_dhcp_message(
+                            &mut dhcp_server,
+                            &send_socket,
+                            iface_ifindex,
+                            iface_mac,
+                            message,
+                        ).await;
                         if need_update_data {
                             update_assign_info(assigned_ips.clone(), dhcp_server.get_offered_info()).await;
                         }
@@ -167,6 +175,8 @@ pub async fn dhcp_v4_server(
 async fn handle_dhcp_message(
     dhcp_server: &mut DHCPv4Server,
     send_socket: &Arc<UdpSocket>,
+    iface_ifindex: u32,
+    iface_mac: Option<MacAddr>,
     (message, msg_addr): (Vec<u8>, SocketAddr),
 ) -> bool {
     let dhcp = DhcpEthFrame::new(&message);
@@ -194,7 +204,7 @@ async fn handle_dhcp_message(
                     return true;
                 }
                 DhcpOptionMessageType::Request => {
-                    let Some(payload) = gen_ack(dhcp_server, dhcp) else {
+                    let Some(payload) = gen_ack(dhcp_server, dhcp, iface_ifindex, iface_mac) else {
                         return false;
                     };
 
@@ -792,7 +802,12 @@ pub fn gen_offer(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpE
     }
 }
 
-fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFrame> {
+fn gen_ack(
+    server: &mut DHCPv4Server,
+    frame: DhcpEthFrame,
+    iface_ifindex: u32,
+    iface_mac: Option<MacAddr>,
+) -> Option<DhcpEthFrame> {
     let mut options = vec![];
     let request_params = if let Some(request_params) = frame.options.has_option(55) {
         request_params
@@ -872,6 +887,23 @@ fn gen_ack(server: &mut DHCPv4Server, frame: DhcpEthFrame) -> Option<DhcpEthFram
         magic_cookie: frame.magic_cookie,
         options,
     };
+
+    if !is_nak {
+        if let Some(dev_mac) = iface_mac {
+            if let Err(e) = landscape_ebpf::base::ip_mac::upsert_ipv4_ip_mac(
+                iface_ifindex,
+                client_addr,
+                frame.chaddr,
+                dev_mac,
+            ) {
+                tracing::warn!(
+                    "failed to prewarm ip_mac_v4 for DHCP lease {client_addr} -> {}: {e}",
+                    frame.chaddr
+                );
+            }
+        }
+    }
+
     Some(offer)
 }
 

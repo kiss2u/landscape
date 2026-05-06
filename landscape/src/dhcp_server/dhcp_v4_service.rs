@@ -131,9 +131,13 @@ impl ServiceStarterTrait for DHCPv4ServerStarter {
             let stop_dhcp_server_child = stop_dhcp_server.child_token();
             let server_addr = config.config.server_ip_addr;
             let network_mask = config.config.network_mask;
+            let iface_ifindex = iface.index;
+            let iface_mac = iface.mac;
             tokio::spawn(async move {
                 crate::dhcp_server::dhcp_server_new::dhcp_v4_server(
                     config.iface_name,
+                    iface_ifindex,
+                    iface_mac,
                     config.config,
                     bindings,
                     status,

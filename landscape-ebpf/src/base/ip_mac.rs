@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::mem::MaybeUninit;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 use landscape_common::net::MacAddr;
 use libbpf_rs::skel::{OpenSkel, SkelBuilder};
-use libbpf_rs::{ErrorKind, MapCore, MapFlags};
+use libbpf_rs::{ErrorKind, MapCore, MapFlags, MapHandle};
 use tokio::sync::oneshot;
 
 pub(crate) mod neigh_update {
@@ -17,10 +17,14 @@ pub(crate) mod neigh_update {
 use neigh_update::*;
 
 use crate::base::ip_mac::neigh_update::types::mac_key_v4;
+use crate::base::ip_mac::neigh_update::types::mac_key_v6;
 use crate::base::ip_mac::neigh_update::types::mac_value_v4;
+use crate::base::ip_mac::neigh_update::types::mac_value_v6;
 use crate::{bpf_error::LdEbpfResult, landscape::pin_and_reuse_map, MAP_PATHS};
 
 const ARP_SYNC_INTERVAL_SECS: u64 = 10;
+const ETH_P_IPV4_BE: u16 = 0x0008;
+const ETH_P_IPV6_BE: u16 = 0xdd86;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 struct ArpSyncStats {
@@ -102,6 +106,80 @@ pub fn sync_arp_table_to_ebpf_map() {
             tracing::error!("reconcile ip_mac_v4 map error: {e}");
         }
     }
+}
+
+pub fn upsert_ipv4_ip_mac(
+    ifindex: u32,
+    ip_addr: Ipv4Addr,
+    mac: MacAddr,
+    dev_mac: MacAddr,
+) -> LdEbpfResult<()> {
+    let ip_mac_v4 = MapHandle::from_pinned_path(&MAP_PATHS.ip_mac_v4)?;
+    upsert_ipv4_ip_mac_in_map(&ip_mac_v4, ifindex, ip_addr, mac, dev_mac)
+}
+
+pub fn upsert_ipv6_ip_mac(
+    ifindex: u32,
+    ip_addr: Ipv6Addr,
+    mac: MacAddr,
+    dev_mac: MacAddr,
+) -> LdEbpfResult<()> {
+    let ip_mac_v6 = MapHandle::from_pinned_path(&MAP_PATHS.ip_mac_v6)?;
+    upsert_ipv6_ip_mac_in_map(&ip_mac_v6, ifindex, ip_addr, mac, dev_mac)
+}
+
+fn upsert_ipv4_ip_mac_in_map<T>(
+    map: &T,
+    ifindex: u32,
+    ip_addr: Ipv4Addr,
+    mac: MacAddr,
+    dev_mac: MacAddr,
+) -> LdEbpfResult<()>
+where
+    T: MapCore,
+{
+    let mut key = mac_key_v4::default();
+    key.addr = ip_addr.to_bits().to_be();
+
+    let mut value = mac_value_v4::default();
+    value.ifindex = ifindex;
+    value.proto = ETH_P_IPV4_BE;
+    value.mac = mac.octets();
+    value.dev_mac = dev_mac.octets();
+
+    map.update(
+        unsafe { plain::as_bytes(&key) },
+        unsafe { plain::as_bytes(&value) },
+        MapFlags::ANY,
+    )?;
+    Ok(())
+}
+
+fn upsert_ipv6_ip_mac_in_map<T>(
+    map: &T,
+    ifindex: u32,
+    ip_addr: Ipv6Addr,
+    mac: MacAddr,
+    dev_mac: MacAddr,
+) -> LdEbpfResult<()>
+where
+    T: MapCore,
+{
+    let mut key = mac_key_v6::default();
+    key.addr.bytes = ip_addr.to_bits().to_be_bytes();
+
+    let mut value = mac_value_v6::default();
+    value.ifindex = ifindex;
+    value.proto = ETH_P_IPV6_BE;
+    value.mac = mac.octets();
+    value.dev_mac = dev_mac.octets();
+
+    map.update(
+        unsafe { plain::as_bytes(&key) },
+        unsafe { plain::as_bytes(&value) },
+        MapFlags::ANY,
+    )?;
+    Ok(())
 }
 
 fn reconcile_arp_entries_in_map<T>(
@@ -264,6 +342,24 @@ mod tests {
         .expect("create ip_mac test map")
     }
 
+    fn create_test_ip_mac_v6_map() -> MapHandle {
+        #[allow(clippy::needless_update)]
+        let opts = libbpf_sys::bpf_map_create_opts {
+            sz: std::mem::size_of::<libbpf_sys::bpf_map_create_opts>() as libbpf_sys::size_t,
+            ..Default::default()
+        };
+
+        MapHandle::create(
+            MapType::Hash,
+            Option::<&str>::None,
+            std::mem::size_of::<mac_key_v6>() as u32,
+            std::mem::size_of::<mac_value_v6>() as u32,
+            128,
+            &opts,
+        )
+        .expect("create ip_mac_v6 test map")
+    }
+
     fn make_entry(ip: &str, mac: &str, dev_mac: &str, ifindex: u32) -> (mac_key_v4, mac_value_v4) {
         let mut key = mac_key_v4::default();
         key.addr = Ipv4Addr::from_str(ip).unwrap().to_bits().to_be();
@@ -299,6 +395,57 @@ mod tests {
         map.lookup(unsafe { plain::as_bytes(&key) }, MapFlags::ANY)
             .expect("lookup ip_mac entry")
             .map(|value| read_unaligned::<mac_value_v4>(&value).expect("decode ip_mac entry"))
+    }
+
+    fn lookup_entry_v6<T>(map: &T, ip: &str) -> Option<mac_value_v6>
+    where
+        T: MapCore,
+    {
+        let mut key = mac_key_v6::default();
+        key.addr.bytes = std::net::Ipv6Addr::from_str(ip).unwrap().to_bits().to_be_bytes();
+
+        map.lookup(unsafe { plain::as_bytes(&key) }, MapFlags::ANY)
+            .expect("lookup ip_mac_v6 entry")
+            .map(|value| read_unaligned::<mac_value_v6>(&value).expect("decode ip_mac_v6 entry"))
+    }
+
+    #[test]
+    fn upsert_ipv4_ip_mac_in_map_stores_client_and_device_mac() {
+        let map = create_test_ip_mac_map();
+        let client_mac = MacAddr::from_str("02:11:22:33:44:55").unwrap();
+        let dev_mac = MacAddr::from_str("02:aa:bb:cc:dd:ee").unwrap();
+
+        upsert_ipv4_ip_mac_in_map(&map, 9, Ipv4Addr::new(10, 0, 0, 8), client_mac, dev_mac)
+            .expect("upsert ipv4 ip_mac entry");
+
+        let stored = lookup_entry(&map, "10.0.0.8").expect("entry missing after ipv4 upsert");
+        assert_eq!(stored.ifindex, 9);
+        assert_eq!(stored.mac, client_mac.octets());
+        assert_eq!(stored.dev_mac, dev_mac.octets());
+        assert_eq!(stored.proto, ETH_P_IPV4_BE);
+    }
+
+    #[test]
+    fn upsert_ipv6_ip_mac_in_map_stores_client_and_device_mac() {
+        let map = create_test_ip_mac_v6_map();
+        let client_mac = MacAddr::from_str("02:66:77:88:99:aa").unwrap();
+        let dev_mac = MacAddr::from_str("02:aa:bb:cc:dd:ef").unwrap();
+
+        upsert_ipv6_ip_mac_in_map(
+            &map,
+            11,
+            std::net::Ipv6Addr::from_str("2001:db8::20").unwrap(),
+            client_mac,
+            dev_mac,
+        )
+        .expect("upsert ipv6 ip_mac entry");
+
+        let stored =
+            lookup_entry_v6(&map, "2001:db8::20").expect("entry missing after ipv6 upsert");
+        assert_eq!(stored.ifindex, 11);
+        assert_eq!(stored.mac, client_mac.octets());
+        assert_eq!(stored.dev_mac, dev_mac.octets());
+        assert_eq!(stored.proto, ETH_P_IPV6_BE);
     }
 
     #[test]

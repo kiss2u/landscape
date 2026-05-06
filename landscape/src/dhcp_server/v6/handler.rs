@@ -158,6 +158,7 @@ pub async fn dhcp_v6_server(
                             &mut dhcp_server,
                             &send_socket,
                             &server_duid,
+                            mac,
                             (msg_bytes, msg_addr),
                             &ra_pd_runtime_sources,
                             &ra_static_infos,
@@ -228,10 +229,25 @@ async fn update_assigned_info(assigned_info: Arc<RwLock<DHCPv6OfferInfo>>, info:
     }
 }
 
+fn assigned_client_na_ips(
+    server: &DHCPv6Server,
+    client_duid: &[u8],
+    na_prefixes: &[(Ipv6Addr, u8)],
+) -> Option<Vec<Ipv6Addr>> {
+    let cache = server.na_offered.get(client_duid)?;
+    Some(
+        na_prefixes
+            .iter()
+            .map(|(prefix, prefix_len)| combine_prefix_suffix(*prefix, *prefix_len, cache.suffix))
+            .collect(),
+    )
+}
+
 async fn handle_dhcpv6_message(
     server: &mut DHCPv6Server,
     send_socket: &Arc<UdpSocket>,
     server_duid: &[u8],
+    dev_mac: MacAddr,
     (msg_bytes, msg_addr): (Vec<u8>, SocketAddr),
     runtime_sources: &[Arc<ArcSwap<Option<ICMPv6ConfigInfo>>>],
     static_infos: &[ICMPv6ConfigInfo],
@@ -405,6 +421,25 @@ async fn handle_dhcpv6_message(
                     let na_prefixes =
                         server.get_qualifying_na_prefixes(runtime_sources, static_infos);
                     if !na_prefixes.is_empty() {
+                        if let Some(client_mac) = mac {
+                            if let Some(ips) =
+                                assigned_client_na_ips(server, &client_duid, &na_prefixes)
+                            {
+                                for ip in ips {
+                                    if let Err(e) = landscape_ebpf::base::ip_mac::upsert_ipv6_ip_mac(
+                                        link_ifindex,
+                                        ip,
+                                        client_mac,
+                                        dev_mac,
+                                    ) {
+                                        tracing::warn!(
+                                            "failed to prewarm ip_mac_v6 for DHCPv6 lease {ip} -> {client_mac}: {e}"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
                         // For Renew: ensure we have a cached address, or re-allocate if needed
                         if !server.na_offered.contains_key(&client_duid) {
                             // Client has no cached address - allocate new one
@@ -965,6 +1000,67 @@ mod tests {
             server.na_offered.contains_key(&client_duid),
             "Client should be in na_offered cache after allocation"
         );
+    }
+
+    #[test]
+    fn test_assigned_client_na_ips_use_cached_suffix() {
+        let server_config = DHCPv6ServerConfig {
+            enable: true,
+            ia_na: Some(DHCPv6IANAConfig {
+                max_prefix_len: 64,
+                pool_start: 256,
+                pool_end: Some(512),
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+            ia_pd: None,
+        };
+
+        let mut server = DHCPv6Server::init(&server_config, std::collections::HashMap::new());
+        let client_duid = b"test-client-current-ip".to_vec();
+        let mac = MacAddr::from([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]);
+        server.offer_na_suffix(&client_duid, Some(mac), None);
+
+        let prefix = Ipv6Addr::new(0xfd11, 0x2222, 0x3333, 0x4444, 0, 0, 0, 0);
+        let cache = server.na_offered.get(&client_duid).expect("missing NA cache entry");
+        let expected = combine_prefix_suffix(prefix, 64, cache.suffix);
+
+        assert_eq!(
+            assigned_client_na_ips(&server, &client_duid, &[(prefix, 64)]),
+            Some(vec![expected])
+        );
+    }
+
+    #[test]
+    fn test_assigned_client_na_ips_include_all_prefixes() {
+        let server_config = DHCPv6ServerConfig {
+            enable: true,
+            ia_na: Some(DHCPv6IANAConfig {
+                max_prefix_len: 64,
+                pool_start: 256,
+                pool_end: Some(512),
+                preferred_lifetime: 3600,
+                valid_lifetime: 7200,
+            }),
+            ia_pd: None,
+        };
+
+        let mut server = DHCPv6Server::init(&server_config, std::collections::HashMap::new());
+        let client_duid = b"test-client-multi-prefix-ip".to_vec();
+        let mac = MacAddr::from([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]);
+        server.offer_na_suffix(&client_duid, Some(mac), None);
+
+        let prefixes = vec![
+            (Ipv6Addr::new(0xfd11, 0x2222, 0x3333, 0x4444, 0, 0, 0, 0), 64),
+            (Ipv6Addr::new(0xfd55, 0x6666, 0x7777, 0x8888, 0, 0, 0, 0), 64),
+        ];
+        let cache = server.na_offered.get(&client_duid).expect("missing NA cache entry");
+        let expected: Vec<Ipv6Addr> = prefixes
+            .iter()
+            .map(|(prefix, prefix_len)| combine_prefix_suffix(*prefix, *prefix_len, cache.suffix))
+            .collect();
+
+        assert_eq!(assigned_client_na_ips(&server, &client_duid, &prefixes), Some(expected));
     }
 
     #[test]
