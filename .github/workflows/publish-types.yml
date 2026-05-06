@@ -21,7 +21,7 @@ jobs:
       - name: Cache OpenAPI spec
         if: github.event_name == 'push'
         id: cache-openapi
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: landscape-types/openapi.json
           key: openapi-spec-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
@@ -65,7 +65,7 @@ jobs:
             VERSION="${BASE}-build.${{ github.run_id }}"
           fi
           cd landscape-types
-          pnpm pkg set version="$VERSION"
+          npm pkg set version="$VERSION"
 
       - name: Publish to npm
         run: |

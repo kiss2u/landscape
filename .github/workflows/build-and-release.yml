@@ -56,7 +56,7 @@ jobs:
           components: rustfmt
 
       - name: Setup cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/sccache
@@ -146,7 +146,7 @@ jobs:
 
       - name: Cache cross-libraries
         id: cache-cross-libs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/${{ matrix.settings.architecture }}-linux-gnu
           key: cross-libs-${{ matrix.settings.target }}-${{ env.zlib_version }}-${{ env.elfutils_version }}
@@ -266,7 +266,7 @@ jobs:
           fi
 
       - name: Setup cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/sccache
