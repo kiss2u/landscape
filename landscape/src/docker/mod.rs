@@ -13,8 +13,8 @@ use landscape_common::{
 use regex::Regex;
 use serde::Serialize;
 use std::{fs::File, io::BufRead, path::PathBuf};
-use tokio::net::UnixStream;
-use tokio::{io::AsyncWriteExt, net::unix::SocketAddr};
+use tokio::net::{UnixListener, UnixStream};
+use tokio::{io::AsyncReadExt, net::unix::SocketAddr};
 use tokio_stream::StreamExt;
 
 use crate::{docker::image::PullManager, get_all_devices, route::IpRouteService};
@@ -52,75 +52,195 @@ impl LandscapeDockerService {
         scan_all_lan_net(&route_service).await;
         tokio::spawn(async move {
             status.just_change_status(ServiceStatus::Staring);
-            let docker = Docker::connect_with_socket_defaults();
-
-            let Ok(docker) = docker else {
-                tracing::warn!("Docker Connect Fail");
-                return;
-            };
 
             let unix_socket = unix_sock::listen_unix_sock(path).await;
 
             route_service.remove_all_wan_docker().await;
             // scan_and_set_all_docker(&route_service, &docker).await;
 
-            let query: Option<EventsOptions> = None;
-            let mut event_stream = docker.events(query);
+            let unix_status = status.clone();
+            let unix_route_service = route_service.clone();
+            let unix_listener = tokio::spawn(async move {
+                run_unix_registration_listener(unix_status, unix_route_service, unix_socket).await;
+            });
+
+            let docker_status = status.clone();
+            let docker_route_service = route_service.clone();
+            let docker_event_listener = tokio::spawn(async move {
+                run_docker_event_loop(docker_status, docker_route_service).await;
+            });
+
             let mut receiver = status.subscribe();
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-            let mut timeout_times = 0;
             status.just_change_status(ServiceStatus::Running);
             loop {
-                tokio::select! {
-                    event_msg = event_stream.next() => {
-                        if let Some(e) = event_msg {
-                            if let Ok(msg) = e {
-                                handle_event(&route_service ,&docker, msg).await;
-                            } else {
-                                tracing::error!("err event loop: event_msg");
-                            }
-                        } else {
-                            break;
-                        }
-                    },
-                    info = unix_socket.accept() => {
-                        if let Ok(conn) = info {
-                            accept_docker_info(&route_service, &docker, conn).await
-                        }
-                    },
-                    change_result = receiver.changed() => {
-                        if let Err(_) = change_result {
-                            tracing::error!("get change result error. exit loop");
-                            break;
-                        }
-                        if status.is_exit() {
-                            tracing::error!("stop exit");
-                            break;
-                        }
-
-                    }
-                    _ = interval.tick() => {
-                        if status.is_running() {
-                            match docker.ping().await {
-                                Ok(_) => {
-                                    // println!("docker event loop ok event: {msg:?}");
-                                },
-                                Err(e) => {
-                                    timeout_times += 1;
-                                    if timeout_times >= 3 {
-                                        tracing::error!("exit docker event listen, cause ping error: {e:?}");
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        interval.reset();
-                    }
-                };
+                if let Err(_) = receiver.changed().await {
+                    tracing::error!("get change result error. exit loop");
+                    break;
+                }
+                if status.is_exit() {
+                    tracing::info!("docker service stopping");
+                    break;
+                }
             }
+
+            let _ = unix_listener.await;
+            let _ = docker_event_listener.await;
 
             status.just_change_status(ServiceStatus::Stop);
         });
+    }
+}
+
+async fn run_unix_registration_listener(
+    status: WatchService,
+    route_service: IpRouteService,
+    unix_socket: UnixListener,
+) {
+    let mut receiver = status.subscribe();
+
+    loop {
+        if status.is_exit() {
+            tracing::info!("docker registration listener stopping");
+            break;
+        }
+
+        tokio::select! {
+            info = unix_socket.accept() => {
+                match info {
+                    Ok(conn) => accept_docker_info(&route_service, conn).await,
+                    Err(e) => {
+                        tracing::error!("failed to accept docker registration socket connection: {e:?}");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    }
+                }
+            }
+            change_result = receiver.changed() => {
+                if let Err(_) = change_result {
+                    tracing::error!("docker registration listener status channel closed");
+                    break;
+                }
+                if status.is_exit() {
+                    tracing::info!("docker registration listener stopping");
+                    break;
+                }
+            }
+        }
+    }
+}
+
+async fn run_docker_event_loop(status: WatchService, route_service: IpRouteService) {
+    let mut receiver = status.subscribe();
+    let retry_interval = tokio::time::Duration::from_secs(300);
+
+    loop {
+        if status.is_exit() {
+            break;
+        }
+
+        let docker = match Docker::connect_with_socket_defaults() {
+            Ok(docker) => docker,
+            Err(e) => {
+                tracing::warn!("Docker Connect Fail, retrying in {:?}: {e:?}", retry_interval);
+                tokio::select! {
+                    _ = tokio::time::sleep(retry_interval) => {}
+                    change_result = receiver.changed() => {
+                        if change_result.is_err() || status.is_exit() {
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
+        };
+
+        if let Err(e) = docker.ping().await {
+            tracing::warn!(
+                "docker ping failed after connect, retrying in {:?}: {e:?}",
+                retry_interval
+            );
+            tokio::select! {
+                _ = tokio::time::sleep(retry_interval) => {}
+                change_result = receiver.changed() => {
+                    if change_result.is_err() || status.is_exit() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+
+        scan_all_lan_net(&route_service).await;
+
+        let query: Option<EventsOptions> = None;
+        let mut event_stream = docker.events(query);
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        let mut timeout_times = 0;
+
+        loop {
+            tokio::select! {
+                event_msg = event_stream.next() => {
+                    match event_msg {
+                        Some(Ok(msg)) => {
+                            handle_event(&route_service, &docker, msg).await;
+                        }
+                        Some(Err(e)) => {
+                            tracing::warn!(
+                                "docker event stream error, reconnecting in {:?}: {e:?}",
+                                retry_interval
+                            );
+                            break;
+                        }
+                        None => {
+                            tracing::warn!(
+                                "docker event stream ended, reconnecting in {:?}",
+                                retry_interval
+                            );
+                            break;
+                        }
+                    }
+                }
+                change_result = receiver.changed() => {
+                    if let Err(_) = change_result {
+                        tracing::error!("docker event listener status channel closed");
+                        return;
+                    }
+                    if status.is_exit() {
+                        tracing::info!("docker event listener stopping");
+                        return;
+                    }
+                }
+                _ = interval.tick() => {
+                    if status.is_running() {
+                        match docker.ping().await {
+                            Ok(_) => {
+                                timeout_times = 0;
+                            },
+                            Err(e) => {
+                                timeout_times += 1;
+                                tracing::warn!(
+                                    "docker ping failed {timeout_times} times, reconnecting in {:?} after 3 failures: {e:?}",
+                                    retry_interval
+                                );
+                                if timeout_times >= 3 {
+                                    tracing::error!("docker ping failed repeatedly, reconnecting event listener");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    interval.reset();
+                }
+            }
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(retry_interval) => {}
+            change_result = receiver.changed() => {
+                if change_result.is_err() || status.is_exit() {
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -150,60 +270,79 @@ pub async fn get_docker_continer_summary(docker: &Docker) -> Vec<ContainerSummar
 
 pub async fn accept_docker_info(
     ip_route_service: &IpRouteService,
-    docker: &Docker,
-    (mut stream, _addr): (UnixStream, SocketAddr),
+    (stream, _addr): (UnixStream, SocketAddr),
 ) {
     let ip_route_service = ip_route_service.clone();
-    let docker = docker.clone();
     tokio::spawn(async move {
-        //
-        let mut buf = vec![0u8; 1024];
-        let Ok(_) = stream.readable().await else {
-            return;
-        };
+        const MAX_REGISTRATION_BYTES: usize = 4096;
 
-        match stream.try_read(&mut buf) {
-            Ok(n) if n == 0 => {
+        let mut buf = Vec::with_capacity(256);
+        let mut stream = stream.take((MAX_REGISTRATION_BYTES + 1) as u64);
+        let read_result =
+            tokio::time::timeout(tokio::time::Duration::from_secs(5), stream.read_to_end(&mut buf))
+                .await;
+
+        match read_result {
+            Ok(Ok(n)) if n == 0 => {
                 tracing::error!("Client disconnected");
             }
-            Ok(n) => {
-                let result = serde_json::from_slice::<DockerTargetEnroll>(&buf[..n]);
+            Ok(Ok(n)) => {
+                if n > MAX_REGISTRATION_BYTES {
+                    tracing::error!(
+                        "docker registration info exceeded {MAX_REGISTRATION_BYTES} bytes"
+                    );
+                    return;
+                }
+
+                let result = serde_json::from_slice::<DockerTargetEnroll>(&buf);
 
                 tracing::info!("Receive info from sock: {:?}", result);
-                if let Ok(DockerTargetEnroll { id, ifindex }) = result {
-                    let query: Option<InspectContainerOptions> = None;
-                    let Ok(container_info) = docker.inspect_container(&id, query).await else {
-                        tracing::error!("can not inspect container id: {id}");
-                        return;
-                    };
+                let Ok(DockerTargetEnroll { id, ifindex }) = result else {
+                    tracing::error!("failed to parse docker registration info");
+                    return;
+                };
 
-                    let mut container_name = if let Some(container_name) = container_info.name {
-                        container_name
-                    } else {
+                let docker = match Docker::connect_with_socket_defaults() {
+                    Ok(docker) => docker,
+                    Err(e) => {
+                        tracing::warn!("Docker Connect Fail while handling registration: {e:?}");
                         return;
-                    };
-
-                    if container_name.starts_with('/') {
-                        container_name = container_name
-                            .strip_prefix('/')
-                            .map(|n| n.to_string())
-                            .unwrap_or(container_name);
                     }
-                    tracing::info!("container_name: {container_name:?}");
+                };
 
-                    let (ipv4, ipv6) = RouteTargetInfo::docker_new(ifindex, &container_name);
+                let query: Option<InspectContainerOptions> = None;
+                let Ok(container_info) = docker.inspect_container(&id, query).await else {
+                    tracing::error!("can not inspect container id: {id}");
+                    return;
+                };
 
-                    ip_route_service.insert_ipv4_wan_route(&container_name, ipv4).await;
-                    ip_route_service.insert_ipv6_wan_route(&container_name, ipv6).await;
-                    ip_route_service.print_wan_ifaces().await;
+                let mut container_name = if let Some(container_name) = container_info.name {
+                    container_name
+                } else {
+                    return;
+                };
+
+                if container_name.starts_with('/') {
+                    container_name = container_name
+                        .strip_prefix('/')
+                        .map(|n| n.to_string())
+                        .unwrap_or(container_name);
                 }
+                tracing::info!("container_name: {container_name:?}");
+
+                let (ipv4, ipv6) = RouteTargetInfo::docker_new(ifindex, &container_name);
+
+                ip_route_service.insert_ipv4_wan_route(&container_name, ipv4).await;
+                ip_route_service.insert_ipv6_wan_route(&container_name, ipv6).await;
+                ip_route_service.print_wan_ifaces().await;
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 tracing::error!("Failed to read from socket: {:?}", e);
             }
+            Err(_) => {
+                tracing::error!("Timed out reading from docker registration socket");
+            }
         }
-
-        let _ = stream.shutdown().await;
     });
 }
 

@@ -2,6 +2,7 @@ use clap::{Parser, ValueEnum};
 use landscape_common::docker::DockerTargetEnroll;
 use landscape_common::{NAMESPACE_REGISTER_SOCK, NAMESPACE_REGISTER_SOCK_PATH_IN_DOCKER};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
 
 use std::mem::MaybeUninit;
@@ -170,21 +171,22 @@ async fn run_connection_loop(socket_path: PathBuf, enroll: DockerTargetEnroll) {
     let loop_interval = 60;
     loop {
         match UnixStream::connect(&socket_path).await {
-            Ok(stream) => {
-                if stream.writable().await.is_err() {
-                    continue;
+            Ok(mut stream) => match stream.write_all(&data).await {
+                Ok(()) => {
+                    let _ = stream.shutdown().await;
+                    tracing::info!(
+                        "send success: {:?}, {} bytes to {:?}",
+                        enroll,
+                        data.len(),
+                        socket_path
+                    );
                 }
-
-                match stream.try_write(&data) {
-                    Ok(n) => tracing::info!("send success: {:?}, {} bytes", enroll, n),
-                    Err(e) => {
-                        tracing::error!("write error: {:?}", e);
-                        continue;
-                    }
+                Err(e) => {
+                    tracing::error!("write error to {:?}: {:?}", socket_path, e);
                 }
-            }
+            },
             Err(e) => {
-                tracing::warn!("Error registering Edge to Landscape. The next registration attempt will be in {loop_interval} seconds. Error: {:?}", e);
+                tracing::warn!("Error registering Edge to Landscape via {:?}. The next registration attempt will be in {loop_interval} seconds. Error: {:?}", socket_path, e);
             }
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(loop_interval)).await;
