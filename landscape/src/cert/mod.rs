@@ -258,7 +258,10 @@ pub async fn reload_api_tls_resolver(
 pub fn build_tls_server_config_with_shared_resolver(
     shared_resolver: SharedSniResolver,
 ) -> ServerConfig {
-    ServerConfig::builder().with_no_client_auth().with_cert_resolver(Arc::new(shared_resolver))
+    let mut config =
+        ServerConfig::builder().with_no_client_auth().with_cert_resolver(Arc::new(shared_resolver));
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    config
 }
 
 pub fn validate_certified_key_from_pem(

@@ -70,7 +70,7 @@ use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::repository::Repository;
 use tokio::runtime::Builder as RuntimeBuilder;
 use tokio::sync::mpsc;
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{compression::CompressionLayer, services::ServeDir, trace::TraceLayer};
 use utoipa_scalar::{Scalar, Servable};
 
 mod api;
@@ -698,6 +698,7 @@ async fn run_system(
         // .nest("/sock", sockets_route)
         .route("/foo", get(|| async { "Hi from /foo" }))
         .fallback_service(serve_dir)
+        .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http());
 
     let server_handle = axum_server::Handle::new();

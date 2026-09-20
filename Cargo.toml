@@ -123,7 +123,12 @@ axum-extra = { version = "0.12.6", features = [
 axum-server = "0.8.0"
 headers = "0.4.1"
 tower = { version = "0.5.3", features = ["util"] }
-tower-http = { version = "0.7.1", features = ["fs", "trace"] }
+tower-http = { version = "0.7.1", features = [
+    "fs",
+    "trace",
+    "compression-gzip",
+    "compression-br",
+] }
 utoipa = { version = "5.5.0", features = ["uuid", "openapi_extensions"] }
 utoipa-axum = "0.2"
 utoipa-scalar = { version = "0.3", features = ["axum"] }
