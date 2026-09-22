@@ -20,8 +20,8 @@ pub use runtime::{
 };
 pub use settings::{
     LandscapeAuthConfig, LandscapeConfig, LandscapeDnsConfig, LandscapeLogConfig,
-    LandscapeMetricConfig, LandscapeStoreConfig, LandscapeTimeConfig, LandscapeUIConfig,
-    LandscapeWebConfig, MetricMode,
+    LandscapeMetricConfig, LandscapeStoreConfig, LandscapeThemeStyleConfig, LandscapeTimeConfig,
+    LandscapeUIConfig, LandscapeWebConfig, MetricMode,
 };
 
 use uuid::Uuid;

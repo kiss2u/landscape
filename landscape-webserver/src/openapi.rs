@@ -127,6 +127,8 @@ impl Modify for SecurityAddon {
         landscape_common::pty::LandscapePtyConfig,
         landscape_common::pty::PtyInMessage,
         landscape_common::pty::PtyOutMessage,
+        // UI Config
+        landscape_common::config::LandscapeThemeStyleConfig,
     ))
 )]
 pub struct ApiDoc;
