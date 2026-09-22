@@ -1,6 +1,8 @@
 use landscape_common::store::storev4::LandscapeStoreTrait;
 use landscape_common::{
-    config_service::geo::{GeoError, GeoFileCacheKey, GeoIpConfig, GeoIpSource, GeoIpSourceConfig},
+    config_service::geo::{
+        GeoError, GeoFileCacheKey, GeoIpConfig, GeoIpLookupResult, GeoIpSource, GeoIpSourceConfig,
+    },
     database::LandscapeStore,
     flow::ip_mark::{IpMarkInfo, WanIPRuleSource, WanIpRuleConfig},
     service::controller::ConfigController,
@@ -11,6 +13,7 @@ use uuid::Uuid;
 use std::{
     collections::HashMap,
     collections::HashSet,
+    net::IpAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -115,51 +118,47 @@ impl GeoIpService {
         result
     }
 
-    async fn refresh_url_config(&self, client: &Client, config: &mut GeoIpSourceConfig) {
+    async fn refresh_url_config(
+        &self,
+        client: &Client,
+        config: &mut GeoIpSourceConfig,
+    ) -> Result<(), GeoError> {
         let url = match &config.source {
             GeoIpSource::Url { url, .. } => url.clone(),
-            _ => return,
+            _ => return Ok(()),
         };
 
         tracing::debug!("download file: {}", url);
         let time = Instant::now();
 
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-                Ok(bytes) => {
-                    let parse_result = self.parse_source_bytes(&config.source, bytes).await;
-
-                    match parse_result {
-                        Ok(result) => {
-                            self.replace_cache_by_name(&config.name, result).await;
-
-                            // Update next_update_at in the source
-                            if let GeoIpSource::Url { next_update_at, .. } = &mut config.source {
-                                *next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
-                            }
-                            let _ = self.store.set(config.clone()).await;
-
-                            tracing::debug!(
-                                "handle file done: {}, time: {}s",
-                                url,
-                                time.elapsed().as_secs()
-                            );
-                            self.notify_dst_ip_updated();
-                        }
-                        Err(e) => {
-                            tracing::error!("parse geo ip source {} error: {}", config.name, e);
-                        }
-                    }
-                }
-                Err(e) => tracing::error!("read {} response error: {}", url, e),
-            },
-            Ok(resp) => {
-                tracing::error!("download {} error, HTTP status: {}", url, resp.status());
-            }
-            Err(e) => {
-                tracing::error!("request {} error: {}", url, e);
-            }
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| GeoError::IpSourceRequestFailed(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(GeoError::IpSourceRequestFailed(format!(
+                "{} returned HTTP {}",
+                url,
+                response.status()
+            )));
         }
+        let bytes =
+            response.bytes().await.map_err(|e| GeoError::IpSourceRequestFailed(e.to_string()))?;
+        let result = self.parse_source_bytes(&config.source, bytes).await?;
+        self.replace_cache_by_name(&config.name, result).await;
+
+        if let GeoIpSource::Url { next_update_at, .. } = &mut config.source {
+            *next_update_at = get_f64_timestamp() + MILL_A_DAY as f64;
+        }
+        self.store
+            .set(config.clone())
+            .await
+            .map_err(|e| GeoError::IpConfigStoreFailed(e.to_string()))?;
+
+        tracing::debug!("handle file done: {}, time: {}s", url, time.elapsed().as_secs());
+        self.notify_dst_ip_updated();
+        Ok(())
     }
 
     pub async fn refresh(&self, force: bool) {
@@ -178,7 +177,9 @@ impl GeoIpService {
                     if !force && *next_update_at >= now {
                         continue;
                     }
-                    self.refresh_url_config(&client, &mut config).await;
+                    if let Err(e) = self.refresh_url_config(&client, &mut config).await {
+                        tracing::error!("refresh geo ip source {} error: {}", config.name, e);
+                    }
                 }
                 GeoIpSource::Direct { data } => {
                     self.write_direct_to_cache(&config.name, data).await;
@@ -200,22 +201,27 @@ impl GeoIpService {
         }
     }
 
-    pub async fn refresh_one(&self, name: &str) {
-        let configs: Vec<GeoIpSourceConfig> = self.store.list().await.unwrap();
+    pub async fn refresh_one(&self, name: &str) -> Result<(), GeoError> {
+        let configs: Vec<GeoIpSourceConfig> =
+            self.store.list().await.map_err(|e| GeoError::IpConfigStoreFailed(e.to_string()))?;
         let Some(mut config) = configs.into_iter().find(|c| c.name == name) else {
-            tracing::warn!("refresh_one: config '{}' not found", name);
-            return;
+            return Err(GeoError::IpConfigNotFound(name.to_string()));
         };
 
         let client = Client::new();
 
         match &config.source {
-            GeoIpSource::Url { .. } => self.refresh_url_config(&client, &mut config).await,
+            GeoIpSource::Url { .. } => self.refresh_url_config(&client, &mut config).await?,
             GeoIpSource::Direct { data } => {
                 self.write_direct_to_cache(&config.name, data).await;
+                self.store
+                    .set(config.clone())
+                    .await
+                    .map_err(|e| GeoError::IpConfigStoreFailed(e.to_string()))?;
                 self.notify_dst_ip_updated();
             }
         }
+        Ok(())
     }
 
     async fn write_direct_to_cache(
@@ -321,6 +327,27 @@ impl GeoIpService {
         lock.get(key)
     }
 
+    pub async fn lookup_ip(&self, input: &str) -> Result<Vec<GeoIpLookupResult>, GeoError> {
+        let ip = input
+            .parse::<IpAddr>()
+            .map_err(|_| GeoError::IpInvalidLookupAddress(input.to_string()))?;
+        let mut lock = self.file_cache.lock().await;
+        let mut result = Vec::new();
+        for key in lock.keys() {
+            let Some(config) = lock.get(&key) else { continue };
+            let values = config
+                .values
+                .into_iter()
+                .filter(|cidr| cidr_contains(cidr.ip, cidr.prefix, ip))
+                .collect::<Vec<_>>();
+            if !values.is_empty() {
+                result.push(GeoIpLookupResult { key, values });
+            }
+        }
+        result.sort_by(|a, b| a.key.key.cmp(&b.key.key).then(a.key.name.cmp(&b.key.name)));
+        Ok(result)
+    }
+
     pub async fn query_geo_by_name(&self, name: Option<String>) -> Vec<GeoIpSourceConfig> {
         self.store.query_by_name(name).await.unwrap()
     }
@@ -338,8 +365,23 @@ impl GeoIpService {
             .ok_or_else(|| GeoError::IpConfigNotFound(name.clone()))?;
         let result = self.parse_source_bytes(&config.source, file_bytes).await?;
         self.replace_cache_by_name(&name, result).await;
+        self.store.set(config).await.map_err(|e| GeoError::IpConfigStoreFailed(e.to_string()))?;
         self.notify_dst_ip_updated();
         Ok(())
+    }
+}
+
+fn cidr_contains(network: IpAddr, prefix: u32, ip: IpAddr) -> bool {
+    match (network, ip) {
+        (IpAddr::V4(network), IpAddr::V4(ip)) if prefix <= 32 => {
+            let mask = if prefix == 0 { 0 } else { u32::MAX << (32 - prefix) };
+            u32::from(network) & mask == u32::from(ip) & mask
+        }
+        (IpAddr::V6(network), IpAddr::V6(ip)) if prefix <= 128 => {
+            let mask = if prefix == 0 { 0 } else { u128::MAX << (128 - prefix) };
+            u128::from(network) & mask == u128::from(ip) & mask
+        }
+        _ => false,
     }
 }
 
@@ -378,7 +420,18 @@ mod tests {
         store::storev4::StoreFileManager,
         LANDSCAPE_GEO_CACHE_TMP_DIR,
     };
-    use std::path::PathBuf;
+    use std::{net::IpAddr, path::PathBuf, str::FromStr};
+
+    use super::cidr_contains;
+
+    #[test]
+    fn matches_ipv4_and_ipv6_cidrs() {
+        let ip = |value| IpAddr::from_str(value).unwrap();
+        assert!(cidr_contains(ip("10.0.0.0"), 8, ip("10.1.2.3")));
+        assert!(!cidr_contains(ip("10.0.0.0"), 8, ip("11.1.2.3")));
+        assert!(cidr_contains(ip("2001:db8::"), 32, ip("2001:db8::1")));
+        assert!(!cidr_contains(ip("2001:db8::"), 32, ip("2001:db9::1")));
+    }
 
     // cargo test --package landscape --lib -- config_service::geo_ip_service::tests --show-output
     #[test]

@@ -2,7 +2,8 @@ use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
 use landscape_common::config_service::geo::{
-    GeoError, GeoFileCacheKey, GeoIpConfig, GeoIpSourceConfig, QueryGeoIpConfig, QueryGeoKey,
+    GeoError, GeoFileCacheKey, GeoIpConfig, GeoIpLookupResult, GeoIpSourceConfig,
+    QueryGeoIpAddress, QueryGeoIpConfig, QueryGeoKey,
 };
 use landscape_common::service::controller::ConfigController;
 use utoipa_axum::router::OpenApiRouter;
@@ -24,8 +25,23 @@ pub fn get_geo_ip_config_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_geo_ip_cache, refresh_geo_ip_cache))
         .routes(routes!(refresh_geo_ip_config_by_name))
         .routes(routes!(search_geo_ip_cache))
+        .routes(routes!(lookup_geo_ip_address))
         .routes(routes!(get_geo_ip_cache_detail))
         .merge(upload_router)
+}
+
+#[utoipa::path(
+    get,
+    path = "/ips/cache/lookup",
+    tag = "Geo IPs",
+    params(("ip" = String, Query, description = "IP address to reverse lookup")),
+    responses((status = 200, body = CommonApiResp<Vec<GeoIpLookupResult>>))
+)]
+async fn lookup_geo_ip_address(
+    State(state): State<LandscapeApp>,
+    Query(query): Query<QueryGeoIpAddress>,
+) -> LandscapeApiResult<Vec<GeoIpLookupResult>> {
+    LandscapeApiResp::success(state.geo_ip_service.lookup_ip(&query.ip).await?)
 }
 
 #[utoipa::path(
@@ -120,7 +136,7 @@ async fn refresh_geo_ip_config_by_name(
     State(state): State<LandscapeApp>,
     Path(name): Path<String>,
 ) -> LandscapeApiResult<()> {
-    state.geo_ip_service.refresh_one(&name).await;
+    state.geo_ip_service.refresh_one(&name).await?;
     LandscapeApiResp::success(())
 }
 

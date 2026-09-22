@@ -1,9 +1,10 @@
 use landscape_common::{
     config_service::geo::{
         GeoDomainConfig, GeoError, GeoFileCacheKey, GeoMatcherSource, GeoSiteFileConfig,
-        GeoSiteSource,
+        GeoSiteLookupResult, GeoSiteSource,
     },
     database::LandscapeStore,
+    dns::domain::normalize_domain_name,
     dns::rule::DomainMatchType,
     service::controller::ConfigController,
     utils::time::{get_f64_timestamp, MILL_A_DAY},
@@ -26,6 +27,7 @@ use landscape_common::{
 use landscape_database::{
     geo_site::repository::GeoSiteConfigRepository, provider::LandscapeDBServiceProvider,
 };
+use landscape_dns::server::domain_rule_matches_normalized;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, Mutex};
@@ -70,6 +72,10 @@ fn domain_match_type_tag(match_type: &DomainMatchType) -> u8 {
         DomainMatchType::Domain => 2,
         DomainMatchType::Full => 3,
     }
+}
+
+fn geo_value_matches_lookup(value: &GeoSiteFileConfig, normalized: &str) -> bool {
+    domain_rule_matches_normalized(&value.match_type, &value.value, normalized)
 }
 
 #[derive(Debug, Default)]
@@ -432,6 +438,28 @@ impl GeoSiteService {
         self.store.query_by_name(name).await.unwrap()
     }
 
+    pub async fn lookup_domain(&self, domain: &str) -> Result<Vec<GeoSiteLookupResult>, GeoError> {
+        let normalized = normalize_domain_name(domain)
+            .map_err(|_| GeoError::SiteInvalidLookupDomain(domain.to_string()))?;
+        let mut lock = self.file_cache.lock().await;
+        let mut result = Vec::new();
+
+        // ponytail: on-demand full scan; add a reverse index only if measured lookup latency requires it.
+        for key in lock.keys() {
+            let Some(config) = lock.get(&key) else { continue };
+            let values = config
+                .values
+                .into_iter()
+                .filter(|value| geo_value_matches_lookup(value, &normalized))
+                .collect::<Vec<_>>();
+            if !values.is_empty() {
+                result.push(GeoSiteLookupResult { key, values });
+            }
+        }
+        result.sort_by(|a, b| a.key.key.cmp(&b.key.key).then(a.key.name.cmp(&b.key.name)));
+        Ok(result)
+    }
+
     pub async fn update_geo_config_by_bytes(&self, name: String, file_bytes: impl Into<Vec<u8>>) {
         let before_hashes = self.snapshot_key_hashes_for_name(&name).await;
         let result = landscape_protobuf::read_geo_sites_from_bytes(file_bytes).await;
@@ -493,7 +521,7 @@ mod tests {
     use landscape_common::config_service::geo::GeoSiteFileConfig;
     use landscape_common::dns::rule::{DomainConfig, DomainMatchType};
 
-    use super::{domain_match_type_tag, geo_values_hash, GeoContentHash};
+    use super::{domain_match_type_tag, geo_value_matches_lookup, geo_values_hash, GeoContentHash};
 
     fn geo_value(value: &str, attributes: &[&str]) -> GeoSiteFileConfig {
         GeoSiteFileConfig {
@@ -553,5 +581,25 @@ mod tests {
         let mut hashes = HashMap::new();
         hashes.insert(key.clone(), geo_values_hash(&[geo_value("example.com", &[])]));
         assert!(hashes.contains_key(&key));
+    }
+
+    #[test]
+    fn lookup_uses_dns_rule_matching_semantics() {
+        let plain = GeoSiteFileConfig {
+            match_type: DomainMatchType::Plain,
+            value: "cloudflare".to_string(),
+            attributes: HashSet::new(),
+        };
+        let domain = geo_value("cloudflare.com", &[]);
+        let generic_regex = GeoSiteFileConfig {
+            match_type: DomainMatchType::Regex,
+            value: "^[a-z][a-z0-9-]+$".to_string(),
+            attributes: HashSet::new(),
+        };
+
+        assert!(geo_value_matches_lookup(&plain, "cloudflare"));
+        assert!(!geo_value_matches_lookup(&domain, "cloudflare"));
+        assert!(geo_value_matches_lookup(&domain, "www.cloudflare.com"));
+        assert!(geo_value_matches_lookup(&generic_regex, "cloudflare"));
     }
 }

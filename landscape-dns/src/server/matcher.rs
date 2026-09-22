@@ -7,6 +7,26 @@ use zerotrie::ZeroTrieSimpleAscii;
 
 use crate::domain::{normalize_domain_text, ParsedDomain};
 
+pub fn domain_rule_matches_normalized(
+    match_type: &DomainMatchType,
+    value: &str,
+    normalized: &str,
+) -> bool {
+    match match_type {
+        DomainMatchType::Plain => normalized.contains(normalize_domain_text(value).as_ref()),
+        DomainMatchType::Regex => Regex::new(value).is_ok_and(|regex| regex.is_match(normalized)),
+        DomainMatchType::Domain => {
+            let rule = normalize_domain_text(value);
+            rule.is_ascii()
+                && (normalized == rule
+                    || normalized
+                        .strip_suffix(rule.as_ref())
+                        .is_some_and(|prefix| prefix.ends_with('.')))
+        }
+        DomainMatchType::Full => normalized == normalize_domain_text(value),
+    }
+}
+
 #[derive(Debug)]
 pub struct DomainMatcher {
     regex_set: RegexSet, // 正则匹配（RegexSet 单自动机，一次扫描全部 pattern）
@@ -343,6 +363,27 @@ mod tests {
         assert!(matcher.is_match_normalized(pd("node42.example.org").name()));
         assert!(!matcher.is_match_normalized(pd("node42.example.com").name()));
         assert!(matcher.is_match_normalized(pd("NODE42.Example.Org").name()));
+    }
+
+    #[test]
+    fn single_rule_lookup_uses_runtime_match_semantics() {
+        let domain = pd("Sub.Example.COM");
+        for config in [
+            rule(DomainMatchType::Domain, "example.com"),
+            rule(DomainMatchType::Plain, "sub.example"),
+            rule(DomainMatchType::Regex, r"^sub\.example\.com$"),
+            rule(DomainMatchType::Full, "sub.example.com"),
+        ] {
+            let runtime = DomainMatcher::new(vec![config.clone()]);
+            assert_eq!(
+                super::domain_rule_matches_normalized(
+                    &config.match_type,
+                    &config.value,
+                    domain.name(),
+                ),
+                runtime.is_match_normalized(domain.name())
+            );
+        }
     }
 
     #[test]

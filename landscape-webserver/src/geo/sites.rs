@@ -2,8 +2,8 @@ use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::ConfigId;
 use landscape_common::config_service::geo::{
-    GeoDomainConfig, GeoError, GeoFileCacheKey, GeoSiteSourceConfig, QueryGeoDomainConfig,
-    QueryGeoKey,
+    GeoDomainConfig, GeoError, GeoFileCacheKey, GeoSiteLookupResult, GeoSiteSourceConfig,
+    QueryGeoDomainConfig, QueryGeoKey, QueryGeoSiteDomain,
 };
 use landscape_common::service::controller::ConfigController;
 use utoipa_axum::router::OpenApiRouter;
@@ -25,8 +25,26 @@ pub fn get_geo_site_config_paths() -> OpenApiRouter<LandscapeApp> {
         .routes(routes!(get_geo_site_cache, refresh_geo_site_cache))
         .routes(routes!(refresh_geo_site_config_by_name))
         .routes(routes!(search_geo_site_cache))
+        .routes(routes!(lookup_geo_site_domain))
         .routes(routes!(get_geo_site_cache_detail))
         .merge(upload_router)
+}
+
+#[utoipa::path(
+    get,
+    path = "/sites/cache/lookup",
+    tag = "Geo Sites",
+    params(("domain" = String, Query, description = "Domain to reverse lookup")),
+    responses(
+        (status = 200, body = CommonApiResp<Vec<GeoSiteLookupResult>>),
+        (status = 400, description = "Invalid domain")
+    )
+)]
+async fn lookup_geo_site_domain(
+    State(state): State<LandscapeApp>,
+    Query(query): Query<QueryGeoSiteDomain>,
+) -> LandscapeApiResult<Vec<GeoSiteLookupResult>> {
+    LandscapeApiResp::success(state.geo_site_service.lookup_domain(&query.domain).await?)
 }
 
 #[utoipa::path(
