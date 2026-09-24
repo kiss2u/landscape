@@ -73,6 +73,20 @@ export default {
   detail_drawer: {
     rule_details: "规则细节",
   },
+  lookup: {
+    site_action: "查询域名归属",
+    ip_action: "查询 IP 归属",
+    site_title: "GeoSite 域名反向查询",
+    ip_title: "GeoIP 地址反向查询",
+    site_placeholder: "输入域名，例如 example.com",
+    ip_placeholder: "输入 IPv4 或 IPv6 地址",
+    action: "查询",
+    no_result: "没有匹配的 Geo 规则",
+    domain_notice_title: "域名格式提示",
+    domain_notice_content:
+      "GeoSite 反查基于完整域名匹配（例如：{example}），是否查询 {suggested}？",
+    domain_notice_positive: "查询 {domain}",
+  },
   geo_ip_name_select: {
     select_geo_ip_name: "选择 geo ip 名称",
   },

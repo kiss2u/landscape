@@ -8,6 +8,7 @@ import {
   refreshGeoSiteCache,
   refreshGeoSiteConfigByName,
   searchGeoSiteCache,
+  lookupGeoSiteDomain,
   getGeoSiteCacheDetail,
   updateGeoSiteByUpload as _updateGeoSiteByUpload,
 } from "@landscape-router/types/api/geo-sites/geo-sites";
@@ -16,7 +17,16 @@ import type {
   QueryGeoKey,
   GeoDomainConfig,
   GeoSiteSourceConfig,
+  GeoSiteLookupResult,
 } from "@landscape-router/types/api/schemas";
+
+export type { GeoSiteLookupResult };
+
+export async function lookup_geo_site_domain(
+  domain: string,
+): Promise<GeoSiteLookupResult[]> {
+  return lookupGeoSiteDomain({ domain });
+}
 
 export async function get_geo_site_configs(
   name?: string,

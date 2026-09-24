@@ -75,6 +75,20 @@ export default {
   detail_drawer: {
     rule_details: "Rule Details",
   },
+  lookup: {
+    site_action: "Lookup Domain",
+    ip_action: "Lookup IP",
+    site_title: "GeoSite Domain Lookup",
+    ip_title: "GeoIP Address Lookup",
+    site_placeholder: "Enter a domain, e.g. example.com",
+    ip_placeholder: "Enter an IPv4 or IPv6 address",
+    action: "Lookup",
+    no_result: "No matching Geo rules",
+    domain_notice_title: "Domain Format Notice",
+    domain_notice_content:
+      "GeoSite lookup requires a full domain name (e.g. {example}). Do you want to query {suggested}?",
+    domain_notice_positive: "Query {domain}",
+  },
   geo_ip_name_select: {
     select_geo_ip_name: "Select Geo IP Name",
   },

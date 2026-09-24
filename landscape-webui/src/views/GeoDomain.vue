@@ -36,6 +36,7 @@ async function refresh_cache() {
 }
 
 const show_geo_drawer_modal = ref(false);
+const show_lookup_modal = ref(false);
 </script>
 <template>
   <n-flex style="flex: 1; overflow: hidden; margin-bottom: 10px" vertical>
@@ -43,6 +44,9 @@ const show_geo_drawer_modal = ref(false);
       <!-- {{ filter }} -->
       <n-button @click="show_geo_drawer_modal = true">
         {{ t("common.domain_rule_source_config") }}
+      </n-button>
+      <n-button @click="show_lookup_modal = true">
+        {{ t("geo.lookup.site_action") }}
       </n-button>
       <n-popconfirm
         :positive-button-props="{ loading: loading }"
@@ -77,5 +81,6 @@ const show_geo_drawer_modal = ref(false);
     </n-virtual-list>
     <GeoSiteDrawer @refresh:keys="refresh" v-model:show="show_geo_drawer_modal">
     </GeoSiteDrawer>
+    <GeoLookupModal mode="site" v-model:show="show_lookup_modal" />
   </n-flex>
 </template>
