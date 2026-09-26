@@ -1,11 +1,8 @@
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
-};
+use std::net::{IpAddr, Ipv4Addr};
 
 use futures::stream::TryStreamExt;
 use netlink_packet_route::address::{AddressAttribute, AddressMessage};
-use netlink_packet_route::{link::LinkAttribute, AddressFamily};
+use netlink_packet_route::AddressFamily;
 use rtnetlink::Handle;
 use serde::Serialize;
 
@@ -47,59 +44,6 @@ impl LandscapeSingleIpInfo {
     }
 }
 
-pub async fn all_addresses_by_iface_name() -> HashMap<String, Vec<LandscapeSingleIpInfo>> {
-    let mut result = HashMap::new();
-    let handle = match create_handle() {
-        Ok(handle) => handle,
-        Err(error) => {
-            tracing::error!(?error, "failed to create netlink handle for runtime addresses");
-            return result;
-        }
-    };
-
-    let mut iface_names = HashMap::new();
-    let mut links = handle.link().get().execute();
-    loop {
-        match links.try_next().await {
-            Ok(Some(link)) => {
-                if let Some(LinkAttribute::IfName(name)) = link
-                    .attributes
-                    .iter()
-                    .find(|attribute| matches!(attribute, LinkAttribute::IfName(_)))
-                {
-                    iface_names.insert(link.header.index, name.clone());
-                }
-            }
-            Ok(None) => break,
-            Err(error) => {
-                tracing::error!(?error, "failed to read interfaces for runtime addresses");
-                return result;
-            }
-        }
-    }
-
-    let mut addresses = handle.address().get().execute();
-    loop {
-        match addresses.try_next().await {
-            Ok(Some(message)) => {
-                let Some(name) = iface_names.get(&message.header.index) else {
-                    continue;
-                };
-                if let Some(address) = LandscapeSingleIpInfo::new(message) {
-                    result.entry(name.clone()).or_default().push(address);
-                }
-            }
-            Ok(None) => break,
-            Err(error) => {
-                tracing::error!(?error, "failed to read runtime addresses");
-                return HashMap::new();
-            }
-        }
-    }
-
-    result
-}
-
 pub async fn addresses_by_iface_name(link: String) -> Vec<LandscapeSingleIpInfo> {
     let mut result = vec![];
 
@@ -112,16 +56,33 @@ pub async fn addresses_by_iface_name(link: String) -> Vec<LandscapeSingleIpInfo>
     };
 
     let mut links = handle.link().get().match_name(link.clone()).execute();
-    if let Some(link) = links.try_next().await.unwrap() {
-        let mut addresses =
-            handle.address().get().set_link_index_filter(link.header.index).execute();
-        while let Some(msg) = addresses.try_next().await.unwrap() {
-            if let Some(info) = LandscapeSingleIpInfo::new(msg) {
-                result.push(info);
+    let link_message = match links.try_next().await {
+        Ok(Some(link)) => link,
+        Ok(None) => {
+            tracing::error!("link {link} not found");
+            return result;
+        }
+        Err(e) => {
+            tracing::error!("failed to query link {link}: {e:?}");
+            return result;
+        }
+    };
+
+    let mut addresses =
+        handle.address().get().set_link_index_filter(link_message.header.index).execute();
+    loop {
+        match addresses.try_next().await {
+            Ok(Some(msg)) => {
+                if let Some(info) = LandscapeSingleIpInfo::new(msg) {
+                    result.push(info);
+                }
+            }
+            Ok(None) => break,
+            Err(e) => {
+                tracing::error!("failed to read addresses for link {link}: {e:?}");
+                break;
             }
         }
-    } else {
-        tracing::error!("link {link} not found");
     }
 
     result
@@ -281,4 +242,64 @@ pub fn get_existing_linklocal(iface_name: &str) -> Option<std::net::Ipv6Addr> {
     let field = line.split_whitespace().find(|s| s.starts_with("fe80:"))?;
     let addr_str = field.split('/').next()?;
     addr_str.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use netlink_packet_route::address::{AddressHeader, AddressHeaderFlags, AddressScope};
+
+    fn message(
+        prefix_len: u8,
+        is_permanent: bool,
+        attributes: Vec<AddressAttribute>,
+    ) -> AddressMessage {
+        let mut message = AddressMessage::default();
+        message.header = AddressHeader {
+            prefix_len,
+            flags: if is_permanent {
+                AddressHeaderFlags::Permanent
+            } else {
+                AddressHeaderFlags::empty()
+            },
+            scope: AddressScope::Universe,
+            index: 7,
+            ..Default::default()
+        };
+        message.attributes = attributes;
+        message
+    }
+
+    #[test]
+    fn prefers_local_attribute_over_address() {
+        let local = "10.0.0.2".parse().unwrap();
+        let peer = "10.0.0.1".parse().unwrap();
+        let info = LandscapeSingleIpInfo::new(message(
+            24,
+            true,
+            vec![AddressAttribute::Address(peer), AddressAttribute::Local(local)],
+        ))
+        .expect("address info");
+
+        assert_eq!(info.address, local);
+        assert_eq!(info.prefix_len, 24);
+        assert!(info.is_permanent);
+        assert_eq!(info.ifindex, 7);
+    }
+
+    #[test]
+    fn falls_back_to_address_when_local_missing() {
+        let addr = "192.168.1.10".parse().unwrap();
+        let info =
+            LandscapeSingleIpInfo::new(message(16, false, vec![AddressAttribute::Address(addr)]))
+                .expect("address info");
+
+        assert_eq!(info.address, addr);
+        assert!(!info.is_permanent);
+    }
+
+    #[test]
+    fn returns_none_without_address_attributes() {
+        assert!(LandscapeSingleIpInfo::new(message(24, true, vec![])).is_none());
+    }
 }

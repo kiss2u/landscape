@@ -60,9 +60,18 @@ watch(
   async (iface_name) => {
     runtime_addresses.value = [];
     try {
-      const addresses = await get_runtime_ip_addresses();
+      const addresses = await get_runtime_ip_addresses(iface_name);
       if (iface_name === props.node.name) {
-        runtime_addresses.value = addresses[iface_name] ?? [];
+        runtime_addresses.value = [...addresses]
+          .filter(
+            (address, index, list) =>
+              list.findIndex(
+                (item) =>
+                  item.address === address.address &&
+                  item.prefix_length === address.prefix_length,
+              ) === index,
+          )
+          .sort((a, b) => a.address.localeCompare(b.address));
       }
     } catch {
       // Runtime addresses are supplemental and must not block interface actions.

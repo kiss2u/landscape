@@ -8,7 +8,7 @@ use landscape_common::wan_service::ip_config::{IfaceIpModelConfig, IfaceIpServic
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use landscape::netlink::address::all_addresses_by_iface_name;
+use landscape::netlink::address::addresses_by_iface_name;
 use landscape_common::service::ServiceConfigError;
 use serde::Serialize;
 
@@ -56,29 +56,28 @@ pub fn get_iface_ipconfig_paths() -> OpenApiRouter<LandscapeApp> {
 
 #[utoipa::path(
     get,
-    path = "/ip/runtime-addresses",
+    path = "/ip/runtime-addresses/{iface_name}",
     tag = "IP Config",
-    responses((status = 200, body = CommonApiResp<HashMap<String, Vec<RuntimeIpAddress>>>))
+    operation_id = "get_runtime_ip_addresses",
+    params(("iface_name" = String, Path, description = "Interface name")),
+    responses((status = 200, body = CommonApiResp<Vec<RuntimeIpAddress>>))
 )]
 async fn get_runtime_ip_addresses(
     State(_state): State<LandscapeApp>,
-) -> LandscapeApiResult<HashMap<String, Vec<RuntimeIpAddress>>> {
+    Path(iface_name): Path<String>,
+) -> LandscapeApiResult<Vec<RuntimeIpAddress>> {
+    if iface_name == "lo" {
+        return LandscapeApiResp::success(Vec::new());
+    }
+
     LandscapeApiResp::success(
-        all_addresses_by_iface_name()
+        addresses_by_iface_name(iface_name)
             .await
             .into_iter()
-            .map(|(name, addresses)| {
-                (
-                    name,
-                    addresses
-                        .into_iter()
-                        .map(|address| RuntimeIpAddress {
-                            address: address.address,
-                            prefix_length: address.prefix_len,
-                            is_permanent: address.is_permanent,
-                        })
-                        .collect(),
-                )
+            .map(|address| RuntimeIpAddress {
+                address: address.address,
+                prefix_length: address.prefix_len,
+                is_permanent: address.is_permanent,
             })
             .collect(),
     )
