@@ -108,7 +108,7 @@
     <path d="M1200 215 H1220" class="control"/>
 
     <rect x="300" y="270" width="1280" height="22" rx="4" fill="#202024"/>
-    <text x="940" y="285" class="chip muted" text-anchor="middle">SQLite configuration  /  Geo data  /  DuckDB telemetry  /  ACME certificates  /  Gateway</text>
+    <text x="940" y="285" class="chip muted" text-anchor="middle">SQLite configuration  /  Geo data  /  SQLite telemetry  /  ACME certificates  /  Gateway</text>
   </g>
 
   <!-- LAN side rail -->

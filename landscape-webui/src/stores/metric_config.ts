@@ -27,8 +27,7 @@ export const useMetricConfigStore = defineStore("metric_config", () => {
 
   async function loadMetricConfig() {
     const { metric, hash } = await get_metric_config_edit();
-    mode.value =
-      metric.mode === "duckdb" ? "persistent" : (metric.mode ?? "persistent");
+    mode.value = metric.mode ?? "persistent";
     connectSecondWindowMinutes.value =
       metric.connect_second_window_minutes ?? undefined;
     connect1mRetentionDays.value =

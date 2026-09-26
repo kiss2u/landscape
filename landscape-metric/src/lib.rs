@@ -68,8 +68,6 @@ async fn build_sink(
                 }
             }
         }
-        // resolved_metric_mode 已把 duckdb 映射为 persistent/memory,不会走到这里。
-        MetricMode::Duckdb => (Arc::new(MemoryMetricSink), false),
     }
 }
 
@@ -80,7 +78,7 @@ async fn build_sink(
     mode: &MetricMode,
 ) -> Arc<dyn MetricSink> {
     match mode {
-        MetricMode::Off | MetricMode::Memory | MetricMode::Duckdb => Arc::new(MemoryMetricSink),
+        MetricMode::Off | MetricMode::Memory => Arc::new(MemoryMetricSink),
         MetricMode::Persistent => {
             tracing::error!(
                 "metric mode 'persistent' requested, but landscape-metric was built \
@@ -440,16 +438,7 @@ fn normalized_dns_range(params: &DnsSummaryQueryParams, now_ms: u64) -> Option<(
 }
 
 pub fn resolved_metric_mode(mode: MetricMode) -> MetricMode {
-    if matches!(mode, MetricMode::Duckdb) {
-        #[cfg(feature = "metric-persistent")]
-        {
-            MetricMode::Persistent
-        }
-        #[cfg(not(feature = "metric-persistent"))]
-        {
-            MetricMode::Memory
-        }
-    } else if matches!(mode, MetricMode::Persistent) {
+    if matches!(mode, MetricMode::Persistent) {
         #[cfg(feature = "metric-persistent")]
         {
             mode
@@ -1112,17 +1101,6 @@ mod tests {
             );
             assert!(inverted.is_none(), "inverted cross-minute range must fall back to raw rows");
         }
-    }
-
-    #[test]
-    fn duckdb_metric_mode_resolves_to_persistent_or_memory() {
-        let mode = resolved_metric_mode(MetricMode::Duckdb);
-
-        #[cfg(feature = "metric-persistent")]
-        assert!(matches!(mode, MetricMode::Persistent));
-
-        #[cfg(not(feature = "metric-persistent"))]
-        assert!(matches!(mode, MetricMode::Memory));
     }
 
     #[test]

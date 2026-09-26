@@ -20,10 +20,8 @@ pub mod thread_name {
         pub const GATEWAY_MAIN: &str = "ld-gw-main";
         /// Driver thread that owns the secondary HTTPS gateway runtime.
         pub const GATEWAY_HTTPS_DRIVER: &str = "ld-gwh-drv";
-        /// Single SQLite hot-store writer thread.
+        /// Single SQLite metric writer thread.
         pub const METRIC_DB_WRITER: &str = "ld-mdb";
-        /// Background DuckDB cold-store sync thread.
-        pub const METRIC_DB_COLD: &str = "ld-mdc";
         /// eBPF neighbor update listener thread.
         pub const EBPF_NEIGH_UPDATE: &str = "ld-neigh";
     }
@@ -33,8 +31,6 @@ pub mod thread_name {
         pub const CORE_RUNTIME: &str = "ld-core";
         /// Secondary Tokio runtime for gateway HTTPS accept/IO work.
         pub const GATEWAY_HTTPS_RUNTIME: &str = "ld-gwh";
-        /// Dedicated Tokio runtime for DuckDB query work.
-        pub const METRIC_QUERY_RUNTIME: &str = "ld-mqry";
         /// Firewall eBPF worker threads keyed by interface.
         pub const FIREWALL: &str = "ld-fw";
         /// NAT eBPF worker threads keyed by interface.

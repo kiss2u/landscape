@@ -157,7 +157,7 @@ cargo test --workspace
 | `landscape/` | 核心库（配置、NAT、DNS、eBPF 集成） |
 | `landscape-webserver/` | HTTP/HTTPS 服务、REST API、WebSocket |
 | `landscape-ebpf/` | eBPF C 程序 + Rust 用户态加载器 |
-| `landscape-database/` | SeaORM 数据库 schema + DuckDB 指标存储 |
+| `landscape-database/` | SeaORM 数据库 schema + SQLite 指标存储 |
 | `landscape-gateway/` | 基于 Pingora 的网关 |
 | `landscape-dns/` | 基于 hickory 的 DNS 服务 |
 | `landscape-common/` | 共享工具库、OpenAPI 支持 |

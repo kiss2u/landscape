@@ -157,7 +157,7 @@ Examples: `ebpf: fix NAT4 rule leak on interface down`, `webui: add dark mode to
 | `landscape/` | Core library (config, NAT, DNS, eBPF integration) |
 | `landscape-webserver/` | HTTP/HTTPS server, REST API, WebSocket |
 | `landscape-ebpf/` | eBPF C programs + Rust userspace loader |
-| `landscape-database/` | SeaORM schema + DuckDB metrics |
+| `landscape-database/` | SeaORM schema + SQLite metrics |
 | `landscape-gateway/` | Pingora-based gateway |
 | `landscape-dns/` | hickory-based DNS server |
 | `landscape-common/` | Shared utilities, OpenAPI support |
