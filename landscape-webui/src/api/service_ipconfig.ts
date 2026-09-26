@@ -2,10 +2,20 @@ import { IfaceIpServiceConfig } from "@/lib/service_ipconfig";
 import { ServiceStatus } from "@/lib/services";
 import {
   getAllIpconfigStatus,
+  getRuntimeIpAddresses,
   getIpconfigServiceConfig,
   handleIfaceServiceStatus,
   deleteAndStopIpconfigService,
 } from "@landscape-router/types/api/ip-config/ip-config";
+import type { RuntimeIpAddress } from "@landscape-router/types/api/schemas";
+
+export type { RuntimeIpAddress };
+
+export async function get_runtime_ip_addresses(): Promise<
+  Record<string, RuntimeIpAddress[]>
+> {
+  return (await getRuntimeIpAddresses({ silent: true })) ?? {};
+}
 
 export async function get_all_ipconfig_status(): Promise<
   Map<string, ServiceStatus>

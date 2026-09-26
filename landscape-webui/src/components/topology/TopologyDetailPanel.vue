@@ -8,6 +8,10 @@ import {
   change_iface_status,
   delete_bridge,
 } from "@/api/network";
+import {
+  get_runtime_ip_addresses,
+  type RuntimeIpAddress,
+} from "@/api/service_ipconfig";
 import { DevStateType, NetDev, WifiMode, WLANTypeTag } from "@/lib/dev";
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
 import {
@@ -37,6 +41,7 @@ const themeVars = useThemeVars();
 const show_zone_change = ref(false);
 const show_cpu_balance_btn = ref(false);
 const delete_loading = ref(false);
+const runtime_addresses = ref<RuntimeIpAddress[]>([]);
 const selected_bridge_ifindex = ref<number | null>(null);
 const disable_guard_modal = ref<InstanceType<
   typeof IfaceDisableGuardModal
@@ -46,6 +51,22 @@ watch(
   () => props.node.index,
   () => {
     selected_bridge_ifindex.value = null;
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.node.name,
+  async (iface_name) => {
+    runtime_addresses.value = [];
+    try {
+      const addresses = await get_runtime_ip_addresses();
+      if (iface_name === props.node.name) {
+        runtime_addresses.value = addresses[iface_name] ?? [];
+      }
+    } catch {
+      // Runtime addresses are supplemental and must not block interface actions.
+    }
   },
   { immediate: true },
 );
@@ -514,6 +535,29 @@ async function handleDeleteBridge() {
                 </n-descriptions-item>
                 <n-descriptions-item :label="t('topology.node.perm_mac')">
                   {{ maskValue(node.perm_mac) }}
+                </n-descriptions-item>
+                <n-descriptions-item
+                  :label="t('topology.panel.runtime_addresses')"
+                >
+                  <n-flex v-if="runtime_addresses.length" vertical size="small">
+                    <span
+                      v-for="address in runtime_addresses"
+                      :key="`${address.address}/${address.prefix_length}`"
+                    >
+                      {{ maskValue(address.address) }}/{{
+                        address.prefix_length
+                      }}
+                      ·
+                      {{
+                        address.is_permanent
+                          ? t("topology.panel.address_permanent")
+                          : t("topology.panel.address_dynamic")
+                      }}
+                    </span>
+                  </n-flex>
+                  <span v-else>{{
+                    t("topology.panel.no_runtime_addresses")
+                  }}</span>
                 </n-descriptions-item>
                 <n-descriptions-item :label="t('topology.panel.wifi_type')">
                   {{
