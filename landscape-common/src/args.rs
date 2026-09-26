@@ -128,6 +128,9 @@ pub enum LandscapeAction {
         #[clap(short = 't', long, hide = true)]
         times: Option<u32>,
     },
+
+    /// Generate a landscape_init.toml from high-level deployment options
+    Config(Box<crate::config::cli::ConfigCliArgs>),
 }
 
 #[derive(Subcommand, Debug, Clone)]

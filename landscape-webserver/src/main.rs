@@ -126,6 +126,8 @@ pub enum StartupError {
     Cert(String),
     #[error("metric: {0}")]
     Metric(String),
+    #[error("config: {0}")]
+    Config(String),
 }
 
 async fn prepare_startup_init(
@@ -748,6 +750,16 @@ async fn async_main() -> Result<(), StartupError> {
     let db_exists = home_path.join(landscape_common::LANDSCAPE_DB_SQLITE_NAME).exists();
 
     let args = (*LAND_ARGS).clone();
+
+    // The `config` subcommand only generates a landscape_init.toml. It does not
+    // touch the database, eBPF or the running system, so handle it before any
+    // logging / time-sync side effects.
+    if let Some(LandscapeAction::Config(config_args)) = &args.action {
+        landscape_common::config::cli::run_config_cli(config_args)
+            .map_err(|e| StartupError::Config(e.to_string()))?;
+        return Ok(());
+    }
+
     let init_config_to_import = if args.action.is_none() { boot_check(&home_path)? } else { None };
     let config = RuntimeConfig::new_with_file_config(
         args.clone(),
@@ -816,6 +828,8 @@ async fn async_main() -> Result<(), StartupError> {
                     Ok(())
                 }
             },
+            // Handled (and returned early) before this point.
+            LandscapeAction::Config(_) => Ok(()),
         }
     } else {
         let db_store_provider =

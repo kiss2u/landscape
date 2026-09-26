@@ -47,6 +47,47 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace --features metric-persistent -- -D warnings
 
+  config-cli-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang curl gcc llvm make pkg-config libelf-dev libclang-dev zlib1g-dev zstd
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Setup sccache
+        run: |
+          wget -qO- https://github.com/mozilla/sccache/releases/download/v0.12.0/sccache-v0.12.0-x86_64-unknown-linux-musl.tar.gz | sudo tar -xzf - -C /usr/local/bin/ --strip-components=1
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
+      - name: Setup cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/sccache
+          key: ${{ runner.os }}-e2e-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-
+            ${{ runner.os }}-check-
+
+      - name: Run landscape-common unit tests
+        run: cargo test -p landscape-common --lib
+
+      - name: Build landscape-webserver
+        run: cargo build -p landscape-webserver
+
+      - name: Run config CLI end-to-end tests
+        run: ./scripts/config_cli_test.sh target/debug/landscape-webserver
+
   rust-format-check:
     runs-on: ubuntu-latest
     

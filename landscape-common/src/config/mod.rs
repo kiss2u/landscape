@@ -1,4 +1,5 @@
 pub mod api;
+pub mod cli;
 pub mod init;
 pub mod init_error;
 pub mod loader;
@@ -12,6 +13,7 @@ pub use api::{
     GetUIConfigResponse, UpdateDnsConfigRequest, UpdateGatewayConfigRequest,
     UpdateMetricConfigRequest, UpdateTimeConfigRequest, UpdateUIConfigRequest,
 };
+pub use cli::{ConfigCliArgs, ConfigCliError, ConfigOutput};
 pub use init::InitConfig;
 pub use init_error::InitConfigError;
 pub use runtime::{
