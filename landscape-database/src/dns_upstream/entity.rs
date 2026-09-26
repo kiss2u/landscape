@@ -17,6 +17,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: DBId,
 
+    pub name: Option<String>,
+
     pub remark: String,
 
     pub mode: DBJson,
@@ -54,6 +56,7 @@ impl From<Model> for DnsUpstreamConfig {
     fn from(entity: Model) -> Self {
         DnsUpstreamConfig {
             id: entity.id,
+            name: entity.name,
             remark: entity.remark,
             mode: serde_json::from_value(entity.mode).unwrap(),
             ips: serde_json::from_value(entity.ips).unwrap(),
@@ -77,6 +80,7 @@ impl From<DnsUpstreamConfig> for ActiveModel {
 /// UpdateActiveModel 实现
 impl UpdateActiveModel<ActiveModel> for DnsUpstreamConfig {
     fn update(self, active: &mut ActiveModel) {
+        active.name = Set(self.name);
         active.remark = Set(self.remark);
         active.mode = Set(serde_json::to_value(self.mode).unwrap());
         active.ips = Set(serde_json::to_value(self.ips).unwrap());

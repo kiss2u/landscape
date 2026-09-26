@@ -20,6 +20,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: DBId,
 
+    pub name: Option<String>,
+
     /// 备注
     #[sea_orm(column_type = "Text", nullable)]
     pub remark: String,
@@ -67,6 +69,7 @@ impl From<Model> for DNSRedirectRule {
     fn from(entity: Model) -> Self {
         DNSRedirectRule {
             id: entity.id,
+            name: entity.name,
             remark: entity.remark,
             enable: entity.enable,
             match_rules: serde_json::from_value(entity.match_rules).unwrap(),
@@ -91,6 +94,7 @@ impl From<DNSRedirectRule> for ActiveModel {
 /// 更新 ActiveModel 的实现
 impl UpdateActiveModel<ActiveModel> for DNSRedirectRule {
     fn update(self, active: &mut ActiveModel) {
+        active.name = Set(self.name);
         active.remark = Set(self.remark);
         active.enable = Set(self.enable);
         active.match_rules = Set(serde_json::to_value(self.match_rules).unwrap());

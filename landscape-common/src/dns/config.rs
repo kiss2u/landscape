@@ -15,6 +15,8 @@ pub struct DnsUpstreamConfig {
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
 
+    pub name: Option<String>,
+
     pub remark: String,
 
     pub mode: DnsUpstreamMode,
@@ -55,6 +57,7 @@ impl Default for DnsUpstreamConfig {
     fn default() -> Self {
         Self {
             id: Uuid::new_v4(),
+            name: None,
             remark: "Landscape Router Default DNS Upstream".to_string(),
             mode: DnsUpstreamMode::Plaintext,
             ips: vec![IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1))],

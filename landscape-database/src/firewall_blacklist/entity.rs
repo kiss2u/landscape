@@ -15,6 +15,7 @@ pub type FirewallBlacklistConfigActiveModel = ActiveModel;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: DBId,
+    pub name: Option<String>,
     pub enable: bool,
     #[sea_orm(column_type = "Json")]
     pub source: DBJson,
@@ -42,6 +43,7 @@ impl From<Model> for FirewallBlacklistConfig {
     fn from(entity: Model) -> Self {
         FirewallBlacklistConfig {
             id: entity.id,
+            name: entity.name,
             enable: entity.enable,
             source: serde_json::from_value(entity.source).unwrap(),
             remark: entity.remark,
@@ -60,6 +62,7 @@ impl From<FirewallBlacklistConfig> for ActiveModel {
 
 impl UpdateActiveModel<ActiveModel> for FirewallBlacklistConfig {
     fn update(self, active: &mut ActiveModel) {
+        active.name = Set(self.name);
         active.enable = Set(self.enable);
         active.source = Set(serde_json::to_value(&self.source).unwrap());
         active.remark = Set(self.remark);

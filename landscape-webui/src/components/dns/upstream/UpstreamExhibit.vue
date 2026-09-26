@@ -31,7 +31,7 @@ async function refresh() {
 <template>
   <n-popover v-if="rule" trigger="hover">
     <template #trigger>
-      {{ rule.remark }}
+      {{ [rule.name?.trim(), rule.remark?.trim()].filter(Boolean).join(" - ") }}
     </template>
     <DnsUpstreamCard :show_action="false" :rule="rule"></DnsUpstreamCard>
     <!-- <span>{{ rule }}</span> -->

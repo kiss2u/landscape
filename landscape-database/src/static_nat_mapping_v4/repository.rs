@@ -182,6 +182,7 @@ mod tests {
 
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,
@@ -204,6 +205,7 @@ mod tests {
 
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,
@@ -227,6 +229,7 @@ mod tests {
 
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,
@@ -249,6 +252,7 @@ mod tests {
 
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,
@@ -271,6 +275,7 @@ mod tests {
 
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,
@@ -293,6 +298,7 @@ mod tests {
 
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,

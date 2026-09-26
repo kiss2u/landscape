@@ -103,6 +103,7 @@ mod tests {
     async fn insert_static_mapping(provider: &LandscapeDBServiceProvider, port: u16, proto: u8) {
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,
@@ -149,6 +150,7 @@ mod tests {
         let provider = LandscapeDBServiceProvider::mem_test_db().await;
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: false,
             remark: String::new(),
             wan_iface_name: None,
@@ -179,6 +181,7 @@ mod tests {
         let provider = LandscapeDBServiceProvider::mem_test_db().await;
         let config = StaticNatMappingV4Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,

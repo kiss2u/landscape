@@ -4,6 +4,7 @@ use sea_orm_migration::prelude::*;
 pub enum DstIpRuleConfigs {
     Table,
     Id,
+    Name,
     Index,
     Enable,
     Mark,

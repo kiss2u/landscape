@@ -52,6 +52,7 @@ async function enter() {
     config.value = await get_firewall_blacklist(props.id);
   } else {
     config.value = {
+      name: null,
       enable: true,
       source: [],
       remark: "",
@@ -134,6 +135,9 @@ async function saveConfig() {
     @after-enter="enter"
   >
     <n-form v-if="config" style="flex: 1" :model="config">
+      <n-form-item :label="t('common.name')">
+        <n-input v-model:value="config.name" type="text" />
+      </n-form-item>
       <n-form-item :label="t('firewall.blacklist_edit.remark')">
         <n-input v-model:value="config.remark" type="text" />
       </n-form-item>

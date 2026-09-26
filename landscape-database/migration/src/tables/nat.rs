@@ -42,6 +42,7 @@ pub enum StaticNatMappingV4Configs {
     #[sea_orm(iden = "static_nat_mapping_v4_configs")]
     Table,
     Id,
+    Name,
     Enable,
     Remark,
     WanIfaceName,
@@ -59,6 +60,7 @@ pub enum StaticNatMappingV6Configs {
     #[sea_orm(iden = "static_nat_mapping_v6_configs")]
     Table,
     Id,
+    Name,
     Enable,
     Remark,
     WanIfaceName,

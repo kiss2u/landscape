@@ -154,6 +154,7 @@ async function enter() {
     rule.value = await get_static_nat_mapping_v6(props.rule_id);
   } else {
     rule.value = {
+      name: null,
       enable: true,
       port_config: { mode: "ports", ports: [] },
       wan_iface_name: null,
@@ -259,6 +260,10 @@ const isIndeterminate = computed(() => {
         :cols="5"
       >
         <n-grid :cols="2">
+          <n-form-item-gi :span="2" :label="t('common.name')">
+            <n-input v-model:value="rule.name" />
+          </n-form-item-gi>
+
           <n-form-item-gi :label="t('nat.mapping.allowed_protocols')" :span="2">
             <n-flex justify="space-between" style="flex: 1">
               <n-flex>

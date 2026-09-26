@@ -4,6 +4,7 @@ use sea_orm_migration::prelude::*;
 pub enum FirewallRuleConfigs {
     Table,
     Id,
+    Name,
     Index,
     Enable,
     Remark,

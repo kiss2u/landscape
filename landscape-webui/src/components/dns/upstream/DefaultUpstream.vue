@@ -143,6 +143,7 @@ const DEFAULT_CONFIGS: Record<
 function replace_default(config: DefaultDnsConfig) {
   rule.value = {
     id: rule.value.id,
+    name: rule.value.name ?? null,
     remark: rule.value?.remark ?? "",
     ...DEFAULT_CONFIGS[config],
     update_at: rule.value.update_at,

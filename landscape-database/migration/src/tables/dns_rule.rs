@@ -21,6 +21,7 @@ pub enum DNSRuleConfigs {
 pub enum DNSRedirectRuleConfigs {
     Table,
     Id,
+    Name,
     Remark,
     Enable,
     MatchRules,
@@ -36,6 +37,7 @@ pub enum DNSRedirectRuleConfigs {
 pub enum DNSUpstreamConfigs {
     Table,
     Id,
+    Name,
     Remark,
     Mode,
     Ips,

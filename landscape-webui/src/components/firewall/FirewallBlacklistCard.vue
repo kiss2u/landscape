@@ -21,10 +21,12 @@ async function del() {
   }
 }
 
-const title_name = computed(() =>
-  rule.value.remark == null || rule.value.remark === ""
-    ? t("common.no_remark")
-    : rule.value.remark,
+const title_name = computed(
+  () =>
+    rule.value.name?.trim() ||
+    (rule.value.remark == null || rule.value.remark === ""
+      ? t("common.no_remark")
+      : rule.value.remark),
 );
 </script>
 <template>
@@ -54,6 +56,9 @@ const title_name = computed(() =>
           </template>
         </n-empty>
       </div>
+      <n-text v-if="rule.name && rule.remark" depth="3">
+        {{ rule.remark }}
+      </n-text>
       <template #header-extra>
         <n-flex>
           <n-button

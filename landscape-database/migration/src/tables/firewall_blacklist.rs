@@ -4,6 +4,7 @@ use sea_orm_migration::prelude::*;
 pub enum FirewallBlacklistConfigs {
     Table,
     Id,
+    Name,
     Enable,
     Source,
     Remark,

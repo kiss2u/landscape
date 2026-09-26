@@ -65,6 +65,8 @@ pub struct DNSRedirectRule {
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
 
+    pub name: Option<String>,
+
     pub remark: String,
 
     pub enable: bool,

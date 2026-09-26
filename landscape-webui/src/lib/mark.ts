@@ -7,6 +7,7 @@ import type {
 } from "@landscape-router/types/api/schemas";
 export class WanIpRuleConfigClass implements WanIpRuleConfig {
   id?: string;
+  name?: string | null;
   index: number;
   enable: boolean;
   mark: FlowMark;
@@ -18,6 +19,7 @@ export class WanIpRuleConfigClass implements WanIpRuleConfig {
 
   constructor(obj: Partial<WanIpRuleConfig> = {}) {
     this.id = obj?.id;
+    this.name = obj?.name;
     this.index = obj?.index ?? -1;
     this.enable = obj?.enable ?? true;
     this.mark = convert_flow_mark(obj.mark);

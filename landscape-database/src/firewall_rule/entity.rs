@@ -16,6 +16,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     /// 主键 ID
     pub id: DBId,
+    pub name: Option<String>,
     pub index: u32,
     pub enable: bool,
     pub remark: String,
@@ -45,6 +46,7 @@ impl From<Model> for FirewallRuleConfig {
     fn from(entity: Model) -> Self {
         FirewallRuleConfig {
             id: entity.id,
+            name: entity.name,
             index: entity.index,
             enable: entity.enable,
             remark: entity.remark,
@@ -66,6 +68,7 @@ impl From<FirewallRuleConfig> for ActiveModel {
 impl UpdateActiveModel<ActiveModel> for FirewallRuleConfig {
     fn update(self, active: &mut ActiveModel) {
         active.index = Set(self.index);
+        active.name = Set(self.name);
         active.enable = Set(self.enable);
         active.remark = Set(self.remark);
         active.items = Set(serde_json::to_value(self.items).unwrap());

@@ -18,6 +18,7 @@ pub type StaticNatMappingV4ConfigActiveModel = ActiveModel;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: DBId,
+    pub name: Option<String>,
     pub enable: bool,
     pub remark: String,
     pub wan_iface_name: Option<String>,
@@ -41,6 +42,7 @@ impl From<Model> for StaticNatMappingV4Config {
         let lan_ipv4 = model.lan_ipv4.and_then(|e| e.parse().ok());
         StaticNatMappingV4Config {
             id: model.id,
+            name: model.name,
             enable: model.enable,
             remark: model.remark,
             mapping_pair_ports: serde_json::from_value(model.mapping_pair_ports).unwrap(),
@@ -65,6 +67,7 @@ impl From<StaticNatMappingV4Config> for ActiveModel {
 
 impl crate::repository::UpdateActiveModel<ActiveModel> for StaticNatMappingV4Config {
     fn update(self, active: &mut ActiveModel) {
+        active.name = Set(self.name);
         active.enable = Set(self.enable);
         active.remark = Set(self.remark);
         active.wan_iface_name = Set(self.wan_iface_name);

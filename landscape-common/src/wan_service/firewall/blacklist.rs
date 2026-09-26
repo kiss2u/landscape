@@ -21,6 +21,7 @@ pub struct FirewallBlacklistConfig {
     #[serde(default = "gen_database_uuid")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
+    pub name: Option<String>,
     pub enable: bool,
     pub source: Vec<FirewallBlacklistSource>,
     pub remark: String,

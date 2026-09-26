@@ -263,6 +263,7 @@ mod tests {
     fn config(target: StaticNatV6Target) -> StaticNatMappingV6Config {
         StaticNatMappingV6Config {
             id: Uuid::new_v4(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,

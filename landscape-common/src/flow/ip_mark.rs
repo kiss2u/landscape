@@ -28,6 +28,7 @@ pub struct WanIpRuleConfig {
     #[serde(default = "gen_database_uuid")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
+    pub name: Option<String>,
     // 优先级 用作存储主键
     pub index: u32,
     // 是否启用

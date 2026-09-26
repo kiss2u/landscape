@@ -36,6 +36,7 @@ pub struct StaticNatMappingV4Config {
     #[serde(default = "gen_database_uuid")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
+    pub name: Option<String>,
     pub enable: bool,
     pub remark: String,
     #[cfg_attr(feature = "openapi", schema(required = true, nullable = true))]

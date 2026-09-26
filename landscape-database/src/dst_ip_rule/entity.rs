@@ -17,6 +17,7 @@ pub type DstIpRuleConfigColumn = Column;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: DBId,
+    pub name: Option<String>,
     pub index: u32,
     pub enable: bool,
     pub mark: u32,
@@ -48,6 +49,7 @@ impl From<Model> for WanIpRuleConfig {
     fn from(entity: Model) -> Self {
         WanIpRuleConfig {
             id: entity.id,
+            name: entity.name,
             index: entity.index,
             enable: entity.enable,
             mark: entity.mark.into(),
@@ -71,6 +73,7 @@ impl From<WanIpRuleConfig> for ActiveModel {
 impl UpdateActiveModel<ActiveModel> for WanIpRuleConfig {
     fn update(self, active: &mut ActiveModel) {
         active.index = Set(self.index);
+        active.name = Set(self.name);
         active.enable = Set(self.enable);
         active.mark = Set(self.mark.into());
         active.source = Set(serde_json::to_value(&self.source).unwrap());

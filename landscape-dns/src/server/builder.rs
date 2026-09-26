@@ -437,6 +437,7 @@ mod tests {
     fn redirect(match_rules: Vec<RuleSource>) -> DNSRedirectRule {
         DNSRedirectRule {
             id: uuid::Uuid::new_v4(),
+            name: None,
             remark: "test".to_string(),
             enable: true,
             match_rules,

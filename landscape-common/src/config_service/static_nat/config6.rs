@@ -51,6 +51,7 @@ pub struct StaticNatMappingV6Config {
     #[serde(default = "gen_database_uuid")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
+    pub name: Option<String>,
     pub enable: bool,
     pub remark: String,
     #[cfg_attr(feature = "openapi", schema(required = true, nullable = true))]
@@ -178,6 +179,7 @@ mod tests {
     fn legacy_unspecified_address_uses_local_port_validation() {
         let config = StaticNatMappingV6Config {
             id: Uuid::nil(),
+            name: None,
             enable: true,
             remark: String::new(),
             wan_iface_name: None,

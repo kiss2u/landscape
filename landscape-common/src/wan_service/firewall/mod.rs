@@ -36,6 +36,7 @@ pub struct FirewallRuleConfig {
     #[serde(default = "gen_database_uuid")]
     #[cfg_attr(feature = "openapi", schema(required = false))]
     pub id: Uuid,
+    pub name: Option<String>,
     // 优先级
     pub index: u32,
     pub enable: bool,
@@ -189,6 +190,7 @@ pub fn insert_default_firewall_rule() -> Option<FirewallRuleConfig> {
     } else {
         Some(FirewallRuleConfig {
             id: gen_database_uuid(),
+            name: None,
             index: 1,
             enable: true,
             remark: "Landscape Router Default Firewall Rule".to_string(),

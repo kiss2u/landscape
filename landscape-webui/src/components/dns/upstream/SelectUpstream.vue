@@ -18,7 +18,8 @@ const upstream_options = computed(() => {
     .filter((e) => e.id)
     .map((e) => ({
       value: e.id,
-      label: e.remark ? `${e.remark}` : e.id,
+      label:
+        [e.name?.trim(), e.remark?.trim()].filter(Boolean).join(" - ") || e.id,
     }));
 });
 

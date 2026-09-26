@@ -156,7 +156,10 @@ async function append_import_rules() {
   >
     <!-- {{ isModified }} -->
     <n-form v-if="rule" style="flex: 1" ref="formRef" :model="rule" :cols="5">
-      <n-grid :cols="5">
+      <n-grid :cols="5" :x-gap="12">
+        <n-form-item-gi :label="t('common.name')" :span="3">
+          <n-input v-model:value="rule.name" />
+        </n-form-item-gi>
         <n-form-item-gi :label="t('flow.wan_rule_edit.priority')" :span="2">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi>
@@ -174,9 +177,6 @@ async function append_import_rules() {
           <FlowMarkEdit v-model:mark="rule.mark"></FlowMarkEdit>
         </n-form-item-gi>
       </n-grid>
-      <n-form-item :label="t('flow.wan_rule_edit.remark')">
-        <n-input v-model:value="rule.remark" type="text" />
-      </n-form-item>
       <n-form-item>
         <template #label>
           <n-flex
@@ -245,6 +245,9 @@ async function append_import_rules() {
             </n-flex>
           </template>
         </n-dynamic-input>
+      </n-form-item>
+      <n-form-item :label="t('flow.wan_rule_edit.remark')">
+        <n-input v-model:value="rule.remark" type="text" />
       </n-form-item>
     </n-form>
     <template #footer>

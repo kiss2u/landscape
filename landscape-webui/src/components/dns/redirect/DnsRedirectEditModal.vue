@@ -71,6 +71,7 @@ async function enter() {
     rule.value = await get_dns_redirect(props.rule_id);
   } else {
     rule.value = {
+      name: null,
       enable: true,
       remark: "",
       match_rules: [],
@@ -186,8 +187,8 @@ async function append_import_rules() {
         <!-- <n-form-item-gi label="优先级" :span="4">
           <n-input-number v-model:value="rule.index" clearable />
         </n-form-item-gi> -->
-        <n-form-item-gi :span="3" :label="t('dns.redirect_edit.remark')">
-          <n-input v-model:value="rule.remark" />
+        <n-form-item-gi :span="3" :label="t('common.name')">
+          <n-input v-model:value="rule.name" />
         </n-form-item-gi>
 
         <n-form-item-gi :span="1">
@@ -314,6 +315,10 @@ async function append_import_rules() {
 
           <DomainMatchInput v-model:source="rule.match_rules">
           </DomainMatchInput>
+        </n-form-item-gi>
+
+        <n-form-item-gi :span="4" :label="t('dns.redirect_edit.remark')">
+          <n-input v-model:value="rule.remark" />
         </n-form-item-gi>
       </n-grid>
     </n-form>

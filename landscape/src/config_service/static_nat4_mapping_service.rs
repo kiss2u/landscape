@@ -212,6 +212,7 @@ fn default_static_mapping_v4_rules() -> Vec<StaticNatMappingV4Config> {
     let mut result = Vec::with_capacity(4);
     // DHCPv4 Client
     result.push(StaticNatMappingV4Config {
+        name: None,
         wan_iface_name: None,
         lan_target: Some(StaticNatV4Target::address(Ipv4Addr::UNSPECIFIED)),
         l4_protocols: vec![17],
@@ -227,6 +228,7 @@ fn default_static_mapping_v4_rules() -> Vec<StaticNatMappingV4Config> {
     #[cfg(debug_assertions)]
     {
         result.push(StaticNatMappingV4Config {
+            name: None,
             wan_iface_name: None,
             lan_target: Some(StaticNatV4Target::address(Ipv4Addr::UNSPECIFIED)),
             l4_protocols: vec![6, 17],
@@ -237,6 +239,7 @@ fn default_static_mapping_v4_rules() -> Vec<StaticNatMappingV4Config> {
             mapping_pair_ports: vec![StaticMapPair { wan_port: 8080, lan_port: 8081 }],
         });
         result.push(StaticNatMappingV4Config {
+            name: None,
             wan_iface_name: None,
             lan_target: Some(StaticNatV4Target::address(Ipv4Addr::UNSPECIFIED)),
             l4_protocols: vec![6],
@@ -247,6 +250,7 @@ fn default_static_mapping_v4_rules() -> Vec<StaticNatMappingV4Config> {
             mapping_pair_ports: vec![StaticMapPair { wan_port: 5173, lan_port: 5173 }],
         });
         result.push(StaticNatMappingV4Config {
+            name: None,
             wan_iface_name: None,
             lan_target: Some(StaticNatV4Target::address(Ipv4Addr::UNSPECIFIED)),
             l4_protocols: vec![6],
