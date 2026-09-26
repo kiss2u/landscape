@@ -1,3 +1,4 @@
+pub mod capability;
 pub mod client;
 pub mod gateway;
 pub mod info;

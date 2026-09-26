@@ -28,4 +28,4 @@ setAxiosInstance(orvalAxios);
 const pinia = createPinia();
 pinia.use(piniaPluginPersistedstate);
 
-createApp(App).use(i18n).use(router).use(pinia).mount("#app");
+createApp(App).use(i18n).use(pinia).use(router).mount("#app");

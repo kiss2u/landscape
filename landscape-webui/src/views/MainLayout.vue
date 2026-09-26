@@ -8,6 +8,7 @@ import { useThemeVars } from "naive-ui";
 import { Logout, Pin, PinFilled, Terminal } from "@vicons/carbon";
 import { LANDSCAPE_TOKEN_KEY } from "@/lib/common";
 import { useFrontEndStore } from "@/stores/front_end_config";
+import { useCapabilityStore } from "@/stores/capability";
 import { usePtyStore } from "@/stores/pty";
 import { useEnrolledDeviceStore } from "@/stores/enrolled_device";
 import IntervalFetch from "@/components/head/IntervalFetch.vue";
@@ -48,8 +49,11 @@ function handleTagClose(path: string) {
 }
 
 const frontEndStore = useFrontEndStore();
+const capabilityStore = useCapabilityStore();
 const ptyStore = usePtyStore();
 const enrolledDeviceStore = useEnrolledDeviceStore();
+
+void capabilityStore.LOAD();
 
 watch(
   () => route.path,

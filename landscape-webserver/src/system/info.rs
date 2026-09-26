@@ -8,6 +8,7 @@ use landscape::sys_service::routerstatus::get_sys_running_status;
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::dev::{get_interface_index_by_name, LandscapeInterface};
 use landscape_common::service::ServiceConfigError;
+use landscape_common::sys_service::capability::Capability;
 use landscape_common::sys_service::info::{
     LandscapeStatus, LandscapeSystemInfo, WatchResource, XdpRedirectAbleInfo, LAND_SYS_BASE_INFO,
 };
@@ -27,6 +28,7 @@ pub fn build_sysinfo_openapi_router() -> OpenApiRouter<SysStatus> {
         .routes(routes!(interval_fetch_info))
         .routes(routes!(get_cpu_count))
         .routes(routes!(net_dev))
+        .routes(routes!(get_capabilities))
         .routes(routes!(get_xdp_redirect_able_all))
         .routes(routes!(get_xdp_redirect_able))
 }
@@ -40,6 +42,7 @@ pub fn get_sys_info_route(ebpf_paths: Arc<LandscapeMapPath>) -> Router {
         .route("/info/interval", get(interval_fetch_info))
         .route("/info/cpu_count", get(get_cpu_count))
         .route("/info/net_dev", get(net_dev))
+        .route("/info/capabilities", get(get_capabilities))
         .route("/info/xdp_redirect_able", get(get_xdp_redirect_able_all))
         .route("/info/xdp_redirect_able/{ifname}", get(get_xdp_redirect_able))
         .with_state((watchs, ebpf_paths))
@@ -55,6 +58,29 @@ pub fn get_sys_info_route(ebpf_paths: Arc<LandscapeMapPath>) -> Router {
 async fn net_dev() -> LandscapeApiResult<Vec<LandscapeInterface>> {
     let devs = landscape::get_all_devices().await;
     LandscapeApiResp::success(devs)
+}
+
+/// Capabilities supported by this backend build, gated by compile-time features.
+fn enabled_capabilities() -> Vec<Capability> {
+    let mut capabilities = Vec::new();
+    if cfg!(feature = "gateway") {
+        capabilities.push(Capability::Gateway);
+    }
+    if cfg!(feature = "metric-persistent") {
+        capabilities.push(Capability::MetricPersistent);
+    }
+    capabilities
+}
+
+#[utoipa::path(
+    get,
+    path = "/info/capabilities",
+    tag = "System Info",
+    operation_id = "get_capabilities",
+    responses((status = 200, body = CommonApiResp<Vec<Capability>>))
+)]
+async fn get_capabilities() -> LandscapeApiResult<Vec<Capability>> {
+    LandscapeApiResp::success(enabled_capabilities())
 }
 
 #[utoipa::path(

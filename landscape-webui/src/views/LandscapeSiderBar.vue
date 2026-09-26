@@ -22,10 +22,34 @@ import { Docker } from "@vicons/fa";
 import { BookGlobe20Regular } from "@vicons/fluent";
 
 import CopyRight from "@/components/CopyRight.vue";
+import { useCapabilityStore } from "@/stores/capability";
 
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
+const capabilityStore = useCapabilityStore();
+
+// Menu keys that require a backend capability to be usable.
+const menu_capability: Record<string, string> = {
+  gateway: "gateway",
+  "metrics/conn/history": "metric_persistent",
+  "metrics/dns": "metric_persistent",
+};
+
+function applyCapability(options: MenuOption[]): MenuOption[] {
+  return options.map((option) => {
+    const children = option.children
+      ? applyCapability(option.children as MenuOption[])
+      : undefined;
+    const capability = menu_capability[String(option.key)];
+    const disabled =
+      (capability !== undefined && !capabilityStore.HAS(capability)) ||
+      (children !== undefined &&
+        children.length > 0 &&
+        children.every((child) => child.disabled === true));
+    return { ...option, children, disabled };
+  });
+}
 
 const menu_active_key = ref<string>("");
 
@@ -55,162 +79,164 @@ function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) });
 }
 
-const menuOptions = computed<MenuOption[]>(() => [
-  {
-    label: t("routes.dashboard"),
-    key: "",
-    icon: renderIcon(CicsSystemGroup),
-  },
-  {
-    label: t("routes.flow"),
-    key: "flow",
-    icon: renderIcon(ModelBuilder),
-  },
-  {
-    label: t("routes.mac-binding"),
-    key: "mac-binding",
-    icon: renderIcon(Devices),
-  },
-  {
-    label: t("routes.network-status"),
-    key: "network-status",
-    icon: renderIcon(Dashboard),
-    children: [
-      {
-        label: t("routes.dhcp-v4"),
-        key: "network/dhcp-v4",
-        disabled: false,
-      },
-      {
-        label: t("routes.ipv6-pd"),
-        key: "network/ipv6-pd",
-      },
-      {
-        label: t("routes.ipv6-ra"),
-        key: "network/ipv6-ra",
-        disabled: false,
-      },
-    ],
-  },
-  {
-    label: t("routes.firewall-nat"),
-    key: "firewall-nat",
-    icon: renderIcon(Wall),
-    children: [
-      {
-        label: t("routes.firewall"),
-        key: "firewall-nat/firewall",
-      },
-      {
-        label: t("routes.nat-v4"),
-        key: "firewall-nat/nat/v4",
-      },
-      {
-        label: t("routes.nat-v6"),
-        key: "firewall-nat/nat/v6",
-      },
-    ],
-  },
-  {
-    label: t("routes.dns"),
-    key: "dns",
-    icon: renderIcon(ServerDns),
-    children: [
-      {
-        label: t("routes.dns-upstream"),
-        key: "dns/upstream",
-      },
-      {
-        label: t("routes.dns-redirect"),
-        key: "dns/redirect",
-      },
-    ],
-  },
-  {
-    label: t("routes.geo"),
-    key: "geo",
-    icon: renderIcon(BookGlobe20Regular),
-    children: [
-      {
-        label: t("routes.geo-domain"),
-        key: "geo/domain",
-      },
-      {
-        label: t("routes.geo-ip"),
-        key: "geo/ip",
-      },
-    ],
-  },
-  {
-    label: t("routes.domains"),
-    key: "domains",
-    icon: renderIcon(Certificate),
-    children: [
-      {
-        label: t("routes.dns-provider-profiles"),
-        key: "domains/dns-providers",
-      },
-      {
-        label: t("routes.ddns"),
-        key: "domains/ddns",
-      },
-      {
-        label: t("routes.cert-accounts"),
-        key: "domains/cert-accounts",
-      },
-      {
-        label: t("routes.certs"),
-        key: "domains/certs",
-      },
-    ],
-  },
-  {
-    label: t("routes.gateway"),
-    key: "gateway",
-    icon: renderIcon(Gateway),
-  },
-  {
-    label: t("routes.docker"),
-    key: "docker",
-    icon: renderIcon(Docker),
-  },
-  {
-    label: t("routes.metric-group"),
-    key: "metric-group",
-    icon: renderIcon(ChartCombo),
-    children: [
-      {
-        label: t("routes.dns-metric"),
-        key: "metrics/dns",
-      },
-      {
-        label: t("routes.connect-live"),
-        key: "metrics/conn/live",
-      },
-      {
-        label: t("routes.connect-iface"),
-        key: "metrics/conn/iface",
-      },
-      {
-        label: t("routes.connect-src"),
-        key: "metrics/conn/src",
-      },
-      {
-        label: t("routes.connect-dst"),
-        key: "metrics/conn/dst",
-      },
-      {
-        label: t("routes.connect-history"),
-        key: "metrics/conn/history",
-      },
-    ],
-  },
-  {
-    label: t("routes.config"),
-    key: "config",
-    icon: renderIcon(Settings),
-  },
-]);
+const menuOptions = computed<MenuOption[]>(() =>
+  applyCapability([
+    {
+      label: t("routes.dashboard"),
+      key: "",
+      icon: renderIcon(CicsSystemGroup),
+    },
+    {
+      label: t("routes.flow"),
+      key: "flow",
+      icon: renderIcon(ModelBuilder),
+    },
+    {
+      label: t("routes.mac-binding"),
+      key: "mac-binding",
+      icon: renderIcon(Devices),
+    },
+    {
+      label: t("routes.network-status"),
+      key: "network-status",
+      icon: renderIcon(Dashboard),
+      children: [
+        {
+          label: t("routes.dhcp-v4"),
+          key: "network/dhcp-v4",
+          disabled: false,
+        },
+        {
+          label: t("routes.ipv6-pd"),
+          key: "network/ipv6-pd",
+        },
+        {
+          label: t("routes.ipv6-ra"),
+          key: "network/ipv6-ra",
+          disabled: false,
+        },
+      ],
+    },
+    {
+      label: t("routes.firewall-nat"),
+      key: "firewall-nat",
+      icon: renderIcon(Wall),
+      children: [
+        {
+          label: t("routes.firewall"),
+          key: "firewall-nat/firewall",
+        },
+        {
+          label: t("routes.nat-v4"),
+          key: "firewall-nat/nat/v4",
+        },
+        {
+          label: t("routes.nat-v6"),
+          key: "firewall-nat/nat/v6",
+        },
+      ],
+    },
+    {
+      label: t("routes.dns"),
+      key: "dns",
+      icon: renderIcon(ServerDns),
+      children: [
+        {
+          label: t("routes.dns-upstream"),
+          key: "dns/upstream",
+        },
+        {
+          label: t("routes.dns-redirect"),
+          key: "dns/redirect",
+        },
+      ],
+    },
+    {
+      label: t("routes.geo"),
+      key: "geo",
+      icon: renderIcon(BookGlobe20Regular),
+      children: [
+        {
+          label: t("routes.geo-domain"),
+          key: "geo/domain",
+        },
+        {
+          label: t("routes.geo-ip"),
+          key: "geo/ip",
+        },
+      ],
+    },
+    {
+      label: t("routes.domains"),
+      key: "domains",
+      icon: renderIcon(Certificate),
+      children: [
+        {
+          label: t("routes.dns-provider-profiles"),
+          key: "domains/dns-providers",
+        },
+        {
+          label: t("routes.ddns"),
+          key: "domains/ddns",
+        },
+        {
+          label: t("routes.cert-accounts"),
+          key: "domains/cert-accounts",
+        },
+        {
+          label: t("routes.certs"),
+          key: "domains/certs",
+        },
+      ],
+    },
+    {
+      label: t("routes.gateway"),
+      key: "gateway",
+      icon: renderIcon(Gateway),
+    },
+    {
+      label: t("routes.docker"),
+      key: "docker",
+      icon: renderIcon(Docker),
+    },
+    {
+      label: t("routes.metric-group"),
+      key: "metric-group",
+      icon: renderIcon(ChartCombo),
+      children: [
+        {
+          label: t("routes.dns-metric"),
+          key: "metrics/dns",
+        },
+        {
+          label: t("routes.connect-live"),
+          key: "metrics/conn/live",
+        },
+        {
+          label: t("routes.connect-iface"),
+          key: "metrics/conn/iface",
+        },
+        {
+          label: t("routes.connect-src"),
+          key: "metrics/conn/src",
+        },
+        {
+          label: t("routes.connect-dst"),
+          key: "metrics/conn/dst",
+        },
+        {
+          label: t("routes.connect-history"),
+          key: "metrics/conn/history",
+        },
+      ],
+    },
+    {
+      label: t("routes.config"),
+      key: "config",
+      icon: renderIcon(Settings),
+    },
+  ]),
+);
 </script>
 <template>
   <n-layout-sider

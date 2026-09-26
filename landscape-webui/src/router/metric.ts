@@ -18,6 +18,7 @@ const metric_route: Array<RouteRecordRaw> = [
     path: "/metrics/conn/history",
     name: "routes.connect-history",
     component: HistoryMetric,
+    meta: { capability: "metric_persistent" },
   },
   {
     path: "/metrics/conn/iface",
@@ -38,16 +39,19 @@ const metric_route: Array<RouteRecordRaw> = [
     path: "/metrics/conn/history-src",
     name: "routes.connect-history-src",
     component: HistorySrcIpMetric,
+    meta: { capability: "metric_persistent" },
   },
   {
     path: "/metrics/conn/history-dst",
     name: "routes.connect-history-dst",
     component: HistoryDstIpMetric,
+    meta: { capability: "metric_persistent" },
   },
   {
     path: "/metrics/dns",
     name: "routes.dns-metric",
     component: DNSMetric,
+    meta: { capability: "metric_persistent" },
   },
 ];
 

@@ -23,6 +23,8 @@ import DdnsJobs from "@/views/domain/DdnsJobs.vue";
 import DnsProviderProfiles from "@/views/domain/DnsProviderProfiles.vue";
 import Gateway from "@/views/Gateway.vue";
 import NotFound from "@/views/error/NotFound.vue";
+import Unavailable from "@/views/error/Unavailable.vue";
+import { useCapabilityStore } from "@/stores/capability";
 
 import service_status_route from "./service_status";
 import metric_route from "./metric";
@@ -114,11 +116,17 @@ const inner_zone: Array<RouteRecordRaw> = [
     path: "/gateway",
     name: "routes.gateway",
     component: Gateway,
+    meta: { capability: "gateway" },
   },
   {
     path: "/about",
     name: "routes.about",
     component: About,
+  },
+  {
+    path: "/unavailable",
+    name: "routes.unavailable",
+    component: Unavailable,
   },
   {
     path: "/:pathMatch(.*)*",
@@ -142,5 +150,30 @@ const routes: Array<RouteRecordRaw> = [
 ];
 
 const router = createRouter({ history: createWebHistory(), routes });
+
+router.beforeEach(async (to, from) => {
+  const capability = to.meta.capability as string | undefined;
+  if (!capability) {
+    return true;
+  }
+
+  const capabilityStore = useCapabilityStore();
+  await capabilityStore.LOAD();
+
+  if (capabilityStore.HAS(capability)) {
+    return true;
+  }
+
+  // Remember where the user came from so the unavailable page can offer a
+  // back action. Avoid bouncing back to another unavailable route.
+  const fromCapability = from.meta.capability as string | undefined;
+  const origin =
+    from.path !== "/unavailable" &&
+    !(fromCapability && !capabilityStore.HAS(fromCapability))
+      ? from.fullPath
+      : "/";
+
+  return { path: "/unavailable", state: { redirect: origin } };
+});
 
 export default router;
