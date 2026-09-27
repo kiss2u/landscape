@@ -1,11 +1,11 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Initializing Landscape Development Environment ==="
 
 # Run vmlinux setup
-bash "$SCRIPT_DIR/scripts/init/setup_vmlinux.sh"
+bash "$SCRIPT_DIR/init/setup_vmlinux.sh"
 
 echo "=== Initialization Complete! ==="

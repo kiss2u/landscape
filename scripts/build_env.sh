@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-# 记录脚本所在的绝对路径，避免后续 cd 或 source 导致路径混乱
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 记录仓库根目录的绝对路径，避免后续 cd 或 source 导致路径混乱
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # 自动获取当前主机架构
 DEFAULT_ARCH="$(uname -m)"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source ./build_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/build_env.sh"
 
 #
 # 第一阶段：Rust 编译
