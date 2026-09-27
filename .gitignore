@@ -22,3 +22,6 @@ net.sh
 # Node
 node_modules/
 landscape-types/.bindings.lock
+
+# Local environment
+.env
