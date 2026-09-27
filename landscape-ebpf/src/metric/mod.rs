@@ -9,7 +9,7 @@ use landscape_common::metric::connect::ConnectMetric;
 use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::{timeout, Duration};
+use tokio::time::{interval, timeout, Duration, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 use crate::maps::LandscapeMapPath;
@@ -174,12 +174,20 @@ impl MetricSourceHandle for ConnectMetricEventSource {
     }
 }
 
+/// Fallback consume period: recover if an epoll edge wakeup is lost.
+const FALLBACK_CONSUME_INTERVAL: Duration = Duration::from_secs(1);
+
 pub async fn run_ringbuf_loop(
     ringbuf: libbpf_rs::RingBuffer<'_>,
     async_fd: AsyncFd<OwnedFd>,
     cancel: CancellationToken,
 ) {
     let mut async_fd = async_fd;
+    let mut fallback = interval(FALLBACK_CONSUME_INTERVAL);
+    fallback.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    // Drop the immediate first tick.
+    fallback.tick().await;
+
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
@@ -204,6 +212,11 @@ pub async fn run_ringbuf_loop(
                             }
                         }
                     }
+                }
+            }
+            _ = fallback.tick() => {
+                if let Err(error) = ringbuf.consume() {
+                    tracing::error!("fallback ringbuf consume failed: {}", error);
                 }
             }
         }
