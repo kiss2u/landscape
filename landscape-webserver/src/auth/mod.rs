@@ -1,12 +1,16 @@
+use std::collections::HashMap;
 use std::fs::Permissions;
+use std::net::{IpAddr, SocketAddr};
 use std::os::unix::fs::PermissionsExt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
+use std::time::Duration;
+use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
 use axum::Router;
 use axum::{extract::Request, middleware::Next, response::Response};
 use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
@@ -22,6 +26,7 @@ use utoipa_axum::routes;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
@@ -36,6 +41,77 @@ pub mod error;
 const SECRET_KEY_LENGTH: usize = 20;
 const DEFAULT_EXPIRE_TIME: usize = 60 * 60;
 const SYS_TOKEN_EXPIRE_TIME: usize = 60 * 60 * 24 * 365 * 30;
+
+const LOGIN_MAX_FAILURES: u32 = 5;
+const LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(300);
+const LOGIN_BASE_BLOCK: Duration = Duration::from_secs(30);
+const LOGIN_MAX_BLOCK: Duration = Duration::from_secs(900);
+const LOGIN_LIMITER_MAX_ENTRIES: usize = 4096;
+
+#[derive(Default)]
+struct AttemptState {
+    failures: u32,
+    window_start: Option<Instant>,
+    blocked_until: Option<Instant>,
+}
+
+#[derive(Default)]
+struct LoginRateLimiter {
+    entries: Mutex<HashMap<IpAddr, AttemptState>>,
+}
+
+impl LoginRateLimiter {
+    fn check(&self, ip: IpAddr, now: Instant) -> Result<(), Duration> {
+        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(state) = entries.get_mut(&ip) {
+            if let Some(blocked_until) = state.blocked_until {
+                if now < blocked_until {
+                    return Err(blocked_until.saturating_duration_since(now));
+                }
+                state.blocked_until = None;
+                state.failures = 0;
+                state.window_start = None;
+            }
+        }
+        Ok(())
+    }
+
+    fn record_failure(&self, ip: IpAddr, now: Instant) {
+        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        if entries.len() >= LOGIN_LIMITER_MAX_ENTRIES {
+            entries.retain(|_, state| {
+                state.blocked_until.is_some_and(|t| t > now)
+                    || state
+                        .window_start
+                        .is_some_and(|t| now.saturating_duration_since(t) < LOGIN_FAILURE_WINDOW)
+            });
+        }
+
+        let state = entries.entry(ip).or_default();
+        let window_active = state
+            .window_start
+            .is_some_and(|t| now.saturating_duration_since(t) < LOGIN_FAILURE_WINDOW);
+        if !window_active {
+            state.window_start = Some(now);
+            state.failures = 0;
+        }
+
+        state.failures = state.failures.saturating_add(1);
+        if state.failures >= LOGIN_MAX_FAILURES {
+            let over = state.failures - LOGIN_MAX_FAILURES;
+            let factor = 1u32 << over.min(5);
+            let block = LOGIN_BASE_BLOCK.saturating_mul(factor).min(LOGIN_MAX_BLOCK);
+            state.blocked_until = Some(now + block);
+        }
+    }
+
+    fn record_success(&self, ip: IpAddr) {
+        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        entries.remove(&ip);
+    }
+}
+
+static LOGIN_LIMITER: Lazy<LoginRateLimiter> = Lazy::new(LoginRateLimiter::default);
 
 pub static SECRET_KEY: Lazy<String> = Lazy::new(|| {
     //
@@ -179,20 +255,106 @@ pub fn get_auth_route(auth: Arc<ArcSwap<AuthRuntimeConfig>>) -> Router {
     request_body = LoginInfo,
     responses(
         (status = 200, body = CommonApiResp<LoginResult>),
-        (status = 401, description = "Invalid credentials")
+        (status = 401, description = "Invalid credentials"),
+        (status = 429, description = "Too many login attempts")
     )
 )]
 async fn login_handler(
     State(auth): State<Arc<ArcSwap<AuthRuntimeConfig>>>,
+    connect_info: ConnectInfo<SocketAddr>,
     JsonBody(LoginInfo { username, password }): JsonBody<LoginInfo>,
 ) -> LandscapeApiResult<LoginResult> {
-    let auth_config = auth.load();
-    let mut result = LoginResult { success: false, token: "".to_string() };
-    if username == auth_config.admin_user && password == auth_config.admin_pass {
-        result.success = true;
-        result.token = create_jwt(&username, DEFAULT_EXPIRE_TIME)?;
-    } else {
-        Err(AuthError::InvalidUsernameOrPassword)?;
+    let client_ip = connect_info.0.ip();
+    let now = Instant::now();
+    if LOGIN_LIMITER.check(client_ip, now).is_err() {
+        return Err(AuthError::TooManyAttempts.into());
     }
-    LandscapeApiResp::success(result)
+
+    let auth_config = auth.load();
+    let user_ok = username.as_bytes().ct_eq(auth_config.admin_user.as_bytes());
+    let pass_ok = password.as_bytes().ct_eq(auth_config.admin_pass.as_bytes());
+
+    if bool::from(user_ok & pass_ok) {
+        LOGIN_LIMITER.record_success(client_ip);
+        let token = create_jwt(&username, DEFAULT_EXPIRE_TIME)?;
+        LandscapeApiResp::success(LoginResult { success: true, token })
+    } else {
+        LOGIN_LIMITER.record_failure(client_ip, now);
+        Err(AuthError::InvalidUsernameOrPassword.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    fn ip(last: u8) -> IpAddr {
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, last))
+    }
+
+    #[test]
+    fn allows_attempts_below_threshold() {
+        let limiter = LoginRateLimiter::default();
+        let ip = ip(1);
+        let now = Instant::now();
+        for _ in 0..LOGIN_MAX_FAILURES - 1 {
+            assert!(limiter.check(ip, now).is_ok());
+            limiter.record_failure(ip, now);
+        }
+        assert!(limiter.check(ip, now).is_ok());
+    }
+
+    #[test]
+    fn blocks_after_threshold_and_recovers() {
+        let limiter = LoginRateLimiter::default();
+        let ip = ip(2);
+        let now = Instant::now();
+        for _ in 0..LOGIN_MAX_FAILURES {
+            limiter.record_failure(ip, now);
+        }
+        let remaining = limiter.check(ip, now).unwrap_err();
+        assert!(remaining > Duration::ZERO);
+        assert!(limiter.check(ip, now + LOGIN_BASE_BLOCK).is_ok());
+    }
+
+    #[test]
+    fn success_clears_failures() {
+        let limiter = LoginRateLimiter::default();
+        let ip = ip(3);
+        let now = Instant::now();
+        for _ in 0..LOGIN_MAX_FAILURES - 1 {
+            limiter.record_failure(ip, now);
+        }
+        limiter.record_success(ip);
+        for _ in 0..LOGIN_MAX_FAILURES - 1 {
+            limiter.record_failure(ip, now);
+        }
+        assert!(limiter.check(ip, now).is_ok());
+    }
+
+    #[test]
+    fn backoff_grows_with_repeated_lockouts() {
+        let limiter = LoginRateLimiter::default();
+        let ip = ip(4);
+        let now = Instant::now();
+        for _ in 0..LOGIN_MAX_FAILURES {
+            limiter.record_failure(ip, now);
+        }
+        let first = limiter.check(ip, now).unwrap_err();
+        limiter.record_failure(ip, now);
+        let second = limiter.check(ip, now).unwrap_err();
+        assert!(second > first);
+    }
+
+    #[test]
+    fn different_ips_are_independent() {
+        let limiter = LoginRateLimiter::default();
+        let now = Instant::now();
+        for _ in 0..LOGIN_MAX_FAILURES {
+            limiter.record_failure(ip(5), now);
+        }
+        assert!(limiter.check(ip(5), now).is_err());
+        assert!(limiter.check(ip(6), now).is_ok());
+    }
 }

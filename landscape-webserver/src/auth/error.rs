@@ -22,6 +22,10 @@ pub enum AuthError {
     #[api_error(id = "auth.invalid_credentials", status = 401)]
     InvalidUsernameOrPassword,
 
+    #[error("Too many login attempts, please try again later")]
+    #[api_error(id = "auth.too_many_attempts", status = 429)]
+    TooManyAttempts,
+
     #[error("Token creation failed: {0}")]
     #[api_error(id = "auth.token_creation_failed", status = 500)]
     JwtCreationFailed(#[from] jsonwebtoken::errors::Error),

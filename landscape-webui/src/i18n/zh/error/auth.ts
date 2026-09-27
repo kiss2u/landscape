@@ -4,6 +4,7 @@ export default {
   "auth.invalid_token": "登录令牌无效，请重新登录",
   "auth.unauthorized": "未授权用户",
   "auth.invalid_credentials": "用户名或密码错误",
+  "auth.too_many_attempts": "登录尝试过于频繁，请稍后再试",
   "auth.token_creation_failed": "令牌创建失败",
   "auth.current_password_incorrect": "当前密码不正确",
   "auth.password_too_weak":

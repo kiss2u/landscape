@@ -4,6 +4,7 @@ export default {
   "auth.invalid_token": "Invalid token, please log in again",
   "auth.unauthorized": "Unauthorized user",
   "auth.invalid_credentials": "Invalid username or password",
+  "auth.too_many_attempts": "Too many login attempts, please try again later",
   "auth.token_creation_failed": "Token creation failed",
   "auth.current_password_incorrect": "Current password is incorrect",
   "auth.password_too_weak":

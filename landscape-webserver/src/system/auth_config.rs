@@ -1,5 +1,6 @@
 use axum::extract::State;
 use landscape_common::auth::ChangePasswordRequest;
+use subtle::ConstantTimeEq;
 
 use crate::api::{JsonBody, LandscapeApiResp};
 use crate::auth::error::AuthError;
@@ -34,7 +35,8 @@ pub async fn update_auth_config(
         return Err(AuthError::CurrentPasswordIncorrect.into());
     }
     let current_auth = state.config_service.get_auth_config();
-    if req.current_password != current_auth.admin_pass {
+    let current_ok = req.current_password.as_bytes().ct_eq(current_auth.admin_pass.as_bytes());
+    if !bool::from(current_ok) {
         return Err(AuthError::CurrentPasswordIncorrect.into());
     }
 

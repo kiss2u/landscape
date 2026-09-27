@@ -129,7 +129,7 @@ impl RuntimeConfig {
          \n\
          [Auth]\n\
          Admin User: {}\n\
-         Admin Pass: {}\n\
+         Admin Pass: ******\n\
          \n\
          [Log]\n\
          Log Path: {}\n\
@@ -172,7 +172,6 @@ impl RuntimeConfig {
           Samples Per Server: {}\n",
             self.home_path.display(),
             self.auth.admin_user,
-            self.auth.admin_pass,
             self.log.log_path.display(),
             self.log.debug,
             self.log.log_output_in_terminal,
@@ -330,5 +329,29 @@ impl StoreRuntimeConfig {
             }
         }
         format!("sqlite://{}?mode=rwc", path.display())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::args::WebCommArgs;
+
+    #[test]
+    fn to_string_summary_redacts_admin_pass() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let args = WebCommArgs {
+            config_dir: Some(temp_dir.path().to_path_buf()),
+            admin_user: Some("root".to_string()),
+            admin_pass: Some("super-secret-passphrase".to_string()),
+            ..Default::default()
+        };
+        let config = RuntimeConfig::new(args);
+
+        let summary = config.to_string_summary();
+
+        assert!(!summary.contains("super-secret-passphrase"));
+        assert!(summary.contains("Admin Pass: ******"));
+        assert!(summary.contains("Admin User: root"));
     }
 }

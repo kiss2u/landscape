@@ -25,6 +25,7 @@ chrono = { workspace = true }
 colored = { workspace = true }
 jsonwebtoken = { workspace = true }
 once_cell = { workspace = true }
+subtle = { workspace = true }
 
 tokio = { workspace = true, features = ["full"] }
 clap = { workspace = true }
