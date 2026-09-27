@@ -31,6 +31,11 @@ pub struct DnsUpstreamConfig {
     #[cfg_attr(feature = "openapi", schema(required = true, nullable = true))]
     pub enable_ip_validation: Option<bool>,
 
+    /// Opt in to the experimental upstream connection pool (default: false).
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = false, nullable = true))]
+    pub use_experimental_pool: Option<bool>,
+
     /// Source-address binding for connections to this upstream (optional).
     #[serde(default)]
     #[cfg_attr(feature = "openapi", schema(required = false))]
@@ -62,6 +67,7 @@ impl Default for DnsUpstreamConfig {
             mode: DnsUpstreamMode::Plaintext,
             ips: vec![IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1))],
             enable_ip_validation: None,
+            use_experimental_pool: None,
             port: Some(53),
             bind_config: DnsBindConfig::default(),
             update_at: get_f64_timestamp(),
