@@ -3,6 +3,7 @@ import { get_all_iface_pppd_config } from "@/api/service_pppd";
 import { DevStateType, NetDev } from "@/lib/dev";
 import type { PPPDServiceConfig } from "@/lib/pppd";
 import { IfaceZoneType } from "@landscape-router/types/api/schemas";
+import * as dagre from "@dagrejs/dagre";
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
@@ -12,13 +13,16 @@ interface IfaceOption {
   ifindex: number;
 }
 
-const NODE_WIDTH = 360;
+/** Real rendered card width (must match FlowNode). */
+const NODE_WIDTH = 235;
+/** Base card height estimate used before the DOM is measured. */
 const NODE_HEIGHT = 136;
-const LANE_PADDING = 48;
-const GROUP_GAP = 18;
-const STACK_GAP = 8;
-const CORE_COLUMN_GAP = 14;
-const IDEAL_COLUMN_GAP = 320;
+/** Vertical gap between stacked cards: tight rhythm within a column (0.2 × card height). */
+const NODE_SEP = Math.round(NODE_HEIGHT * 0.2);
+/** Horizontal gap between adjacent columns: golden ratio (0.618) of card width. */
+const COLUMN_GAP = NODE_WIDTH * 0.618;
+/** Top margin of the graph. */
+const GRAPH_TOP_MARGIN = 72;
 const MIN_GRAPH_WIDTH = 940;
 const MAX_GRAPH_WIDTH = 1480;
 
@@ -136,6 +140,191 @@ function create_layout_signature(devs: NetDev[], width: number) {
   });
 }
 
+export interface LayoutResult {
+  /** Node id (ifindex) → top-left position, normalized to (0, 0). */
+  positions: Map<string, { x: number; y: number }>;
+  size: { width: number; height: number };
+}
+
+/**
+ * Layered layout via dagre (`rankdir: LR`): WAN roots in the left column,
+ * core roots (bridges / router ifaces) in the middle, bridge members on the
+ * right. Invisible edges from WAN roots to core roots force the rank order.
+ */
+export function compute_layout(
+  devs: NetDev[],
+  heights: Map<string, number>,
+): LayoutResult {
+  const graph = new dagre.graphlib.Graph();
+  graph.setGraph({
+    rankdir: "LR",
+    nodesep: NODE_SEP,
+    edgesep: 16,
+    marginx: 0,
+    marginy: 0,
+  });
+  graph.setDefaultEdgeLabel(() => ({}));
+
+  const device_map = new Map(devs.map((each) => [each.index, each]));
+  const id = (index: number) => `${index}`;
+  const is_root = (each: NetDev) =>
+    each.controller_id === undefined || !device_map.has(each.controller_id);
+
+  for (const each of devs) {
+    const height = heights.get(id(each.index)) ?? NODE_HEIGHT;
+    graph.setNode(id(each.index), { width: NODE_WIDTH, height });
+  }
+
+  // dagre 的列内顺序不可用：无入边的根会被其排序阶段按插入序降序翻转，
+  // 而 weight-0 隐形边把 core 根的重心算成 NaN（0/0），排序结果不可预期。
+  // 这里改为确定性的 BFS 树序：根按 `devs` 顺序（zone → bridge 优先 →
+  // 名称升序），成员按所属 controller 分组、组序跟随 controller 的列序、
+  // 组内名称升序。
+  const children_of = new Map<number, NetDev[]>();
+  for (const each of devs) {
+    if (is_root(each)) {
+      continue;
+    }
+
+    const group = children_of.get(each.controller_id!) ?? [];
+    group.push(each);
+    children_of.set(each.controller_id!, group);
+  }
+
+  const order_index = new Map<string, number>();
+  const queue = devs.filter(is_root);
+  for (let head = 0; head < queue.length; head += 1) {
+    const current = queue[head]!;
+    order_index.set(id(current.index), head);
+    for (const child of children_of.get(current.index) ?? []) {
+      queue.push(child);
+    }
+  }
+
+  for (const each of devs) {
+    if (each.controller_id === undefined) {
+      continue;
+    }
+    if (!device_map.has(each.controller_id)) {
+      continue;
+    }
+
+    const controller = device_map.get(each.controller_id)!;
+    // Members of a WAN root must land in the third column (rank 2), aligned
+    // with the core root members, instead of overlapping the middle column.
+    const minlen =
+      controller.zone_type === IfaceZoneType.wan && is_root(controller) ? 2 : 1;
+    graph.setEdge(id(each.controller_id), id(each.index), {
+      minlen,
+      weight: 1,
+    });
+  }
+
+  const wan_roots = devs.filter(
+    (each) => each.zone_type === IfaceZoneType.wan && is_root(each),
+  );
+  const core_roots = devs.filter(
+    (each) => each.zone_type !== IfaceZoneType.wan && is_root(each),
+  );
+
+  for (const wan of wan_roots) {
+    for (const core of core_roots) {
+      graph.setEdge(id(wan.index), id(core.index), { weight: 0 });
+    }
+  }
+
+  dagre.layout(graph);
+
+  interface LayoutItem {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rank: number;
+  }
+
+  const items = new Map<string, LayoutItem>();
+  for (const each of devs) {
+    const node = graph.node(id(each.index));
+    items.set(id(each.index), {
+      id: id(each.index),
+      x: node.x,
+      y: node.y,
+      width: node.width,
+      height: node.height,
+      rank: node.rank ?? 0,
+    });
+  }
+
+  // dagre 会把节点往邻居中位线方向拉（隐形边/子节点），导致同列间隔不均。
+  // 同一 rank（同一列）内改为均匀堆叠：间隔恒为 NODE_SEP，整组保持原中点。
+  // X 方向同样按列规整：相邻列间固定间隔 COLUMN_GAP，与 dagre 的 ranksep 无关。
+  const by_rank = new Map<number, LayoutItem[]>();
+  for (const item of items.values()) {
+    const group = by_rank.get(item.rank) ?? [];
+    group.push(item);
+    by_rank.set(item.rank, group);
+  }
+
+  const ranks = [...by_rank.keys()].sort((left, right) => left - right);
+  const column_stride = NODE_WIDTH + COLUMN_GAP;
+  ranks.forEach((rank, order) => {
+    const x_center = (order * column_stride + NODE_WIDTH / 2) as number;
+    for (const item of by_rank.get(rank)!) {
+      item.x = x_center;
+    }
+  });
+
+  for (const group of by_rank.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    group.sort(
+      (left, right) =>
+        (order_index.get(left.id) ?? 0) - (order_index.get(right.id) ?? 0),
+    );
+    const top = Math.min(...group.map((item) => item.y - item.height / 2));
+    const bottom = Math.max(...group.map((item) => item.y + item.height / 2));
+    const total =
+      group.reduce((sum, item) => sum + item.height, 0) +
+      NODE_SEP * (group.length - 1);
+
+    let cursor = (top + bottom) / 2 - total / 2;
+    for (const item of group) {
+      item.y = cursor + item.height / 2;
+      cursor += item.height + NODE_SEP;
+    }
+  }
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let min_x = Infinity;
+  let min_y = Infinity;
+  let max_x = -Infinity;
+  let max_y = -Infinity;
+
+  for (const [key, item] of items) {
+    const x = item.x - item.width / 2;
+    const y = item.y - item.height / 2;
+    positions.set(key, { x, y });
+    min_x = Math.min(min_x, x);
+    min_y = Math.min(min_y, y);
+    max_x = Math.max(max_x, x + item.width);
+    max_y = Math.max(max_y, y + item.height);
+  }
+
+  for (const position of positions.values()) {
+    position.x -= min_x;
+    position.y -= min_y;
+  }
+
+  return {
+    positions,
+    size: { width: max_x - min_x, height: max_y - min_y },
+  };
+}
+
 export const useIfaceNodeStore = defineStore(
   "iface_node",
   () => {
@@ -159,20 +348,21 @@ export const useIfaceNodeStore = defineStore(
     const node_call_back = ref<(() => void) | undefined>();
     const last_layout_signature = ref<string | null>(null);
 
+    /** Measured DOM heights per node id, fed back from vue-flow. */
+    const node_heights = ref<Map<string, number>>(new Map());
+    const heights_settled = ref(false);
+
     const visible_net_devs = computed(() =>
       get_visible_devices(net_devs.value, hide_down_dev.value),
     );
 
     watch(
-      [visible_net_devs, layout_width, panel_reserved_width],
-      ([new_value, current_layout_width, current_reserved_width]) => {
+      [visible_net_devs, layout_width, panel_reserved_width, node_heights],
+      ([new_value]) => {
         const tmp_nodes: any[] = [];
         const tmp_edges: any[] = [];
         const new_bridges: IfaceOption[] = [];
         const new_eths: IfaceOption[] = [];
-        const device_map = new Map(new_value.map((each) => [each.index, each]));
-        const child_map = new Map<number, NetDev[]>();
-        const positioned = new Set<number>();
 
         for (const each of new_value) {
           if (each.dev_kind === "bridge") {
@@ -188,20 +378,12 @@ export const useIfaceNodeStore = defineStore(
               ifindex: each.index,
             });
           }
-
-          if (
-            each.controller_id !== undefined &&
-            device_map.has(each.controller_id)
-          ) {
-            const children = child_map.get(each.controller_id) ?? [];
-            children.push(each);
-            child_map.set(each.controller_id, children);
-          }
         }
 
-        for (const [controller_id, children] of child_map) {
-          child_map.set(controller_id, sort_devices(children));
-        }
+        const { positions, size } = compute_layout(
+          new_value,
+          node_heights.value,
+        );
 
         const available_width = Math.max(
           layout_width.value - panel_reserved_width.value,
@@ -212,20 +394,16 @@ export const useIfaceNodeStore = defineStore(
           Math.round((available_width - graph_width) / 2),
           0,
         );
-        const center_x =
-          graph_offset_x + Math.round((graph_width - NODE_WIDTH) / 2);
-        const column_gap = Math.max(
-          Math.min(
-            Math.floor((graph_width - NODE_WIDTH) / 2) - LANE_PADDING,
-            IDEAL_COLUMN_GAP,
-          ),
-          220,
-        );
-        const left_x = center_x - column_gap;
-        const right_x = center_x + column_gap;
+        const offset_x =
+          graph_offset_x +
+          Math.max(Math.round((graph_width - size.width) / 2), 0);
 
-        const push_node = (each: NetDev, x: number, y: number) => {
-          positioned.add(each.index);
+        for (const each of new_value) {
+          const position = positions.get(`${each.index}`);
+          if (!position) {
+            continue;
+          }
+
           tmp_nodes.push({
             id: `${each.index}`,
             data: each,
@@ -234,123 +412,30 @@ export const useIfaceNodeStore = defineStore(
             draggable: false,
             selectable: false,
             connectable: each.has_target_hook() || each.has_source_hook(),
-            position: { x, y },
+            position: {
+              x: offset_x + position.x,
+              y: GRAPH_TOP_MARGIN + position.y,
+            },
           });
-
-          if (
-            each.controller_id !== undefined &&
-            device_map.has(each.controller_id)
-          ) {
-            tmp_edges.push({
-              id: `${each.controller_id}-${each.index}`,
-              source: `${each.controller_id}`,
-              target: `${each.index}`,
-              label: "",
-              animated: true,
-              class: "normal-edge",
-            });
-          }
-        };
-
-        const is_root = (each: NetDev) =>
-          each.controller_id === undefined ||
-          !device_map.has(each.controller_id);
-
-        const wan_roots = new_value.filter(
-          (each) => each.zone_type === IfaceZoneType.wan && is_root(each),
-        );
-        const core_roots = new_value.filter(
-          (each) => each.zone_type !== IfaceZoneType.wan && is_root(each),
-        );
-
-        const get_subtree_height = (each: NetDev): number => {
-          const children = child_map.get(each.index) ?? [];
-
-          if (children.length === 0) {
-            return NODE_HEIGHT;
-          }
-
-          const child_block_height = children.reduce((total, child, index) => {
-            return (
-              total + get_subtree_height(child) + (index > 0 ? STACK_GAP : 0)
-            );
-          }, 0);
-
-          return Math.max(NODE_HEIGHT, child_block_height);
-        };
-
-        const place_subtree = (each: NetDev, x: number, start_y: number) => {
-          const children = child_map.get(each.index) ?? [];
-          const subtree_height = get_subtree_height(each);
-          const child_block_height = children.reduce((total, child, index) => {
-            return (
-              total + get_subtree_height(child) + (index > 0 ? STACK_GAP : 0)
-            );
-          }, 0);
-          const root_y =
-            start_y + Math.max((child_block_height - NODE_HEIGHT) / 2, 0);
-
-          push_node(each, x, root_y);
-
-          if (children.length === 0) {
-            return subtree_height;
-          }
-
-          let child_y = start_y;
-          for (const child of children) {
-            const child_height = place_subtree(child, right_x, child_y);
-            child_y += child_height + STACK_GAP;
-          }
-
-          return subtree_height;
-        };
-
-        let wan_y = 72;
-        for (const each of wan_roots) {
-          const group_height = place_subtree(each, left_x, wan_y);
-          wan_y += group_height + STACK_GAP;
         }
 
-        let center_y = 72;
-        let right_y = 72;
-        for (const each of core_roots) {
-          push_node(each, center_x, center_y);
-
-          const children = child_map.get(each.index) ?? [];
-          if (children.length > 0) {
-            const child_block_height = children.reduce(
-              (total, child, index) => {
-                return (
-                  total +
-                  get_subtree_height(child) +
-                  (index > 0 ? STACK_GAP : 0)
-                );
-              },
-              0,
-            );
-            const desired_child_start =
-              center_y - Math.max((child_block_height - NODE_HEIGHT) / 2, 0);
-            let child_y = Math.max(desired_child_start, right_y);
-
-            for (const child of children) {
-              const child_height = place_subtree(child, right_x, child_y);
-              child_y += child_height + STACK_GAP;
-            }
-
-            right_y = child_y + GROUP_GAP;
-          }
-
-          center_y += NODE_HEIGHT + CORE_COLUMN_GAP;
-        }
-
-        let orphan_y = center_y;
+        const device_indexes = new Set(new_value.map((each) => each.index));
         for (const each of new_value) {
-          if (positioned.has(each.index)) {
+          if (each.controller_id === undefined) {
+            continue;
+          }
+          if (!device_indexes.has(each.controller_id)) {
             continue;
           }
 
-          push_node(each, center_x, orphan_y);
-          orphan_y += NODE_HEIGHT + STACK_GAP;
+          tmp_edges.push({
+            id: `${each.controller_id}-${each.index}`,
+            source: `${each.controller_id}`,
+            target: `${each.index}`,
+            label: "",
+            animated: true,
+            class: "normal-edge",
+          });
         }
 
         bridges.value = new_bridges;
@@ -360,9 +445,14 @@ export const useIfaceNodeStore = defineStore(
 
         const layout_signature = create_layout_signature(
           new_value,
-          current_layout_width,
+          layout_width.value,
         );
-        const should_fit = last_layout_signature.value !== layout_signature;
+        const fully_measured = new_value.every((each) =>
+          node_heights.value.has(`${each.index}`),
+        );
+        const should_fit =
+          last_layout_signature.value !== layout_signature ||
+          (!heights_settled.value && fully_measured);
 
         if (
           node_call_back.value !== undefined &&
@@ -370,6 +460,10 @@ export const useIfaceNodeStore = defineStore(
           should_fit
         ) {
           node_call_back.value();
+        }
+
+        if (fully_measured) {
+          heights_settled.value = true;
         }
 
         last_layout_signature.value = layout_signature;
@@ -384,6 +478,28 @@ export const useIfaceNodeStore = defineStore(
       ]);
       pppd_configs.value = pppd_configs_result;
       net_devs.value = merge_pppd_placeholders(devs, pppd_configs_result);
+    }
+
+    /** Merge measured heights; only real changes (> 0.5px) relayout. */
+    function UPDATE_NODE_HEIGHTS(incoming: Map<string, number>) {
+      if (incoming.size === 0) {
+        return;
+      }
+
+      const next = new Map(node_heights.value);
+      let changed = false;
+
+      for (const [key, height] of incoming) {
+        const prev = next.get(key);
+        if (prev === undefined || Math.abs(prev - height) > 0.5) {
+          next.set(key, height);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        node_heights.value = next;
+      }
     }
 
     async function SETTING_CALL_BACK(call_back: () => void) {
@@ -443,6 +559,7 @@ export const useIfaceNodeStore = defineStore(
       HIDE_DOWN,
       TOGGLE_VIEW_LOCK,
       UPDATE_INFO,
+      UPDATE_NODE_HEIGHTS,
       SETTING_CALL_BACK,
       SET_LAYOUT_CONTEXT,
       FIND_DEV_BY_IFINDEX,
