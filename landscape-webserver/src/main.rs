@@ -65,7 +65,7 @@ use landscape_common::{
     VERSION,
 };
 use landscape_common::{config::InitConfig, lan_service::lan_dhcpv4::config::DHCPv4ServiceConfig};
-use landscape_core::{lan_hostname::LanHostnameRegistry, time::start_time_sync_service};
+use landscape_core::{lan_hostname::LanHostnameRegistry, time::SyncTimeService};
 use landscape_database::provider::LandscapeDBServiceProvider;
 use landscape_database::repository::Repository;
 use tokio::runtime::Builder as RuntimeBuilder;
@@ -183,6 +183,7 @@ async fn run_system(
     home_path: PathBuf,
     config: RuntimeConfig,
     db_store_provider: LandscapeDBServiceProvider,
+    time_service: SyncTimeService,
 ) -> Result<(), StartupError> {
     let startup_start = Instant::now();
 
@@ -537,6 +538,7 @@ async fn run_system(
         home_path: home_path.clone(),
         auth: auth_share.clone(),
         ebpf_paths,
+        time_service,
         dns_service,
         ddns_service,
         dns_provider_profile_service,
@@ -773,7 +775,7 @@ async fn async_main() -> Result<(), StartupError> {
         panic!("init log error: {e:?}");
     }
 
-    start_time_sync_service(config.time.clone());
+    let time_service = SyncTimeService::start(config.time.clone());
 
     let mut init_config_to_import = init_config_to_import;
     if config.auto {
@@ -834,7 +836,7 @@ async fn async_main() -> Result<(), StartupError> {
     } else {
         let db_store_provider =
             prepare_startup_init(&home_path, &config, init_config_to_import).await?;
-        run_system(home_path, config, db_store_provider).await
+        run_system(home_path, config, db_store_provider, time_service).await
     }
 }
 

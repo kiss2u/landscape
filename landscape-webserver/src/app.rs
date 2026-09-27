@@ -41,6 +41,7 @@ use landscape_common::{
     config::AuthRuntimeConfig, database::LandscapeStore, service::controller::ControllerService,
     wan_service::ip_config::IfaceIpModelConfig,
 };
+use landscape_core::time::SyncTimeService;
 
 use crate::gateway_runtime::GatewayService;
 
@@ -61,6 +62,9 @@ pub struct LandscapeApp {
     pub dst_ip_rule_service: DstIpRuleService,
     pub geo_ip_service: GeoIpService,
     pub config_service: LandscapeConfigService,
+
+    /// Time sync (NTP) service.
+    pub(crate) time_service: SyncTimeService,
 
     pub dhcp_v4_server_service: DHCPv4ServerManagerService,
 
@@ -227,6 +231,10 @@ impl LandscapeApp {
 
         self.preserve_critical_ips().await;
         tracing::info!("Critical IPs preserved");
+
+        // Time sync keeps the clock sane for every other service, stop it last.
+        self.time_service.stop().await;
+        tracing::info!("Time sync service stopped");
     }
 
     async fn preserve_critical_ips(&self) {

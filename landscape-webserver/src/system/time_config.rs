@@ -3,10 +3,24 @@ use landscape_common::api_response::LandscapeApiResp as CommonApiResp;
 use landscape_common::config::{
     GetTimeConfigResponse, LandscapeTimeConfig, UpdateTimeConfigRequest,
 };
+use landscape_common::sys_service::time_sync::TimeSyncStatus;
 
 use crate::api::{JsonBody, LandscapeApiResp};
 use crate::error::LandscapeApiResult;
 use crate::LandscapeApp;
+
+#[utoipa::path(
+    get,
+    path = "/time/sync_status",
+    tag = "System Config",
+    operation_id = "get_time_sync_status",
+    responses((status = 200, body = CommonApiResp<TimeSyncStatus>))
+)]
+pub async fn get_time_sync_status(
+    State(state): State<LandscapeApp>,
+) -> LandscapeApiResult<TimeSyncStatus> {
+    LandscapeApiResp::success(state.time_service.status())
+}
 
 #[utoipa::path(
     get,
@@ -49,5 +63,9 @@ pub async fn update_time_config(
     JsonBody(payload): JsonBody<UpdateTimeConfigRequest>,
 ) -> LandscapeApiResult<()> {
     state.config_service.update_time_config(payload.new_time, payload.expected_hash).await?;
+
+    let time_runtime = state.config_service.get_time_runtime_config();
+    state.time_service.update_config(time_runtime);
+
     LandscapeApiResp::success(())
 }

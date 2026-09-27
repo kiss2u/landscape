@@ -3179,12 +3179,13 @@ name = "landscape-core"
 version = "0.24.3"
 dependencies = [
  "arc-swap",
+ "async-trait",
  "dashmap 6.2.1",
  "idna",
  "landscape-common",
  "libc",
- "once_cell",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 

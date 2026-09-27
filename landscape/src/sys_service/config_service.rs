@@ -9,7 +9,6 @@ use landscape_common::sys_service::gateway::settings::{
     GatewayRuntimeConfig, LandscapeGatewayConfig,
 };
 use landscape_common::sys_service::lan_hostname::LanHostnameConfig;
-use landscape_core::time::update_time_sync_config;
 use landscape_database::provider::LandscapeDBServiceProvider;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -226,6 +225,10 @@ impl LandscapeConfigService {
         self.config.load().file_config.time.clone()
     }
 
+    pub fn get_time_runtime_config(&self) -> landscape_common::config::TimeRuntimeConfig {
+        self.config.load().time.clone()
+    }
+
     pub fn get_gateway_config_from_memory(&self) -> LandscapeGatewayConfig {
         self.config.load().file_config.gateway.clone()
     }
@@ -379,7 +382,6 @@ impl LandscapeConfigService {
                     new_config.file_config.time = new_time.clone();
                     new_config
                 });
-                update_time_sync_config(self.config.load().time.clone());
             },
         )
         .await
