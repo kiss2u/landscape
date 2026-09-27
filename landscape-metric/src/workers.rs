@@ -10,7 +10,7 @@ use landscape_common::config::MetricRuntimeConfig;
 use landscape_common::event::{ConnectMessage, DnsMetricMessage};
 #[cfg(feature = "metric-persistent")]
 use landscape_common::metric::dns::DnsMetric;
-use landscape_core::time::get_current_time_ms;
+use landscape_common::utils::time::now_ms;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -225,7 +225,7 @@ pub(crate) async fn run_connect_worker(
             _ = cleanup_interval.tick() => {
                 flush_connect_batch(&writer_tx, &queue_stats, &mut pending);
 
-                let now_ms = get_current_time_ms().unwrap_or_default();
+                let now_ms = now_ms();
                 let (flow_stats, batch) = cleanup_flow_cache(
                     &flow_cache,
                     &iface_realtime,
@@ -347,7 +347,7 @@ fn ingest_dns_metric(
 ) {
     // window 为 None(persistent 初始化失败回退内存)时直接丢弃,不攒批不投递。
     let Some(window) = window else { return };
-    let now_ms = get_current_time_ms().unwrap_or_default();
+    let now_ms = now_ms();
     window.ingest(&metric, now_ms);
     raw_batch.push(metric);
 }
@@ -935,7 +935,7 @@ mod tests {
             Some(window.clone()),
             CancellationToken::new(),
         ));
-        let now_ms = get_current_time_ms().unwrap();
+        let now_ms = now_ms();
 
         // 窗口内 5 个分钟桶;shutdown 时窗口不落库(纯内存),仅原始行批次投递。
         for offset in 1..=5 {

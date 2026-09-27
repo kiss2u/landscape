@@ -6,7 +6,7 @@ use landscape_common::metric::connect::{
     ConnectKey, ConnectMetricPoint, ConnectSortKey, ConnectStatusType, IpHistoryStat,
     MetricResolution, SortOrder,
 };
-use landscape_core::time::get_current_time_ms;
+use landscape_common::utils::time::now_ms;
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection, SqlitePool};
 
 use super::clean_ip_string;
@@ -391,7 +391,7 @@ pub(crate) async fn apply_connect_batch(
 
     super::run_write_tx(pool, batch, |conn, batch| {
         Box::pin(async move {
-            let last_calculate_time = get_current_time_ms().unwrap_or_default();
+            let last_calculate_time = now_ms();
 
             // 批量查询本批次涉及的旧汇总值。SQLite 对 bind 参数数量有限制，
             // 因此按参数预算分块（每个 key 需要两个参数）。
@@ -724,7 +724,7 @@ pub(crate) async fn rebuild_global_stats_cache(
     // 获取写锁，避免 SELECT 与后续 UPDATE 之间被并发写入插队。
     super::run_write_tx(pool, (), |conn, _| {
         Box::pin(async move {
-            let now = get_current_time_ms().unwrap_or_default();
+            let now = now_ms();
             sqlx::query(
                 "UPDATE conn_global_stats_cache
                  SET total_ingress_bytes = (SELECT COALESCE(SUM(total_ingress_bytes), 0) FROM conn_summaries),
@@ -799,8 +799,7 @@ pub(crate) async fn global_stats_stale(
             .await?;
     let last_calculate_time = row_opt.map(|row| row.get::<i64, _>(0).max(0) as u64).unwrap_or(0);
     Ok(last_calculate_time == 0
-        || get_current_time_ms().unwrap_or_default().saturating_sub(last_calculate_time)
-            >= stale_after_secs.saturating_mul(1000))
+        || now_ms().saturating_sub(last_calculate_time) >= stale_after_secs.saturating_mul(1000))
 }
 
 pub(crate) async fn cleanup_old_summaries(
@@ -840,8 +839,7 @@ pub(crate) async fn cleanup_old_summaries(
 
             if deleted > 0 {
                 let delta = GlobalStatsDelta::from_removed_stats(&removed);
-                apply_global_stats_delta_tx(conn, delta, get_current_time_ms().unwrap_or_default())
-                    .await?;
+                apply_global_stats_delta_tx(conn, delta, now_ms()).await?;
             }
 
             Ok(())
@@ -911,7 +909,7 @@ pub(crate) async fn enforce_summary_max_rows(
                 apply_global_stats_delta_tx(
                     conn,
                     delta,
-                    get_current_time_ms().unwrap_or_default(),
+                    now_ms(),
                 )
                 .await?;
             }
@@ -1430,7 +1428,7 @@ mod tests {
         let (_dir, pool) = test_pool().await;
         let stale_after_secs = 86_400;
         let threshold_ms = stale_after_secs * 1000;
-        let now = get_current_time_ms().unwrap_or_default();
+        let now = now_ms();
 
         sqlx::query(
             "UPDATE conn_global_stats_cache SET last_calculate_time = ?1 WHERE cache_key = 1",

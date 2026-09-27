@@ -14,7 +14,7 @@ use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse,
     DnsSummaryQueryParams, DnsSummaryResponse,
 };
-use landscape_core::time::get_current_time_ms;
+use landscape_common::utils::time::now_ms;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -311,17 +311,17 @@ impl MetricEngine {
     }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
-        let now_ms = get_current_time_ms().unwrap_or_default();
+        let now_ms = now_ms();
         agg::collect_connect_infos(&self.flow_cache, now_ms)
     }
 
     pub async fn get_realtime_ip_stats(&self, is_src: bool) -> Vec<IpRealtimeStat> {
-        let now_ms = get_current_time_ms().unwrap_or_default();
+        let now_ms = now_ms();
         agg::collect_realtime_ip_stats(&self.flow_cache, now_ms, is_src)
     }
 
     pub async fn get_realtime_iface_stats(&self) -> Vec<IfaceRealtimeStat> {
-        let now_ms = get_current_time_ms().unwrap_or_default();
+        let now_ms = now_ms();
         agg::collect_realtime_iface_stats(&self.iface_realtime, now_ms)
     }
 
@@ -331,8 +331,7 @@ impl MetricEngine {
         resolution: MetricResolution,
     ) -> Vec<ConnectMetricPoint> {
         if resolution == MetricResolution::Second {
-            let cutoff =
-                get_current_time_ms().unwrap_or_default().saturating_sub(self.second_window_ms);
+            let cutoff = now_ms().saturating_sub(self.second_window_ms);
             return agg::second_points_by_key(&self.flow_cache, &key, cutoff);
         }
         self.sink.query_metric_by_key(key, resolution).await
@@ -386,7 +385,7 @@ impl MetricEngine {
     ) -> DnsLightweightSummaryResponse {
         #[cfg(feature = "metric-persistent")]
         if let Some(window) = &self.dns_window {
-            let now_ms = get_current_time_ms().unwrap_or_default();
+            let now_ms = now_ms();
             let Some((start, end)) = normalized_dns_range(&params, now_ms) else {
                 // 倒置/异常区间窗口无法回答,返回空。
                 return DnsLightweightSummaryResponse::default();
@@ -405,7 +404,7 @@ impl MetricEngine {
     pub async fn get_dns_summary(&self, params: DnsSummaryQueryParams) -> DnsSummaryResponse {
         #[cfg(feature = "metric-persistent")]
         if self.dns_window.is_some() {
-            let now_ms = get_current_time_ms().unwrap_or_default();
+            let now_ms = now_ms();
             if let Some((start, end)) = normalized_dns_range(&params, now_ms) {
                 let parts = self.sink.get_dns_summary_parts(start, end, params.flow_id).await;
                 return parts.into_summary_response();
@@ -527,7 +526,7 @@ mod tests {
         let engine =
             MetricEngine::new(PathBuf::new(), test_config(MetricMode::Memory)).await.unwrap();
         let tx = engine.get_connect_msg_channel().unwrap();
-        let now_ms = get_current_time_ms().unwrap();
+        let now_ms = now_ms();
 
         tx.send(ConnectMessage::Metric(connect_metric(1, now_ms - 3_000, now_ms - 2_000, 100)))
             .await
@@ -580,7 +579,7 @@ mod tests {
         let engine =
             MetricEngine::new(PathBuf::new(), test_config(MetricMode::Memory)).await.unwrap();
         let tx = engine.get_connect_msg_channel().unwrap();
-        let now_ms = get_current_time_ms().unwrap();
+        let now_ms = now_ms();
         let key = ConnectKey { create_time: 1_000 * 1_000_000, cpu_id: 1 };
 
         tx.send(ConnectMessage::Metric(connect_metric(1, 1_000, now_ms - 4_000, 100)))
@@ -620,7 +619,7 @@ mod tests {
         let engine =
             MetricEngine::new(PathBuf::new(), test_config(MetricMode::Memory)).await.unwrap();
         let tx = engine.get_connect_msg_channel().unwrap();
-        let now_ms = get_current_time_ms().unwrap();
+        let now_ms = now_ms();
         tx.send(ConnectMessage::Metric(connect_metric(1, 1_000, now_ms - 1_000, 100)))
             .await
             .unwrap();
@@ -659,7 +658,7 @@ mod tests {
                     .await
                     .unwrap();
             let tx = engine.get_connect_msg_channel().unwrap();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
             // 对齐到整分钟,避免两条 report_time 跨分钟边界落入不同 1m 桶导致断言 flaky。
             let minute_start = now_ms / 60_000 * 60_000;
 
@@ -711,7 +710,7 @@ mod tests {
                     .await
                     .unwrap();
             let tx = engine.get_dns_msg_channel().unwrap();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
 
             tx.send(dns_metric(now_ms - 1_000)).await.unwrap();
 
@@ -758,7 +757,7 @@ mod tests {
         async fn data_survives_engine_restart() {
             let temp = tempfile::tempdir().unwrap();
             let path = temp.path().to_path_buf();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
 
             let engine =
                 MetricEngine::new(path.clone(), test_config(MetricMode::Persistent)).await.unwrap();
@@ -807,7 +806,7 @@ mod tests {
                     .await
                     .unwrap();
             let tx = engine.get_dns_msg_channel().unwrap();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
             let window_start = minute_start(now_ms.saturating_sub(DNS_RECENT_WINDOW_SECS * 1000));
 
             // 边界区记录:report_time 早于 cutoff(now-5min)、但分钟桶恰落在窗口下界,
@@ -857,7 +856,7 @@ mod tests {
         async fn shutdown_finalizes_active_flows_and_flushes() {
             let temp = tempfile::tempdir().unwrap();
             let path = temp.path().to_path_buf();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
 
             let engine =
                 MetricEngine::new(path.clone(), test_config(MetricMode::Persistent)).await.unwrap();
@@ -899,7 +898,7 @@ mod tests {
             // 新流量进入窗口后恢复。两者互不串门。
             let temp = tempfile::tempdir().unwrap();
             let path = temp.path().to_path_buf();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
 
             let engine =
                 MetricEngine::new(path.clone(), test_config(MetricMode::Persistent)).await.unwrap();
@@ -969,7 +968,7 @@ mod tests {
                     .await
                     .unwrap();
             let tx = engine.get_connect_msg_channel().unwrap();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
             tx.send(ConnectMessage::Metric(connect_metric(1, 1_000, now_ms - 1_000, 100)))
                 .await
                 .unwrap();
@@ -990,7 +989,7 @@ mod tests {
                     .await
                     .unwrap();
             let tx = engine.get_dns_msg_channel().unwrap();
-            let now_ms = get_current_time_ms().unwrap();
+            let now_ms = now_ms();
             tx.send(dns_metric(now_ms - 1_000)).await.unwrap();
 
             // 回归:dns server(landscape-dns)会长期持有 sender 且晚于 metric 服务停止,

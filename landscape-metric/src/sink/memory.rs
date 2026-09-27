@@ -20,7 +20,7 @@ use landscape_common::metric::dns::{
 };
 
 use landscape_common::event::{ConnectMessage, DnsMetricMessage};
-use landscape_core::time::get_current_time_ms;
+use landscape_common::utils::time::now_ms;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -144,7 +144,7 @@ impl MemoryMetricStore {
                 tokio::select! {
                     _ = worker_shutdown.cancelled() => break,
                     _ = cleanup_tick.tick() => {
-                        let now = get_current_time_ms().unwrap_or_default();
+                        let now = now_ms();
                         let _ = agg::cleanup_flow_cache(&worker_flow, &worker_iface, now, second_window_ms);
                     }
                     msg = connect_rx.recv(), if !connect_closed => match msg {
@@ -188,22 +188,15 @@ impl MemoryMetricStore {
     }
 
     pub async fn connect_infos(&self) -> Vec<ConnectRealtimeStatus> {
-        agg::collect_connect_infos(&self.flow_cache, get_current_time_ms().unwrap_or_default())
+        agg::collect_connect_infos(&self.flow_cache, now_ms())
     }
 
     pub async fn get_realtime_ip_stats(&self, is_src: bool) -> Vec<IpRealtimeStat> {
-        agg::collect_realtime_ip_stats(
-            &self.flow_cache,
-            get_current_time_ms().unwrap_or_default(),
-            is_src,
-        )
+        agg::collect_realtime_ip_stats(&self.flow_cache, now_ms(), is_src)
     }
 
     pub async fn get_realtime_iface_stats(&self) -> Vec<IfaceRealtimeStat> {
-        agg::collect_realtime_iface_stats(
-            &self.iface_realtime,
-            get_current_time_ms().unwrap_or_default(),
-        )
+        agg::collect_realtime_iface_stats(&self.iface_realtime, now_ms())
     }
 
     pub async fn query_metric_by_key(
@@ -214,8 +207,7 @@ impl MemoryMetricStore {
         if resolution != MetricResolution::Second {
             return Vec::new();
         }
-        let cutoff =
-            get_current_time_ms().unwrap_or_default().saturating_sub(self.second_window_ms);
+        let cutoff = now_ms().saturating_sub(self.second_window_ms);
         agg::second_points_by_key(&self.flow_cache, &key, cutoff)
     }
 
@@ -312,7 +304,7 @@ mod tests {
     async fn compatibility_facade_serves_realtime_api() {
         let store = MemoryMetricStore::new(PathBuf::new(), test_config()).await;
         let tx = store.get_connect_msg_channel();
-        let now = get_current_time_ms().unwrap();
+        let now = now_ms();
         let (metric, key) = test_metric(now - 1000);
         tx.send(ConnectMessage::Metric(metric)).await.unwrap();
 

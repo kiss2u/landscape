@@ -14,7 +14,7 @@ use landscape_common::metric::dns::{
     DnsHistoryQueryParams, DnsHistoryResponse, DnsLightweightSummaryResponse, DnsMetric,
     DnsSummaryQueryParams, DnsSummaryResponse,
 };
-use landscape_core::time::get_current_time_ms;
+use landscape_common::utils::time::now_ms;
 use sqlx::SqlitePool;
 use tokio::task::JoinHandle;
 
@@ -344,7 +344,7 @@ impl MetricSink for PersistentMetricStore {
     }
 
     async fn cleanup_connect(&self, config: &MetricRuntimeConfig) {
-        let now_ms = get_current_time_ms().unwrap_or_default();
+        let now_ms = now_ms();
 
         let summary_cutoff =
             now_ms.saturating_sub(config.connect_summary_retention_days.saturating_mul(MS_PER_DAY));
@@ -497,9 +497,7 @@ impl MetricSink for PersistentMetricStore {
     }
 
     async fn cleanup_dns(&self, config: &MetricRuntimeConfig) {
-        let cutoff = get_current_time_ms()
-            .unwrap_or_default()
-            .saturating_sub(config.dns_retention_days.saturating_mul(MS_PER_DAY));
+        let cutoff = now_ms().saturating_sub(config.dns_retention_days.saturating_mul(MS_PER_DAY));
         match sqlite::dns::cleanup_old_dns(
             &self.dns_pool,
             cutoff,
@@ -516,9 +514,8 @@ impl MetricSink for PersistentMetricStore {
             }
         }
 
-        let bucket_cutoff = get_current_time_ms()
-            .unwrap_or_default()
-            .saturating_sub(config.dns_1m_retention_days.saturating_mul(MS_PER_DAY));
+        let bucket_cutoff =
+            now_ms().saturating_sub(config.dns_1m_retention_days.saturating_mul(MS_PER_DAY));
         if let Err(error) = sqlite::dns::cleanup_old_dns_buckets(
             &self.dns_pool,
             bucket_cutoff,
@@ -767,7 +764,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = PersistentMetricStore::new(temp.path().to_path_buf()).await.unwrap();
         let pool = store.connect_pool.clone();
-        let now_ms = get_current_time_ms().unwrap();
+        let now_ms = now_ms();
 
         // 1. 经 sink 写入一条 summary(缓存同步更新)。
         let mut batch = Batch::default();

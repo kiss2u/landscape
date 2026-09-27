@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use landscape_core::time::get_boot_time_ns;
+use landscape_common::utils::time::get_boot_time_ns;
 
 // cargo run --package landscape-ebpf --bin metric_loop
 

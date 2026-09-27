@@ -24,13 +24,13 @@ use crate::{
     },
     CheckChainDnsResult,
 };
+use landscape_common::utils::time::now_ms;
 use landscape_common::{
     dns::error::DnsServiceError,
     event::DnsMetricMessage,
     flow::DnsResultSink,
     metric::dns::{DnsMetric, DnsOutcome},
 };
-use landscape_core::time::get_current_time_ms;
 
 #[derive(Clone)]
 pub struct DnsRequestHandler {
@@ -157,7 +157,7 @@ impl DnsRequestHandler {
                 query_type: query_type.to_string(),
                 response_code: response_code.to_string(),
                 status: outcome,
-                report_time: get_current_time_ms().unwrap_or_default(),
+                report_time: now_ms(),
                 duration_ms: start_time.elapsed().as_millis() as u32,
                 src_ip,
                 answers: records.iter().map(|r| r.to_string()).collect(),
